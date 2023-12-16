@@ -1,3 +1,7 @@
+import random
+
+random.seed()
+
 def createGroups(teams_list, no_of_groups):
     groups_list = []
 
@@ -21,3 +25,15 @@ def createGroups(teams_list, no_of_groups):
 
     return groups_list
 
+def determineSeeding(ranked, unranked):
+    full_seeded = []
+    for team in ranked:
+        full_seeded.append(team)
+    
+    remaining = len(unranked)
+    while (remaining>1):
+        full_seeded.append(unranked.pop(random.randint(0,remaining-1)))
+        remaining -= 1
+    full_seeded.append(unranked[0])
+
+    return full_seeded

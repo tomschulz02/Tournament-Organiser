@@ -37,3 +37,6 @@ def determineSeeding(ranked, unranked):
     full_seeded.append(unranked[0])
 
     return full_seeded
+
+def generateFixtures(groups):
+    pass

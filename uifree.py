@@ -1,9 +1,24 @@
 import random
+from math import floor
 
 random.seed()
 
-def createGroups(teams_list, no_of_groups):
+# works with 3 min and 5 max teams per group
+# maybe adapt to user input later on?
+def findNoOfGroups(no_of_teams):
+    quotient = floor(no_of_teams/6)
+    groups = quotient+1
+
+    if ((no_of_teams+quotient)%6 < quotient):
+        groups += 1
+
+    return groups
+
+def createGroups(teams_list, no_of_groups=0):
     groups_list = []
+
+    if (no_of_groups==0):
+        no_of_groups = findNoOfGroups(len(teams_list))
 
     for i in range(no_of_groups):
         groups_list.append([])

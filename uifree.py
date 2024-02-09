@@ -40,3 +40,6 @@ def determineSeeding(ranked, unranked):
 
 def generateFixtures(groups):
     pass
+
+def optimiseGroupsize(no_of_teams):
+    pass

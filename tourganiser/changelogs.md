@@ -4,3 +4,9 @@
 
 ### Patch 0.24.02.10.0
 Initial creation of the project using flutter.
+
+### Patch 0.24.02.10.1
+ - Started working on the general layout of the UI
+ - Planned and started working on the UI for the "Create tournament" page
+ - Navigating and expanding the menu bar has been tested and is working
+ - At the moment there is no functionality, only design elements

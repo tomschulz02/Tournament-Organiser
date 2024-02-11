@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'create.dart';
 
 void main() {
   runApp(const MainApp());
@@ -107,59 +108,6 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         );
       }
-    );
-  }
-}
-
-class CreateTournamentPage extends StatelessWidget {
-  const CreateTournamentPage({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create a Tournament'),
-      ),
-      body: Column(
-        children: [
-          Divider(indent: 20, endIndent: 20,),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Enter a tournament name'
-                    ),
-                  ),
-                ),
-                SizedBox(width: 20,),
-                Expanded(
-                  flex: 1,
-                  child: TextField(
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Tournament starting date'
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(indent: 20, endIndent: 20,),
-          Row(),
-          Row(),
-          Row(),
-          Divider(indent: 20, endIndent: 20,),
-          //Teams list
-        ],
-      ),
     );
   }
 }

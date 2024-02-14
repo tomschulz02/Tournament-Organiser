@@ -71,7 +71,7 @@ class _MyHomePageState extends State<MyHomePage> {
               SafeArea(
                 child: NavigationRail(
                   backgroundColor: theme.colorScheme.primaryContainer,
-                  extended: expandedNav || constraints.maxWidth>=600,
+                  extended: expandedNav,
                   destinations: [
                     NavigationRailDestination(
                       icon: Tooltip(message: 'Expand', child: Icon(Icons.menu),), 

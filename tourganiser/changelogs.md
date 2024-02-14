@@ -24,3 +24,7 @@ Initial creation of the project using flutter.
  - Added an error message if the create form isn't valid
  - Added form fields for number of teams and groups
  - Added a dropdown list for the elimination round selection
+
+### Patch 0.24.02.14.1
+ - Changed some texts for better readability
+ 

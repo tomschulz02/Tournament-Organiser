@@ -122,6 +122,7 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                   ),
                   SizedBox(width: 20,),
                   SizedBox(
+                    
                     width: selectionFieldWidth,
                     height: 50,
                     child: ElevatedButton(
@@ -166,7 +167,7 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                 Expanded(
                   child: RadioListTile(
                     title: Text('Tournament'),
-                    subtitle: Text('Group stages, into elimination rounds, ending in a final'),
+                    //subtitle: Text('Group stages, into elimination rounds, ending in a final'),
                     value: CompetitionFormat.tournament,
                     groupValue: _competitionFormat, 
                     onChanged: (CompetitionFormat? value) {
@@ -180,7 +181,7 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                 Expanded(
                   child: RadioListTile(
                     title: Text('League'),
-                    subtitle: Text('Round robin with all teams, optional elimination rounds'),
+                    //subtitle: Text('Round robin with all teams, optional elimination rounds'),
                     value: CompetitionFormat.league,
                     groupValue: _competitionFormat, 
                     onChanged: (CompetitionFormat? value) {
@@ -250,7 +251,7 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
               children: [
                 Expanded(
                   child: Text(
-                    'Choose the first elimination round (i.e. The first round to follow group stages):',
+                    'First elimination round:',
                     style: TextStyle(fontSize: 15),
                   ),
                 ),

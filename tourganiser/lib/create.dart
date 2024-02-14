@@ -40,21 +40,36 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    label: Text('Name of competition'),
+                Expanded(
+                  child: TextFormField(
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      label: Text('Name of competition'),
+                    ),
+                    validator: (value) {
+                      if (value==null || value.isEmpty) {
+                        return "This field cannot be empty";
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value==null || value.isEmpty) {
-                      return "This field cannot be empty";
-                    }
-                    return null;
-                  },
+                ),
+                SizedBox(width: 20,),
+                SizedBox(
+                  width: 200,
+                  height: 50,
+                  child: ElevatedButton(
+                    child: Text('Create'),
+                    onPressed: () {
+                      //TODO: Add the submit function to create a new competition
+                    },
+                    
+                  ),
                 ),
               ],
             ),
           ),
+          Divider(indent: 15, endIndent: 15,),
         ],
       ),
     );

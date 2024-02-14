@@ -14,3 +14,7 @@ Initial creation of the project using flutter.
 ### Patch 0.24.02.11.0
  - Added individual code file for the Create Tournament page to keep the code legible and clean
  - Started work on the tournament creation form with basic validation (Currently not working as intended)
+
+### Patch 0.24.02.12.0
+ - Fixed the issue with the create form
+

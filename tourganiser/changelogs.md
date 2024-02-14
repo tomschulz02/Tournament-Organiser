@@ -18,3 +18,9 @@ Initial creation of the project using flutter.
 ### Patch 0.24.02.12.0
  - Fixed the issue with the create form
 
+### Patch 0.24.02.14.0
+ - Added the validation check to the submit button on the create page
+ - Added radio buttons for competition format
+ - Added an error message if the create form isn't valid
+ - Added form fields for number of teams and groups
+ - Added a dropdown list for the elimination round selection

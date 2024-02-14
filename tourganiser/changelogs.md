@@ -27,4 +27,4 @@ Initial creation of the project using flutter.
 
 ### Patch 0.24.02.14.1
  - Changed some texts for better readability
- 
+ - UI changes in create form

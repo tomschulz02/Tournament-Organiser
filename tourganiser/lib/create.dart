@@ -17,6 +17,7 @@ enum EliminationRound {
 }
 
 const double selectionFieldWidth = 200;
+const double selectionFieldHeight = 50;
 const double edgePadding = 40;
 
 class CreateTournamentPage extends StatelessWidget {
@@ -121,10 +122,8 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                     ),
                   ),
                   SizedBox(width: 20,),
-                  SizedBox(
-                    
-                    width: selectionFieldWidth,
-                    height: 50,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: selectionFieldWidth, minHeight: selectionFieldHeight),
                     child: ElevatedButton(
                       child: Text('Create'),
                       onPressed: () {
@@ -255,11 +254,9 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                     style: TextStyle(fontSize: 15),
                   ),
                 ),
-                SizedBox(
-                  width: selectionFieldWidth,
-                  height: 50,
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: selectionFieldWidth, maxHeight: selectionFieldHeight),
                   child: DropdownMenu(
-                    width: selectionFieldWidth,
                     initialSelection: EliminationRound.roundOf16,
                     controller: _eliminationController,
                     dropdownMenuEntries: EliminationRound.values.map((EliminationRound eliminationRound) {

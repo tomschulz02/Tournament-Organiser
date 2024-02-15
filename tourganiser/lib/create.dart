@@ -122,8 +122,9 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                     ),
                   ),
                   SizedBox(width: 20,),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: selectionFieldWidth, minHeight: selectionFieldHeight),
+                  SizedBox(
+                    width: selectionFieldWidth,
+                    height: selectionFieldHeight,
                     child: ElevatedButton(
                       child: Text('Create'),
                       onPressed: () {
@@ -250,26 +251,24 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
               children: [
                 Expanded(
                   child: Text(
-                    'First elimination round:',
+                    'First round to follow the group stages:',
                     style: TextStyle(fontSize: 15),
                   ),
                 ),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: selectionFieldWidth, maxHeight: selectionFieldHeight),
-                  child: DropdownMenu(
-                    initialSelection: EliminationRound.roundOf16,
-                    controller: _eliminationController,
-                    dropdownMenuEntries: EliminationRound.values.map((EliminationRound eliminationRound) {
-                      return DropdownMenuEntry(
-                        value: eliminationRound,
-                        label: eliminationRound.label,
-                      );
-                    }).toList(),
-                    onSelected: (EliminationRound? eliminationRound) {
-                      _eliminationRound = eliminationRound;
-                    },
-                  ),
-                ),
+                /*DropdownMenu(
+                  width: selectionFieldWidth,
+                  initialSelection: EliminationRound.roundOf16,
+                  controller: _eliminationController,
+                  dropdownMenuEntries: EliminationRound.values.map((EliminationRound eliminationRound) {
+                    return DropdownMenuEntry(
+                      value: eliminationRound,
+                      label: eliminationRound.label,
+                    );
+                  }).toList(),
+                  onSelected: (EliminationRound? eliminationRound) {
+                    _eliminationRound = eliminationRound;
+                  },
+                ),*/
               ],
             ),
           ),
@@ -277,6 +276,31 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
           const Divider(indent: 15, endIndent: 15,),
         ],
       ),
+    );
+  }
+}
+
+class CreateTournamentPageSmall extends StatelessWidget {
+  const CreateTournamentPageSmall({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create a Tournament'),
+      ),
+      body: CreateTournamentFormSmall(),
+    );
+  }
+}
+
+class CreateTournamentFormSmall extends StatelessWidget {
+  @override
+  Widget build (BuildContext context) {
+    return Center(
+      child: Text('Small screen form'),
     );
   }
 }

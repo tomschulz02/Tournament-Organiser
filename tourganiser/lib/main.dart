@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'create.dart';
 
 void main() {
@@ -9,105 +8,103 @@ void main() {
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
+  static const appTitle = 'Tourganiser';
+
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
-      child: MaterialApp(
-        title: 'Tourganiser',
+      return MaterialApp(
+        title: appTitle,
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue)
         ),
-        home: MyHomePage(),
-      ),
-    );
+        home: PageLayout(title: appTitle,),
+      );
   }
 }
 
-class MyAppState extends ChangeNotifier {
+class PageLayout extends StatefulWidget {
+  const PageLayout({super.key, required this.title});
 
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+  final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<PageLayout> createState() => _PageLayoutState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  var selectedIndex = 1;
-  bool expandedNav = false;
-  Widget page = HomePage();
+class _PageLayoutState extends State<PageLayout> {
+  int _selectedPageIndex = 0;
+  static bool _wideScreen = false;
+
+  //List with all the pages from the drawer selection
+  static const List<Widget> _detailsPageList = <Widget>[
+    HomePage(),
+    CreateTournamentPage(),
+    LoadTournamentPage(),
+  ];
+
+  //List with the small screen versions of all the pages
+  static const List<Widget> _detailsPageListSmall = <Widget>[
+    HomePageSmall(),
+    CreateTournamentPageSmall(),
+    LoadTournamentPageSmall()
+  ];
+
+  //function for what to do when a ListTile is selected
+  void _onTapped (int value) {
+    //changes which page should be loaded
+    setState(() {
+      _selectedPageIndex = value;
+    });
+  }
   
   @override
-  Widget build(BuildContext context) {
+  Widget build (BuildContext context) {
+    _wideScreen = MediaQuery.of(context).size.width > 600 ? true : false;
     
-    final theme = Theme.of(context);
-
-    switch(selectedIndex){
-      case 0:
-        expandedNav = !expandedNav;
-        break;
-      case 1:
-        page = HomePage();
-        break;
-      case 2:
-        page = CreateTournamentPage();
-        break;
-      case 3:
-        page = LoadTournamentPage();
-        break;
-      default:
-        throw UnimplementedError('no page created for $selectedIndex');
-    }
-    
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Scaffold(
-          body: Row(
-            children: [
-              SafeArea(
-                child: NavigationRail(
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  extended: expandedNav,
-                  destinations: [
-                    NavigationRailDestination(
-                      icon: Tooltip(message: 'Expand', child: Icon(Icons.menu),), 
-                      label: Text(''),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home), 
-                      label: Text('Home')
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.add_box_outlined), 
-                      label: Text('New')
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.file_open_outlined), 
-                      label: Text('Load')
-                    ),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {
-                    setState(() {
-                      selectedIndex = value;
-                    });
-                    //print('selected $selectedIndex');
-                  },
-                ),
-              ),
-              Expanded(
-                child: Container( 
-                  child: page,
-                ),
-              ),
-            ],
-          ),
-        );
-      }
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title),),
+      body: Container(
+        child: _wideScreen ? _detailsPageList[_selectedPageIndex] : _detailsPageListSmall[_selectedPageIndex],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(),
+              child: Placeholder(),
+            ),
+            ListTile(
+              title: Text('Home'),
+              leading: Icon(Icons.home_outlined),
+              selected: _selectedPageIndex==0,
+              onTap: () {
+                _onTapped(0);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: Text('New'),
+              leading: Icon(Icons.create_new_folder_outlined),
+              selected: _selectedPageIndex==1,
+              onTap: () {
+                _onTapped(1);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: Text('Load'),
+              leading: Icon(Icons.folder_open_outlined),
+              selected: _selectedPageIndex==2,
+              onTap: () {
+                _onTapped(2);
+                Navigator.pop(context);
+              },
+            )
+          ],
+        ),
+      ),
     );
   }
 }
@@ -125,6 +122,19 @@ class LoadTournamentPage extends StatelessWidget {
   }
 }
 
+class LoadTournamentPageSmall extends StatelessWidget {
+  const LoadTournamentPageSmall({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text('Small History'),
+    );
+  }
+}
+
 class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
@@ -134,6 +144,19 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Text('Welcome'),
+    );
+  }
+}
+
+class HomePageSmall extends StatelessWidget {
+  const HomePageSmall({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text('Small Welcome'),
     );
   }
 }

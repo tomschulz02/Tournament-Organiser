@@ -33,3 +33,8 @@ Initial creation of the project using flutter.
  - UI changes for a more responsive app
  - changed the NavigationRail to a Drawer
  - added responsiveness to change the UI based on screen size
+ - Started working on UI for smaller screens
+ - Added all UI elements to smaller screen Layout that were in the larger screen layout
+ - fixed the error that the dropdown list for the elimination round was giving
+ - started working on the list to display the participating teams
+ - created a custom ListTile widget for each team in the list

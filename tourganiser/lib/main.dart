@@ -16,7 +16,9 @@ class MainApp extends StatelessWidget {
         title: appTitle,
         theme: ThemeData(
           useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue)
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+          )
         ),
         home: PageLayout(title: appTitle,),
       );
@@ -63,7 +65,10 @@ class _PageLayoutState extends State<PageLayout> {
     _wideScreen = MediaQuery.of(context).size.width > 600 ? true : false;
     
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title),),
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: Colors.lightBlue,
+      ),
       body: Container(
         child: _wideScreen ? _detailsPageList[_selectedPageIndex] : _detailsPageListSmall[_selectedPageIndex],
       ),
@@ -72,7 +77,7 @@ class _PageLayoutState extends State<PageLayout> {
           padding: EdgeInsets.zero,
           children: [
             const DrawerHeader(
-              decoration: BoxDecoration(),
+              decoration: BoxDecoration(color: Color.fromRGBO(41, 182, 246, 1)),
               child: Placeholder(),
             ),
             ListTile(

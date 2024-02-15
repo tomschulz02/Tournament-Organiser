@@ -3,6 +3,15 @@ import 'package:flutter/services.dart';
 
 //This page asks the user for all the settings to create a competition
 
+const double selectionFieldWidth = 200;
+const double selectionFieldWidthSmall = 125;
+const double selectionFieldHeight = 50;
+const double edgePadding = 40;
+const double edgePaddingSmall = 15;
+
+//Error message for when a field is empty
+const String _emptyErrorMsg = 'This field cannot be empty';
+
 enum CompetitionFormat { tournament, league }
 enum EliminationRound {
   roundOf16('Round of 16', 16),
@@ -16,9 +25,20 @@ enum EliminationRound {
   final int numOfTeams;
 }
 
-const double selectionFieldWidth = 200;
-const double selectionFieldHeight = 50;
-const double edgePadding = 40;
+//create form key
+  final _createFormKey = GlobalKey<FormState>();
+
+  //controllers for all various inputs to get values on submission
+  final _compNameController = TextEditingController();
+  final _numTeamsController = TextEditingController();
+  final _numGroupsController = TextEditingController();
+
+  //competition format radio group value
+  CompetitionFormat? _competitionFormat = CompetitionFormat.tournament;
+
+  //elimination round selected value
+  EliminationRound? _eliminationRound = EliminationRound.roundOf16;
+
 
 class CreateTournamentPage extends StatelessWidget {
   const CreateTournamentPage({
@@ -47,30 +67,16 @@ class CreateTournamentForm extends StatefulWidget {
 
 class _CreateTournamentFormState extends State<CreateTournamentForm> {
   
-  //create form key
-  final _createFormKey = GlobalKey<FormState>();
-
-  //controllers for all various inputs to get values on submission
-  final _compNameController = TextEditingController();
-  final _numTeamsController = TextEditingController();
-  final _numGroupsController = TextEditingController();
-  final _eliminationController = TextEditingController();
-
-  //competition format radio group value
-  CompetitionFormat? _competitionFormat = CompetitionFormat.tournament;
-
-  //elimination round selected value
-  EliminationRound? _eliminationRound;
-
+  
   //cleans up the controllers when the widget is disposed
-  @override
+  /*@override
   void dispose() {
     _compNameController.dispose();
     _numTeamsController.dispose();
     _numGroupsController.dispose();
     _eliminationController.dispose();
     super.dispose();
-  }
+  }*/
 
   void submit() {
     //TODO: Add the submit function to create a new competition
@@ -82,200 +88,230 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
   
   @override
   Widget build(BuildContext context) {
-    return Form(
-      key: _createFormKey,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(width: 15),
-              Text(
-                '*required fields', 
-                style: TextStyle(fontSize: 12, color: Color.fromRGBO(255, 0, 0, 1)),
+    return ListView(
+      children: [Form(
+        key: _createFormKey,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(width: 15),
+                Text(
+                  '*required fields', 
+                  style: TextStyle(fontSize: 12, color: Color.fromRGBO(255, 0, 0, 1)),
+                ),
+              ],
+            ),
+      
+            //=======================================
+            //Competition Name with submission button
+            //=======================================
+            Padding(
+              padding: const EdgeInsets.fromLTRB(edgePadding, 15, edgePadding, 15),
+              child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(),
+                          label: Text('Name of competition*'),
+                        ),
+                        controller: _compNameController,
+                        validator: (value) {
+                          //TODO: add another condition that checks if it is a valid name
+                          if (value==null || value.isEmpty) {
+                            return _emptyErrorMsg;
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 20,),
+                    SizedBox(
+                      width: selectionFieldWidth,
+                      height: selectionFieldHeight,
+                      child: ElevatedButton(
+                        child: Text('Submit'),
+                        onPressed: () {
+                          //function for what is done with the user input on submission
+                          //eventually it will lead to the backend and create a competetion class object
+                          //see https://docs.flutter.dev/cookbook/forms/validation for reference
+                          if (_createFormKey.currentState!.validate()) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Form valid, but no submit function has been created.'))
+                            );
+                            submit();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+            ),
+      
+            const Divider(indent: 15, endIndent: 15,),
+      
+            //===========================================================
+            //Competition format settings (e.g. type, elimination rounds)
+            //===========================================================
+            Row(
+              children: [
+                SizedBox(width: 30,),
+                Text('Choose the competition format:*', style: TextStyle(fontSize: 18),),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 5),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Expanded(
+                    child: RadioListTile(
+                      title: Text('Tournament'),
+                      //subtitle: Text('Group stages, into elimination rounds, ending in a final'),
+                      value: CompetitionFormat.tournament,
+                      groupValue: _competitionFormat, 
+                      onChanged: (CompetitionFormat? value) {
+                        setState(() {
+                          _competitionFormat = value;
+                        });
+                      }
+                    ),
+                  ),
+                  Expanded(
+                    child: RadioListTile(
+                      title: Text('League'),
+                      //subtitle: Text('Round robin with all teams, optional elimination rounds'),
+                      value: CompetitionFormat.league,
+                      groupValue: _competitionFormat, 
+                      onChanged: (CompetitionFormat? value) {
+                        setState(() {
+                          _competitionFormat = value;
+                        });
+                      }
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-
-          //=======================================
-          //Competition Name with submission button
-          //=======================================
-          Padding(
-            padding: const EdgeInsets.fromLTRB(edgePadding, 15, edgePadding, 15),
-            child: Row(
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(edgePadding, 15, edgePadding, 15),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Expanded(
                     child: TextFormField(
+                      controller: _numTeamsController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
                       decoration: InputDecoration(
                         border: OutlineInputBorder(),
-                        label: Text('Name of competition*'),
+                        labelText: 'Number of teams*',
                       ),
-                      controller: _compNameController,
                       validator: (value) {
-                        //TODO: add another condition that checks if it is a valid name
-                        if (value==null || value.isEmpty) {
-                          return "This is a required field";
+                        if (value == null || value.isEmpty){
+                          return _emptyErrorMsg;
                         }
+                        //TODO: add an additional validation check to make sure it is a number (That makes sense)
                         return null;
                       },
                     ),
                   ),
-                  SizedBox(width: 20,),
-                  SizedBox(
-                    width: selectionFieldWidth,
-                    height: selectionFieldHeight,
-                    child: ElevatedButton(
-                      child: Text('Create'),
-                      onPressed: () {
-                        //function for what is done with the user input on submission
-                        //eventually it will lead to the backend and create a competetion class object
-                        //see https://docs.flutter.dev/cookbook/forms/validation for reference
-                        if (_createFormKey.currentState!.validate()) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Form valid, but no submit function has been created.'))
-                          );
-                          submit();
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
-                          );
+                  SizedBox(width: edgePadding,),
+                  //Could add code that automatically decides the group size based on the number of teams
+                  Expanded(
+                    child: TextFormField(
+                      controller: _numGroupsController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Number of groups*',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty){
+                          return _emptyErrorMsg;
                         }
+                        //TODO: add an additional validation check to make sure it is a number (That makes sense)
+                        return null;
                       },
                     ),
                   ),
                 ],
               ),
-          ),
-
-          const Divider(indent: 15, endIndent: 15,),
-
-          //===========================================================
-          //Competition format settings (e.g. type, elimination rounds)
-          //===========================================================
-          Row(
-            children: [
-              SizedBox(width: 30,),
-              Text('Choose the competition format:*', style: TextStyle(fontSize: 18),),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 5),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: RadioListTile(
-                    title: Text('Tournament'),
-                    //subtitle: Text('Group stages, into elimination rounds, ending in a final'),
-                    value: CompetitionFormat.tournament,
-                    groupValue: _competitionFormat, 
-                    onChanged: (CompetitionFormat? value) {
-                      setState(() {
-                        _competitionFormat = value;
-                        print('$_competitionFormat');
-                      });
-                    }
-                  ),
-                ),
-                Expanded(
-                  child: RadioListTile(
-                    title: Text('League'),
-                    //subtitle: Text('Round robin with all teams, optional elimination rounds'),
-                    value: CompetitionFormat.league,
-                    groupValue: _competitionFormat, 
-                    onChanged: (CompetitionFormat? value) {
-                      setState(() {
-                        _competitionFormat = value;
-                        print('$_competitionFormat');
-                      });
-                    }
-                  ),
-                ),
-              ],
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(edgePadding, 15, edgePadding, 15),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _numTeamsController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Number of teams*',
+            Padding(
+              padding: const EdgeInsets.fromLTRB(edgePadding, 5, edgePadding, 15),
+              child: SizedBox(
+                height: selectionFieldHeight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'First round of elimination*:',
+                        style: TextStyle(fontSize: 15),
+                      ),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty){
-                        return "This is a required field";
-                      }
-                      //TODO: add an additional validation check to make sure it is a number (That makes sense)
-                      return null;
-                    },
-                  ),
+                    SizedBox(
+                      width: selectionFieldWidth,
+                      height: selectionFieldHeight,
+                      child: EliminationDropDown(),
+                    )
+                  ],
                 ),
-                SizedBox(width: 50,),
-                Expanded(
-                  child: TextFormField(
-                    controller: _numGroupsController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Number of groups*',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty){
-                        return "This is a required field";
-                      }
-                      //TODO: add an additional validation check to make sure it is a number (That makes sense)
-                      return null;
-                    },
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(edgePadding, 5, edgePadding, 15),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: Text(
-                    'First round to follow the group stages:',
-                    style: TextStyle(fontSize: 15),
-                  ),
-                ),
-                /*DropdownMenu(
-                  width: selectionFieldWidth,
-                  initialSelection: EliminationRound.roundOf16,
-                  controller: _eliminationController,
-                  dropdownMenuEntries: EliminationRound.values.map((EliminationRound eliminationRound) {
-                    return DropdownMenuEntry(
-                      value: eliminationRound,
-                      label: eliminationRound.label,
-                    );
-                  }).toList(),
-                  onSelected: (EliminationRound? eliminationRound) {
-                    _eliminationRound = eliminationRound;
-                  },
-                ),*/
-              ],
-            ),
-          ),
+      
+            const Divider(indent: 15, endIndent: 15,),
+          ],
+        ),
+      ),],
+    );
+  }
+}
 
-          const Divider(indent: 15, endIndent: 15,),
-        ],
-      ),
+class EliminationDropDown extends StatefulWidget {
+  const EliminationDropDown({
+    super.key,
+  });
+
+  @override
+  State<EliminationDropDown> createState() => _EliminationDropDownState();
+}
+
+class _EliminationDropDownState extends State<EliminationDropDown> {
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField(
+      value: _eliminationRound,
+      decoration: InputDecoration(border: OutlineInputBorder()),
+      style: TextStyle(fontSize: 12, color: Colors.black),
+      onChanged: (EliminationRound? value) {
+        setState(() {
+          _eliminationRound = value;
+        });
+      },
+      items: EliminationRound.values.map<DropdownMenuItem<EliminationRound>>((EliminationRound? value) {
+        return DropdownMenuItem<EliminationRound>(
+          value: value,
+          child: Text(value!.label),
+        );
+      }).toList(),
+      validator: (value) {
+        //TODO: check if input makes sense (i.e. there are enough teams to do the selected round)
+        return null;
+      },
     );
   }
 }
@@ -296,11 +332,249 @@ class CreateTournamentPageSmall extends StatelessWidget {
   }
 }
 
-class CreateTournamentFormSmall extends StatelessWidget {
+class CreateTournamentFormSmall extends StatefulWidget {
+  @override
+  State<CreateTournamentFormSmall> createState() => _CreateTournamentFormSmallState();
+}
+
+class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
   @override
   Widget build (BuildContext context) {
-    return Center(
-      child: Text('Small screen form'),
+    return ListView(
+      children: [
+        Form(
+          key: _createFormKey,
+          child: Container(
+            alignment: Alignment.topLeft,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(width: 10,),
+                    Text(
+                      '*required fields', 
+                      style: TextStyle(fontSize: 12, color: Color.fromRGBO(255, 0, 0, 1)),
+                    ),
+                  ],
+                ),
+                
+                //======================================
+                //Competition name and submission button
+                //======================================
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(edgePaddingSmall, 10, edgePaddingSmall, 10),
+                  child: SizedBox(
+                    height: selectionFieldHeight,
+                    child: TextFormField(
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        label: Text('Competition name*')
+                      ),
+                      controller: _compNameController,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return _emptyErrorMsg;
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(edgePaddingSmall, 0, edgePaddingSmall, 10),
+                  child: Container(
+                    alignment: Alignment.topRight,
+                    child: ElevatedButton(
+                      child: Text('Submit'),
+                      onPressed: () {
+                        if (_createFormKey.currentState!.validate()) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Form valid, but no submit function has been created.'))
+                          );
+                          //TODO: Submission function for button
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ),
+
+                Divider(indent: 10, endIndent: 10,),
+
+                //===================
+                //Tournament settings
+                //===================
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(edgePaddingSmall, 10, edgePaddingSmall, 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        alignment: Alignment.topLeft,
+                        child: Text('Choose the competition format*:', style: TextStyle(fontSize: 18),),
+                      ),
+                      Container(
+                        alignment: Alignment.topLeft,
+                        height: selectionFieldHeight,
+                        child: RadioListTile(
+                          title: Text('Tournament'),
+                          value: CompetitionFormat.tournament, 
+                          groupValue: _competitionFormat, 
+                          onChanged:(CompetitionFormat? value) {
+                            setState(() {
+                              _competitionFormat = value;
+                            });
+                          },
+                        ),
+                      ),
+                      Container(
+                        alignment: Alignment.topLeft,
+                        height: selectionFieldHeight,
+                        child: RadioListTile(
+                          title: Text('League'),
+                          value: CompetitionFormat.league, 
+                          groupValue: _competitionFormat, 
+                          onChanged: (CompetitionFormat? value) {
+                            setState(() {
+                              _competitionFormat = value;
+                            });
+                          }
+                        ),
+                      ),
+                      SizedBox(height: 10,),
+                      SizedBox(
+                        height: selectionFieldHeight,
+                        child: Row(
+                          children: [
+                            Expanded(child: Text('Number of teams*:', style: TextStyle(fontSize: 15),)),
+                            SizedBox(
+                              width: selectionFieldWidthSmall,
+                              child: TextFormField(
+                                controller: _numTeamsController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(border: OutlineInputBorder()),
+                                validator: (value) {
+                                  if (value==null || value.isEmpty){
+                                    return '';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 10,),
+                      SizedBox(
+                        height: selectionFieldHeight,
+                        child: Row(
+                          children: [
+                            Expanded(child: Text('Number of groups*:', style: TextStyle(fontSize: 15),)),
+                            SizedBox(
+                              width: selectionFieldWidthSmall,
+                              child: TextFormField(
+                                controller: _numGroupsController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(border: OutlineInputBorder()),
+                                validator: (value) {
+                                  if (value==null || value.isEmpty){
+                                    return '';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 10,),
+                      SizedBox(
+                        height: selectionFieldHeight,
+                        child: Row(
+                          children: [
+                            Expanded(child: Text('First round of elimination*:', style: TextStyle(fontSize: 15),),),
+                            SizedBox(
+                              width: selectionFieldWidthSmall,
+                              height: selectionFieldHeight,
+                              child: EliminationDropDown()
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(indent: 10, endIndent: 10,),
+
+                //=============
+                //List of teams
+                //=============
+                Padding(
+                  padding: EdgeInsets.fromLTRB(edgePaddingSmall, 10, edgePaddingSmall, 10),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text('Teams list*:', style: TextStyle(fontSize: 18),)),
+                          Container(
+                            alignment: Alignment.topRight,
+                            child: ElevatedButton(
+                              child: Text('Add'),
+                              onPressed: () {
+                                
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 10,),
+                      Container(
+                        alignment: Alignment.topCenter,
+                        height: 400,
+                        child: ListView(
+                          children: [
+                            TeamListTile(),
+                            ListTile(title: Text('Team 2'),),
+                            ListTile(title: Text('Team 3'),),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        )
+      ],
+    );
+  }
+}
+
+class TeamListTile extends StatelessWidget {
+  const TeamListTile ({
+    super.key
+  });
+
+  @override
+  Widget build (BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(0, 0, 0, 5),
+      height: 60,
+      child: Row(
+        children: [
+          Icon(Icons.person, size: 25,),
+          SizedBox(width: 10),
+          Expanded(child: Text('Team 1', style: TextStyle(fontSize: 16),)),
+          Icon(Icons.remove_circle_outline, color: Colors.red, size: 25,)
+        ],
+      ),
     );
   }
 }

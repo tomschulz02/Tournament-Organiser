@@ -38,3 +38,6 @@ Initial creation of the project using flutter.
  - fixed the error that the dropdown list for the elimination round was giving
  - started working on the list to display the participating teams
  - created a custom ListTile widget for each team in the list
+
+### Patch 0.24.02.16.0
+ - changes to the custom team ListTile

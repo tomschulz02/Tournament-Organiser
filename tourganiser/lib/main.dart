@@ -18,6 +18,9 @@ class MainApp extends StatelessWidget {
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.blue,
+          ),
+          textTheme: TextTheme(
+            //TODO: Add a custom theme for headings, subheadings, body text, etc
           )
         ),
         home: PageLayout(title: appTitle,),

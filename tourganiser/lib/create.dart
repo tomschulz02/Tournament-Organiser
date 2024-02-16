@@ -534,14 +534,22 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
                         ],
                       ),
                       SizedBox(height: 10,),
+                      Row(
+                        children: [
+                          SizedBox(width: 35,),
+                          Expanded(child: Text('Team name:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),)),
+                          SizedBox(width: 50, child: Text('Rank:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),),),
+                          SizedBox(width: 120,),
+                        ],
+                      ),
                       Container(
                         alignment: Alignment.topCenter,
                         height: 400,
                         child: ListView(
                           children: [
-                            TeamListTile(),
-                            ListTile(title: Text('Team 2'),),
-                            ListTile(title: Text('Team 3'),),
+                            TeamListTile(name: 'Team 1', rank: 1,),
+                            TeamListTile(name: 'Team 2', rank: 2,),
+                            TeamListTile(name: 'Team 3', rank: 3,),
                           ],
                         ),
                       ),
@@ -559,20 +567,48 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
 
 class TeamListTile extends StatelessWidget {
   const TeamListTile ({
-    super.key
+    super.key,
+    required this.name,
+    required this.rank,
   });
+
+  final String name;
+  final int rank;
 
   @override
   Widget build (BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(0, 0, 0, 5),
-      height: 60,
+      height: 50,
       child: Row(
         children: [
-          Icon(Icons.person, size: 25,),
+          Icon(Icons.people, size: 25,),
           SizedBox(width: 10),
-          Expanded(child: Text('Team 1', style: TextStyle(fontSize: 16),)),
-          Icon(Icons.remove_circle_outline, color: Colors.red, size: 25,)
+          Expanded(child: Text(name, style: TextStyle(fontSize: 16),)),
+          SizedBox(
+            width: 50,
+            child: Center(
+              child: Text(
+                '$rank'
+              ),
+            ),
+          ),
+          SizedBox(width: 20,),
+          IconButton(
+            icon: Icon(Icons.edit, size: 30),
+            onPressed: () {
+              print('Edit');
+              //TODO: Add a popup with a textfield and a number chooser (textfield or dropdown)
+            },
+          ),
+          SizedBox(width: 10,),
+          IconButton(
+            icon: Icon(Icons.remove_circle_outline, color: Colors.red, size: 30,),
+            onPressed: () {
+              print('Remove');
+              //TODO: Add a function that removes the team from the list
+            },
+          ),
         ],
       ),
     );

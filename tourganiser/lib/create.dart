@@ -328,6 +328,24 @@ class CreateTournamentPageSmall extends StatelessWidget {
         title: const Text('Create a Tournament'),
       ),
       body: CreateTournamentFormSmall(),
+      floatingActionButton: SizedBox(
+        width: 100,
+        child: FloatingActionButton(
+          onPressed: () {
+            if (_createFormKey.currentState!.validate()) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Form valid, but no submit function has been created.'))
+              );
+            //TODO: Submission function for button
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
+              );
+            }
+          },
+          child: Text("Submit"),
+        ),
+      ),
     );
   }
 }
@@ -377,27 +395,6 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
                           return _emptyErrorMsg;
                         }
                         return null;
-                      },
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(edgePaddingSmall, 0, edgePaddingSmall, 10),
-                  child: Container(
-                    alignment: Alignment.topRight,
-                    child: ElevatedButton(
-                      child: Text('Submit'),
-                      onPressed: () {
-                        if (_createFormKey.currentState!.validate()) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Form valid, but no submit function has been created.'))
-                          );
-                          //TODO: Submission function for button
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
-                          );
-                        }
                       },
                     ),
                   ),

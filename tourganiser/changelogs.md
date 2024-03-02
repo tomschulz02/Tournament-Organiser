@@ -41,3 +41,8 @@ Initial creation of the project using flutter.
 
 ### Patch 0.24.02.16.0
  - changes to the custom team ListTile
+
+### Patch 0.24.03.02.0
+ - Moved the submit button from the create form to a FloatingActionButton on mobile version
+ - Moved the submit button from create form to button in AppBar on desktop version
+ - Started working on the AddTeamPopUp for create form

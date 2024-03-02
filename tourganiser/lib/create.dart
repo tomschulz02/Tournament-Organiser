@@ -50,6 +50,33 @@ class CreateTournamentPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create a Tournament'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: SizedBox(
+                        width: selectionFieldWidth,
+                        height: selectionFieldHeight,
+                        child: ElevatedButton(
+                          child: Text('Submit'),
+                          onPressed: () {
+                            //function for what is done with the user input on submission
+                            //eventually it will lead to the backend and create a competetion class object
+                            //see https://docs.flutter.dev/cookbook/forms/validation for reference
+                            if (_createFormKey.currentState!.validate()) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Form valid, but no submit function has been created.'))
+                              );
+                              
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
+                              );
+                            }
+                          },
+                        ),
+                      ),
+          ),
+        ],
       ),
       body: CreateTournamentForm(),
     );
@@ -104,9 +131,9 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
               ],
             ),
       
-            //=======================================
-            //Competition Name with submission button
-            //=======================================
+            //================
+            //Competition Name
+            //================
             Padding(
               padding: const EdgeInsets.fromLTRB(edgePadding, 15, edgePadding, 15),
               child: Row(
@@ -125,29 +152,6 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
                             return _emptyErrorMsg;
                           }
                           return null;
-                        },
-                      ),
-                    ),
-                    SizedBox(width: 20,),
-                    SizedBox(
-                      width: selectionFieldWidth,
-                      height: selectionFieldHeight,
-                      child: ElevatedButton(
-                        child: Text('Submit'),
-                        onPressed: () {
-                          //function for what is done with the user input on submission
-                          //eventually it will lead to the backend and create a competetion class object
-                          //see https://docs.flutter.dev/cookbook/forms/validation for reference
-                          if (_createFormKey.currentState!.validate()) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Form valid, but no submit function has been created.'))
-                            );
-                            submit();
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('There are some fields that aren\'t vaild. Please try again.'))
-                            );
-                          }
                         },
                       ),
                     ),
@@ -274,6 +278,53 @@ class _CreateTournamentFormState extends State<CreateTournamentForm> {
             ),
       
             const Divider(indent: 15, endIndent: 15,),
+
+            //=============
+            //List of teams
+            //=============
+            Padding(
+                  padding: EdgeInsets.fromLTRB(edgePaddingSmall, 10, edgePaddingSmall, 10),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text('Teams list*:', style: TextStyle(fontSize: 18),)),
+                          Container(
+                            alignment: Alignment.topRight,
+                            child: ElevatedButton(
+                              child: Text('Add'),
+                              onPressed: () async {
+                                await showDialog<void>(context: context, builder: (BuildContext builder) {
+                                  return AddTeamPopUp();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 10,),
+                      Row(
+                        children: [
+                          SizedBox(width: 35,),
+                          Expanded(child: Text('Team name:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),)),
+                          SizedBox(width: 50, child: Text('Rank:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),),),
+                          SizedBox(width: 120,),
+                        ],
+                      ),
+                      Container(
+                        alignment: Alignment.topCenter,
+                        height: 400,
+                        child: ListView(
+                          children: [
+                            TeamListTile(name: 'Team 1', rank: 1,),
+                            TeamListTile(name: 'Team 2', rank: 2,),
+                            TeamListTile(name: 'Team 3', rank: 3,),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
           ],
         ),
       ),],

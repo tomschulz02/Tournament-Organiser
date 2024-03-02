@@ -625,11 +625,66 @@ class AddTeamPopUp extends StatelessWidget {
     return AlertDialog(
       scrollable: true,
       title: Text("Add Teams"),
-      content: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Text("Test"),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width*0.8,
+        height: MediaQuery.of(context).size.height*0.6,
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: DefaultTabController(
+            length: 2,
+            child: Scaffold(
+              appBar: AppBar(
+                bottom: const TabBar(
+                  tabs: [
+                    Tab(text: "New",),
+                    Tab(text: "Existing",),
+                  ],
+                ),
+              ),
+              body: const TabBarView(
+                children: [
+                  NewTeamForm(),
+                  Text("Load Team"),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
       
+    );
+  }
+}
+
+class NewTeamForm extends StatelessWidget {
+  const NewTeamForm({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextFormField(
+              decoration: InputDecoration(
+                label: Text("Team Name:"),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+
+              ],
+            ),
+          )
+        ],
+      ),
     );
   }
 }

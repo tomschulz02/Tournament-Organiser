@@ -377,13 +377,13 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
                   ],
                 ),
                 
-                //======================================
-                //Competition name and submission button
-                //======================================
+                //================
+                //Competition name
+                //================
                 Padding(
                   padding: const EdgeInsets.fromLTRB(edgePaddingSmall, 10, edgePaddingSmall, 10),
                   child: SizedBox(
-                    height: selectionFieldHeight,
+                    //height: selectionFieldHeight,
                     child: TextFormField(
                       decoration: InputDecoration(
                         border: OutlineInputBorder(),
@@ -444,7 +444,7 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
                       ),
                       SizedBox(height: 10,),
                       SizedBox(
-                        height: selectionFieldHeight,
+                        //height: selectionFieldHeight,
                         child: Row(
                           children: [
                             Expanded(child: Text('Number of teams*:', style: TextStyle(fontSize: 15),)),
@@ -468,7 +468,7 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
                       ),
                       SizedBox(height: 10,),
                       SizedBox(
-                        height: selectionFieldHeight,
+                        //height: selectionFieldHeight,
                         child: Row(
                           children: [
                             Expanded(child: Text('Number of groups*:', style: TextStyle(fontSize: 15),)),
@@ -523,8 +523,10 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
                             alignment: Alignment.topRight,
                             child: ElevatedButton(
                               child: Text('Add'),
-                              onPressed: () {
-                                
+                              onPressed: () async {
+                                await showDialog<void>(context: context, builder: (BuildContext builder) {
+                                  return AddTeamPopUp();
+                                });
                               },
                             ),
                           ),
@@ -558,6 +560,25 @@ class _CreateTournamentFormSmallState extends State<CreateTournamentFormSmall> {
           ),
         )
       ],
+    );
+  }
+}
+
+class AddTeamPopUp extends StatelessWidget {
+  const AddTeamPopUp({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: Text("Add Teams"),
+      content: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Text("Test"),
+      ),
+      
     );
   }
 }

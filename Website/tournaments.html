@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volleyball Tournament Creator</title>
+    <style>
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label { 
+            display: block; 
+            margin-bottom: 5px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Volleyball Tournament</h1>
+        <form id="tournamentForm">
+            <div class="form-group">
+                <label for="tournamentName">Tournament Name:</label>
+                <input type="text" id="tournamentName" required>
+            </div>
+            <div class="form-group">
+                <label for="tournamentDate">Tournament Date:</label>
+                <input type="date" id="tournamentDate" required>
+            </div>
+            <div class="form-group">
+                <label for="numTeams">Number of Teams:</label>
+                <input type="number" id="numTeams" min="2" max="32" required>
+            </div>
+            <div class="form-group">
+                <label for="playersPerTeam">Players per Team:</label>
+                <input type="number" id="playersPerTeam" min="6" max="12" required>
+            </div>
+            <div class="form-group">
+                <label for="format">Tournament Format:</label>
+                <select id="format" required>
+                    <option value="singleElimination">Single Elimination</option>
+                    <option value="doubleElimination">Double Elimination</option>
+                    <option value="roundRobin">Round Robin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="venue">Venue:</label>
+                <input type="text" id="venue" required>
+            </div>
+            <button type="submit">Create Tournament</button>
+        </form>
+    </div>
+    <script>
+        document.getElementById('tournamentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            // Here you would add code to handle form submission
+            alert('Tournament creation form submitted!');
+        });
+    </script>
+</body>
+</html>

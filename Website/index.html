@@ -26,9 +26,92 @@
             <p>Plan your next tournament with ease.</p>
         </section>
 
+        <section id="features" class="features-section">
+            <h2 class="section-title">Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-image"></div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">Tournament Creation</h3>
+                        <p class="feature-description">Create and manage tournaments with just a few clicks. Set up brackets, rounds, and schedules effortlessly.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-image"></div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">Player Management</h3>
+                        <p class="feature-description">Keep track of participants, teams, and their statistics. Manage registrations and check-ins smoothly.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-image"></div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">Live Updates</h3>
+                        <p class="feature-description">Real-time score updates and bracket progression. Keep everyone informed with instant notifications.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-image"></div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">Custom Rules</h3>
+                        <p class="feature-description">Define your own tournament rules and formats. Support for various competition styles and scoring systems.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-image"></div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">Analytics</h3>
+                        <p class="feature-description">Get detailed insights and statistics. Track performance metrics and generate comprehensive reports.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
-    <footer>
-        <p>&copy; 2023 My Website</p>
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>Quick Links</h4>
+                <nav>
+                    <a href="#home">Home</a>
+                    <a href="#features">Features</a>
+                    <a href="#about">About</a>
+                    <a href="tournaments.html">Tournaments</a>
+                    <a href="#contact">Contact</a>
+                </nav>
+            </div>
+            <div class="footer-section">
+                <h4>Connect With Us</h4>
+                <div class="social-links">
+                    <a href="#"><i class="fab fa-twitter"></i> Twitter</a>
+                    <a href="#"><i class="fab fa-discord"></i> Discord</a>
+                    <a href="#"><i class="fab fa-github"></i> GitHub</a>
+                </div>
+            </div>
+            <div class="footer-section">
+                <h4>Contact</h4>
+                <p>Email: info@tourganiser.com</p>
+                <p>Support: support@tourganiser.com</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 Tourganiser. All rights reserved.</p>
+            <div class="legal-links">
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+            </div>
+        </div>
     </footer>
+
+    <script>
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 50) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+        });
+    </script>
 </body>
 </html>

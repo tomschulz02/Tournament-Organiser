@@ -65,6 +65,8 @@ header nav a:hover {
 #home {
     padding: 40px;
     text-align: center;
+    align-content: center;
+    height: 400px;
 }
 
 #home h2 {
@@ -280,4 +282,47 @@ main {
 
 main {
     padding-top: 80px;
+}
+
+.donation-banner {
+    background: linear-gradient(135deg, var(--main-color), #121966);
+    color: white;
+    padding: 30px 20px;
+    text-align: left;
+    margin: 20px 0;
+    display: flex;
+    font-family: var(--main-font-family);
+    max-height: 150px;
+}
+
+.banner-content {
+    /* max-width: 800px; */
+    margin: 0 100px;
+    flex: 5;
+}
+
+.banner-content h3 {
+    font-size: 1.8em;
+    margin-bottom: 15px;
+}
+
+.banner-content p {
+    margin-bottom: 20px;
+}
+
+.donate-button {
+    display: inline-block;
+    padding: 12px 30px;
+    background-color: #fff;
+    color: var(--main-color);
+    text-decoration: none;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: transform 0.3s ease;
+    max-height: 45px;
+    margin: auto 20px auto 0;
+}
+
+.donate-button:hover {
+    transform: scale(1.05);
 }

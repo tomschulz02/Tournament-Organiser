@@ -8,7 +8,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const steps = document.querySelectorAll('.step');
     let currentSlide = 0;
 
+    function validateFirstSlide() {
+        const tournamentName = document.getElementById('tournamentName').value;
+        const startDate = document.getElementById('startDate').value;
+        const location = document.getElementById('location').value;
+        
+        // Check if required fields are filled
+        if (!tournamentName || !startDate || !location) {
+            // Add error class to empty required fields
+            if (!tournamentName) document.getElementById('tournamentName').classList.add('error');
+            if (!startDate) document.getElementById('startDate').classList.add('error');
+            if (!location) document.getElementById('location').classList.add('error');
+            return false;
+        }
+        
+        return true;
+    }
+
     nextBtn.addEventListener('click', () => {
+        if (currentSlide === 0) {
+            if (!validateFirstSlide()) {
+                return; // Stop if validation fails
+            }
+        }
+        
         if (currentSlide < slides.length - 1) {
             slides[currentSlide].classList.remove('active');
             slides[currentSlide + 1].classList.add('active');
@@ -39,6 +62,38 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add form submission logic here
         console.log('Form submitted');
     });
-});
 
-let format = document.getElementById('format');
+    let format = document.getElementById('format');
+    let options = Array.from(format.options).map(option => option.value);
+    // options will contain: ['single', 'double', 'round', 'combi']
+    let selectedFormat = format.value;
+
+    // hide all descriptions but the default selected one
+    options.forEach(opt => {
+        document.getElementById(opt).style.display = 'none';
+    });
+    document.getElementById(selectedFormat).style.display = 'block';
+
+    format.addEventListener('change', () => {
+        selectedFormat = format.value;
+        console.log(selectedFormat=== 'combi');
+        // hide all descriptions but the selected one
+        options.forEach(opt => {
+            document.getElementById(opt).style.display = 'none';
+        });
+        document.getElementById(selectedFormat).style.display = 'block';
+
+        // if the selected format is 'combi', show the combi options
+        if (selectedFormat === 'combi') {
+            document.getElementById('groupCount').classList.toggle('hidden');
+            document.getElementById('knockout').classList.toggle('hidden');
+            document.getElementById('teamsPerGroup').toggleAttribute('required');
+            document.getElementById('knockoutRound').toggleAttribute('required');
+        } else {
+            document.getElementById('groupCount').classList.toggle('hidden');
+            document.getElementById('knockout').classList.toggle('hidden');
+            document.getElementById('teamsPerGroup').toggleAttribute('required');
+            document.getElementById('knockoutRound').toggleAttribute('required');
+        }
+    });
+});

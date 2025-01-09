@@ -34,32 +34,33 @@
 
                 <!-- Slide 1: Tournament Details -->
                 <div class="form-slide active" id="slide-1">
-                    <h2>Tournament Details</h2>
+                    <h2>Tournament Details</h2><br>
                     <div class="form-group">
-                        <label for="tournamentName">Tournament Name</label>
+                        <label for="tournamentName">Tournament Name*</label>
                         <input type="text" id="tournamentName" required>
                     </div>
                     <div class="form-group">
-                        <label for="startDate">Start Date</label>
+                        <label for="startDate">Start Date*</label>
                         <input type="date" id="startDate" required>
                     </div>
                     <div class="form-group">
-                        <label for="location">Location</label>
+                        <label for="location">Location*</label>
                         <input type="text" id="location" required>
                     </div>
                     <div class="form-group">
-                        <label for="description">Description</label>
+                        <label for="description">Description (optional)</label>
                         <textarea id="description" rows="4"></textarea>
                     </div>
+                    <p>*required</p>
                 </div>
 
                 <!-- Slide 2: Tournament Structure -->
                 <div class="form-slide" id="slide-2">
-                    <h2>Tournament Structure</h2>
+                    <h2>Tournament Structure</h2><br>
                     <div class="two-column-layout">
                         <div class="column">
                             <div class="form-group">
-                                <label for="format">Tournament Format</label>
+                                <label for="format">Tournament Format*</label>
                                 <select id="format" required>
                                     <option value="single">Single Elimination</option>
                                     <option value="double">Double Elimination</option>
@@ -68,15 +69,15 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="teamCount">Number of Teams</label>
+                                <label for="teamCount">Number of Teams*</label>
                                 <input type="number" id="teamCount" min="2" required>
                             </div>
-                            <div class="form-group hidden">
-                                <label for="teamsPerGroup">Teams per Group</label>
+                            <div class="form-group hidden" id="groupCount">
+                                <label for="teamsPerGroup">Teams per Group*</label>
                                 <input type="number" id="teamsPerGroup" min="3">
                             </div>
-                            <div class="form-group hidden">
-                                <label for="knockoutRound">First Knockout Round</label>
+                            <div class="form-group hidden" id="knockout">
+                                <label for="knockoutRound">First Knockout Round*</label>
                                 <select type="number" id="knockoutRound">
                                     <option value="12">Round of 24</option>
                                     <option value="8">Round of 16</option>
@@ -86,15 +87,16 @@
                                     <option value="1">Finals</option>
                                 </select>
                             </div>
+                            <p>*required</p>
                         </div>
                         <div class="divider"></div>
                         <div class="column">
                             <h2>Description</h2>
-                            <div class="description" id="singleElim">
+                            <div class="description" id="single">
                                 <h3>Single Elimination</h3>
                                 <p>Teams are eliminated after losing a match. The tournament continues until only one team remains.</p>
                             </div>
-                            <div class="description hidden" id="doubleElim">
+                            <div class="description hidden" id="double">
                                 <h3>Double Elimination</h3>
                                 <p>
                                     Teams have two chances to stay in the tournament. A team must lose twice to be eliminated. <br>
@@ -104,7 +106,7 @@
                                     "Losers' Bracket" in the semifinals.
                                 </p>
                             </div>
-                            <div class="description hidden" id="roundRobin">
+                            <div class="description hidden" id="round">
                                 <h3>Round Robin</h3>
                                 <p>
                                     Teams play against every other team in the tournament. Points are awarded for wins and ties. <br>
@@ -133,6 +135,7 @@
                 </div>
             </form>
         </div>
+        
     </main>
 
     <footer class="site-footer">

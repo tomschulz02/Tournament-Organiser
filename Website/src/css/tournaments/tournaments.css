@@ -138,3 +138,12 @@
 .description {
     margin-top: 20px;
 }
+
+.error {
+    border-color: #ff4444 !important;
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.2);
+}
+
+.form-group input.error::placeholder {
+    color: #ff4444;
+}

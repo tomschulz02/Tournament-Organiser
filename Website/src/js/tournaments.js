@@ -40,3 +40,5 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Form submitted');
     });
 });
+
+let format = document.getElementById('format');

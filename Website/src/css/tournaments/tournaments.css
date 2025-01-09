@@ -112,3 +112,29 @@
         transform: translateX(0);
     }
 }
+
+.two-column-layout {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.column {
+    flex: 1;
+}
+
+.divider {
+    width: 1px;
+    align-self: stretch;
+    background-color: #e0e0e0;
+    margin: 0 20px;
+}
+
+.hidden {
+    display: none;
+}
+
+.description {
+    margin-top: 20px;
+}

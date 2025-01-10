@@ -96,4 +96,32 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('knockoutRound').toggleAttribute('required');
         }
     });
+
+    // Tab switching logic
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // Remove active class from all buttons and contents
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked button and corresponding content
+            button.classList.add('active');
+            const tabId = button.getAttribute('data-tab');
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+        });
+    });
+
+    // Search functionality
+    const searchInput = document.getElementById('searchTournaments');
+    const formatFilter = document.getElementById('filterFormat');
+
+    searchInput.addEventListener('input', filterTournaments);
+    formatFilter.addEventListener('change', filterTournaments);
+
+    function filterTournaments() {
+        // Add tournament filtering logic here
+    }
 });

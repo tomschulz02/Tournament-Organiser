@@ -12,6 +12,18 @@
     font-family: var(--main-font-family);
 }
 
+body{
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+main {
+    padding-top: 80px;
+    flex: 1;
+}
+
 /* 
 Styles for the header i.e. navigation bar
 It will be persistent on all pages 
@@ -78,7 +90,7 @@ Styles for the footer, which will be persistent on all pages
     background-color: #1a1a1a;
     color: #fff;
     padding: 40px 20px 20px;
-    margin-top: 40px;
+    margin-top: auto;
     font-family: var(--main-font-family);
 }
 
@@ -165,10 +177,6 @@ Styles for the footer, which will be persistent on all pages
         flex-direction: column;
         text-align: center;
     }
-}
-
-main {
-    padding-top: 80px;
 }
 
 /* 

@@ -57,13 +57,14 @@
 
             <!-- Create Tab -->
             <div class="tab-content" id="create-tab">
-                <!-- Existing form content -->
                 <div class="form-container">
                     <form id="tournament-form" class="multi-step-form">
                         <!-- Progress Bar -->
                         <div class="progress-bar">
                             <div class="step active">Details</div>
-                            <div class="step">Structure</div>
+                            <div class="step">Format</div>
+                            <div class="step">Rules</div>
+                            <div class="step">Teams</div>
                         </div>
 
                         <!-- Slide 1: Tournament Details -->
@@ -90,7 +91,7 @@
 
                         <!-- Slide 2: Tournament Structure -->
                         <div class="form-slide" id="slide-2">
-                            <h2>Tournament Structure</h2><br>
+                            <h2>Tournament Format</h2><br>
                             <div class="two-column-layout">
                                 <div class="column">
                                     <div class="form-group">
@@ -161,11 +162,26 @@
                             </div>
                         </div>
 
+                        <!-- Slide 3: Tournament Rules -->
+                        <div class="form-slide" id="slide-3">
+                            <h2>Tournament Rules</h2>
+                            <div class="two-column-layout">
+                                <div class="column">
+                                    
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Slide 4: Team list -->
+                        <div class="form-slide" id="slide-4">
+                            <h2>Teams</h2>
+                        </div>
+
                         <!-- Navigation Buttons -->
                         <div class="form-navigation">
-                            <button type="button" id="prevBtn" class="nav-btn" style="display: none;">Previous</button>
                             <button type="button" id="nextBtn" class="nav-btn">Next</button>
                             <button type="submit" id="submitBtn" class="nav-btn" style="display: none;">Create Tournament</button>
+                            <button type="button" id="prevBtn" class="nav-btn" style="display: none;">Previous</button>
                         </div>
                     </form>
                 </div>

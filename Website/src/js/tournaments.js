@@ -1,29 +1,14 @@
 /* filepath: /js/tournaments.js */
+let currentSlide = 0;
+let slides = 0;
+
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('tournament-form');
-    const slides = document.querySelectorAll('.form-slide');
+    slides = document.querySelectorAll('.form-slide');
     const nextBtn = document.getElementById('nextBtn');
     const prevBtn = document.getElementById('prevBtn');
     const submitBtn = document.getElementById('submitBtn');
     const steps = document.querySelectorAll('.step');
-    let currentSlide = 0;
-
-    function validateFirstSlide() {
-        const tournamentName = document.getElementById('tournamentName').value;
-        const startDate = document.getElementById('startDate').value;
-        const location = document.getElementById('location').value;
-        
-        // Check if required fields are filled
-        if (!tournamentName || !startDate || !location) {
-            // Add error class to empty required fields
-            if (!tournamentName) document.getElementById('tournamentName').classList.add('error');
-            if (!startDate) document.getElementById('startDate').classList.add('error');
-            if (!location) document.getElementById('location').classList.add('error');
-            return false;
-        }
-        
-        return true;
-    }
 
     nextBtn.addEventListener('click', () => {
         if (currentSlide === 0) {
@@ -50,12 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateButtons();
         }
     });
-
-    function updateButtons() {
-        prevBtn.style.display = currentSlide === 0 ? 'none' : 'block';
-        nextBtn.style.display = currentSlide === slides.length - 1 ? 'none' : 'block';
-        submitBtn.style.display = currentSlide === slides.length - 1 ? 'block' : 'none';
-    }
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -119,9 +98,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const formatFilter = document.getElementById('filterFormat');
 
     searchInput.addEventListener('input', filterTournaments);
-    formatFilter.addEventListener('change', filterTournaments);
-
-    function filterTournaments() {
-        // Add tournament filtering logic here
-    }
+    formatFilter.addEventListener('change', filterTournaments); 
 });
+
+function validateFirstSlide() {
+    const tournamentName = document.getElementById('tournamentName').value;
+    const startDate = document.getElementById('startDate').value;
+    const location = document.getElementById('location').value;
+    
+    // Check if required fields are filled
+    if (!tournamentName || !startDate || !location) {
+        // Add error class to empty required fields
+        if (!tournamentName) document.getElementById('tournamentName').classList.add('error');
+        if (!startDate) document.getElementById('startDate').classList.add('error');
+        if (!location) document.getElementById('location').classList.add('error');
+        return false;
+    }
+    
+    return true;
+}
+
+function updateButtons() {
+    prevBtn.style.display = currentSlide === 0 ? 'none' : 'block';
+    nextBtn.style.display = currentSlide === slides.length - 1 ? 'none' : 'block';
+    submitBtn.style.display = currentSlide === slides.length - 1 ? 'block' : 'none';
+}
+
+function filterTournaments() {
+    // Add tournament filtering logic here
+}

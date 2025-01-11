@@ -9,7 +9,7 @@ window.addEventListener('scroll', () => {
 
 function openProfile(){
     event.preventDefault(); // Prevent default link behavior
-    document.getElementById('profileTab').style.display = 'block';
+    document.getElementById('profileTab').style.display = 'flex';
 }
 
 function closeProfile(){

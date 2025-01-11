@@ -254,7 +254,23 @@ Styles for a donation banner that could be used on multiple pages
     width: 90vw;
     max-width: 400px;
     margin: 0;
-    margin-left: auto;
+    padding: 15px 20px;
+}
+
+.profile-close-btn {
+    position: relative;
+    top: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    padding: 10px;
+    padding-top: 0;
+    background-color: white;
+    border-radius: 0 0 0 40px;
+    border: none;
+    margin: 0 0 auto auto;
+    cursor: pointer;
+    font-size: 30px;
 }
 
 @keyframes slideLeft {

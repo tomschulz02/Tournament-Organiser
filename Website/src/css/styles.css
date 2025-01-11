@@ -225,3 +225,52 @@ Styles for a donation banner that could be used on multiple pages
 .donate-button:hover {
     transform: scale(1.05);
 }
+
+/* 
+    Styles for the user profile tab
+*/
+.profile-tab {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    animation: slideLeft 0.3s ease-out;    
+}
+
+.profile-tab.closing {
+    animation: slideRight 0.3s ease-out;
+}
+
+.profile-content {
+    position: relative;
+    top: 0;
+    right: 0;
+    background-color: white;
+    height: 100%;
+    width: 90vw;
+    max-width: 400px;
+    margin: 0;
+    margin-left: auto;
+}
+
+@keyframes slideLeft {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideRight {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(100%);
+    }
+}

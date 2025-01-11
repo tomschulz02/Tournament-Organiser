@@ -129,7 +129,7 @@ function closePopup() {
     setTimeout(() => {
         popup.style.display = 'none';
         popup.classList.remove('closing');
-    }, 600); // Match animation duration
+    }, 480); // Match animation duration
 }
 
 function loadTournamentData(tournamentId) {

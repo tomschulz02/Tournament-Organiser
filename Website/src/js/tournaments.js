@@ -99,6 +99,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     searchInput.addEventListener('input', filterTournaments);
     formatFilter.addEventListener('change', filterTournaments); 
+
+    // Tab switching functionality
+    document.querySelectorAll('.view-tab-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            // Remove active class from all buttons and panes
+            document.querySelectorAll('.view-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+            
+            // Add active class to clicked button and corresponding pane
+            button.classList.add('active');
+            const tabId = button.getAttribute('data-tab');
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+});
+
+function openPopup(tournamentId) {
+    document.getElementById('tournamentPopup').style.display = 'block';
+    // Load tournament data based on tournamentId
+    loadTournamentData(tournamentId);
+}
+
+function closePopup() {
+    const popup = document.getElementById('tournamentPopup');
+    popup.classList.add('closing');
+    
+    // Wait for animation to complete before hiding
+    setTimeout(() => {
+        popup.style.display = 'none';
+        popup.classList.remove('closing');
+    }, 600); // Match animation duration
+}
+
+function loadTournamentData(tournamentId) {
+// TODO: load tournament data based on tournamentId
+}
+
+// Tab switching functionality
+document.querySelectorAll('.view-tab-btn').forEach(button => {
+    button.addEventListener('click', () => {
+        // Remove active class from all buttons and panes
+        document.querySelectorAll('.view-tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+        
+        // Add active class to clicked button and corresponding pane
+        button.classList.add('active');
+        const tabId = button.getAttribute('data-tab');
+        document.getElementById(tabId).classList.add('active');
+    });
+});
+
+// Close popup when clicking outside
+window.addEventListener('click', (e) => {
+    if (e.target === document.getElementById('tournamentPopup')) {
+        closePopup();
+    }
 });
 
 function validateFirstSlide() {

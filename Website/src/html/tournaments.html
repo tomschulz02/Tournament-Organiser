@@ -49,7 +49,7 @@
                         <p class="tournament-date">Starting: July 1, 2024</p>
                         <p class="tournament-format">Format: Single Elimination</p>
                         <p class="tournament-location">Location: London</p>
-                        <button class="join-btn">Join Tournament</button>
+                        <button class="join-btn" onclick="openPopup(1)">Join Tournament</button>
                     </div>
                     <!-- More tournament cards... -->
                 </div>
@@ -184,6 +184,63 @@
                             <button type="button" id="prevBtn" class="nav-btn" style="display: none;">Previous</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Popup window for viewing tournament details -->        
+        <div class="tournament-popup" id="tournamentPopup">
+            <div class="popup-content">
+                <button class="close-btn" onclick="closePopup()">&times;</button>
+                <h2 id="popupTournamentName">Tournament Name</h2>
+                
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="view-tab-btn active" data-tab="overview">Overview</button>
+                    <button class="view-tab-btn" data-tab="fixtures">Fixtures</button>
+                    <button class="view-tab-btn" data-tab="standings">Standings</button>
+                    <button class="view-tab-btn" data-tab="teams">Teams</button>
+                </div>
+        
+                <!-- Tab Content -->
+                <div class="view-tab-content">
+                    <div class="tab-pane active" id="overview">
+                        <div class="tournament-info">
+                            <p><strong>Format:</strong> <span id="format-value">Single Elimination</span></p>
+                            <p><strong>Status:</strong> <span id="status-value">In Progress</span></p>
+                            <p><strong>Teams:</strong> <span id="teams-value">8</span></p>
+                        </div>
+                    </div>
+        
+                    <div class="tab-pane" id="fixtures">
+                        <div class="fixtures-list">
+                            <!-- Fixtures will be dynamically populated -->
+                        </div>
+                    </div>
+        
+                    <div class="tab-pane" id="standings">
+                        <table class="standings-table">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Team</th>
+                                    <th>Played</th>
+                                    <th>Won</th>
+                                    <th>Lost</th>
+                                    <th>Points</th>
+                                </tr>
+                            </thead>
+                            <tbody id="standings-body">
+                                <!-- Standings will be dynamically populated -->
+                            </tbody>
+                        </table>
+                    </div>
+        
+                    <div class="tab-pane" id="teams">
+                        <div class="teams-grid" id="teams-list">
+                            <!-- Teams will be dynamically populated -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

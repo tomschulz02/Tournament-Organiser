@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/tournaments/tournaments.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="../js/tournaments.js"></script>
+    <script src="../js/script.js"></script>
     <title>Volleyball Tournament Creator</title>
 </head>
 <body>
@@ -12,16 +15,235 @@
         <h1>Tourganiser</h1>
         <nav>
             <ul>
-                <a href="#home">Home</a>
+                <a href="index.html">Home</a>
                 <a href="tournaments.html">Tournaments</a>
-                <a href="#about">About</a>
+                <a href="about.html">About</a>
                 <a href="#login">Login</a>
             </ul>
         </nav>
     </header>
 
     <main>
+        <div class="tabs-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" data-tab="browse">Browse Tournaments</button>
+                <button class="tab-btn" data-tab="create">Create Tournament</button>
+            </div>
+
+            <!-- Browse Tab -->
+            <div class="tab-content active" id="browse-tab">
+                <div class="search-section">
+                    <input type="text" id="searchTournaments" placeholder="Search tournaments...">
+                    <select id="filterFormat">
+                        <option value="all">All Formats</option>
+                        <option value="single">Single Elimination</option>
+                        <option value="double">Double Elimination</option>
+                        <option value="round">Round Robin</option>
+                        <option value="combi">Round Robin + Knockout</option>
+                    </select>
+                </div>
+                <div class="tournaments-grid">
+                    <!-- Example tournament cards -->
+                    <div class="tournament-card">
+                        <h3>Summer Volleyball Championship</h3>
+                        <p class="tournament-date">Starting: July 1, 2024</p>
+                        <p class="tournament-format">Format: Single Elimination</p>
+                        <p class="tournament-location">Location: London</p>
+                        <button class="join-btn" onclick="openPopup(1)">Join Tournament</button>
+                    </div>
+                    <!-- More tournament cards... -->
+                </div>
+            </div>
+
+            <!-- Create Tab -->
+            <div class="tab-content" id="create-tab">
+                <div class="form-container">
+                    <form id="tournament-form" class="multi-step-form">
+                        <!-- Progress Bar -->
+                        <div class="progress-bar">
+                            <div class="step active">Details</div>
+                            <div class="step">Format</div>
+                            <div class="step">Rules</div>
+                            <div class="step">Teams</div>
+                        </div>
+
+                        <!-- Slide 1: Tournament Details -->
+                        <div class="form-slide active" id="slide-1">
+                            <h2>Tournament Details</h2><br>
+                            <div class="form-group">
+                                <label for="tournamentName">Tournament Name*</label>
+                                <input type="text" id="tournamentName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="startDate">Start Date*</label>
+                                <input type="date" id="startDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="location">Location*</label>
+                                <input type="text" id="location" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="description">Description (optional)</label>
+                                <textarea id="description" rows="4"></textarea>
+                            </div>
+                            <p>*required</p>
+                        </div>
+
+                        <!-- Slide 2: Tournament Structure -->
+                        <div class="form-slide" id="slide-2">
+                            <h2>Tournament Format</h2><br>
+                            <div class="two-column-layout">
+                                <div class="column">
+                                    <div class="form-group">
+                                        <label for="format">Tournament Format*</label>
+                                        <select id="format" required>
+                                            <option value="single">Single Elimination</option>
+                                            <option value="double">Double Elimination</option>
+                                            <option value="round">Round Robin</option>
+                                            <option value="combi">Round Robin + Knockout</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="teamCount">Number of Teams*</label>
+                                        <input type="number" id="teamCount" min="2" required>
+                                    </div>
+                                    <div class="form-group hidden" id="groupCount">
+                                        <label for="teamsPerGroup">Teams per Group*</label>
+                                        <input type="number" id="teamsPerGroup" min="3">
+                                    </div>
+                                    <div class="form-group hidden" id="knockout">
+                                        <label for="knockoutRound">First Knockout Round*</label>
+                                        <select type="number" id="knockoutRound">
+                                            <option value="12">Round of 24</option>
+                                            <option value="8">Round of 16</option>
+                                            <option value="6">Round of 12</option>
+                                            <option value="4">Quarterfinals</option>
+                                            <option value="2">Semifinals</option>
+                                            <option value="1">Finals</option>
+                                        </select>
+                                    </div>
+                                    <p>*required</p>
+                                </div>
+                                <div class="divider"></div>
+                                <div class="column">
+                                    <h2>Description</h2>
+                                    <div class="description" id="single">
+                                        <h3>Single Elimination</h3>
+                                        <p>Teams are eliminated after losing a match. The tournament continues until only one team remains.</p>
+                                    </div>
+                                    <div class="description hidden" id="double">
+                                        <h3>Double Elimination</h3>
+                                        <p>
+                                            Teams have two chances to stay in the tournament. A team must lose twice to be eliminated. <br>
+                                            Teams that have lost for the first time play other teams that have lost in a "Losers' Bracket".
+                                            The winner moves on to face the next loser from the "Winners' Bracket". <br>
+                                            The final two teams of the "Winners' Bracket" face the final two teams of the 
+                                            "Losers' Bracket" in the semifinals.
+                                        </p>
+                                    </div>
+                                    <div class="description hidden" id="round">
+                                        <h3>Round Robin</h3>
+                                        <p>
+                                            Teams play against every other team in the tournament. Points are awarded for wins and ties. <br>
+                                            The team with the most points at the end of the round wins.
+                                        </p>
+                                    </div>
+                                    <div class="description hidden" id="combi">
+                                        <h3>Round Robin + Knockout</h3>
+                                        <p>
+                                            Teams are divided equally (as possible) into groups. <br>
+                                            Teams play against every other team in their group. Points are awarded for wins and ties. <br>
+                                            The top teams from the round robin stage advance to the knockout stage. <br><br>
+                                            You choose the number of teams per group and the first knockout round. <br>
+
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Slide 3: Tournament Rules -->
+                        <div class="form-slide" id="slide-3">
+                            <h2>Tournament Rules</h2>
+                            <div class="two-column-layout">
+                                <div class="column">
+                                    
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Slide 4: Team list -->
+                        <div class="form-slide" id="slide-4">
+                            <h2>Teams</h2>
+                        </div>
+
+                        <!-- Navigation Buttons -->
+                        <div class="form-navigation">
+                            <button type="button" id="nextBtn" class="nav-btn">Next</button>
+                            <button type="submit" id="submitBtn" class="nav-btn" style="display: none;">Create Tournament</button>
+                            <button type="button" id="prevBtn" class="nav-btn" style="display: none;">Previous</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Popup window for viewing tournament details -->        
+        <div class="tournament-popup" id="tournamentPopup">
+            <div class="popup-content">
+                <button class="close-btn" onclick="closePopup()">&times;</button>
+                <h2 id="popupTournamentName">Tournament Name</h2>
+                
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="view-tab-btn active" data-tab="overview">Overview</button>
+                    <button class="view-tab-btn" data-tab="fixtures">Fixtures</button>
+                    <button class="view-tab-btn" data-tab="standings">Standings</button>
+                    <button class="view-tab-btn" data-tab="teams">Teams</button>
+                </div>
         
+                <!-- Tab Content -->
+                <div class="view-tab-content">
+                    <div class="tab-pane active" id="overview">
+                        <div class="tournament-info">
+                            <p><strong>Format:</strong> <span id="format-value">Single Elimination</span></p>
+                            <p><strong>Status:</strong> <span id="status-value">In Progress</span></p>
+                            <p><strong>Teams:</strong> <span id="teams-value">8</span></p>
+                        </div>
+                    </div>
+        
+                    <div class="tab-pane" id="fixtures">
+                        <div class="fixtures-list">
+                            <!-- Fixtures will be dynamically populated -->
+                        </div>
+                    </div>
+        
+                    <div class="tab-pane" id="standings">
+                        <table class="standings-table">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Team</th>
+                                    <th>Played</th>
+                                    <th>Won</th>
+                                    <th>Lost</th>
+                                    <th>Points</th>
+                                </tr>
+                            </thead>
+                            <tbody id="standings-body">
+                                <!-- Standings will be dynamically populated -->
+                            </tbody>
+                        </table>
+                    </div>
+        
+                    <div class="tab-pane" id="teams">
+                        <div class="teams-grid" id="teams-list">
+                            <!-- Teams will be dynamically populated -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <footer class="site-footer">

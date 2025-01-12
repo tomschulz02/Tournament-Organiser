@@ -9,22 +9,11 @@
     <link rel="stylesheet" href="../css/home/home-features.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <script src="../js/script.js" defer></script>
+    <script src="../js/page.js" defer></script>
 </head>
-<body>
-    
-    <header>
-        <h1>Tourganiser</h1>
-        <nav>
-            <ul>
-                <a href="index.html">Home</a>
-                <a href="tournaments.html">Tournaments</a>
-                <a href="about.html">About</a>
-                <a href="#login">Login</a>
-            </ul>
-        </nav>
-    </header>
-    
+<body onload="loadPage()">
     <main>
+        <!-- Banner for donations -->
         <section class="donation-banner">
             <div class="banner-content">
                 <h3>Support Tourganiser's Development</h3>
@@ -33,11 +22,13 @@
             <a href="#donate" class="donate-button">Make a Donation</a>
         </section>
 
+        <!-- Welcome message -->
         <section id="home">
             <h2>Welcome to Tourganiser</h2>
             <p>Plan your next tournament with ease.</p>
         </section>
 
+        <!-- List of features -->
         <section id="features" class="features-section">
             <h2 class="section-title">Features</h2>
             <div class="features-grid">
@@ -80,37 +71,5 @@
         </section>
 
     </main>
-    <footer class="site-footer">
-        <div class="footer-content">
-            <div class="footer-section">
-                <h4>Quick Links</h4>
-                <nav>
-                    <a href="#home">Home</a>
-                    <a href="#features">Features</a>
-                    <a href="tournaments.html">Tournaments</a>
-                    <a href="about.html">About</a>
-                </nav>
-            </div>
-            <div class="footer-section">
-                <h4>Connect With Us</h4>
-                <div class="social-links">
-                    <a href="#"><i class="fab fa-discord"></i> Discord</a>
-                    <a href="#"><i class="fab fa-github"></i> GitHub</a>
-                </div>
-            </div>
-            <div class="footer-section">
-                <h4>Contact</h4>
-                <p>Email: info@tourganiser.com</p>
-                <p>Support: support@tourganiser.com</p>
-            </div>
-        </div>
-        <div class="footer-bottom">
-            <p>&copy; 2024 Tourganiser. All rights reserved.</p>
-            <div class="legal-links">
-                <a href="#">Privacy Policy</a>
-                <a href="#">Terms of Service</a>
-            </div>
-        </div>
-    </footer>
 </body>
 </html>

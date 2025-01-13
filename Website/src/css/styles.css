@@ -12,6 +12,18 @@
     font-family: var(--main-font-family);
 }
 
+body{
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+main {
+    padding-top: 80px;
+    flex: 1;
+}
+
 /* 
 Styles for the header i.e. navigation bar
 It will be persistent on all pages 
@@ -78,7 +90,7 @@ Styles for the footer, which will be persistent on all pages
     background-color: #1a1a1a;
     color: #fff;
     padding: 40px 20px 20px;
-    margin-top: 40px;
+    margin-top: auto;
     font-family: var(--main-font-family);
 }
 
@@ -167,10 +179,6 @@ Styles for the footer, which will be persistent on all pages
     }
 }
 
-main {
-    padding-top: 80px;
-}
-
 /* 
 Styles for a donation banner that could be used on multiple pages
 */
@@ -216,4 +224,69 @@ Styles for a donation banner that could be used on multiple pages
 
 .donate-button:hover {
     transform: scale(1.05);
+}
+
+/* 
+    Styles for the user profile tab
+*/
+.profile-tab {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    animation: slideLeft 0.3s ease-out;    
+}
+
+.profile-tab.closing {
+    animation: slideRight 0.3s ease-out;
+}
+
+.profile-content {
+    position: relative;
+    top: 0;
+    right: 0;
+    background-color: white;
+    height: 100%;
+    width: 90vw;
+    max-width: 400px;
+    margin: 0;
+    padding: 15px 20px;
+}
+
+.profile-close-btn {
+    position: relative;
+    top: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    padding: 10px;
+    padding-top: 0;
+    background-color: white;
+    border-radius: 0 0 0 40px;
+    border: none;
+    margin: 0 0 auto auto;
+    cursor: pointer;
+    font-size: 30px;
+}
+
+@keyframes slideLeft {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideRight {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(100%);
+    }
 }

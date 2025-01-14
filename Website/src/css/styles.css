@@ -3,6 +3,7 @@
 :root {
     --main-font-family: 'Segoe UI', 'Roboto', sans-serif;
     --main-color: #2962ff;
+    --secondary-color: #658eff;
 }
 
 * {
@@ -237,7 +238,7 @@ Styles for a donation banner that could be used on multiple pages
     height: 100%;
     width: 100%;
     background-color: rgba(0, 0, 0, 0.4);
-    z-index: 1000;
+    z-index: 1001;
     animation: slideLeft 0.3s ease-out;    
 }
 

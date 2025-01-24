@@ -1,0 +1,36 @@
+{
+    "tournaments":[
+        "id",
+        "name",
+        "date",
+        "location",
+        "description",
+        "format_id",
+        ""
+    ],
+    "formats":[
+        "id",
+        "name",
+        "",
+        "initial_state (json)" 
+    ],
+    "fixtures":[
+        "id",
+        "tournament_id",
+        "match_no",
+        "team1_id",
+        "team2_id",
+        "result"
+    ],
+    "users":[
+        "username",
+        "name",
+        "email",
+        "password"
+    ],
+    "friends":[
+        "id",
+        "user_id",
+        "friend_id"
+    ]
+}

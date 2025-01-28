@@ -5,14 +5,12 @@
         "date",
         "location",
         "description",
-        "format_id",
-        ""
-    ],
-    "formats":[
-        "id",
-        "name",
-        "",
-        "initial_state (json)" 
+        "format",
+        "num_teams",
+        "num_groups",
+        "knockout",
+        "state",
+        "created_by"
     ],
     "fixtures":[
         "id",
@@ -20,11 +18,13 @@
         "match_no",
         "team1_id",
         "team2_id",
-        "result"
+        "status",
+        "result",
+        "round",
+        "next_game"
     ],
     "users":[
         "username",
-        "name",
         "email",
         "password"
     ],

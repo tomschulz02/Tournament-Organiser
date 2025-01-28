@@ -11,13 +11,20 @@ Back-end functions for the server
 8. Add and view freinds/other users
 */
 
+// run with flag --watch to restart server on changes
+
 // Importing required modules
+const DBConnection = require('./config');
 const express = require('express');
 const cors = require('cors');
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Database connection
+const db = new DBConnection();
+db.exampleQuery();
 
 // Request handling
 // TODO

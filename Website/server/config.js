@@ -1,6 +1,8 @@
 // import env variables and necessary modules
 require('dotenv').config();
-var mysql = require('mysql');
+const mysql = require('mysql');
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 function DBConnection() {
     // create connection to database using a pool
@@ -10,7 +12,7 @@ function DBConnection() {
         password: process.env.DB_PASSWORD,
         port: process.env.DB_PORT,
         database: process.env.DB_NAME,
-        connectionLimit: 10
+        connectionLimit: 50
     });
 
     this.exampleQuery = function() {
@@ -29,6 +31,74 @@ function DBConnection() {
             // handle error after the release
             if (err) throw err;
             console.log('Connection closed');
+        });
+    }
+
+    // query to insert a new user into the database with username, email, and hashed password
+    this.createUser = function(username, password, email, callback) {
+        this.pool.getConnection(function(err, connection) {
+            // connection error
+            if (err) return callback([false, err]);
+
+            // hash password
+            bcrypt.hash(password, saltRounds, function(err, hash) {
+                // hash error
+                if (err) {
+                    connection.release();
+                    return callback([false, err]);
+                }
+
+                var query = 'INSERT INTO users (username, password, email) VALUES (?, ?, ?)';
+
+                // insert user into database
+                connection.query(query, [username, hash, email], function(err, result) {
+                    // query error
+                    if (err) {
+                        connection.release();
+                        return callback([false, err]);
+                    }
+
+                    console.log('User created');
+
+                    connection.release();
+
+                    if (err) return callback([false, err]);
+
+                    callback([true, result]);
+                });
+            });
+        });
+    }
+
+    this.loginUser = function(username, password) {
+        this.pool.getConnection(function(err, connection) {
+            if (err) return [false, err];
+
+            var query = 'SELECT * FROM users WHERE username = ?';
+
+            connection.query(query, [username], function(err, result) {
+                if (err) return [false, err];
+
+                // check if user exists
+                if (result.length === 0) {
+                    return [false, 'User does not exist'];
+                }
+
+                // check if password is correct
+                bcrypt.compare(password, result[0].password, function(err, res) {
+                    if (err) return [false, err];
+
+                    if (res) {
+                        return [true, res];
+                    } else {
+                        return [false, 'Incorrect password'];
+                    }
+                });
+
+                connection.release();
+
+                if (err) return [false, err];
+            });
         });
     }
 }

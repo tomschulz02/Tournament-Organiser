@@ -14,17 +14,16 @@ Back-end functions for the server
 // run with flag --watch to restart server on changes
 
 // Importing required modules
-const DBConnection = require('./config');
-const express = require('express');
-const cors = require('cors');
+import DBConnection from './config';
+import express, { json } from 'express';
+import cors from 'cors';
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(json());
 
 // Database connection
 const db = new DBConnection();
-db.exampleQuery();
 
 // Request handling
 // TODO
@@ -83,6 +82,7 @@ app.post('/api/signup', async (req, res) => {
     try {
         const { username, email, password } = req.body;
         // Add logic to save user to database
+        
         res.status(201).json({ message: 'User signed up successfully' });
     } catch (error) {
         res.status(500).json({ error: 'Failed to sign up user' });

@@ -195,9 +195,48 @@
                 <div class="view-tab-content">
                     <div class="tab-pane active" id="overview">
                         <div class="tournament-info">
-                            <p><strong>Format:</strong> <span id="format-value">Single Elimination</span></p>
-                            <p><strong>Status:</strong> <span id="status-value">In Progress</span></p>
-                            <p><strong>Teams:</strong> <span id="teams-value">8</span></p>
+                            <div class="tournament-info-heading">
+                                <h2>Tournament Name</h2>
+                                <p>
+                                    Optional description of the tournament. 
+                                    If the user has not provided a description, 
+                                    a default description based on the format and rules will be generated and displayed here.
+                                </p>
+                                <button class="follow-tournament-btn">Follow</button>
+                            </div>
+                            <div class="tournament-info-format">
+                                <p><strong>Format:</strong> Single Elimination</p>
+                                <p><strong>Status:</strong> In Progress</p>
+                                <p><strong>Teams:</strong> 8</p>
+                            </div>
+                        </div>
+                        <div class="tournament-info-fixtures">
+                            <h3>Upcoming Fixtures</h3>
+                            <div class="fixture-summary-scroll">
+                                <div class="fixture-card">
+                                    <p>Match 1</p>
+                                    <p>Team A vs Team B</p>
+                                    <p>July 1, 2024</p>
+                                </div>
+                                <div class="fixture-card">
+                                    <p>Match 1</p>
+                                    <p>Team A vs Team B</p>
+                                    <p>July 1, 2024</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tournament-info-fixtures">
+                            <h3>Recent Results</h3>
+                            <div class="fixture-summary-scroll">
+                                <div class="result-card">
+                                    <p>Match 1</p>
+                                    <p>Team A 2 - 1 Team B</p>
+                                </div>
+                                <div class="result-card">
+                                    <p>Match 1</p>
+                                    <p>Team A 2 - 1 Team B</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
         

@@ -8,7 +8,7 @@ window.addEventListener('scroll', () => {
 });
 
 function openProfile(){
-    event.preventDefault(); // Prevent default link behavior
+    // event.preventDefault(); // Prevent default link behavior
     document.getElementById('profileTab').style.display = 'flex';
 }
 

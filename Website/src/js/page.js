@@ -24,12 +24,17 @@ function addHeader(){
     profileTab.innerHTML = `
             <button class="profile-close-btn" onclick="closeProfile()">&times;</button>
             <div class="profile-content">
-                <h2>Profile</h2>
+                <h2>Profile - Username</h2>
+                <div class="profile-item no-hover"></div>
                 <div class="profile-item">
                     <h4>My Tournaments</h4>
                 </div>
                 <div class="profile-item">
                     <h4>Friends</h4>
+                </div>
+                <div class="profile-actions">
+                    <div class="profile-actions-settings"></div>
+                    <div class="profile-actions-item" onclick="openLogin()">Login</div>
                 </div>
             </div>
     `;

@@ -1,7 +1,8 @@
 // import env variables and necessary modules
-require("dotenv").config();
-const mysql = require("mysql");
-const bcrypt = require("bcrypt");
+import dotenv from 'dotenv';
+dotenv.config();
+import mysql from 'mysql';
+import bcrypt from 'bcrypt';
 const saltRounds = 10;
 
 class DBConnection {
@@ -80,7 +81,7 @@ class DBConnection {
 		this.pool.getConnection(function (err, connection) {
 			if (err) return callback({ success: false, object: true, message: err });
 
-			var query = "SELECT * FROM users WHERE username = ?";
+			var query = "SELECT * FROM users WHERE email = ?";
 
 			connection.query(query, [username], function (err, result) {
 				if (err) {
@@ -101,10 +102,10 @@ class DBConnection {
 						return callback({ success: false, object: true, message: err });
 					}
 
-                    console.log(res);
+                    console.log(result[0]);
 
 					if (res) {
-						callback({ success: true, object: true, message: res });
+						callback({ success: true, object: true, message: result[0] });
 					} else {
 						callback({ success: false, object: false, message: "Incorrect Password" });
 					}
@@ -316,4 +317,4 @@ class DBConnection {
 }
 
 // export the module
-module.exports = DBConnection;
+export default DBConnection;

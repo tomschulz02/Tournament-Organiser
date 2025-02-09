@@ -21,14 +21,24 @@ TODO:
 // run with flag --watch to restart server on changes
 
 // Importing required modules
-import DBConnection from './config';
+import dotenv from 'dotenv';
+dotenv.config();
+import DBConnection from './config.js';
 import express, { json } from 'express';
 import cors from 'cors';
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+    origin: 'http://127.0.0.1:3000',
+    methods: 'GET,POST',
+    headers: 'Content-Type, Authorization',
+    credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(json());
 
 // Database connection
@@ -165,8 +175,24 @@ app.post('/api/signup', async (req, res) => {
                 }
             }
         });
+
+        db.loginUser(email, password, (result) => {
+            if (!result.success) {
+                return res.status(400).json({ error: result.message });
+            }
+
+            const token = jwt.sign(
+                {user: result.message.username, email: result.message.email}, 
+                SECRET_KEY,
+                {expiresIn: '24h'}
+            );
+
+            res.cookie('authToken', token,  {httpOnly: true, secure: true, sameSite: 'strict', maxAge: (1000*60*60*24)});
+            return res.status(200).json({ 
+                message: "User account created successfully"
+            });         
+        });
         
-        return res.status(201).json({ message: 'User account created successfully' });
     } catch (error) {
         console.log(error);
         res.status(500).json({ error: 'Failed to create account' });
@@ -189,7 +215,12 @@ app.post('/api/signin', async (req, res) => {
                 {expiresIn: '24h'}
             );
 
-            return res.status(200).cookie('authToken', token,  {httpOnly: true, secure: true, sameSite: 'strict', maxAge: (1000*60*60*24)}).json({ message: "User authenticated" });         
+            res.cookie('authToken', token,  {httpOnly: true, secure: true, sameSite: 'strict', maxAge: (1000*60*60*24)});
+            return res.status(200).json({ 
+                success: true,
+                message: "User authenticated",
+                user: result.message.username
+            });         
         });
     } catch (error) {
         res.status(500).json({ error: 'Failed to sign in user' });
@@ -259,6 +290,6 @@ app.post('/api/tournaments/:id/join', verifyToken, async (req, res) => {
 
 
 // Start the server
-app.listen(3000, () => {
-    console.log('Server is running on port 3000');
+app.listen(3030, () => {
+    console.log('Server is running on port 3030');
 });

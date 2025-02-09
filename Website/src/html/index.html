@@ -13,6 +13,63 @@
 </head>
 <body onload="loadPage()">
     <main>
+
+        <div class="login-popup" id="loginPopup">
+            <div class="login-container">
+                <button class="close-login" onclick="closeLogin()">&times;</button>
+                <div class="login-header">
+                    <h2>Login</h2>
+                </div>
+                <form class="login-form" id="loginForm">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" autocomplete="email" id="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <button type="submit">Login</button>
+                </form>
+                <div class="login-form-link">
+                    Don't have an account yet? Create one <span onclick="toggleForms()"
+                        style="color: blue; text-decoration-line: underline; cursor: pointer;">here</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="login-popup" id="signupPopup">
+            <div class="login-container">
+                <button class="close-login" onclick="closeSignup()">&times;</button>
+                <div class="login">
+                    <h2>Create Account</h2>
+                </div>
+                <form class="login-form" id="signupForm">
+                    <div class="form-group">
+                        <label for="newUsername">Username</label>
+                        <input type="text" autocomplete="username" id="newUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmail">Email</label>
+                        <input type="email" autocomplete="email" id="newEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">Password</label>
+                        <input type="password" autocomplete="new-password" id="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password</label>
+                        <input type="password" autocomplete="new-password" id="confirmPassword" required>
+                    </div>
+                    <button type="submit">Create Account</button>
+                </form>
+                <div class="login-form-link">
+                    Already have an account? <span onclick="toggleForms()"
+                        style="color: blue; text-decoration-line: underline; cursor: pointer;">Login here</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Banner for donations -->
         <section class="donation-banner">
             <div class="banner-content">

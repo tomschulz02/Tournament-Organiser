@@ -1,5 +1,5 @@
 window.addEventListener('load', () => {
-    loadPage();
+    // loadPage();
 });
 
 function loadPage(){

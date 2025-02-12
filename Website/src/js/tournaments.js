@@ -2,7 +2,7 @@
 let currentSlide = 0;
 let slides = 0;
 
-document.addEventListener('DOMContentLoaded', () => {
+export function loadTournamentEvents() {
     const form = document.getElementById('tournament-form');
     slides = document.querySelectorAll('.form-slide');
     const nextBtn = document.getElementById('nextBtn');
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(tabId).classList.add('active');
         });
     });
-});
+}
 
 function openPopup(tournamentId) {
     document.getElementById('tournamentPopup').style.display = 'block';

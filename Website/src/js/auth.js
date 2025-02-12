@@ -1,4 +1,4 @@
-import { navigateTo } from "../../app";
+import { navigateTo } from "../../app.js";
 
 // scripts for authenticating user login and signup
 export function loadAuthEvents() {
@@ -65,9 +65,17 @@ export function loadAuthEvents() {
 			}
 		});
 
+	// adds event to close-login buttons to go back to previous page when clicked
 	for (let c of document.getElementsByClassName("close-login")) {
 		c.addEventListener("click", (event) => {
-			navigateTo(event, "/");
+			history.back();
+		});
+	}
+
+	// adds event to links to toggle between login and signup forms
+	for (let e of document.getElementsByClassName("toggle-form")) {
+		e.addEventListener("click", () => {
+			toggleForms();
 		});
 	}
 }
@@ -131,8 +139,4 @@ function toggleForms() {
 		loginPopup.style.display = "flex";
 		signupPopup.style.display = "none";
 	}
-}
-
-function closeLogin() {
-	window.location = "/src/html/index.html";
 }

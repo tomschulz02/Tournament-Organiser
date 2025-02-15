@@ -26,7 +26,7 @@
 				<p class="tournament-date">Starting: July 1, 2024</p>
 				<p class="tournament-format">Format: Single Elimination</p>
 				<p class="tournament-location">Location: London</p>
-				<button class="join-btn" onclick="openPopup(1)">Join Tournament</button>
+				<button class="join-btn" name="1">Join Tournament</button>
 			</div>
 			<!-- More tournament cards... -->
 		</div>
@@ -52,13 +52,19 @@
 						<label for="tournamentName">Tournament Name*</label>
 						<input type="text" id="tournamentName" required />
 					</div>
-					<div class="form-group">
-						<label for="startDate">Start Date*</label>
-						<input type="date" id="startDate" required />
-					</div>
-					<div class="form-group">
-						<label for="location">Location*</label>
-						<input type="text" id="location" required />
+					<div class="two-column-layout">
+						<div class="column">
+							<div class="form-group">
+								<label for="startDate">Start Date*</label>
+								<input type="date" id="startDate" required />
+							</div>
+						</div>
+						<div class="column">
+							<div class="form-group">
+								<label for="location">Location*</label>
+								<input type="text" id="location" required />
+							</div>
+						</div>
 					</div>
 					<div class="form-group">
 						<label for="description">Description (optional)</label>
@@ -76,9 +82,10 @@
 							<div class="form-group">
 								<label for="format">Tournament Format*</label>
 								<select id="format" required>
-									<option value="single">Single Elimination</option>
-									<option value="double">Double Elimination</option>
-									<option value="round">Round Robin</option>
+									<!-- All options are disabled for now. Only combi is available for MVP -->
+									<option value="single" disabled>Single Elimination</option>
+									<option value="double" disabled>Double Elimination</option>
+									<option value="round" disabled>Round Robin</option>
 									<option value="combi">Round Robin + Knockout</option>
 								</select>
 							</div>
@@ -87,8 +94,8 @@
 								<input type="number" id="teamCount" min="2" required />
 							</div>
 							<div class="form-group hidden" id="groupCount">
-								<label for="teamsPerGroup">Teams per Group*</label>
-								<input type="number" id="teamsPerGroup" min="3" />
+								<label for="numGroups">Number of groups*</label>
+								<input type="number" id="numGroups" min="2" />
 							</div>
 							<div class="form-group hidden" id="knockout">
 								<label for="knockoutRound">First Knockout Round*</label>
@@ -152,14 +159,125 @@
 				<!-- Slide 3: Tournament Rules -->
 				<div class="form-slide" id="slide-3">
 					<h2>Tournament Rules</h2>
+					<br />
 					<div class="two-column-layout">
-						<div class="column"></div>
+						<div class="column">
+							<div class="form-group">
+								<div>Volleyball Type*</div>
+								<div class="radio-group" id="volleyballType">
+									<div class="radio-option">
+										<input
+											type="radio"
+											id="indoor"
+											name="volleyballType"
+											value="indoor"
+											checked
+											required />
+										<label for="indoor">Indoor</label>
+									</div>
+									<div class="radio-option">
+										<input
+											type="radio"
+											id="beach"
+											name="volleyballType"
+											value="beach"
+											required />
+										<label for="beach">Beach</label>
+									</div>
+								</div>
+							</div>
+							<div class="form-group">
+								<label for="numSets">Sets per game*</label>
+								<select name="numberOfSets" id="numSets">
+									<option value="1">1</option>
+									<option value="3">3</option>
+									<option value="5">5</option>
+								</select>
+							</div>
+							<!-- <div class="form-group">
+								<label for="numPoints">Points per set (optional)</label>
+								<input type="number" id="numPoints" />
+							</div>
+							<div class="form-group">
+								<label for="tiePoints">Points for tiebreaker (optional)</label>
+								<input type="number" id="tiePoints" />
+							</div> -->
+							<p>*required</p>
+						</div>
+						<div class="divider"></div>
+						<div class="column">
+							<h2>Descriptions</h2>
+							<div class="description">
+								<h3>Sets per game</h3>
+								<p>
+									This is the maximum number of sets played each game, e.g. 3
+									sets means the game will end in 2-0 or 2-1, similarly 5 will
+									end in 3-0, 3-1, or 3-2
+								</p>
+							</div>
+							<!-- <div class="description">
+								<h3>Points per set</h3>
+								<p>
+									Number of points needed to win each set (excl. tiebreaker
+									set). It isn't necessary to specify whether it's capped or
+									lead-by-2, but it's probably a good idea to put that in the
+									description of the tournament.
+								</p>
+							</div>
+							<div class="description">
+								<h3>Tiebreaker points</h3>
+								<p>
+									In the event of a tiebreaker set, this is the amount of points
+									needed to win the set and the game
+								</p>
+							</div> -->
+						</div>
 					</div>
 				</div>
 
 				<!-- Slide 4: Team list -->
 				<div class="form-slide" id="slide-4">
 					<h2>Teams</h2>
+					<div class="two-column-layout">
+						<div class="column">
+							<div class="team-list-headings">
+								<h4>Rank</h4>
+								<h4 style="width: 60%">Team name</h4>
+								<h4>Edit</h4>
+							</div>
+							<div id="teamList" class="team-list">
+								<div class="team-slot">
+									<p>1.</p>
+									<p class="team-name">Team 1</p>
+									<div class="edit-team-name"><i class="fas fa-pen"></i></div>
+								</div>
+								<div class="team-slot">
+									<p>2.</p>
+									<p class="team-name">Team 1</p>
+									<div class="edit-team-name"><i class="fas fa-pen"></i></div>
+								</div>
+								<div class="team-slot">
+									<p>3.</p>
+									<p class="team-name">Team 1</p>
+									<div class="edit-team-name"><i class="fas fa-pen"></i></div>
+								</div>
+							</div>
+						</div>
+						<div class="divider"></div>
+						<div class="column">
+							<h2>Description</h2>
+							<div class="description">
+								<h3>Team names</h3>
+								<p>
+									The teams are pre-generated based on the number of teams you
+									selected in a previous step. <br />
+									You can change the names of the teams here in this list, or
+									you can also do that later in the tournament manager after
+									creating this tournament.
+								</p>
+							</div>
+						</div>
+					</div>
 				</div>
 
 				<!-- Navigation Buttons -->
@@ -188,7 +306,7 @@
 <!-- Popup window for viewing tournament details -->
 <div class="tournament-popup" id="tournamentPopup">
 	<div class="popup-content">
-		<button class="close-btn" onclick="closePopup()">&times;</button>
+		<button class="close-btn" id="closeTournamentPopup">&times;</button>
 		<h2 id="popupTournamentName">Tournament Name</h2>
 
 		<!-- Tab Navigation -->
@@ -278,5 +396,35 @@
 				</div>
 			</div>
 		</div>
+	</div>
+</div>
+
+<!-- Popup for changing team names -->
+<div id="teamNameChangePopup" class="team-name-change">
+	<div class="team-name-change-content">
+		<div class="close-btn" id="closeNameChangePopup">&times;</div>
+		<h2>Change team name</h2>
+		<sub
+			>Change the name of the team at rank:
+			<span id="nameChangeTeamRank">1</span></sub
+		>
+		<form id="nameChangeForm" class="name-change-form">
+			<div class="name-change-input">
+				<label for="currentTeamName">Current:</label>
+				<input
+					id="currentTeamName"
+					type="text"
+					value="Current team name"
+					disabled />
+			</div>
+			<div class="exchange-icon">
+				<i class="fas fa-exchange-alt"></i>
+			</div>
+			<div class="name-change-input">
+				<label for="newTeamName">New:</label>
+				<input type="text" id="newTeamName" />
+			</div>
+			<button type="submit" class="name-change-button">Save Changes</button>
+		</form>
 	</div>
 </div>

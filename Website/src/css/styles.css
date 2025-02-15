@@ -1,9 +1,13 @@
 /* CSS file with all the common styles between pages */
 
+/* Add these viewport breakpoints at the top of your file */
 :root {
 	--main-font-family: "Segoe UI", "Roboto", sans-serif;
 	--main-color: #2962ff;
 	--secondary-color: #658eff;
+	--mobile-breakpoint: 480px;
+	--tablet-breakpoint: 768px;
+	--desktop-breakpoint: 1024px;
 }
 
 * {
@@ -174,6 +178,7 @@ Styles for the footer, which will be persistent on all pages
 @media (max-width: 768px) {
 	.footer-content {
 		flex-direction: column;
+		text-align: center;
 	}
 
 	.footer-bottom {
@@ -347,4 +352,173 @@ Styles for a donation banner that could be used on multiple pages
 	font-size: 1.1em;
 	color: white;
 	cursor: pointer;
+}
+
+/* Update header styles for mobile */
+@media (max-width: 768px) {
+	header {
+		flex-direction: column;
+		align-items: center;
+		padding: 10px;
+		height: 100px;
+		background-color: var(--main-color);
+	}
+
+	header h1 {
+		margin-bottom: 10px;
+	}
+
+	header.scrolled {
+		background-color: rgba(41, 98, 255, 0.6);
+	}
+
+	header nav {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		padding: 10px;
+		justify-content: space-around;
+	}
+
+	header nav a {
+		font-size: 0.9rem;
+		padding: 8px;
+	}
+
+	header nav ul {
+		display: flex;
+		justify-content: space-around;
+		width: 100%;
+	}
+
+	main {
+		padding-top: 100px;
+		padding-bottom: 60px; /* Space for bottom navigation */
+	}
+}
+
+/* Add responsive form styles */
+@media (max-width: 768px) {
+	.form-container {
+		padding: 10px;
+	}
+
+	.two-column-layout {
+		flex-direction: column;
+	}
+
+	.column {
+		width: 100%;
+	}
+
+	.form-group {
+		margin-bottom: 15px;
+	}
+
+	input,
+	select,
+	textarea {
+		width: 100%;
+		padding: 8px;
+	}
+}
+
+/* Make tables responsive */
+@media (max-width: 768px) {
+	table {
+		display: block;
+		overflow-x: auto;
+		white-space: nowrap;
+	}
+
+	td,
+	th {
+		padding: 8px;
+	}
+}
+
+/* Adjust donation banner for mobile */
+@media (max-width: 768px) {
+	.donation-banner {
+		flex-direction: column;
+		max-height: none;
+		padding: 15px;
+	}
+
+	.banner-content {
+		margin: 0;
+		text-align: center;
+	}
+
+	.donate-button {
+		margin: 15px auto;
+	}
+}
+
+/* Add responsive profile tab styles */
+@media (max-width: 768px) {
+	.profile-tab .profile-content {
+		width: 100%;
+		max-width: none;
+	}
+
+	.profile-actions {
+		padding: 10px;
+	}
+}
+
+/* Add general responsive utilities */
+@media (max-width: 768px) {
+	.hide-mobile {
+		display: none !important;
+	}
+
+	.text-center-mobile {
+		text-align: center !important;
+	}
+
+	.full-width-mobile {
+		width: 100% !important;
+	}
+
+	/* Adjust font sizes for mobile */
+	h1 {
+		font-size: 1.8em;
+	}
+	h2 {
+		font-size: 1.5em;
+	}
+	h3 {
+		font-size: 1.3em;
+	}
+	p {
+		font-size: 1rem;
+	}
+}
+
+/* Add tablet-specific styles */
+@media (min-width: 769px) and (max-width: 1024px) {
+	.hide-tablet {
+		display: none !important;
+	}
+
+	.two-column-layout {
+		gap: 20px;
+	}
+}
+
+/* Ensure images are responsive */
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+/* Add flexible container */
+.container {
+	width: 100%;
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 15px;
+	box-sizing: border-box;
 }

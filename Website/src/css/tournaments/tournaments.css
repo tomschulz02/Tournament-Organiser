@@ -376,15 +376,36 @@
 	display: flex;
 	gap: 20px;
 	padding: 20px;
-	overflow-y: auto;
-	overflow-x: hidden;
+	overflow-y: none;
+	overflow-x: scroll;
 	text-align: center;
 	color: black;
+	scrollbar-width: thin; /* For Firefox */
+	scrollbar-color: #888 #f1f1f1; /* For Firefox */
+}
+
+.fixture-summary-scroll::-webkit-scrollbar {
+	width: 5px;
+}
+
+.fixture-summary-scroll::-webkit-scrollbar-track {
+	background: #f1f1f1; /* Track color */
+	border-radius: 10px;
+}
+
+.fixture-summary-scroll::-webkit-scrollbar-thumb {
+	background: #888; /* Scrollbar color */
+	border-radius: 10px;
+	cursor: pointer;
+}
+
+.fixture-summary-scroll::-webkit-scrollbar-thumb:hover {
+	background: #555; /* Color when hovered */
 }
 
 .fixture-card {
 	background: var(--secondary-color);
-	width: 200px;
+	min-width: 200px;
 	height: 150px;
 	padding: 10px;
 	border-radius: 8px;
@@ -393,7 +414,7 @@
 
 .result-card {
 	background: #14d33d;
-	width: 200px;
+	min-width: 200px;
 	height: 150px;
 	padding: 10px;
 	border-radius: 8px;
@@ -479,11 +500,12 @@
 	overflow-x: hidden;
 	overflow-y: scroll;
 	margin-right: -5px;
+	scrollbar-width: thin; /* For Firefox */
+	scrollbar-color: #888 #f1f1f1; /* For Firefox */
 }
 
 .team-list::-webkit-scrollbar {
 	width: 5px; /* Scrollbar width */
-	cursor: pointer;
 }
 
 .team-list::-webkit-scrollbar-track {
@@ -617,4 +639,131 @@ Styles for the name change popup
 	border: 1px solid #ddd;
 	border-radius: 4px;
 	font-size: 16px;
+}
+
+/* Update form container for mobile */
+@media (max-width: 768px) {
+	.form-container {
+		width: 95%;
+		height: auto;
+		min-height: 600px;
+		margin: 20px auto;
+		padding: 15px;
+	}
+
+	.two-column-layout {
+		flex-direction: column;
+		padding-bottom: 80px;
+	}
+
+	.column {
+		width: 100%;
+	}
+
+	.divider {
+		display: none;
+	}
+
+	.radio-option {
+		max-width: 100%;
+	}
+}
+
+/* Update tournament cards for mobile */
+@media (max-width: 768px) {
+	.tournaments-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.search-section {
+		flex-direction: column;
+	}
+
+	.tournament-info {
+		flex-direction: column;
+		padding: 20px;
+		padding-top: 60px;
+	}
+
+	.tournament-info-heading {
+		max-width: 100%;
+	}
+
+	.tournament-info-format {
+		margin-left: 0;
+		margin-top: 20px;
+	}
+}
+
+/* Update popup content for mobile */
+@media (max-width: 768px) {
+	.popup-content {
+		margin: 0;
+		border-radius: 0;
+		height: 100%;
+	}
+
+	.tab-navigation {
+		overflow-x: auto;
+		white-space: nowrap;
+	}
+
+	.teams-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.fixture-summary-scroll {
+		/* flex-direction: column; */
+		/* align-items: center; */
+	}
+
+	.fixture-card,
+	.result-card {
+		width: 90%;
+	}
+}
+
+/* Update team management for mobile */
+@media (max-width: 768px) {
+	.team-name-change-content {
+		width: 95%;
+		height: auto;
+		padding: 20px 15px;
+	}
+
+	.name-change-form {
+		flex-direction: column;
+		margin: 20px 0;
+	}
+
+	.name-change-form .exchange-icon {
+		transform: rotate(90deg);
+		margin: 10px 0;
+	}
+
+	.name-change-input {
+		width: 100%;
+	}
+
+	.name-change-form button {
+		position: relative;
+		width: 100%;
+		left: 0;
+		margin-top: 20px;
+	}
+
+	.team-list {
+		max-height: 300px;
+	}
+}
+
+/* Add tablet-specific adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+	.form-container {
+		width: 90%;
+	}
+
+	.tournaments-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
 }

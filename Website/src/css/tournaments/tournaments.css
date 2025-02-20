@@ -380,12 +380,13 @@
 	overflow-x: scroll;
 	text-align: center;
 	color: black;
-	scrollbar-width: thin; /* For Firefox */
-	scrollbar-color: #888 #f1f1f1; /* For Firefox */
+	/* scrollbar-width: thin;
+	scrollbar-color: #888 #f1f1f1; */
 }
 
 .fixture-summary-scroll::-webkit-scrollbar {
 	width: 5px;
+	height: 5px;
 }
 
 .fixture-summary-scroll::-webkit-scrollbar-track {
@@ -500,8 +501,8 @@
 	overflow-x: hidden;
 	overflow-y: scroll;
 	margin-right: -5px;
-	scrollbar-width: thin; /* For Firefox */
-	scrollbar-color: #888 #f1f1f1; /* For Firefox */
+	/* scrollbar-width: thin;
+	scrollbar-color: #888 #f1f1f1; */
 }
 
 .team-list::-webkit-scrollbar {
@@ -653,7 +654,8 @@ Styles for the name change popup
 
 	.two-column-layout {
 		flex-direction: column;
-		padding-bottom: 80px;
+		padding-bottom: 0px;
+		gap: 0;
 	}
 
 	.column {
@@ -710,11 +712,6 @@ Styles for the name change popup
 
 	.teams-grid {
 		grid-template-columns: 1fr;
-	}
-
-	.fixture-summary-scroll {
-		/* flex-direction: column; */
-		/* align-items: center; */
 	}
 
 	.fixture-card,

@@ -12,16 +12,17 @@ export function loadTournamentEvents() {
 
 	nextBtn.addEventListener("click", () => {
 		if (currentSlide === 0) {
-			// if (!validateFirstSlide()) return; // Stop if validation fails
+			if (!validateFirstSlide()) return; // Stop if validation fails
 		}
 		if (currentSlide === 1) {
-			// if (!validateSecondSlide()) return;
+			if (!validateSecondSlide()) return;
 			// automatically add appropriate number of teams to team slide after submitting second slide
 			const teams = document.getElementById("teamCount").value;
 			populateTeamlist(teams);
+			addNameChangeEvents();
 		}
 		if (currentSlide === 2) {
-			// if (!validateThirdSlide()) return;
+			if (!validateThirdSlide()) return;
 		}
 
 		if (currentSlide < slides.length - 1) {
@@ -46,7 +47,32 @@ export function loadTournamentEvents() {
 	form.addEventListener("submit", (e) => {
 		e.preventDefault();
 		// Add form submission logic here
+		let tournament = {
+			name: document.getElementById("tournamentName").value,
+			date: document.getElementById("startDate").value,
+			location: document.getElementById("location").value,
+			description: document.getElementById("description").value,
+			structure: {
+				format: document.getElementById("format").option,
+				numTeams: parseInt(document.getElementById("teamCount").value),
+				numGroups:
+					document.getElementById("numGroups").value !== undefined
+						? parseInt(document.getElementById("numGroups").value)
+						: 0,
+				knockout:
+					document.getElementById("knockoutRound").option !== undefined
+						? document.getElementById("knockoutRound").option
+						: "none",
+			},
+			rules: {
+				type: document.getElementById("indoor").selected ? "indoor" : "beach",
+				sets: parseInt(document.getElementById("numSets").value),
+			},
+			teams: getTeamsList(),
+		};
+
 		console.log("Form submitted");
+		console.log(tournament);
 	});
 
 	let format = document.getElementById("format");
@@ -143,15 +169,6 @@ export function loadTournamentEvents() {
 		);
 	});
 
-	// add event to edit icons on team view slide to open name change popup
-	const edits = document.getElementsByClassName("edit-team-name");
-	for (let index = 1; index <= edits.length; index++) {
-		const element = edits.item(index - 1);
-		element.addEventListener("click", () => {
-			openNameChangePopup(index);
-		});
-	}
-
 	// name change submit function
 	document.getElementById("nameChangeForm").addEventListener("submit", (e) => {
 		e.preventDefault();
@@ -174,6 +191,17 @@ export function loadTournamentEvents() {
 		});
 }
 
+function addNameChangeEvents() {
+	// add event to edit icons on team view slide to open name change popup
+	const edits = document.getElementsByClassName("edit-team-name");
+	for (let index = 1; index <= edits.length; index++) {
+		const element = edits.item(index - 1);
+		element.addEventListener("click", () => {
+			openNameChangePopup(index);
+		});
+	}
+}
+
 function showMoreFormatOptions(type) {
 	if (type === "combi") {
 		document.getElementById("groupCount").classList.toggle("hidden");
@@ -192,7 +220,10 @@ function populateTeamlist(count) {
 	const list = document.getElementById("teamList");
 	for (let index = 0; index < count; index++) {
 		let team = document.createElement("div");
-		team.innerHTML = "Team " + (index + 1);
+		team.className = "team-slot";
+		team.innerHTML = `<p>${index + 1}.</p>
+						<p class="team-name">Team ${index + 1}</p>
+						<div class="edit-team-name"><i class="fas fa-pen"></i></div>`;
 		list.appendChild(team);
 	}
 }
@@ -287,9 +318,6 @@ function validateThirdSlide() {
 	const indoor = document.getElementById("indoor").checked;
 	const beach = document.getElementById("beach").checked;
 
-	console.log(indoor);
-	console.log(beach);
-
 	if (!beach && !indoor) {
 		document.getElementById("volleyballType").classList.add("error");
 		return false;
@@ -351,4 +379,13 @@ function openNameChangePopup(rank) {
 
 function closeNameChangePopup() {
 	document.getElementById("teamNameChangePopup").style.display = "none";
+}
+
+function getTeamsList() {
+	var list = [];
+	document.querySelectorAll(".team-name").forEach((team) => {
+		list.push(team.innerHTML);
+	});
+
+	return list;
 }

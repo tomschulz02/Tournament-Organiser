@@ -764,3 +764,10 @@ Styles for the name change popup
 		grid-template-columns: repeat(2, 1fr);
 	}
 }
+
+.signin-request {
+	text-align: center;
+	align-items: center;
+	justify-content: center;
+	display: none;
+}

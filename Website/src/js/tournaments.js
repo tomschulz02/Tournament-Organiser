@@ -3,6 +3,11 @@ let currentSlide = 0;
 let slides = 0;
 
 export function loadTournamentEvents() {
+	if (!isLoggedIn()) {
+		document.getElementById("createFormContainer").style.display = "none";
+		document.getElementById("signinRequest").style.display = "block";
+	}
+
 	const form = document.getElementById("tournament-form");
 	slides = document.querySelectorAll(".form-slide");
 	const nextBtn = document.getElementById("nextBtn");
@@ -100,10 +105,6 @@ export function loadTournamentEvents() {
 		showMoreFormatOptions(selectedFormat);
 	});
 
-	// format.addEventListener("focus", () => {
-	// 	showMoreFormatOptions(selectedFormat);
-	// });
-
 	// Tab switching logic
 	const tabButtons = document.querySelectorAll(".tab-btn");
 	const tabContents = document.querySelectorAll(".tab-content");
@@ -188,6 +189,17 @@ export function loadTournamentEvents() {
 		.getElementById("closeNameChangePopup")
 		.addEventListener("click", () => {
 			closeNameChangePopup();
+		});
+}
+
+function isLoggedIn() {
+	fetch("http://localhost:5000/api/check-login")
+		.then((response) => response.json())
+		.then((data) => {
+			return data.loggedIn;
+		})
+		.catch((error) => {
+			console.error(error);
 		});
 }
 
@@ -388,4 +400,49 @@ function getTeamsList() {
 	});
 
 	return list;
+}
+
+async function sendAPIRequestPOST(path, data) {
+	try {
+		const response = await fetch(`http://localhost:5000/api/${path}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(data),
+			credentials: "include", // needed for cookies
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			throw new Error(data.error || "Request failed");
+		}
+
+		return data;
+	} catch (error) {
+		console.error("Request failed: " + error);
+	}
+}
+
+async function sendAPIRequestGET(path) {
+	try {
+		const response = await fetch(`http://localhost:5000/api/${path}`, {
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include", // needed for cookies
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			throw new Error(data.error || "Request failed");
+		}
+
+		return data;
+	} catch (error) {
+		console.error("Request failed: " + error);
+	}
 }

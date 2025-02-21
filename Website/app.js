@@ -8,8 +8,6 @@ const routes = {
 	"/tournaments": "/src/html/tournaments.html",
 };
 
-const baseURL = "http://locahost:5000";
-
 // load initial page
 // alert(location.pathname);
 loadPage(location.pathname);

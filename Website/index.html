@@ -46,6 +46,7 @@
 				<div class="profile-actions">
 					<div class="profile-actions-settings"></div>
 					<div class="profile-actions-item" id="gotoLogin">Login</div>
+					<div class="profile-actions-item" id="logout">Logout</div>
 				</div>
 			</div>
 		</div>
@@ -88,6 +89,7 @@
 		<script type="module" src="app.js" defer></script>
 		<script type="module">
 			import { navigateTo } from "./app.js";
+			import { logoutUser } from "./src/js/auth.js";
 
 			const links = document.getElementsByClassName("nav-links");
 
@@ -101,6 +103,42 @@
 				.getElementById("gotoLogin")
 				.addEventListener("click", (event) => {
 					navigateTo(event, "/login");
+				});
+			document
+				.getElementById("logout")
+				.addEventListener("click", async (event) => {
+					try {
+						const res = await logoutUser();
+						// console.log(res);
+
+						if (res.success) {
+							document.getElementById("logout").style.display = "none";
+							document.getElementById("gotoLogin").style.display = "block";
+						} else {
+							console.log("Failed to logout");
+						}
+					} catch (error) {
+						console.error(error);
+					}
+				});
+
+			fetch("http://localhost:5000/api/check-login")
+				.then((response) => {
+					if (!response.ok) {
+						return response.json().then((errorData) => {
+							throw new Error(errorData.message || "Something went wrong");
+						});
+					}
+				})
+				.then((data) => {
+					if (data.loggedIn) {
+						document.getElementById("gotoLogin").style.display = "none";
+					} else {
+						document.getElementById("logout").style.display = "none";
+					}
+				})
+				.catch((error) => {
+					console.log(error);
 				});
 		</script>
 	</body>

@@ -24,6 +24,7 @@ TODO:
 import dotenv from "dotenv";
 dotenv.config();
 import DBConnection from "./config.js";
+import { populateGroups } from "./formatter.js";
 import express, { json } from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -64,12 +65,13 @@ const db = new DBConnection();
 const verifyToken = (req, res, next) => {
 	const token = req.cookies.authToken;
 
-	console.log(token);
+	// console.log(token);
 
 	if (!token) {
-		return res
-			.status(403)
-			.json({ error: "A token is required for authentication" });
+		return res.status(403).json({
+			error: "A token is required for authentication",
+			loggedIn: false,
+		});
 	}
 
 	try {
@@ -77,14 +79,40 @@ const verifyToken = (req, res, next) => {
 		req.user = decoded;
 		next();
 	} catch (error) {
-		return res.status(401).json({ error: "Invalid token" });
+		return res.status(401).json({ error: "Invalid token", loggedIn: false });
 	}
 };
+
+// Testing formatter methods
+/* var teamList = [
+	"Team1",
+	"Team2",
+	"Team3",
+	"Team4",
+	"Team5",
+	"Team6",
+	"Team7",
+	"Team8",
+	"Team9",
+	"Team10",
+	"Team11",
+	"Team12",
+	"Team13",
+	"Team14",
+	"Team15",
+	"Team16",
+];
+console.log(populateGroups(5, teamList)); */
 
 // app.use((req, res, next) => {
 // 	console.log(`Incoming request: ${req.method} ${req.url}`);
 // 	next();
 // });
+
+// check whether the user is logged in or not
+app.get("/api/check-login", verifyToken, (req, res) => {
+	return res.status(200).json({ loggedIn: true, user: req.user.user });
+});
 
 // Get tournament information
 app.get("/api/tournament/:id", (req, res) => {
@@ -210,7 +238,11 @@ app.post("/api/signup", async (req, res) => {
 			}
 
 			const token = jwt.sign(
-				{ user: result.message.username, email: result.message.email },
+				{
+					user: result.message.username,
+					email: result.message.email,
+					id: result.message.idusers,
+				},
 				SECRET_KEY,
 				{ expiresIn: "24h" }
 			);
@@ -238,11 +270,16 @@ app.post("/api/signin", async (req, res) => {
 
 		db.loginUser(email, password, (result) => {
 			if (!result.success) {
+				console.log(result);
 				return res.status(400).json({ error: result.message });
 			}
 
 			const token = jwt.sign(
-				{ user: result.message.username, email: result.message.email },
+				{
+					user: result.message.username,
+					email: result.message.email,
+					id: result.message.idusers,
+				},
 				SECRET_KEY,
 				{ expiresIn: "24h" }
 			);
@@ -272,7 +309,7 @@ app.post("/api/signout", verifyToken, async (req, res) => {
 		sameSite: "strict",
 		maxAge: 1000 * 60 * 60 * 24,
 	});
-	res.json({ message: "User logged out" });
+	res.json({ success: true, message: "User logged out" });
 });
 
 // Update tournament results
@@ -306,7 +343,7 @@ app.post("/api/user/:id/friends", verifyToken, (req, res) => {
 // Create tournament
 app.post("/api/tournament/create", verifyToken, (req, res) => {
 	try {
-		const { name, date, location, format, created_by } = req.body; // Add more parameters as needed
+		console.log(req.body + "\nCreated By: " + req.user.user);
 		// Add logic to save tournament to database
 		res.status(201).json({ message: "Tournament created successfully" });
 	} catch (error) {

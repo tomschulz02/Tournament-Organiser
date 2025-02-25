@@ -19,6 +19,7 @@ export function loadAuthEvents() {
 			if (result.success) {
 				// Handle successful login
 				navigateTo(e, "/");
+				location.reload();
 				// change text from Login to Logout in profile window
 			}
 		} catch (error) {
@@ -51,6 +52,7 @@ export function loadAuthEvents() {
 				if (result.success) {
 					// Handle successful login
 					navigateTo(e, "/");
+					location.reload();
 				}
 			} catch (error) {
 				// Show error message to user
@@ -65,7 +67,7 @@ export function loadAuthEvents() {
 	// adds event to close-login buttons to go back to previous page when clicked
 	for (let c of document.getElementsByClassName("close-login")) {
 		c.addEventListener("click", (event) => {
-			history.back();
+			navigateTo(e, "/");
 		});
 	}
 

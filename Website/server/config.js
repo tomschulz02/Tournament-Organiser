@@ -54,28 +54,23 @@ class DBConnection {
 					return callback({ success: false, object: true, message: err });
 				}
 
-				var query =
-					"INSERT INTO users (username, password, email) VALUES (?, ?, ?)";
+				var query = "INSERT INTO users (username, password, email) VALUES (?, ?, ?)";
 
 				// insert user into database
-				connection.query(
-					query,
-					[username, hash, email],
-					function (err, result) {
-						// query error
-						if (err) {
-							connection.release();
-							return callback({ success: false, object: true, message: err });
-						}
-
-						console.log("User created");
-
+				connection.query(query, [username, hash, email], function (err, result) {
+					// query error
+					if (err) {
 						connection.release();
-
-						if (err) callback({ success: false, object: true, message: err });
-						else callback({ success: true, object: true, message: result });
+						return callback({ success: false, object: true, message: err });
 					}
-				);
+
+					console.log("User created");
+
+					connection.release();
+
+					if (err) callback({ success: false, object: true, message: err });
+					else callback({ success: true, object: true, message: result });
+				});
 			});
 		});
 	}
@@ -124,8 +119,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 			});
 		});
 	}
@@ -146,8 +140,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});
@@ -169,69 +162,74 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});
 	}
 
-	createTournament(
-		name,
-		date,
-		location,
-		desc,
-		format,
-		teams,
-		groups,
-		knockout,
-		state,
-		created_by,
-		callback
-	) {
+	createTournament(details, fixtures, callback) {
 		this.pool.getConnection(function (err, connection) {
 			if (err) return callback({ success: false, object: true, message: err });
 
-			var query =
-				"INSERT INTO tournaments (name, date, location, description, format, num_teams, num_groups, knockout, state, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-			var id = null;
+			var columns = Object.keys(details).join(", ");
+			var placeholders = Object.keys(details)
+				.map(() => "?")
+				.join(", ");
+			var values = [
+				details.name,
+				details.date,
+				details.location,
+				details.description,
+				details.format,
+				details.num_teams,
+				details.num_groups,
+				details.knockout,
+				JSON.stringify(details.state),
+				details.created_by,
+			];
+			var query = `INSERT INTO tournaments (${columns}) VALUES (${placeholders})`;
+			var id = 0;
 
-			connection.query(
-				query,
-				[
-					name,
-					date,
-					location,
-					desc,
-					format,
-					teams,
-					groups,
-					knockout,
-					state,
-					created_by,
-				],
-				function (err, result) {
-					if (err) {
-						connection.release();
-						return callback({ success: false, object: true, message: err });
-					}
-
-					id = result.insertId;
-
-					console.log("Tournament created");
-				}
-			);
-
-			query =
-				"INSERT INTO saved_tournaments (user_id, tournament_id) VALUES (?, ?)";
-
-			connection.query(query, [created_by, id], function (err, result) {
+			console.log(`Query: ${query} \nValues: ${values}`);
+			connection.query(query, values, function (err, result) {
 				if (err) {
 					connection.release();
 					return callback({ success: false, object: true, message: err });
 				}
 
-				console.log("Tournament saved");
+				id = result.insertId;
+
+				console.log("Tournament created");
+
+				const squery = "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES (?, ?)";
+				const created_by = details["created_by"];
+				connection.query(squery, [created_by, id], function (err, result) {
+					if (err) {
+						connection.release();
+						return callback({ success: false, object: true, message: err });
+					}
+
+					console.log("Tournament saved");
+				});
+
+				var fvalues = [];
+				fixtures.forEach((f) => {
+					fvalues.push([id, f.match_no, f.team1, f.team2, f.status, f.round, f.next_game]);
+				});
+
+				console.dir(fvalues, { depth: null });
+
+				const fquery =
+					"INSERT INTO fixtures (tournament_id, match_no, team1, team2, status, round, next_game) VALUES ?";
+				connection.query(fquery, [fvalues], function (err, result) {
+					if (err) {
+						connection.release();
+						return callback({ success: false, object: true, message: err });
+					}
+
+					console.log("Fixtures created");
+				});
 			});
 
 			connection.release();
@@ -250,8 +248,7 @@ class DBConnection {
 		this.pool.getConnection(function (err, connection) {
 			if (err) return callback({ success: false, object: true, message: err });
 
-			var query =
-				"INSERT INTO saved_tournaments (user_id, tournament_id) VALUES (?, ?)";
+			var query = "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES (?, ?)";
 
 			connection.query(query, [userId, tournamentId], function (err, result) {
 				if (err) {
@@ -263,8 +260,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});
@@ -286,8 +282,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});
@@ -309,8 +304,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});
@@ -320,8 +314,7 @@ class DBConnection {
 		this.pool.getConnection(function (err, connection) {
 			if (err) return callback({ success: false, object: true, message: err });
 
-			var query =
-				"SELECT * FROM fixtures WHERE tournament_id = ? AND status IS 'COMPLETED'";
+			var query = "SELECT * FROM fixtures WHERE tournament_id = ? AND status IS 'COMPLETED'";
 
 			connection.query(query, [tournamentId], function (err, result) {
 				if (err) {
@@ -333,8 +326,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});
@@ -356,8 +348,7 @@ class DBConnection {
 
 				connection.release();
 
-				if (err)
-					return callback({ success: false, object: true, message: err });
+				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});
 		});

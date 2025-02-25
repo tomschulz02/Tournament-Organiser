@@ -24,7 +24,7 @@ TODO:
 import dotenv from "dotenv";
 dotenv.config();
 import DBConnection from "./config.js";
-import { populateGroups } from "./formatter.js";
+import { populateGroups, formatCombiTournamentForStorage } from "./formatter.js";
 import express, { json } from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -84,25 +84,39 @@ const verifyToken = (req, res, next) => {
 };
 
 // Testing formatter methods
-/* var teamList = [
-	"Team1",
-	"Team2",
-	"Team3",
-	"Team4",
-	"Team5",
-	"Team6",
-	"Team7",
-	"Team8",
-	"Team9",
-	"Team10",
-	"Team11",
-	"Team12",
-	"Team13",
-	"Team14",
-	"Team15",
-	"Team16",
-];
-console.log(populateGroups(5, teamList)); */
+// simulated input for tournament creation
+var format = {
+	name: "Test",
+	date: "2025-02-22",
+	location: "Home",
+	description: "this is a test description",
+	structure: {
+		format: "combi",
+		numTeams: 16,
+		numGroups: 4,
+		knockout: 6,
+		type: "beach",
+	},
+	teams: [
+		"Team 1",
+		"Team 2",
+		"Team 3",
+		"Team 4",
+		"Team 5",
+		"Team 6",
+		"Team 7",
+		"Team 8",
+		"Team 9",
+		"Team 10",
+		"Team 11",
+		"Team 12",
+		"Team 13",
+		"Team 14",
+		"Team 15",
+		"Team 16",
+	],
+};
+// console.dir(formatCombiTournamentForStorage(format), { depth: null });
 
 // app.use((req, res, next) => {
 // 	console.log(`Incoming request: ${req.method} ${req.url}`);
@@ -161,9 +175,7 @@ app.get("/api/tournament/:id/results", (req, res) => {
 	// Get tournament results
 	try {
 		const tournamentId = req.params.id;
-		console.log(
-			"Getting tournament results for tournament ID: " + tournamentId
-		);
+		console.log("Getting tournament results for tournament ID: " + tournamentId);
 
 		db.getResults(tournamentId, (result) => {
 			if (!result.success) {
@@ -307,7 +319,6 @@ app.post("/api/signout", verifyToken, async (req, res) => {
 		httpOnly: true,
 		secure: process.env.NODE_ENV === "production",
 		sameSite: "strict",
-		maxAge: 1000 * 60 * 60 * 24,
 	});
 	res.json({ success: true, message: "User logged out" });
 });
@@ -317,12 +328,8 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 	// Update tournament results
 	try {
 		const tournamentId = req.params.id;
-		console.log(
-			"Updating tournament results for tournament ID: " + tournamentId
-		);
-		res
-			.status(200)
-			.json({ message: "Tournament results updated successfully" });
+		console.log("Updating tournament results for tournament ID: " + tournamentId);
+		res.status(200).json({ message: "Tournament results updated successfully" });
 	} catch (error) {
 		res.status(500).json({ error: "Failed to update tournament results" });
 	}
@@ -343,10 +350,18 @@ app.post("/api/user/:id/friends", verifyToken, (req, res) => {
 // Create tournament
 app.post("/api/tournament/create", verifyToken, (req, res) => {
 	try {
-		console.log(req.body + "\nCreated By: " + req.user.user);
+		var data = JSON.parse(JSON.stringify(req.body));
+		data["user"] = req.user.id;
+		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
+		console.dir(details, { depth: null });
+		// console.dir(fixtures, { depth: null });
 		// Add logic to save tournament to database
+		db.createTournament(details, fixtures, (result) => {
+			console.log(result);
+		});
 		res.status(201).json({ message: "Tournament created successfully" });
 	} catch (error) {
+		console.error(error);
 		res.status(500).json({ error: "Failed to create tournament" });
 	}
 });

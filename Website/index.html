@@ -114,6 +114,7 @@
 						if (res.success) {
 							document.getElementById("logout").style.display = "none";
 							document.getElementById("gotoLogin").style.display = "block";
+							location.reload();
 						} else {
 							console.log("Failed to logout");
 						}
@@ -123,22 +124,21 @@
 				});
 
 			fetch("http://localhost:5000/api/check-login")
-				.then((response) => {
-					if (!response.ok) {
-						return response.json().then((errorData) => {
-							throw new Error(errorData.message || "Something went wrong");
-						});
-					}
-				})
+				.then((response) => response.json())
 				.then((data) => {
+					// console.log(data);
 					if (data.loggedIn) {
 						document.getElementById("gotoLogin").style.display = "none";
+						document.getElementById("logout").style.display = "block";
 					} else {
+						document.getElementById("gotoLogin").style.display = "block";
 						document.getElementById("logout").style.display = "none";
 					}
 				})
 				.catch((error) => {
-					console.log(error);
+					document.getElementById("gotoLogin").style.display = "block";
+					document.getElementById("logout").style.display = "none";
+					console.error(error);
 				});
 		</script>
 	</body>

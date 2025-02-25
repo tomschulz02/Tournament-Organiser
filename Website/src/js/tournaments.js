@@ -3,10 +3,14 @@ let currentSlide = 0;
 let slides = 0;
 
 export function loadTournamentEvents() {
-	if (!isLoggedIn()) {
-		document.getElementById("createFormContainer").style.display = "none";
-		document.getElementById("signinRequest").style.display = "block";
-	}
+	isLoggedIn().then((loggedin) => {
+		if (!loggedin) {
+			var now = new Date();
+			console.log(`Called: ${now} => Logged In: ${loggedin}`);
+			document.getElementById("createFormContainer").style.display = "none";
+			document.getElementById("signinRequest").style.display = "block";
+		}
+	});
 
 	const form = document.getElementById("tournament-form");
 	slides = document.querySelectorAll(".form-slide");
@@ -26,9 +30,9 @@ export function loadTournamentEvents() {
 			populateTeamlist(teams);
 			addNameChangeEvents();
 		}
-		if (currentSlide === 2) {
-			if (!validateThirdSlide()) return;
-		}
+		// if (currentSlide === 2) {
+		// 	if (!validateThirdSlide()) return;
+		// }
 
 		if (currentSlide < slides.length - 1) {
 			slides[currentSlide].classList.remove("active");
@@ -58,26 +62,25 @@ export function loadTournamentEvents() {
 			location: document.getElementById("location").value,
 			description: document.getElementById("description").value,
 			structure: {
-				format: document.getElementById("format").option,
+				format: document.getElementById("format").value,
 				numTeams: parseInt(document.getElementById("teamCount").value),
 				numGroups:
 					document.getElementById("numGroups").value !== undefined
 						? parseInt(document.getElementById("numGroups").value)
 						: 0,
 				knockout:
-					document.getElementById("knockoutRound").option !== undefined
-						? document.getElementById("knockoutRound").option
-						: "none",
-			},
-			rules: {
+					document.getElementById("knockoutRound").value !== undefined
+						? parseInt(document.getElementById("knockoutRound").value)
+						: 0,
 				type: document.getElementById("indoor").selected ? "indoor" : "beach",
-				sets: parseInt(document.getElementById("numSets").value),
 			},
 			teams: getTeamsList(),
 		};
 
-		console.log("Form submitted");
-		console.log(tournament);
+		// console.log("Form submitted");
+		// console.log(tournament);
+
+		sendAPIRequestPOST("tournament/create", tournament);
 	});
 
 	let format = document.getElementById("format");
@@ -164,11 +167,11 @@ export function loadTournamentEvents() {
 		changeKnockoutOptions(teams.value);
 	});
 
-	document.getElementById("volleyballType").addEventListener("change", () => {
+	/* document.getElementById("volleyballType").addEventListener("change", () => {
 		updateSetOptions(
 			document.querySelector('input[name="volleyballType"]:checked')?.value
 		);
-	});
+	}); */
 
 	// name change submit function
 	document.getElementById("nameChangeForm").addEventListener("submit", (e) => {
@@ -193,13 +196,15 @@ export function loadTournamentEvents() {
 }
 
 function isLoggedIn() {
-	fetch("http://localhost:5000/api/check-login")
+	return fetch("http://localhost:5000/api/check-login")
 		.then((response) => response.json())
 		.then((data) => {
+			console.log(data);
 			return data.loggedIn;
 		})
 		.catch((error) => {
 			console.error(error);
+			return false;
 		});
 }
 
@@ -364,7 +369,7 @@ function changeKnockoutOptions(amount) {
 	document.getElementById("knockoutRound").value = highest.toString();
 }
 
-function updateSetOptions(volleyballType) {
+/* function updateSetOptions(volleyballType) {
 	const select = document.getElementById("numSets");
 	const options = select.options;
 
@@ -377,7 +382,7 @@ function updateSetOptions(volleyballType) {
 			option.disabled = false;
 		}
 	}
-}
+} */
 
 function openNameChangePopup(rank) {
 	// fetch element with current team name to display on popup and change on submit
@@ -403,13 +408,14 @@ function getTeamsList() {
 }
 
 async function sendAPIRequestPOST(path, data) {
+	const bodyData = data;
 	try {
 		const response = await fetch(`http://localhost:5000/api/${path}`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify(data),
+			body: JSON.stringify(bodyData),
 			credentials: "include", // needed for cookies
 		});
 

@@ -6,7 +6,7 @@ export function loadTournamentEvents() {
 	isLoggedIn().then((loggedin) => {
 		if (!loggedin) {
 			var now = new Date();
-			console.log(`Called: ${now} => Logged In: ${loggedin}`);
+			// console.log(`Called: ${now} => Logged In: ${loggedin}`);
 			document.getElementById("createFormContainer").style.display = "none";
 			document.getElementById("signinRequest").style.display = "block";
 		}
@@ -136,12 +136,8 @@ export function loadTournamentEvents() {
 	document.querySelectorAll(".view-tab-btn").forEach((button) => {
 		button.addEventListener("click", () => {
 			// Remove active class from all buttons and panes
-			document
-				.querySelectorAll(".view-tab-btn")
-				.forEach((btn) => btn.classList.remove("active"));
-			document
-				.querySelectorAll(".tab-pane")
-				.forEach((pane) => pane.classList.remove("active"));
+			document.querySelectorAll(".view-tab-btn").forEach((btn) => btn.classList.remove("active"));
+			document.querySelectorAll(".tab-pane").forEach((pane) => pane.classList.remove("active"));
 
 			// Add active class to clicked button and corresponding pane
 			button.classList.add("active");
@@ -150,17 +146,9 @@ export function loadTournamentEvents() {
 		});
 	});
 
-	document.querySelectorAll(".join-btn").forEach((button) => {
-		button.addEventListener("click", () => {
-			openPopup(button.name);
-		});
+	document.getElementById("closeTournamentPopup").addEventListener("click", () => {
+		closePopup();
 	});
-
-	document
-		.getElementById("closeTournamentPopup")
-		.addEventListener("click", () => {
-			closePopup();
-		});
 
 	const teams = document.getElementById("teamCount");
 	teams.addEventListener("focusout", () => {
@@ -178,28 +166,52 @@ export function loadTournamentEvents() {
 		e.preventDefault();
 
 		const names = document.getElementsByClassName("team-name");
-		const index = parseInt(
-			document.getElementById("nameChangeTeamRank").innerHTML,
-			10
-		);
-		names.item(index - 1).innerHTML =
-			document.getElementById("newTeamName").value;
+		const index = parseInt(document.getElementById("nameChangeTeamRank").innerHTML, 10);
+		names.item(index - 1).innerHTML = document.getElementById("newTeamName").value;
 
 		closeNameChangePopup();
 	});
 
-	document
-		.getElementById("closeNameChangePopup")
-		.addEventListener("click", () => {
-			closeNameChangePopup();
+	document.getElementById("closeNameChangePopup").addEventListener("click", () => {
+		closeNameChangePopup();
+	});
+
+	getAllTournaments();
+}
+
+async function getAllTournaments() {
+	// show loading screen here
+	const gridList = document.getElementById("tournamentsGrid");
+	toggleLoadingScreen("Browse tournaments");
+
+	const tournaments = await sendAPIRequestGET("tournaments");
+
+	gridList.innerHTML = "";
+	tournaments.message.forEach((tournament) => {
+		gridList.innerHTML += `<div class="tournament-card">
+				<h3>${tournament.name}</h3>
+				<p class="tournament-date">Starting: ${tournament.date}</p>
+				<p class="tournament-format">Format: ${tournament.format}</p>
+				<p class="tournament-location">Location: ${tournament.location}</p>
+				<button class="view-btn" name="${tournament.id}">View Tournament</button>
+			</div>`;
+	});
+	// console.log(tournaments);
+	// add the event to the view buttons
+	document.querySelectorAll(".view-btn").forEach((button) => {
+		button.addEventListener("click", () => {
+			openPopup(button.name);
 		});
+	});
+	// remove loading screen here
+	toggleLoadingScreen("Browse tournaments");
 }
 
 function isLoggedIn() {
 	return fetch("http://localhost:5000/api/check-login")
 		.then((response) => response.json())
 		.then((data) => {
-			console.log(data);
+			// console.log(data);
 			return data.loggedIn;
 		})
 		.catch((error) => {
@@ -262,21 +274,50 @@ function closePopup() {
 	}, 480); // Match animation duration
 }
 
-function loadTournamentData(tournamentId) {
+async function loadTournamentData(tournamentId) {
 	// TODO: load tournament data based on tournamentId
-	// console.log(tournamentId);
+	// add loading screen here
+	toggleLoadingScreen("Tournament View");
+	const results = await sendAPIRequestGET(`tournament/${tournamentId}`);
+	console.log(results);
+	const details = results.message.details;
+	document.getElementById("tournamentInfoName").innerHTML = details.name;
+	document.getElementById("tournamentInfoDescription").innerHTML = details.description;
+	document.getElementById("followTournament").disabled = !results.loggedIn;
+	document.getElementById("tournamentInfoFormat").innerHTML = `
+		<p><strong>Format:</strong> ${details.format}</p>
+		<p><strong>Teams:</strong> ${details.teams}</p>
+		<p><strong>Status:</strong> ${details.status}</p>
+	`;
+	const remFixtures = document.getElementById("tournamentInfoFixtures");
+	remFixtures.innerHTML = "";
+	details.upcomingFixtures.forEach((fixture) => {
+		remFixtures.innerHTML += `
+			<div class="fixture-card">
+				<p>Match #${fixture.match_no}</p>
+				<p>${fixture.team1} vs ${fixture.team2}</p>
+				<p>Phase: ${fixture.round}</p>
+			</div>
+		`;
+	});
+	const recResults = document.getElementById("tournamentInfoResults");
+	// recResults.innerHTML = "";
+	if (details.results.length == 0) {
+		recResults.innerHTML += `<div class="result-card">No Results yet</div>`;
+	} else {
+		details.results.forEach((result) => {});
+	}
+
+	//remove loading screen here
+	toggleLoadingScreen("Tournament View");
 }
 
 // Tab switching functionality
 document.querySelectorAll(".view-tab-btn").forEach((button) => {
 	button.addEventListener("click", () => {
 		// Remove active class from all buttons and panes
-		document
-			.querySelectorAll(".view-tab-btn")
-			.forEach((btn) => btn.classList.remove("active"));
-		document
-			.querySelectorAll(".tab-pane")
-			.forEach((pane) => pane.classList.remove("active"));
+		document.querySelectorAll(".view-tab-btn").forEach((btn) => btn.classList.remove("active"));
+		document.querySelectorAll(".tab-pane").forEach((pane) => pane.classList.remove("active"));
 
 		// Add active class to clicked button and corresponding pane
 		button.classList.add("active");
@@ -300,8 +341,7 @@ function validateFirstSlide() {
 	// Check if required fields are filled
 	if (!tournamentName || !startDate || !location) {
 		// Add error class to empty required fields
-		if (!tournamentName)
-			document.getElementById("tournamentName").classList.add("error");
+		if (!tournamentName) document.getElementById("tournamentName").classList.add("error");
 		if (!startDate) document.getElementById("startDate").classList.add("error");
 		if (!location) document.getElementById("location").classList.add("error");
 		return false;
@@ -346,8 +386,7 @@ function validateThirdSlide() {
 function updateButtons() {
 	prevBtn.style.display = currentSlide === 0 ? "none" : "block";
 	nextBtn.style.display = currentSlide === slides.length - 1 ? "none" : "block";
-	submitBtn.style.display =
-		currentSlide === slides.length - 1 ? "block" : "none";
+	submitBtn.style.display = currentSlide === slides.length - 1 ? "block" : "none";
 }
 
 function filterTournaments() {
@@ -443,7 +482,7 @@ async function sendAPIRequestGET(path) {
 
 		const data = await response.json();
 
-		if (!response.ok) {
+		if (response.status >= 500) {
 			throw new Error(data.error || "Request failed");
 		}
 
@@ -451,4 +490,8 @@ async function sendAPIRequestGET(path) {
 	} catch (error) {
 		console.error("Request failed: " + error);
 	}
+}
+
+function toggleLoadingScreen(element) {
+	console.error(`Add loading screen here: ${element}`);
 }

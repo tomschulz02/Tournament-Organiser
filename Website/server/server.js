@@ -24,7 +24,7 @@ TODO:
 import dotenv from "dotenv";
 dotenv.config();
 import DBConnection from "./config.js";
-import { populateGroups, formatCombiTournamentForStorage } from "./formatter.js";
+import { formatCombiTournamentForStorage, formatTournamentsForBrowse, formatTournamentView } from "./formatter.js";
 import express, { json } from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -68,19 +68,17 @@ const verifyToken = (req, res, next) => {
 	// console.log(token);
 
 	if (!token) {
-		return res.status(403).json({
-			error: "A token is required for authentication",
-			loggedIn: false,
-		});
+		req.user = null;
+		return next();
 	}
 
 	try {
 		const decoded = jwt.verify(token, SECRET_KEY);
 		req.user = decoded;
-		next();
 	} catch (error) {
-		return res.status(401).json({ error: "Invalid token", loggedIn: false });
+		req.user = null;
 	}
+	next();
 };
 
 // Testing formatter methods
@@ -125,11 +123,30 @@ var format = {
 
 // check whether the user is logged in or not
 app.get("/api/check-login", verifyToken, (req, res) => {
+	if (!req.user)
+		return res.status(401).json({
+			error: "A valid token is required for authentication",
+			loggedIn: false,
+		});
 	return res.status(200).json({ loggedIn: true, user: req.user.user });
 });
 
+app.get("/api/tournaments", (req, res) => {
+	try {
+		db.getAllTournaments((result) => {
+			if (!result.success) {
+				return res.status(500).json({ error: result.message });
+			}
+			res.status(200).json({ message: formatTournamentsForBrowse(result.message) });
+		});
+	} catch (error) {
+		console.log("Error: " + error);
+		res.status(500).json({ message: "Server error" });
+	}
+});
+
 // Get tournament information
-app.get("/api/tournament/:id", (req, res) => {
+app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	// Get tournament information
 	try {
 		const tournamentId = req.params.id;
@@ -137,12 +154,19 @@ app.get("/api/tournament/:id", (req, res) => {
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
 			}
-
+			// console.log(result);
+			var loggedIn = false;
+			var creator = false;
+			if (req.user) {
+				loggedIn = true;
+				if (req.user.user === result["details"]["created_by"]) {
+					creator = true;
+				}
+			}
+			// console.log({ message: result, log: loggedIn, creator: creator });
 			// filter out specific tournament information depending on user request parameters
-			res.status(200).json({ message: "Tournament information" });
+			res.status(200).json({ message: formatTournamentView(result.message), loggedIn: loggedIn, creator: creator });
 		});
-
-		res.status(200).json({ message: "Tournament information" });
 	} catch (error) {
 		console.log("Error: " + error);
 		res.status(500).json({ message: "Server error" });

@@ -2,9 +2,7 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 		<title>Tourganiser</title>
 		<link rel="stylesheet" href="src/css/styles.css" />
 		<link rel="stylesheet" href="src/css/home/home.css" />
@@ -12,9 +10,7 @@
 		<link rel="stylesheet" href="src/css/login/login.css" />
 		<link rel="stylesheet" href="src/css/about/about.css" />
 		<link rel="stylesheet" href="src/css/tournaments/tournaments.css" />
-		<link
-			rel="stylesheet"
-			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
 		<script src="src/js/script.js" defer></script>
 	</head>
 	<body>
@@ -31,9 +27,7 @@
 		</header>
 
 		<div id="profileTab" class="profile-tab">
-			<button class="profile-close-btn" onclick="closeProfile()">
-				&times;
-			</button>
+			<button class="profile-close-btn" onclick="closeProfile()">&times;</button>
 			<div class="profile-content">
 				<h2>Profile - Username</h2>
 				<div class="profile-item no-hover"></div>
@@ -99,29 +93,25 @@
 				});
 			}
 
-			document
-				.getElementById("gotoLogin")
-				.addEventListener("click", (event) => {
-					navigateTo(event, "/login");
-				});
-			document
-				.getElementById("logout")
-				.addEventListener("click", async (event) => {
-					try {
-						const res = await logoutUser();
-						// console.log(res);
+			document.getElementById("gotoLogin").addEventListener("click", (event) => {
+				navigateTo(event, "/login");
+			});
+			document.getElementById("logout").addEventListener("click", async (event) => {
+				try {
+					const res = await logoutUser();
+					// console.log(res);
 
-						if (res.success) {
-							document.getElementById("logout").style.display = "none";
-							document.getElementById("gotoLogin").style.display = "block";
-							location.reload();
-						} else {
-							console.log("Failed to logout");
-						}
-					} catch (error) {
-						console.error(error);
+					if (res.success) {
+						document.getElementById("logout").style.display = "none";
+						document.getElementById("gotoLogin").style.display = "block";
+						location.reload();
+					} else {
+						console.log("Failed to logout");
 					}
-				});
+				} catch (error) {
+					console.error(error);
+				}
+			});
 
 			fetch("http://localhost:5000/api/check-login")
 				.then((response) => response.json())

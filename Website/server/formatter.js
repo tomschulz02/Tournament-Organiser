@@ -242,3 +242,106 @@ export function populateGroups(numGroups, teamList) {
 	}
 	return groups;
 }
+
+export function formatTournamentsForBrowse(tournaments) {
+	var result = [];
+	tournaments.forEach((tour) => {
+		var date = getDate(tour.date);
+		const tournament = {
+			id: tour.id,
+			name: tour.name,
+			date: date,
+			location: tour.location,
+			type: tour["state"]["type"],
+			format: expandFormat(tour.format),
+		};
+		result.push(tournament);
+	});
+	return result;
+}
+
+export function formatTournamentView(tournament) {
+	const remainingFixtures = separateFixturesAndResults(tournament.fixtures).remainingFixtures;
+	const results = separateFixturesAndResults(tournament.fixtures).results;
+	var pages = {
+		details: {
+			name: tournament.details.name,
+			description: tournament.details.description,
+			format: expandFormat(tournament.details.format),
+			teams: tournament.details.num_teams,
+			startDate: getDate(tournament.details.date),
+			status: tournament.details.status,
+			upcomingFixtures: remainingFixtures.slice(0, 10),
+			results: results.slice(0, 10),
+		},
+		fixtures: {
+			remainingFixtures: remainingFixtures,
+			results: results,
+		},
+		standings: {},
+		teams: [tournament.details.state.groups],
+	};
+
+	return pages;
+}
+
+function expandFormat(symbol) {
+	var format;
+	switch (symbol) {
+		case "C":
+			format = "Pool Play + Knockout";
+			break;
+		case "SE":
+			format = "Single Elimination";
+			break;
+		case "DE":
+			format = "Double Elimination";
+			break;
+		case "KOTB":
+			format = "King Of The Beach";
+			break;
+		case "KOTC":
+			format = "King Of The Court";
+			break;
+		default:
+			format = null;
+			break;
+	}
+	return format;
+}
+
+function getDate(date) {
+	var start = new Date(date);
+	start.setUTCDate(start.getUTCDate() + 1);
+	start = start.toISOString().split("T")[0];
+
+	return start;
+}
+
+// structure for the result object for each match:
+/* 
+{
+    status: 'Not Started'/'Ongoing'/'Finished'
+    winner: team1/team2
+    score: [
+        [21,16],
+        [17,21],
+        [15,9]
+    ]
+}
+*/
+function separateFixturesAndResults(fixtures) {
+	var remainingFixtures = [];
+	var results = [];
+
+	fixtures.forEach((fix) => {
+		var result = fix.result;
+		if (!result || result.status != "Finished") {
+			remainingFixtures.push(fix);
+		} else {
+			results.push(fix);
+		}
+	});
+
+	return { remainingFixtures, results };
+}

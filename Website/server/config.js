@@ -294,18 +294,33 @@ class DBConnection {
 
 			var query = "SELECT * FROM tournaments WHERE id = ?";
 
+			var details = {};
+
 			connection.query(query, [tournamentId], function (err, result) {
 				if (err) {
 					connection.release();
 					return callback({ success: false, object: true, message: err });
 				}
 
-				console.log("Tournament retrieved");
+				// console.log(result);
+				details["details"] = result[0];
+				// console.log(details);
 
-				connection.release();
+				query = "SELECT * FROM fixtures WHERE tournament_id = ?";
 
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
+				connection.query(query, [tournamentId], function (err, res) {
+					if (err) {
+						connection.release();
+						return callback({ success: false, object: true, message: err });
+					}
+
+					details["fixtures"] = res;
+
+					connection.release();
+
+					if (err) return callback({ success: false, object: true, message: err });
+					else return callback({ success: true, object: true, message: details });
+				});
 			});
 		});
 	}
@@ -348,6 +363,22 @@ class DBConnection {
 
 				connection.release();
 
+				if (err) return callback({ success: false, object: true, message: err });
+				else return callback({ success: true, object: true, message: result });
+			});
+		});
+	}
+
+	getAllTournaments(callback) {
+		this.pool.getConnection(function (err, connection) {
+			if (err) return callback({ success: false, object: true, message: err });
+
+			var query = "SELECT * FROM tournaments;";
+			connection.query(query, function (err, result) {
+				if (err) {
+					connection.release();
+					return callback({ success: false, object: true, message: err });
+				}
 				if (err) return callback({ success: false, object: true, message: err });
 				else return callback({ success: true, object: true, message: result });
 			});

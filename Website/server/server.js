@@ -159,7 +159,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 			var creator = false;
 			if (req.user) {
 				loggedIn = true;
-				if (req.user.user === result["details"]["created_by"]) {
+				if (req.user.user === result["message"]["details"]["created_by"]) {
 					creator = true;
 				}
 			}

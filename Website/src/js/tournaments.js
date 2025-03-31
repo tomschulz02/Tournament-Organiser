@@ -12,6 +12,10 @@ export function loadTournamentEvents() {
 		}
 	});
 
+	document.getElementById("collectionTooltip").addEventListener("mouseover", () => {
+		// TODO: add explanation of collections as a tooltip on hover
+	});
+
 	const form = document.getElementById("tournament-form");
 	slides = document.querySelectorAll(".form-slide");
 	const nextBtn = document.getElementById("nextBtn");
@@ -22,6 +26,8 @@ export function loadTournamentEvents() {
 	nextBtn.addEventListener("click", () => {
 		if (currentSlide === 0) {
 			if (!validateFirstSlide()) return; // Stop if validation fails
+			// TODO: add check here for collection. if the user has selected to create a new collection
+			// make a popup appear for the user to create a collection with all the necessary details (name, description, etc.)
 		}
 		if (currentSlide === 1) {
 			if (!validateSecondSlide()) return;

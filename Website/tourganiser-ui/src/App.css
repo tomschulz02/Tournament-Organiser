@@ -253,7 +253,13 @@ Styles for a donation banner that could be used on multiple pages
 }
 
 .profile-tab.closing {
+  display: none;
   animation: slideRight 0.3s ease-out;
+}
+
+.profile-tab.open {
+  display: flex;
+  animation: slideLeft 0.3s ease-out;
 }
 
 .profile-content {

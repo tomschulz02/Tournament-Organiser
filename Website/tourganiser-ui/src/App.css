@@ -1,33 +1,36 @@
-
 /* CSS file with all the common styles between pages */
 
 /* Add these viewport breakpoints at the top of your file */
 :root {
-  --main-font-family: "Segoe UI", "Roboto", sans-serif;
-  --main-color: #2962ff;
-  --secondary-color: #658eff;
-  --mobile-breakpoint: 480px;
-  --tablet-breakpoint: 768px;
-  --desktop-breakpoint: 1024px;
+	--main-font-family: "Segoe UI", "Roboto", sans-serif;
+	--main-color: #2962ff;
+	--secondary-color: #658eff;
+	--mobile-breakpoint: 480px;
+	--tablet-breakpoint: 768px;
+	--desktop-breakpoint: 1024px;
 }
 
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: var(--main-font-family);
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+	font-family: var(--main-font-family);
 }
 
 body {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	margin: 0;
 }
 
 main {
-  padding-top: 80px;
-  flex: 1;
+	padding-top: 80px;
+	flex: 1;
+}
+
+#app {
+	flex: 1 0 auto;
 }
 
 /* 
@@ -36,57 +39,57 @@ It will be persistent on all pages
 */
 
 header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: calc(100% - 10px);
-  margin: 5px;
-  box-sizing: border-box;
-  padding: 20px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: var(--main-color);
-  font-family: var(--main-font-family);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  transition: background-color 0.3s ease;
-  color: #fff;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: calc(100% - 10px);
+	margin: 5px;
+	box-sizing: border-box;
+	padding: 20px 24px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background-color: var(--main-color);
+	font-family: var(--main-font-family);
+	backdrop-filter: blur(8px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	z-index: 1000;
+	transition: background-color 0.3s ease;
+	color: #fff;
 }
 
 header.scrolled {
-  background-color: rgba(41, 98, 255, 0.8);
+	background-color: rgba(41, 98, 255, 0.8);
 }
 
 header h1 {
-  margin: 0;
-  font-size: 1.5em;
-  font-weight: 500;
+	margin: 0;
+	font-size: 1.5em;
+	font-weight: 500;
 }
 
 header nav {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	justify-content: flex-end;
+	width: 100%;
 }
 
 header nav .nav-links {
-  color: rgba(255, 255, 255, 0.9);
-  text-decoration: none;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
+	color: rgba(255, 255, 255, 0.9);
+	text-decoration: none;
+	font-size: 1rem;
+	font-weight: 500;
+	transition: all 0.2s ease;
+	padding: 6px 12px;
+	border-radius: 4px;
+	cursor: pointer;
 }
 
 header nav .nav-links:hover {
-  color: #fff;
-  background-color: rgba(255, 255, 255, 0.1);
+	color: #fff;
+	background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* 
@@ -94,98 +97,103 @@ Styles for the footer, which will be persistent on all pages
 */
 
 .site-footer {
-  background-color: #1a1a1a;
-  color: #fff;
-  padding: 40px 20px 20px;
-  margin-top: auto;
-  font-family: var(--main-font-family);
+	background-color: #1a1a1a;
+	color: #fff;
+	padding: 40px 20px 20px;
+	margin-top: auto;
+	font-family: var(--main-font-family);
+	height: 300px;
+	width: 100%;
+	flex-shrink: 0;
+	position: absolute;
+	bottom: 0;
 }
 
 .footer-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  gap: 40px;
-  flex-wrap: wrap;
+	max-width: 1200px;
+	margin: 0 auto;
+	display: flex;
+	justify-content: space-between;
+	gap: 40px;
+	flex-wrap: wrap;
 }
 
 .footer-section {
-  flex: 1;
-  min-width: 250px;
+	flex: 1;
+	min-width: 250px;
 }
 
 .footer-section h4 {
-  color: var(--main-color);
-  font-size: 1.2em;
-  margin-bottom: 20px;
+	color: var(--main-color);
+	font-size: 1.2em;
+	margin-bottom: 20px;
 }
 
 .footer-section nav {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .footer-section a {
-  color: #fff;
-  text-decoration: none;
-  transition: color 0.3s ease;
-  cursor: pointer;
+	color: #fff;
+	text-decoration: none;
+	transition: color 0.3s ease;
+	cursor: pointer;
 }
 
 .footer-section a:hover {
-  color: var(--main-color);
+	color: var(--main-color);
 }
 
 .social-links {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .social-links i {
-  width: 20px;
-  margin-right: 10px;
+	width: 20px;
+	margin-right: 10px;
 }
 
 .footer-bottom {
-  max-width: 1200px;
-  margin: 40px auto 0;
-  padding-top: 20px;
-  border-top: 1px solid #333;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 20px;
+	max-width: 1200px;
+	margin: 40px auto 0;
+	padding-top: 20px;
+	border-top: 1px solid #333;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 20px;
 }
 
 .legal-links {
-  display: flex;
-  gap: 20px;
+	display: flex;
+	gap: 20px;
 }
 
 .legal-links a {
-  color: #888;
-  text-decoration: none;
-  transition: color 0.3s ease;
+	color: #888;
+	text-decoration: none;
+	transition: color 0.3s ease;
 }
 
 .legal-links a:hover {
-  color: #fff;
+	color: #fff;
 }
 
 @media (max-width: 768px) {
-  .footer-content {
-    flex-direction: column;
-    text-align: center;
-  }
+	.footer-content {
+		flex-direction: column;
+		text-align: center;
+	}
 
-  .footer-bottom {
-    flex-direction: column;
-    text-align: center;
-  }
+	.footer-bottom {
+		flex-direction: column;
+		text-align: center;
+	}
 }
 
 /* 
@@ -193,345 +201,345 @@ Styles for a donation banner that could be used on multiple pages
 */
 
 .donation-banner {
-  background: linear-gradient(135deg, var(--main-color), #8b0000);
-  color: white;
-  padding: 30px 20px;
-  text-align: left;
-  margin: 20px 0;
-  display: flex;
-  font-family: var(--main-font-family);
-  max-height: 130px;
+	background: linear-gradient(135deg, var(--main-color), #8b0000);
+	color: white;
+	padding: 30px 20px;
+	text-align: left;
+	margin: 20px 0;
+	display: flex;
+	font-family: var(--main-font-family);
+	max-height: 130px;
 }
 
 .banner-content {
-  /* max-width: 800px; */
-  margin: 0 100px;
-  flex: 5;
+	/* max-width: 800px; */
+	margin: 0 100px;
+	flex: 5;
 }
 
 .banner-content h3 {
-  font-size: 1.6em;
-  margin-bottom: 15px;
+	font-size: 1.6em;
+	margin-bottom: 15px;
 }
 
 .banner-content p {
-  margin-bottom: 20px;
+	margin-bottom: 20px;
 }
 
 .donate-button {
-  display: inline-block;
-  padding: 12px 30px;
-  background-color: #fff;
-  color: var(--main-color);
-  text-decoration: none;
-  border-radius: 25px;
-  font-weight: 600;
-  transition: transform 0.3s ease;
-  max-height: 45px;
-  margin: auto 20px auto 0;
+	display: inline-block;
+	padding: 12px 30px;
+	background-color: #fff;
+	color: var(--main-color);
+	text-decoration: none;
+	border-radius: 25px;
+	font-weight: 600;
+	transition: transform 0.3s ease;
+	max-height: 45px;
+	margin: auto 20px auto 0;
 }
 
 .donate-button:hover {
-  transform: scale(1.05);
+	transform: scale(1.05);
 }
 
 /* 
     Styles for the user profile tab
 */
 .profile-tab {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 100%;
-  background-color: rgba(0, 0, 0, 0.4);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(8px);
-  z-index: 1001;
-  animation: slideLeft 0.3s ease-out;
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100%;
+	background-color: rgba(0, 0, 0, 0.4);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(8px);
+	z-index: 1001;
+	animation: slideLeft 0.3s ease-out;
 }
 
 .profile-tab.closing {
-  display: none;
-  animation: slideRight 0.3s ease-out;
+	display: none;
+	animation: slideRight 0.3s ease-out;
 }
 
 .profile-tab.open {
-  display: flex;
-  animation: slideLeft 0.3s ease-out;
+	display: flex;
+	animation: slideLeft 0.3s ease-out;
 }
 
 .profile-content {
-  position: relative;
-  top: 0;
-  right: 0;
-  background-color: white;
-  height: 100%;
-  width: 90vw;
-  max-width: 400px;
-  margin: 0;
-  padding: 15px 20px;
+	position: relative;
+	top: 0;
+	right: 0;
+	background-color: white;
+	height: 100%;
+	width: 90vw;
+	max-width: 400px;
+	margin: 0;
+	padding: 15px 20px;
 }
 
 .profile-close-btn {
-  position: relative;
-  top: 0;
-  right: 0;
-  width: 60px;
-  height: 60px;
-  padding: 10px;
-  padding-top: 0;
-  background-color: white;
-  border-radius: 0 0 0 40px;
-  border: none;
-  margin: 0 0 auto auto;
-  cursor: pointer;
-  font-size: 30px;
+	position: relative;
+	top: 0;
+	right: 0;
+	width: 60px;
+	height: 60px;
+	padding: 10px;
+	padding-top: 0;
+	background-color: white;
+	border-radius: 0 0 0 40px;
+	border: none;
+	margin: 0 0 auto auto;
+	cursor: pointer;
+	font-size: 30px;
 }
 
 @keyframes slideLeft {
-  from {
-    transform: translateX(100%);
-  }
+	from {
+		transform: translateX(100%);
+	}
 
-  to {
-    transform: translateX(0);
-  }
+	to {
+		transform: translateX(0);
+	}
 }
 
 @keyframes slideRight {
-  from {
-    transform: translateX(0);
-  }
+	from {
+		transform: translateX(0);
+	}
 
-  to {
-    transform: translateX(100%);
-  }
+	to {
+		transform: translateX(100%);
+	}
 }
 
 .profile-item {
-  border-bottom: #1a1a1a 1px solid;
-  padding: 10px 0;
-  display: flex;
-  transition-duration: 0.5s;
-  cursor: pointer;
+	border-bottom: #1a1a1a 1px solid;
+	padding: 10px 0;
+	display: flex;
+	transition-duration: 0.5s;
+	cursor: pointer;
 }
 
 .profile-item:not(.no-hover):hover {
-  padding-left: 10px;
-  background: #88888888;
+	padding-left: 10px;
+	background: #88888888;
 }
 
 .no-hover {
-  pointer-events: none;
+	pointer-events: none;
 }
 
 .profile-item h4 {
-  font-size: 1.1em;
+	font-size: 1.1em;
 }
 
 .profile-actions {
-  height: 80px;
-  width: 100%;
-  padding: 15px;
-  margin-left: -20px;
-  position: absolute;
-  bottom: 0;
-  display: flex;
-  justify-content: space-between;
-  background-color: var(--secondary-color);
-  border-radius: 10px 10px 0 0;
+	height: 80px;
+	width: 100%;
+	padding: 15px;
+	margin-left: -20px;
+	position: absolute;
+	bottom: 0;
+	display: flex;
+	justify-content: space-between;
+	background-color: var(--secondary-color);
+	border-radius: 10px 10px 0 0;
 }
 
 .profile-actions-settings {
-  flex: 1;
-  max-width: 50px;
-  background: grey;
-  cursor: pointer;
-  border-radius: 25px;
+	flex: 1;
+	max-width: 50px;
+	background: grey;
+	cursor: pointer;
+	border-radius: 25px;
 }
 
 .profile-actions-item {
-  flex: 1;
-  max-width: 60px;
-  align-content: center;
-  text-align: center;
-  font-weight: bold;
-  font-size: 1.1em;
-  color: white;
-  cursor: pointer;
+	flex: 1;
+	max-width: 60px;
+	align-content: center;
+	text-align: center;
+	font-weight: bold;
+	font-size: 1.1em;
+	color: white;
+	cursor: pointer;
 }
 
 /* Update header styles for mobile */
 @media (max-width: 768px) {
-  header {
-    flex-direction: column;
-    align-items: center;
-    padding: 10px;
-    height: 100px;
-    background-color: var(--main-color);
-  }
+	header {
+		flex-direction: column;
+		align-items: center;
+		padding: 10px;
+		height: 100px;
+		background-color: var(--main-color);
+	}
 
-  header h1 {
-    margin-bottom: 10px;
-  }
+	header h1 {
+		margin-bottom: 10px;
+	}
 
-  header.scrolled {
-    background-color: rgba(41, 98, 255, 0.6);
-  }
+	header.scrolled {
+		background-color: rgba(41, 98, 255, 0.6);
+	}
 
-  header nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    padding: 10px;
-    justify-content: space-around;
-  }
+	header nav {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		padding: 10px;
+		justify-content: space-around;
+	}
 
-  header nav a {
-    font-size: 0.9rem;
-    padding: 8px;
-  }
+	header nav a {
+		font-size: 0.9rem;
+		padding: 8px;
+	}
 
-  header nav ul {
-    display: flex;
-    justify-content: space-around;
-    width: 100%;
-  }
+	header nav ul {
+		display: flex;
+		justify-content: space-around;
+		width: 100%;
+	}
 
-  main {
-    padding-top: 100px;
-    padding-bottom: 60px;
-    /* Space for bottom navigation */
-  }
+	main {
+		padding-top: 100px;
+		padding-bottom: 60px;
+		/* Space for bottom navigation */
+	}
 }
 
 /* Add responsive form styles */
 @media (max-width: 768px) {
-  .form-container {
-    padding: 10px;
-  }
+	.form-container {
+		padding: 10px;
+	}
 
-  .two-column-layout {
-    flex-direction: column;
-  }
+	.two-column-layout {
+		flex-direction: column;
+	}
 
-  .column {
-    width: 100%;
-  }
+	.column {
+		width: 100%;
+	}
 
-  .form-group {
-    margin-bottom: 15px;
-  }
+	.form-group {
+		margin-bottom: 15px;
+	}
 
-  input,
-  select,
-  textarea {
-    width: 100%;
-    padding: 8px;
-  }
+	input,
+	select,
+	textarea {
+		width: 100%;
+		padding: 8px;
+	}
 }
 
 /* Make tables responsive */
 @media (max-width: 768px) {
-  table {
-    display: block;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
+	table {
+		display: block;
+		overflow-x: auto;
+		white-space: nowrap;
+	}
 
-  td,
-  th {
-    padding: 8px;
-  }
+	td,
+	th {
+		padding: 8px;
+	}
 }
 
 /* Adjust donation banner for mobile */
 @media (max-width: 768px) {
-  .donation-banner {
-    flex-direction: column;
-    max-height: none;
-    padding: 15px;
-  }
+	.donation-banner {
+		flex-direction: column;
+		max-height: none;
+		padding: 15px;
+	}
 
-  .banner-content {
-    margin: 0;
-    text-align: center;
-  }
+	.banner-content {
+		margin: 0;
+		text-align: center;
+	}
 
-  .donate-button {
-    margin: 15px auto;
-  }
+	.donate-button {
+		margin: 15px auto;
+	}
 }
 
 /* Add responsive profile tab styles */
 @media (max-width: 768px) {
-  .profile-tab .profile-content {
-    width: 100%;
-    max-width: none;
-  }
+	.profile-tab .profile-content {
+		width: 100%;
+		max-width: none;
+	}
 
-  .profile-actions {
-    padding: 10px;
-  }
+	.profile-actions {
+		padding: 10px;
+	}
 }
 
 /* Add general responsive utilities */
 @media (max-width: 768px) {
-  .hide-mobile {
-    display: none !important;
-  }
+	.hide-mobile {
+		display: none !important;
+	}
 
-  .text-center-mobile {
-    text-align: center !important;
-  }
+	.text-center-mobile {
+		text-align: center !important;
+	}
 
-  .full-width-mobile {
-    width: 100% !important;
-  }
+	.full-width-mobile {
+		width: 100% !important;
+	}
 
-  /* Adjust font sizes for mobile */
-  h1 {
-    font-size: 1.8em;
-  }
+	/* Adjust font sizes for mobile */
+	h1 {
+		font-size: 1.8em;
+	}
 
-  h2 {
-    font-size: 1.5em;
-  }
+	h2 {
+		font-size: 1.5em;
+	}
 
-  h3 {
-    font-size: 1.3em;
-  }
+	h3 {
+		font-size: 1.3em;
+	}
 
-  p {
-    font-size: 1rem;
-  }
+	p {
+		font-size: 1rem;
+	}
 }
 
 /* Add tablet-specific styles */
 @media (min-width: 769px) and (max-width: 1024px) {
-  .hide-tablet {
-    display: none !important;
-  }
+	.hide-tablet {
+		display: none !important;
+	}
 
-  .two-column-layout {
-    gap: 20px;
-  }
+	.two-column-layout {
+		gap: 20px;
+	}
 }
 
 /* Ensure images are responsive */
 img {
-  max-width: 100%;
-  height: auto;
+	max-width: 100%;
+	height: auto;
 }
 
 /* Add flexible container */
 .container {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 15px;
-  box-sizing: border-box;
+	width: 100%;
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 15px;
+	box-sizing: border-box;
 }

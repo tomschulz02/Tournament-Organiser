@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "../styles/Tournaments.css";
 
 export default function Tournaments() {
@@ -74,6 +74,84 @@ function CreateTournament() {
 	});
 	const [isLoggedIn, setIsLoggedIn] = useState(true);
 	const [expandOptions, setExpandOptions] = useState(true);
+	const [teamList, setTeamList] = useState([]);
+	const [tempTeamCount, setTempTeamCount] = useState(0);
+	const [openCollectionPopup, setOpenCollectionPopup] = useState(false);
+	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
+	const [teamNameChange, setTeamNameChange] = useState({
+		name: "",
+		rank: 0,
+	});
+
+	useEffect(() => {
+		setTempTeamCount(tournamentData.teamCount);
+		setTeamList((prevTeamList) => {
+			const updatedList = [...prevTeamList];
+
+			if (tournamentData.teamCount > prevTeamList.length) {
+				for (let i = prevTeamList.length; i < tournamentData.teamCount; i++) {
+					updatedList.push(`Team ${i + 1}`);
+				}
+			} else if (tournamentData.teamCount < prevTeamList.length) {
+				updatedList.length = tournamentData.teamCount;
+			}
+
+			return updatedList;
+		});
+	}, [tournamentData.teamCount]);
+
+	const validateFirstSlide = () => {
+		const tournamentName = tournamentData.tournamentName;
+		const startDate = tournamentData.startDate;
+		const location = tournamentData.location;
+
+		// Check if required fields are filled
+		if (!tournamentName || !startDate || !location) {
+			// Add error class to empty required fields
+			if (!tournamentName) document.getElementById("tournamentName").classList.add("error");
+			if (!startDate) document.getElementById("startDate").classList.add("error");
+			if (!location) document.getElementById("location").classList.add("error");
+			return false;
+		}
+
+		return true;
+	};
+
+	const validateSecondSlide = () => {
+		const format = tournamentData.format;
+		const teams = tournamentData.teamCount;
+		const groups = tournamentData.numGroups;
+
+		if (format === "combi") {
+			if (!teams || !groups) {
+				if (!teams) document.getElementById("teamCount").classList.add("error");
+				if (!groups) document.getElementById("numGroups").classList.add("error");
+				return false;
+			}
+		} else {
+			if (!teams) {
+				document.getElementById("teamCount").classList.add("error");
+				return false;
+			}
+		}
+
+		populateTeamlist(teams);
+		return true;
+	};
+
+	const populateTeamlist = (count) => {
+		if (teamList.length === 0) {
+			for (let index = 1; index <= count; index++) {
+				setTeamList(...teamList, { id: index, name: `Team ${index}` });
+			}
+		} else if (teamList.length < count) {
+			for (let index = teamList.length + 1; index <= count; index++) {
+				setTeamList(...teamList, { id: index, name: `Team ${index}` });
+			}
+		} else if (teamList.length > count) {
+			setTeamList(teamList.splice(count, teamList.length - count));
+		}
+	};
 
 	const nextSlide = () => {
 		if (currentSlide === 1 && validateFirstSlide()) {
@@ -98,10 +176,17 @@ function CreateTournament() {
 				type: e.target.value,
 			});
 		} else {
-			setTournamentData({
-				...tournamentData,
-				[e.target.id]: e.target.value,
-			});
+			if ((e.target.id === "teamCount" || e.target.id === "numGroups") && e.target.value !== "") {
+				setTournamentData({
+					...tournamentData,
+					[e.target.id]: parseInt(e.target.value),
+				});
+			} else {
+				setTournamentData({
+					...tournamentData,
+					[e.target.id]: e.target.value,
+				});
+			}
 		}
 
 		if (e.target.id === "format") {
@@ -109,12 +194,50 @@ function CreateTournament() {
 		}
 	};
 
+	const handleBlur = () => {
+		const parsed = parseInt(tempTeamCount, 10);
+		if (!isNaN(parsed) && parsed > 0) {
+			setTournamentData({
+				...tournamentData,
+				teamCount: parsed,
+			});
+		}
+	};
+
 	const handleSubmit = (e) => {
 		e.preventDefault();
+		setTournamentData({
+			...tournamentData,
+			teams: teamList,
+		});
+		console.log("Tournament Created:", tournamentData);
+	};
+
+	const handleTeamNameChangePopup = (action, name, rank) => {
+		setTeamNameChange({ name: name, rank: rank });
+		setOpenTeamNameChangePopup(action === "open");
+	};
+
+	const handleTeamNameChangeSubmit = (e, rank, newName) => {
+		e.preventDefault();
+		setTeamList((prevTeamList) => {
+			const updatedList = [...prevTeamList];
+			updatedList[rank - 1] = newName;
+			return updatedList;
+		});
 	};
 
 	return (
 		<div className="create-tournament">
+			{openCollectionPopup && <CollectionPopup />}
+			{openTeamNameChangePopup && (
+				<TeamNameChangePopup
+					onClose={() => handleTeamNameChangePopup("close")}
+					onSubmit={handleTeamNameChangeSubmit}
+					currName={teamNameChange.name}
+					rank={teamNameChange.rank}
+				/>
+			)}
 			<div id="signinRequest" className="signin-request" style={{ display: isLoggedIn ? "none" : "block" }}>
 				<h3>You must be logged in to be able to create tournaments</h3>
 			</div>
@@ -168,7 +291,6 @@ function CreateTournament() {
 							</select>
 						</div>
 						<p>*required</p>
-						
 					</div>
 
 					{/* <!-- Slide 2: Tournament Structure --> */}
@@ -181,15 +303,9 @@ function CreateTournament() {
 									<label htmlFor="format">Tournament Format*</label>
 									<select id="format" onChange={handleChange} value={tournamentData.format} required>
 										{/* <!-- All options are disabled for now. Only combi is available for MVP --> */}
-										<option value="single">
-											Single Elimination
-										</option>
-										<option value="double">
-											Double Elimination
-										</option>
-										<option value="round">
-											Round Robin
-										</option>
+										<option value="single">Single Elimination</option>
+										<option value="double">Double Elimination</option>
+										<option value="round">Round Robin</option>
 										<option value="combi">Round Robin + Knockout</option>
 									</select>
 								</div>
@@ -230,9 +346,12 @@ function CreateTournament() {
 											<input
 												type="number"
 												id="teamCount"
-												onChange={handleChange}
+												onChange={(e) => {
+													setTempTeamCount(e.target.value);
+												}}
+												onBlur={handleBlur}
 												min="2"
-												value={tournamentData.teamCount}
+												value={tempTeamCount}
 												required
 											/>
 										</div>
@@ -264,13 +383,13 @@ function CreateTournament() {
 							<div className="divider"></div>
 							<div className="column">
 								<h2>Description</h2>
-								<div className={`description ${tournamentData.format==='single' ? '' : 'hidden'}`} id="single">
+								<div className={`description ${tournamentData.format === "single" ? "" : "hidden"}`} id="single">
 									<h3>Single Elimination</h3>
 									<p>
 										Teams are eliminated after losing a match. The tournament continues until only one team remains.
 									</p>
 								</div>
-								<div className={`description ${tournamentData.format==='double' ? '' : 'hidden'}`} id="double">
+								<div className={`description ${tournamentData.format === "double" ? "" : "hidden"}`} id="double">
 									<h3>Double Elimination</h3>
 									<p>
 										Teams have two chances to stay in the tournament. A team must lose twice to be eliminated. <br />
@@ -280,14 +399,14 @@ function CreateTournament() {
 										the semifinals.
 									</p>
 								</div>
-								<div className={`description ${tournamentData.format==='round' ? '' : 'hidden'}`} id="round">
+								<div className={`description ${tournamentData.format === "round" ? "" : "hidden"}`} id="round">
 									<h3>Round Robin</h3>
 									<p>
 										Teams play against every other team in the tournament. Points are awarded for wins and ties. <br />
 										The team with the most points at the end of the round wins.
 									</p>
 								</div>
-								<div className={`description ${tournamentData.format==='combi' ? '' : 'hidden'}`} id="combi">
+								<div className={`description ${tournamentData.format === "combi" ? "" : "hidden"}`} id="combi">
 									<h3>Round Robin + Knockout</h3>
 									<p>
 										Teams are divided equally (as possible) into groups. <br />
@@ -299,7 +418,6 @@ function CreateTournament() {
 								</div>
 							</div>
 						</div>
-						
 					</div>
 
 					{/* <!-- Slide 3: Team list --> */}
@@ -312,7 +430,21 @@ function CreateTournament() {
 									<h4 style={{ width: "60%" }}>Team name</h4>
 									<h4>Edit</h4>
 								</div>
-								<div id="teamList" className="team-list"></div>
+								<div id="teamList" className="team-list">
+									{teamList.map((team, index) => {
+										return (
+											<div key={index + 1} className="team-slot">
+												<p>{index + 1}.</p>
+												<p className="team-name">{team}</p>
+												<div
+													className="edit-team-name"
+													onClick={() => handleTeamNameChangePopup("open", team, index + 1)}>
+													<i className="fas fa-pen"></i>
+												</div>
+											</div>
+										);
+									})}
+								</div>
 							</div>
 							<div className="divider"></div>
 							<div className="column">
@@ -374,17 +506,34 @@ function CollectionPopup() {
 	);
 }
 
-function TeamNameChangePopup() {
+function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
+	const handleSubmit = (e) => {
+		e.preventDefault();
+		const newName = document.getElementById("newTeamName").value;
+		if (newName === "") {
+			document.getElementById("newTeamName").classList.add("error");
+			return;
+		}
+		document.getElementById("newTeamName").classList.remove("error");
+
+		onSubmit(e, rank, newName);
+		onClose();
+	};
+
 	return (
 		<div id="teamNameChangePopup" className="team-name-change">
 			<div className="team-name-change-content">
-				<div className="close-btn" id="closeNameChangePopup">&times;</div>
+				<div className="close-btn" id="closeNameChangePopup" onClick={onClose}>
+					&times;
+				</div>
 				<h2>Change team name</h2>
-				<sub>Change the name of the team at rank: <span id="nameChangeTeamRank">1</span></sub>
-				<form id="nameChangeForm" className="name-change-form">
+				<sub>
+					Change the name of the team at rank: <span id="nameChangeTeamRank">{rank}</span>
+				</sub>
+				<form id="nameChangeForm" className="name-change-form" onSubmit={handleSubmit}>
 					<div className="name-change-input">
 						<label htmlFor="currentTeamName">Current:</label>
-						<input id="currentTeamName" type="text" value="Current team name" disabled />
+						<input id="currentTeamName" type="text" value={currName} disabled />
 					</div>
 					<div className="exchange-icon">
 						<i className="fas fa-exchange-alt"></i>
@@ -393,60 +542,11 @@ function TeamNameChangePopup() {
 						<label htmlFor="newTeamName">New:</label>
 						<input type="text" id="newTeamName" />
 					</div>
-					<button type="submit" className="name-change-button">Save Changes</button>
+					<button type="submit" className="name-change-button">
+						Save Changes
+					</button>
 				</form>
 			</div>
 		</div>
-	)
-}
-
-function validateFirstSlide() {
-	const tournamentName = document.getElementById("tournamentName").value;
-	const startDate = document.getElementById("startDate").value;
-	const location = document.getElementById("location").value;
-
-	// Check if required fields are filled
-	if (!tournamentName || !startDate || !location) {
-		// Add error class to empty required fields
-		if (!tournamentName) document.getElementById("tournamentName").classList.add("error");
-		if (!startDate) document.getElementById("startDate").classList.add("error");
-		if (!location) document.getElementById("location").classList.add("error");
-		return false;
-	}
-
-	return true;
-}
-
-function validateSecondSlide() {
-	const format = document.getElementById("format").value;
-	const teams = document.getElementById("teamCount").value;
-	const groups = document.getElementById("numGroups").value;
-
-	if (format === "combi") {
-		if (!teams || !groups) {
-			if (!teams) document.getElementById("teamCount").classList.add("error");
-			if (!groups) document.getElementById("numGroups").classList.add("error");
-			return false;
-		}
-	} else {
-		if (!teams) {
-			document.getElementById("teamCount").classList.add("error");
-			return false;
-		}
-	}
-
-	populateTeamlist(teams);
-	return true;
-}
-
-function populateTeamlist(count) {
-	const list = document.getElementById("teamList");
-	for (let index = 0; index < count; index++) {
-		let team = document.createElement("div");
-		team.className = "team-slot";
-		team.innerHTML = `<p>${index + 1}.</p>
-						<p class="team-name">Team ${index + 1}</p>
-						<div class="edit-team-name"><i class="fas fa-pen"></i></div>`;
-		list.appendChild(team);
-	}
+	);
 }

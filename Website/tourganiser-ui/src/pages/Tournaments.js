@@ -73,9 +73,9 @@ function CreateTournament() {
 		teams: [],
 	});
 	const [isLoggedIn, setIsLoggedIn] = useState(true);
-	const [expandOptions, setExpandOptions] = useState(true);
+	const [expandOptions, setExpandOptions] = useState(tournamentData.format === "combi");
 	const [teamList, setTeamList] = useState([]);
-	const [tempTeamCount, setTempTeamCount] = useState(0);
+	const [tempTeamCount, setTempTeamCount] = useState("");
 	const [openCollectionPopup, setOpenCollectionPopup] = useState(false);
 	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
 	const [teamNameChange, setTeamNameChange] = useState({
@@ -84,7 +84,7 @@ function CreateTournament() {
 	});
 
 	useEffect(() => {
-		setTempTeamCount(tournamentData.teamCount);
+		// setTempTeamCount(tournamentData.teamCount);
 		setTeamList((prevTeamList) => {
 			const updatedList = [...prevTeamList];
 
@@ -96,6 +96,10 @@ function CreateTournament() {
 				updatedList.length = tournamentData.teamCount;
 			}
 
+			setTournamentData({
+				...tournamentData,
+				teams: updatedList,
+			});
 			return updatedList;
 		});
 	}, [tournamentData.teamCount]);
@@ -111,6 +115,12 @@ function CreateTournament() {
 			if (!tournamentName) document.getElementById("tournamentName").classList.add("error");
 			if (!startDate) document.getElementById("startDate").classList.add("error");
 			if (!location) document.getElementById("location").classList.add("error");
+			return false;
+		}
+
+		if (tournamentData.tournamentCollection === "new") {
+			// Open collection popup
+			setOpenCollectionPopup(true);
 			return false;
 		}
 
@@ -135,22 +145,7 @@ function CreateTournament() {
 			}
 		}
 
-		populateTeamlist(teams);
 		return true;
-	};
-
-	const populateTeamlist = (count) => {
-		if (teamList.length === 0) {
-			for (let index = 1; index <= count; index++) {
-				setTeamList(...teamList, { id: index, name: `Team ${index}` });
-			}
-		} else if (teamList.length < count) {
-			for (let index = teamList.length + 1; index <= count; index++) {
-				setTeamList(...teamList, { id: index, name: `Team ${index}` });
-			}
-		} else if (teamList.length > count) {
-			setTeamList(teamList.splice(count, teamList.length - count));
-		}
 	};
 
 	const nextSlide = () => {
@@ -206,11 +201,6 @@ function CreateTournament() {
 
 	const handleSubmit = (e) => {
 		e.preventDefault();
-		setTournamentData({
-			...tournamentData,
-			teams: teamList,
-		});
-		console.log("Tournament Created:", tournamentData);
 	};
 
 	const handleTeamNameChangePopup = (action, name, rank) => {
@@ -223,13 +213,32 @@ function CreateTournament() {
 		setTeamList((prevTeamList) => {
 			const updatedList = [...prevTeamList];
 			updatedList[rank - 1] = newName;
+			setTournamentData({
+				...tournamentData,
+				teams: updatedList,
+			});
 			return updatedList;
+		});
+	};
+
+	const handleCollectionPopup = (action) => {
+		setOpenCollectionPopup(action === "open");
+	};
+
+	const handleCollectionSubmit = (collectionName) => {
+		let newCollection = document.createElement("option");
+		newCollection.value = collectionName;
+		newCollection.innerHTML = collectionName;
+		document.getElementById("tournamentCollection").appendChild(newCollection);
+		setTournamentData({
+			...tournamentData,
+			tournamentCollection: collectionName,
 		});
 	};
 
 	return (
 		<div className="create-tournament">
-			{openCollectionPopup && <CollectionPopup />}
+			{openCollectionPopup && <CollectionPopup onClose={handleCollectionPopup} onSubmit={handleCollectionSubmit} />}
 			{openTeamNameChangePopup && (
 				<TeamNameChangePopup
 					onClose={() => handleTeamNameChangePopup("close")}
@@ -493,14 +502,36 @@ function CreateTournament() {
 	);
 }
 
-function CollectionPopup() {
+function CollectionPopup({ onClose, onSubmit }) {
+	const [collection, setCollection] = useState("");
+
+	const handleSubmit = (e) => {
+		e.preventDefault();
+		onSubmit(collection);
+		onClose("close");
+	};
+
+	const handleChange = (e) => {
+		setCollection(e.target.value);
+	};
+
 	return (
-		<div>
-			<h2>Collection</h2>
-			<p>Here you can create a collection for your tournaments.</p>
-			<div className="form-group">
-				<label htmlFor="collectionName">Collection Name*</label>
-				<input type="text" id="collectionName" required />
+		<div className="collection-popup">
+			<div className="collection-popup-content">
+				<div className="close-btn" id="closeCollectionPopup" onClick={() => onClose("close")}>
+					&times;
+				</div>
+				<h2>Collection</h2>
+				<p>Here you can create a collection for your tournaments.</p>
+				<form id="collectionForm" className="collection-form" onSubmit={handleSubmit}>
+					<div className="form-group">
+						<label htmlFor="collectionName">Collection Name*</label>
+						<input type="text" id="collectionName" value={collection} onChange={handleChange} required />
+					</div>
+					<button type="submit" className="collection-button">
+						Create Collection
+					</button>
+				</form>
 			</div>
 		</div>
 	);

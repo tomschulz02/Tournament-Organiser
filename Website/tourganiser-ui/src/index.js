@@ -6,6 +6,7 @@ import App from './App';
 import Home from './pages/Home';
 import Tournaments from './pages/Tournaments';
 import About from './pages/About';
+import "@fortawesome/fontawesome-free/css/all.min.css";
 
 import reportWebVitals from './reportWebVitals';
 

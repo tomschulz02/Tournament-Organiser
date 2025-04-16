@@ -168,7 +168,7 @@ function CreateTournament() {
 							</select>
 						</div>
 						<p>*required</p>
-						<div style={{ height: "80px" }}></div>
+						
 					</div>
 
 					{/* <!-- Slide 2: Tournament Structure --> */}
@@ -181,13 +181,13 @@ function CreateTournament() {
 									<label htmlFor="format">Tournament Format*</label>
 									<select id="format" onChange={handleChange} value={tournamentData.format} required>
 										{/* <!-- All options are disabled for now. Only combi is available for MVP --> */}
-										<option value="single" disabled>
+										<option value="single">
 											Single Elimination
 										</option>
-										<option value="double" disabled>
+										<option value="double">
 											Double Elimination
 										</option>
-										<option value="round" disabled>
+										<option value="round">
 											Round Robin
 										</option>
 										<option value="combi">Round Robin + Knockout</option>
@@ -264,13 +264,13 @@ function CreateTournament() {
 							<div className="divider"></div>
 							<div className="column">
 								<h2>Description</h2>
-								<div className="description" id="single">
+								<div className={`description ${tournamentData.format==='single' ? '' : 'hidden'}`} id="single">
 									<h3>Single Elimination</h3>
 									<p>
 										Teams are eliminated after losing a match. The tournament continues until only one team remains.
 									</p>
 								</div>
-								<div className="description hidden" id="double">
+								<div className={`description ${tournamentData.format==='double' ? '' : 'hidden'}`} id="double">
 									<h3>Double Elimination</h3>
 									<p>
 										Teams have two chances to stay in the tournament. A team must lose twice to be eliminated. <br />
@@ -280,14 +280,14 @@ function CreateTournament() {
 										the semifinals.
 									</p>
 								</div>
-								<div className="description hidden" id="round">
+								<div className={`description ${tournamentData.format==='round' ? '' : 'hidden'}`} id="round">
 									<h3>Round Robin</h3>
 									<p>
 										Teams play against every other team in the tournament. Points are awarded for wins and ties. <br />
 										The team with the most points at the end of the round wins.
 									</p>
 								</div>
-								<div className="description hidden" id="combi">
+								<div className={`description ${tournamentData.format==='combi' ? '' : 'hidden'}`} id="combi">
 									<h3>Round Robin + Knockout</h3>
 									<p>
 										Teams are divided equally (as possible) into groups. <br />
@@ -299,7 +299,7 @@ function CreateTournament() {
 								</div>
 							</div>
 						</div>
-						<div style={{ height: "80px" }}></div>
+						
 					</div>
 
 					{/* <!-- Slide 3: Team list --> */}
@@ -327,7 +327,6 @@ function CreateTournament() {
 								</div>
 							</div>
 						</div>
-						<div style={{ height: "80px" }}></div>
 					</div>
 
 					{/* <!-- Navigation Buttons --> */}
@@ -375,6 +374,32 @@ function CollectionPopup() {
 	);
 }
 
+function TeamNameChangePopup() {
+	return (
+		<div id="teamNameChangePopup" className="team-name-change">
+			<div className="team-name-change-content">
+				<div className="close-btn" id="closeNameChangePopup">&times;</div>
+				<h2>Change team name</h2>
+				<sub>Change the name of the team at rank: <span id="nameChangeTeamRank">1</span></sub>
+				<form id="nameChangeForm" className="name-change-form">
+					<div className="name-change-input">
+						<label htmlFor="currentTeamName">Current:</label>
+						<input id="currentTeamName" type="text" value="Current team name" disabled />
+					</div>
+					<div className="exchange-icon">
+						<i className="fas fa-exchange-alt"></i>
+					</div>
+					<div className="name-change-input">
+						<label htmlFor="newTeamName">New:</label>
+						<input type="text" id="newTeamName" />
+					</div>
+					<button type="submit" className="name-change-button">Save Changes</button>
+				</form>
+			</div>
+		</div>
+	)
+}
+
 function validateFirstSlide() {
 	const tournamentName = document.getElementById("tournamentName").value;
 	const startDate = document.getElementById("startDate").value;
@@ -410,5 +435,18 @@ function validateSecondSlide() {
 		}
 	}
 
+	populateTeamlist(teams);
 	return true;
+}
+
+function populateTeamlist(count) {
+	const list = document.getElementById("teamList");
+	for (let index = 0; index < count; index++) {
+		let team = document.createElement("div");
+		team.className = "team-slot";
+		team.innerHTML = `<p>${index + 1}.</p>
+						<p class="team-name">Team ${index + 1}</p>
+						<div class="edit-team-name"><i class="fas fa-pen"></i></div>`;
+		list.appendChild(team);
+	}
 }

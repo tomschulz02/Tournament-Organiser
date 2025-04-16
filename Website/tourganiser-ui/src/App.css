@@ -102,7 +102,7 @@ Styles for the footer, which will be persistent on all pages
 	padding: 40px 20px 20px;
 	margin-top: auto;
 	font-family: var(--main-font-family);
-	height: 300px;
+	height: auto;
 	width: 100%;
 	flex-shrink: 0;
 	position: absolute;
@@ -411,7 +411,7 @@ Styles for a donation banner that could be used on multiple pages
 
 	main {
 		padding-top: 100px;
-		padding-bottom: 60px;
+		padding-bottom: 300px;
 		/* Space for bottom navigation */
 	}
 }
@@ -443,7 +443,7 @@ Styles for a donation banner that could be used on multiple pages
 }
 
 /* Make tables responsive */
-@media (max-width: 768px) {
+/* @media (max-width: 768px) {
 	table {
 		display: block;
 		overflow-x: auto;
@@ -454,7 +454,7 @@ Styles for a donation banner that could be used on multiple pages
 	th {
 		padding: 8px;
 	}
-}
+} */
 
 /* Adjust donation banner for mobile */
 @media (max-width: 768px) {

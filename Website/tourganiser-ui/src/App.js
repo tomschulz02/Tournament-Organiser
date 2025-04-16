@@ -2,7 +2,6 @@ import "./App.css";
 import { Outlet, Link } from "react-router-dom";
 import React from "react";
 import { useState, useEffect } from "react";
-// import { useEffect } from "react";
 
 export default function App() {
 	return (

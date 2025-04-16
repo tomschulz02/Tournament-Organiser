@@ -127,6 +127,7 @@
 
 .divider {
 	width: 1px;
+	height: auto;
 	align-self: stretch;
 	background-color: #e0e0e0;
 	margin: 0 20px;
@@ -691,11 +692,19 @@ Styles for the name change popup
 	}
 
 	.divider {
-		display: none;
+		height: 1px;
+		width: auto;
+		justify-self: stretch;
+		background-color: #e0e0e0;
+		margin: 20px 0;
 	}
 
 	.radio-option {
 		max-width: 100%;
+	}
+
+	.description {
+		margin-bottom: 80px;
 	}
 }
 

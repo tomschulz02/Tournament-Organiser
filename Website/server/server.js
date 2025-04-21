@@ -31,6 +31,7 @@ import jwt from "jsonwebtoken";
 import path, { dirname } from "path";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
+import logger from "./logger.cjs";
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
@@ -52,7 +53,7 @@ app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 app.use(json());
 app.use(cookieParser());
-
+app.use(logger);
 app.use(express.static(path.join(__dirname, "../")));
 
 // Database connection

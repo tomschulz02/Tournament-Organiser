@@ -583,3 +583,46 @@ img {
 		transform: rotate(0deg);
 	}
 }
+
+.message-popup {
+	position: fixed;
+	top: 20px;
+	right: calc(50% - 150px);
+	width: 300px;
+	background: white;
+	color: black;
+	padding: 12px 20px;
+	border-radius: 8px;
+	z-index: 10000;
+	text-align: center;
+	text-wrap: normal;
+	animation: fadeInOut 3s ease-in-out;
+}
+
+.message-popup.success {
+	background: #4caf50;
+	color: white;
+}
+.message-popup.error {
+	background: #f44336;
+	color: white;
+}
+
+@keyframes fadeInOut {
+	0% {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	10% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	90% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+}

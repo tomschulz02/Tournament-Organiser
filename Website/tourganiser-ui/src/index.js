@@ -8,6 +8,7 @@ import Tournaments from "./pages/Tournaments";
 import About from "./pages/About";
 import Login from "./pages/Login";
 import { AuthProvider } from "./AuthContext";
+import { MessageProvider } from "./MessageContext";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 
 import reportWebVitals from "./reportWebVitals";
@@ -31,9 +32,11 @@ function RoutesComponent() {
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
 	<React.StrictMode>
-		<AuthProvider>
-			<RoutesComponent />
-		</AuthProvider>
+		<MessageProvider>
+			<AuthProvider>
+				<RoutesComponent />
+			</AuthProvider>
+		</MessageProvider>
 	</React.StrictMode>
 );
 

@@ -2,7 +2,8 @@ import React, { useState, useContext, useEffect } from "react";
 import { AuthContext } from "../AuthContext";
 import "../styles/Login.css";
 import { useNavigate } from "react-router-dom";
-import { loginUser, registerUser, checkLoginStatus } from "../requests"; // Assuming you have a requests.js file for API calls
+import { loginUser, registerUser, checkLoginStatus } from "../requests";
+import { MessagePopup, useMessage } from "../MessageContext";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
@@ -11,6 +12,7 @@ export default function Login() {
 	const [currentForm, setCurrentForm] = useState("login");
 	const { setIsLoggedIn } = useContext(AuthContext);
 	const navigate = useNavigate();
+	const { showMessage } = useMessage();
 
 	// TODO: Add logic to check if user is already logged in and redirect to home page
 	useEffect(() => {
@@ -19,14 +21,15 @@ export default function Login() {
 				const response = await checkLoginStatus();
 				if (response.loggedIn) {
 					setIsLoggedIn(true);
+					showMessage("Successfully logged in!", "success");
 					navigate("/home"); // Redirect to home page if already logged in
 				}
 			} catch (error) {
-				console.error("Error checking login status:", error);
+				// do nothing
 			}
 		};
 		checkLogin();
-	});
+	}, []);
 
 	const toggleForm = (formName) => {
 		setCurrentForm(formName);
@@ -37,19 +40,23 @@ export default function Login() {
 	};
 
 	return (
-		<div className="login-popup">
-			{currentForm === "login" ? (
-				<LoginForm onFormSwitch={() => toggleForm("register")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
-			) : (
-				<RegisterForm onFormSwitch={() => toggleForm("login")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
-			)}
-		</div>
+		<>
+			<MessagePopup />
+			<div className="login-popup">
+				{currentForm === "login" ? (
+					<LoginForm onFormSwitch={() => toggleForm("register")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+				) : (
+					<RegisterForm onFormSwitch={() => toggleForm("login")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+				)}
+			</div>
+		</>
 	);
 }
 
 function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 	const [loginDetails, setLoginDetails] = useState({ email: "", password: "" });
 	const [isLoading, setIsLoading] = useState(false);
+	const { showMessage } = useMessage();
 
 	const handleChange = (e) => {
 		const { id, value } = e.target;
@@ -60,8 +67,10 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 		e.preventDefault();
 		// validate input fields
 		const { email, password } = loginDetails;
-		if (!validateLoginDetails(email, password)) {
+		const validation = validateLoginDetails(email, password);
+		if (!validation.success) {
 			// show error message to user
+			showMessage(validation.message, "error");
 			return;
 		}
 		setIsLoading(true);
@@ -70,11 +79,11 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 			const response = await loginUser(email, password);
 			if (response.success) {
 				setLoggedIn(true);
+				showMessage("Successfully logged in!", "success");
 				onClose();
 			}
 		} catch (error) {
-			console.error("Login error:", error);
-			alert(error.message); // Show error message to user
+			showMessage(error.message, "error"); // Show error message to user
 		} finally {
 			setIsLoading(false);
 		}
@@ -139,6 +148,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 		confirmPassword: "",
 	});
 	const [isLoading, setIsLoading] = useState(false);
+	const { showMessage } = useMessage();
 
 	const handleChange = (e) => {
 		const { id, value } = e.target;
@@ -149,7 +159,9 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 		e.preventDefault();
 
 		const { newUsername, newEmail, newPassword, confirmPassword } = registerDetails;
-		if (!validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword)) {
+		const validation = validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword);
+		if (!validation.success) {
+			showMessage(validation.message, "error");
 			return;
 		}
 		setIsLoading(true);
@@ -158,11 +170,11 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			const response = await registerUser(newUsername, newEmail, newPassword, confirmPassword);
 			if (response.success) {
 				setLoggedIn(true);
+				showMessage("Account created successfully!", "success");
 				onClose();
 			}
 		} catch (error) {
-			console.error("Registration error:", error);
-			alert(error.message); // Show error message to user
+			showMessage(error.message, "error");
 		} finally {
 			setIsLoading(false);
 		}
@@ -243,28 +255,31 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 
 function validateLoginDetails(email, password) {
 	if (!email || !password) {
-		return false;
+		return { message: "Please fill in all fields", success: false };
 	}
-	if (!emailRegex.test(email)) {
-		return false;
-	}
-	if (password.length < 8) {
-		return false;
-	} else {
-		return strongPasswordRegex.test(password);
-	}
+
+	return { message: "Input valid", success: true };
 }
 
 function validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword) {
 	if (!newUsername || !newEmail || !newPassword || !confirmPassword) {
-		return false;
+		return { message: "Please fill in all fields", success: false };
 	}
 	if (!emailRegex.test(newEmail)) {
-		return false;
+		return { message: "Please enter a valid email", success: false };
 	}
 	if (newPassword.length < 8) {
-		return false;
-	} else {
-		return strongPasswordRegex.test(newPassword) && newPassword === confirmPassword;
+		return { message: "Password must be at least 8 characters long", success: false };
 	}
+	if (!strongPasswordRegex.test(newPassword)) {
+		return {
+			message:
+				"Password must contain at least one of each of the following: lowercase and uppercase letter, number, symbol",
+			success: false,
+		};
+	}
+	if (newPassword !== confirmPassword) {
+		return { message: "Passwords do not match", success: false };
+	}
+	return { message: "Input valid", success: true };
 }

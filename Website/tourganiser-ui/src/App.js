@@ -3,6 +3,8 @@ import { Outlet, Link } from "react-router-dom";
 import React from "react";
 import { useState, useEffect, useContext } from "react";
 import { AuthContext } from "./AuthContext";
+import { MessagePopup, useMessage } from "./MessageContext";
+import { logoutUser } from "./requests";
 
 export default function App() {
 	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
@@ -13,6 +15,7 @@ export default function App() {
 				<Outlet />
 			</main>
 			<Footer />
+			<MessagePopup />
 		</>
 	);
 }
@@ -93,6 +96,8 @@ function Footer() {
 }
 
 function Profile({ isOpen, onClose, loggedIn, logout }) {
+	const { showMessage } = useMessage();
+
 	useEffect(() => {
 		const profileTab = document.getElementById("profileTab");
 		if (isOpen) {
@@ -107,9 +112,20 @@ function Profile({ isOpen, onClose, loggedIn, logout }) {
 		}
 	}, [isOpen]);
 
-	const handleLogout = () => {
-		logout(false);
-		// Perform any additional logout actions here, such as clearing tokens or user data
+	const handleLogout = async (e) => {
+		e.preventDefault();
+		try {
+			const response = await logoutUser();
+			if (response.success) {
+				logout(false);
+				showMessage("Successfully logged out!", "success");
+			} else {
+				showMessage("Logout failed. Please try again.", "error");
+			}
+		} catch (error) {
+			showMessage(`Error logging out: ${error}`, "error");
+		}
+
 		onClose();
 	};
 

@@ -1,6 +1,8 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, use } from "react";
 import { Link } from "react-router-dom";
 import { AuthContext } from "../AuthContext";
+import { useMessage } from "../MessageContext";
+import { getTournaments } from "../requests";
 import "../styles/Tournaments.css";
 
 export default function Tournaments() {
@@ -30,6 +32,27 @@ export default function Tournaments() {
 }
 
 function BrowseTournaments() {
+	const [tournaments, setTournaments] = useState([]);
+	const [isLoading, setIsLoading] = useState(true);
+	const { showMessage } = useMessage();
+
+	useEffect(() => {
+		const fetchTournaments = async () => {
+			try {
+				const response = await getTournaments();
+				if (response.message.length > 0) {
+					setTournaments(response.message);
+				} else {
+					showMessage("Failed to fetch tournaments", "error");
+				}
+			} catch (error) {
+				showMessage("Error fetching tournaments", "error");
+			}
+		};
+		fetchTournaments();
+		setIsLoading(false);
+	}, []);
+
 	return (
 		<div className="browse-tournaments">
 			<div className="search-section">
@@ -43,8 +66,21 @@ function BrowseTournaments() {
 				</select>
 			</div>
 			<div className="tournaments-grid" id="tournamentsGrid">
+				{tournaments.map((tournament) => {
+					return (
+						<div className="tournament-card" key={tournament.id}>
+							<h3>{tournament.name}</h3>
+							<p className="tournament-date">Starting: {tournament.startDate}</p>
+							<p className="tournament-format">Format: {tournament.format}</p>
+							<p className="tournament-location">Location: {tournament.location}</p>
+							<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
+								View Tournament
+							</Link>
+						</div>
+					);
+				})}
 				{/* <!-- Example tournament cards --> */}
-				<div className="tournament-card">
+				{/* <div className="tournament-card">
 					<h3>Summer Volleyball Championship</h3>
 					<p className="tournament-date">Starting: July 1, 2024</p>
 					<p className="tournament-format">Format: Single Elimination</p>
@@ -52,7 +88,7 @@ function BrowseTournaments() {
 					<Link to="/tournaments/view/1" className="view-btn" name="1">
 						Join Tournament
 					</Link>
-				</div>
+				</div> */}
 				{/* <!-- More tournament cards... --> */}
 			</div>
 		</div>

@@ -82,3 +82,20 @@ export async function logoutUser() {
 		throw error;
 	}
 }
+
+export async function getTournaments() {
+	try {
+		const response = await fetch("http://localhost:5000/api/tournaments", {
+			method: "GET",
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to fetch tournaments");
+		}
+		console.log(data);
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}

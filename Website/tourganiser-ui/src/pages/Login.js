@@ -1,14 +1,32 @@
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { AuthContext } from "../AuthContext";
 import "../styles/Login.css";
 import { useNavigate } from "react-router-dom";
+import { loginUser, registerUser, checkLoginStatus } from "../requests"; // Assuming you have a requests.js file for API calls
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 export default function Login() {
 	const [currentForm, setCurrentForm] = useState("login");
-	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
+	const { setIsLoggedIn } = useContext(AuthContext);
 	const navigate = useNavigate();
 
 	// TODO: Add logic to check if user is already logged in and redirect to home page
+	useEffect(() => {
+		const checkLogin = async () => {
+			try {
+				const response = await checkLoginStatus();
+				if (response.loggedIn) {
+					setIsLoggedIn(true);
+					navigate("/home"); // Redirect to home page if already logged in
+				}
+			} catch (error) {
+				console.error("Error checking login status:", error);
+			}
+		};
+		checkLogin();
+	});
 
 	const toggleForm = (formName) => {
 		setCurrentForm(formName);
@@ -40,16 +58,26 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 
 	const handleLogin = async (e) => {
 		e.preventDefault();
-		setIsLoading(true);
+		// validate input fields
 		const { email, password } = loginDetails;
+		if (!validateLoginDetails(email, password)) {
+			// show error message to user
+			return;
+		}
+		setIsLoading(true);
 
-		setTimeout(() => {
-			console.log("Login details:", { email, password });
-			// Simulate a successful login
+		try {
+			const response = await loginUser(email, password);
+			if (response.success) {
+				setLoggedIn(true);
+				onClose();
+			}
+		} catch (error) {
+			console.error("Login error:", error);
+			alert(error.message); // Show error message to user
+		} finally {
 			setIsLoading(false);
-			setLoggedIn(true);
-			onClose();
-		}, 2000);
+		}
 	};
 
 	return (
@@ -83,7 +111,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 						required
 					/>
 				</div>
-				<button type="submit">
+				<button type="submit" disabled={isLoading}>
 					{isLoading ? (
 						<div className="loading-spinner">
 							<div className="spinner"></div>
@@ -119,15 +147,25 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 
 	const handleRegister = async (e) => {
 		e.preventDefault();
+
+		const { newUsername, newEmail, newPassword, confirmPassword } = registerDetails;
+		if (!validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword)) {
+			return;
+		}
 		setIsLoading(true);
 
-		setTimeout(() => {
-			console.log("Register details:", registerDetails);
-			// Simulate a successful registration
+		try {
+			const response = await registerUser(newUsername, newEmail, newPassword, confirmPassword);
+			if (response.success) {
+				setLoggedIn(true);
+				onClose();
+			}
+		} catch (error) {
+			console.error("Registration error:", error);
+			alert(error.message); // Show error message to user
+		} finally {
 			setIsLoading(false);
-			setLoggedIn(true);
-			onClose();
-		}, 2000);
+		}
 	};
 
 	return (
@@ -138,7 +176,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			<div className="login">
 				<h2>Create Account</h2>
 			</div>
-			<form className="login-form" id="signupForm">
+			<form className="login-form" id="signupForm" onSubmit={handleRegister}>
 				<div className="form-group">
 					<label htmlFor="newUsername">Username</label>
 					<input
@@ -183,7 +221,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 						required
 					/>
 				</div>
-				<button type="submit">
+				<button type="submit" disabled={isLoading}>
 					{isLoading ? (
 						<div className="loading-spinner">
 							<div className="spinner"></div>
@@ -201,4 +239,32 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			</div>
 		</div>
 	);
+}
+
+function validateLoginDetails(email, password) {
+	if (!email || !password) {
+		return false;
+	}
+	if (!emailRegex.test(email)) {
+		return false;
+	}
+	if (password.length < 8) {
+		return false;
+	} else {
+		return strongPasswordRegex.test(password);
+	}
+}
+
+function validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword) {
+	if (!newUsername || !newEmail || !newPassword || !confirmPassword) {
+		return false;
+	}
+	if (!emailRegex.test(newEmail)) {
+		return false;
+	}
+	if (newPassword.length < 8) {
+		return false;
+	} else {
+		return strongPasswordRegex.test(newPassword) && newPassword === confirmPassword;
+	}
 }

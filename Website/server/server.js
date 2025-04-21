@@ -255,7 +255,7 @@ app.get("/api/user/:id/tournaments", verifyToken, (req, res) => {
 // create account
 app.post("/api/signup", async (req, res) => {
 	try {
-		const { username, email, password } = req.body;
+		const { username, email, password, confirmPassword } = req.body;
 		// Add logic to save user to database
 
 		db.createUser(username, email, password, (result) => {

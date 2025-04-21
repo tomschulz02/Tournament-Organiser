@@ -99,3 +99,19 @@ export async function getTournaments() {
 		throw error;
 	}
 }
+
+export async function fetchTournamentData(tournamentId) {
+	try {
+		const response = await fetch(`http://localhost:5000/api/tournament/${tournamentId}`, {
+			method: "GET",
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to fetch tournament data");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}

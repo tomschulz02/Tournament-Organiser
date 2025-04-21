@@ -155,6 +155,10 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
 			}
+			console.log(result);
+			if (result.message.details == undefined) {
+				return res.status(404).json({ error: "Tournament not found" });
+			}
 			// console.log(result);
 			var loggedIn = false;
 			var creator = false;

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
+import { AuthContext } from "../AuthContext";
 import "../styles/Tournaments.css";
 
 export default function Tournaments() {
@@ -72,7 +73,7 @@ function CreateTournament() {
 		knockoutRound: 0,
 		teams: [],
 	});
-	const [isLoggedIn, setIsLoggedIn] = useState(true);
+	const { isLoggedIn } = useContext(AuthContext);
 	const [expandOptions, setExpandOptions] = useState(tournamentData.format === "combi");
 	const [teamList, setTeamList] = useState([]);
 	const [tempTeamCount, setTempTeamCount] = useState("");

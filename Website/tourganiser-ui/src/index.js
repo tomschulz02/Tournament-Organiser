@@ -1,36 +1,40 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import React from "react";
+import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import './index.css';
-import App from './App';
-import Home from './pages/Home';
-import Tournaments from './pages/Tournaments';
-import About from './pages/About';
+import "./index.css";
+import App from "./App";
+import Home from "./pages/Home";
+import Tournaments from "./pages/Tournaments";
+import About from "./pages/About";
+import Login from "./pages/Login";
+import { AuthProvider } from "./AuthContext";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 
-import reportWebVitals from './reportWebVitals';
+import reportWebVitals from "./reportWebVitals";
 
 function RoutesComponent() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<App />}>
-          <Route path='/' element={<Home />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/tournaments" element={<Tournaments />} />
-          <Route path="/about" element={<About />} />
-        </Route>
-        <Route path='/login' element={<App />} />
-      </Routes>
-    </BrowserRouter>
-  );
+	return (
+		<BrowserRouter>
+			<Routes>
+				<Route path="/" element={<App />}>
+					<Route path="/" element={<Home />} />
+					<Route path="/home" element={<Home />} />
+					<Route path="/tournaments" element={<Tournaments />} />
+					<Route path="/about" element={<About />} />
+				</Route>
+				<Route path="/login" element={<Login />} />
+			</Routes>
+		</BrowserRouter>
+	);
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
-  <React.StrictMode>
-    <RoutesComponent />
-  </React.StrictMode>
+	<React.StrictMode>
+		<AuthProvider>
+			<RoutesComponent />
+		</AuthProvider>
+	</React.StrictMode>
 );
 
 // If you want to start measuring performance in your app, pass a function

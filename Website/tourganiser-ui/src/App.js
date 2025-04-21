@@ -1,12 +1,14 @@
 import "./App.css";
 import { Outlet, Link } from "react-router-dom";
 import React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
+import { AuthContext } from "./AuthContext";
 
 export default function App() {
+	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
 	return (
 		<>
-			<Header />
+			<Header loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} />
 			<main id="app">
 				<Outlet />
 			</main>
@@ -15,7 +17,7 @@ export default function App() {
 	);
 }
 
-function Header() {
+function Header({ loggedIn, setLoggedIn }) {
 	const [profileOpen, setProfileOpen] = useState(false);
 
 	return (
@@ -39,7 +41,7 @@ function Header() {
 					</ul>
 				</nav>
 			</header>
-			{<Profile isOpen={profileOpen} onClose={() => setProfileOpen(false)} />}
+			{<Profile isOpen={profileOpen} onClose={() => setProfileOpen(false)} loggedIn={loggedIn} logout={setLoggedIn} />}
 		</>
 	);
 }
@@ -90,7 +92,7 @@ function Footer() {
 	);
 }
 
-function Profile({ isOpen, onClose }) {
+function Profile({ isOpen, onClose, loggedIn, logout }) {
 	useEffect(() => {
 		const profileTab = document.getElementById("profileTab");
 		if (isOpen) {
@@ -104,6 +106,12 @@ function Profile({ isOpen, onClose }) {
 			}, 280);
 		}
 	}, [isOpen]);
+
+	const handleLogout = () => {
+		logout(false);
+		// Perform any additional logout actions here, such as clearing tokens or user data
+		onClose();
+	};
 
 	return (
 		<div id="profileTab" className="profile-tab">
@@ -121,12 +129,15 @@ function Profile({ isOpen, onClose }) {
 				</div>
 				<div className="profile-actions">
 					<div className="profile-actions-settings"></div>
-					<div className="profile-actions-item" id="gotoLogin">
-						Login
-					</div>
-					<div className="profile-actions-item" id="logout">
-						Logout
-					</div>
+					{!loggedIn ? (
+						<Link to={"/login"} className="profile-actions-item" id="gotoLogin">
+							Login
+						</Link>
+					) : (
+						<div className="profile-actions-item" id="logout" onClick={handleLogout}>
+							<i className="fas fa-sign-out-alt" title="Logout"></i>
+						</div>
+					)}
 				</div>
 			</div>
 		</div>

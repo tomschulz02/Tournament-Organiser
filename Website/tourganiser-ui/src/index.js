@@ -5,6 +5,7 @@ import "./index.css";
 import App from "./App";
 import Home from "./pages/Home";
 import Tournaments from "./pages/Tournaments";
+import TournamentView from "./pages/TournamentView";
 import About from "./pages/About";
 import Login from "./pages/Login";
 import { AuthProvider } from "./AuthContext";
@@ -21,6 +22,7 @@ function RoutesComponent() {
 					<Route path="/" element={<Home />} />
 					<Route path="/home" element={<Home />} />
 					<Route path="/tournaments" element={<Tournaments />} />
+					<Route path="/tournaments/view/:id" element={<TournamentView />} />
 					<Route path="/about" element={<About />} />
 				</Route>
 				<Route path="/login" element={<Login />} />

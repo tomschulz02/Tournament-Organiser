@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useContext } from "react";
+import { Link } from "react-router-dom";
 import { AuthContext } from "../AuthContext";
 import "../styles/Tournaments.css";
 
@@ -48,9 +49,9 @@ function BrowseTournaments() {
 					<p className="tournament-date">Starting: July 1, 2024</p>
 					<p className="tournament-format">Format: Single Elimination</p>
 					<p className="tournament-location">Location: London</p>
-					<button className="view-btn" name="1">
+					<Link to="/tournaments/view/1" className="view-btn" name="1">
 						Join Tournament
-					</button>
+					</Link>
 				</div>
 				{/* <!-- More tournament cards... --> */}
 			</div>

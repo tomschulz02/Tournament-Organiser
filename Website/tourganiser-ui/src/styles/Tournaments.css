@@ -231,6 +231,10 @@
 }
 
 .view-btn {
+	display: inline-block;
+	box-sizing: border-box;
+	vertical-align: middle;
+	text-align: center;
 	width: 100%;
 	padding: 10px;
 	background: #2962ff;
@@ -240,6 +244,7 @@
 	cursor: pointer;
 	margin-top: 15px;
 	transition: background 0.3s ease;
+	text-decoration: none;
 }
 
 .view-btn:hover {

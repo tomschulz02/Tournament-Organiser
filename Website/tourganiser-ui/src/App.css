@@ -369,6 +369,10 @@ Styles for a donation banner that could be used on multiple pages
 	font-size: 1.1em;
 	color: white;
 	cursor: pointer;
+	display: inline-block;
+	box-sizing: border-box;
+	vertical-align: middle;
+	text-decoration: none;
 }
 
 /* Update header styles for mobile */

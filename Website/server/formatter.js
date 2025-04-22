@@ -243,12 +243,12 @@ export function populateGroups(numGroups, teamList) {
 	return groups;
 }
 
-export function formatTournamentsForBrowse(tournaments) {
+export function formatTournamentsForBrowse(tournaments, hashids) {
 	var result = [];
 	tournaments.forEach((tour) => {
 		var date = getDate(tour.date);
 		const tournament = {
-			id: tour.id,
+			id: hashids.encode(tour.id),
 			name: tour.name,
 			date: date,
 			location: tour.location,

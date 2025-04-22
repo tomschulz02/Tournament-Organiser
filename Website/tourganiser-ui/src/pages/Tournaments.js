@@ -70,7 +70,7 @@ function BrowseTournaments() {
 					return (
 						<div className="tournament-card" key={tournament.id}>
 							<h3>{tournament.name}</h3>
-							<p className="tournament-date">Starting: {tournament.startDate}</p>
+							<p className="tournament-date">Starting: {tournament.date}</p>
 							<p className="tournament-format">Format: {tournament.format}</p>
 							<p className="tournament-location">Location: {tournament.location}</p>
 							<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>

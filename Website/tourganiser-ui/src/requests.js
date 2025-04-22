@@ -51,6 +51,9 @@ export async function checkLoginStatus() {
 			credentials: "include",
 		});
 		const data = await response.json();
+		if (response.status === 401) {
+			return { loggedIn: false };
+		}
 		if (!response.ok) {
 			throw new Error(data.error || "Failed to check login status");
 		}
@@ -93,7 +96,6 @@ export async function getTournaments() {
 		if (!response.ok) {
 			throw new Error(data.error || "Failed to fetch tournaments");
 		}
-		console.log(data);
 		return data;
 	} catch (error) {
 		throw error;

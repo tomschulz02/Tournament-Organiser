@@ -1,36 +1,80 @@
-import { useParams } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import { Link, useParams } from "react-router-dom";
+import React, { useState, useEffect, useContext } from "react";
 import { fetchTournamentData } from "../requests";
 import "../styles/Tournaments.css";
 import { useMessage } from "../MessageContext";
+import { AuthContext } from "../AuthContext";
+
+const defaultTournamentData = {
+	details: {
+		name: "Tournament Name",
+		description: "Tournament Description",
+		format: "Tournament Format",
+		teams: 16,
+		startDate: "2023-10-01",
+		status: "Upcoming",
+		upcomingFixtures: [
+			{ match: "Team A vs Team B", date: "2023-10-01" },
+			{ match: "Team C vs Team D", date: "2023-10-02" },
+		],
+		results: [
+			{ match: "Team E vs Team F", date: "2023-09-30", result: "Team E won" },
+			{ match: "Team G vs Team H", date: "2023-09-29", result: "Team H won" },
+		],
+	},
+	fixtures: {
+		remainingFixtures: [
+			{ match: "Team I vs Team J", date: "2023-10-03" },
+			{ match: "Team K vs Team L", date: "2023-10-04" },
+		],
+		results: [
+			{ match: "Team M vs Team N", date: "2023-09-28", result: "Team M won" },
+			{ match: "Team O vs Team P", date: "2023-09-27", result: "Team P won" },
+		],
+	},
+	standings: {},
+	teams: ["Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H"],
+};
 
 export default function TournamentView() {
 	const { id } = useParams();
 	const [tournamentData, setTournamentData] = useState(null);
+	const [creator, setCreator] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [notFound, setNotFound] = useState(false);
+	const [currentTab, setCurrentTab] = useState("info");
 	const { showMessage } = useMessage();
+	const { isLoggedIn } = useContext(AuthContext);
 
 	useEffect(() => {
 		const getTournamentDetails = async () => {
 			try {
 				const response = await fetchTournamentData(id);
-				console.log(response);
 				if (response.error) {
 					setNotFound(true);
 					showMessage("Tournament not found", "error");
 				} else {
 					setTournamentData(response.message);
+					setCreator(response.creator);
 					setNotFound(false);
 				}
 			} catch (error) {
 				setNotFound(true);
 				showMessage("Error fetching tournament data", "error");
+			} finally {
+				setLoading(false);
 			}
 		};
 		getTournamentDetails();
-		setLoading(false);
 	}, [id]);
+
+	if (loading) {
+		return (
+			<div style={{ textAlign: "center", marginTop: "2rem" }}>
+				<h2>Loading...</h2>
+			</div>
+		);
+	}
 
 	if (notFound) {
 		return (
@@ -43,9 +87,121 @@ export default function TournamentView() {
 
 	return (
 		<div className="tournament-view">
-			<h1>Tournament View</h1>
-			<p>Tournament ID: {id}</p>
-			{/* Add more tournament details here */}
+			<Link to="/tournaments" className="back-to-browse">
+				&lt; Back to browse
+			</Link>
+			<div className="tab-navigation">
+				<button
+					className={`view-tab-btn ${currentTab === "info" ? "active" : ""}`}
+					onClick={() => setCurrentTab("info")}>
+					Overview
+				</button>
+				<button
+					className={`view-tab-btn ${currentTab === "fixtures" ? "active" : ""}`}
+					onClick={() => setCurrentTab("fixtures")}>
+					Fixtures
+				</button>
+				<button
+					className={`view-tab-btn ${currentTab === "results" ? "active" : ""}`}
+					onClick={() => setCurrentTab("results")}>
+					Results
+				</button>
+				<button
+					className={`view-tab-btn ${currentTab === "teams" ? "active" : ""}`}
+					onClick={() => setCurrentTab("teams")}>
+					Teams
+				</button>
+			</div>
+			{currentTab === "info" && (
+				<TournamentDetails details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />
+			)}
+			{currentTab === "fixtures" && <div className="tournament-fixtures">Fixtures</div>}
+			{currentTab === "results" && <div className="tournament-results">Results</div>}
+			{currentTab === "teams" && <div className="tournament-teams">Teams</div>}
 		</div>
+	);
+}
+
+function TournamentDetails({ details, loggedIn, creator }) {
+	return (
+		<>
+			<div className="tournament-info">
+				<div className="tournament-info-heading">
+					<h2>{details.name}</h2>
+					<p>{details.description}</p>
+					<button className="follow-tournament-btn" disabled={!loggedIn}>
+						Follow Tournament
+					</button>
+				</div>
+				<div className="tournament-info-format">
+					<p>
+						<strong>Format:</strong>
+						{" " + details.format}
+					</p>
+					<p>
+						<strong>Status:</strong>
+						{" " + details.status}
+					</p>
+					<p>
+						<strong>Teams:</strong>
+						{" " + details.teams}
+					</p>
+				</div>
+			</div>
+			<div className="tournament-info-fixtures">
+				<h3>Upcoming Fixtures</h3>
+				<div className="fixture-summary-scroll">
+					{details.upcomingFixtures.length > 0 ? (
+						details.upcomingFixtures.map((fixture) => {
+							return (
+								<div className="fixture-card" key={fixture.match_no}>
+									<p>Match #{fixture.match_no}</p>
+									<p>
+										{fixture.team1} vs. {fixture.team2}
+									</p>
+									<p>{fixture.round}</p>
+								</div>
+							);
+						})
+					) : (
+						<div className="fixture-card">
+							<p>No upcoming fixtures</p>
+						</div>
+					)}
+				</div>
+			</div>
+			<div className="tournament-info-fixtures">
+				<h3>Recent Results</h3>
+				<div className="fixture-summary-scroll">
+					{details.results.length > 0 ? (
+						details.results.map((result) => {
+							return (
+								<div className="result-card" key={result.match_no}>
+									<p>Match #{result.match_no}</p>
+									<table>
+										<tr>
+											<td style={{ width: "auto" }}>{result.team1}</td>
+											{result.score.map((score, index) => {
+												return <td key={index}>{score[0]}</td>;
+											})}
+										</tr>
+										<tr>
+											<td style={{ width: "auto" }}>{result.team2}</td>
+											{result.score.map((score, index) => {
+												return <td key={index}>{score[1]}</td>;
+											})}
+										</tr>
+									</table>
+								</div>
+							);
+						})
+					) : (
+						<div className="result-card">
+							<p>No recent results</p>
+						</div>
+					)}
+				</div>
+			</div>
+		</>
 	);
 }

@@ -32,6 +32,7 @@ import path, { dirname } from "path";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import logger from "./logger.cjs";
+import Hashids from "hashids";
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
@@ -48,6 +49,8 @@ const corsOptions = {
 	credentials: true,
 	optionsSuccessStatus: 200,
 };
+
+const hashids = new Hashids("finest salt in all the land", 10);
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
@@ -138,7 +141,7 @@ app.get("/api/tournaments", (req, res) => {
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
 			}
-			res.status(200).json({ message: formatTournamentsForBrowse(result.message) });
+			res.status(200).json({ message: formatTournamentsForBrowse(result.message, hashids) });
 		});
 	} catch (error) {
 		console.log("Error: " + error);
@@ -150,12 +153,15 @@ app.get("/api/tournaments", (req, res) => {
 app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	// Get tournament information
 	try {
-		const tournamentId = req.params.id;
+		const decodedId = hashids.decode(req.params.id);
+		if (decodedId.length === 0) {
+			return res.status(400).json({ error: "Invalid tournament ID" });
+		}
+		const tournamentId = decodedId[0];
 		db.getTournamentDetails(tournamentId, (result) => {
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
 			}
-			console.log(result);
 			if (result.message.details == undefined) {
 				return res.status(404).json({ error: "Tournament not found" });
 			}

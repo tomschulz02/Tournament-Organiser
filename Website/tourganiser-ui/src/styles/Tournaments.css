@@ -417,6 +417,9 @@
 	padding: 10px;
 	border-radius: 8px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	display: flex;
+	flex-direction: column;
+	justify-content: space-around;
 }
 
 .result-card {
@@ -879,4 +882,13 @@ Collection popup
 	align-items: center;
 	justify-content: center;
 	display: none;
+}
+
+.back-to-browse {
+	display: block;
+	padding: 10px;
+	font-size: 1.1em;
+	color: var(--main-color);
+	text-decoration: none;
+	width: 200px;
 }

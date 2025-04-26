@@ -1,12 +1,18 @@
 // import env variables and necessary modules
-import dotenv from "dotenv";
-dotenv.config();
+// import dotenv from "dotenv";
+// dotenv.config();
 import mysql from "mysql2";
 import bcrypt from "bcrypt";
 const saltRounds = 10;
 
+console.log(process.env.DB_HOST);
+
 class DBConnection {
 	constructor() {
+		if (DBConnection.instance) {
+			return DBConnection.instance;
+		}
+
 		// create connection to database using a pool
 		this.pool = mysql.createPool({
 			host: process.env.DB_HOST,
@@ -16,6 +22,17 @@ class DBConnection {
 			database: process.env.DB_DATABASE,
 			connectionLimit: 50,
 		});
+
+		this.pool.getConnection((err, connection) => {
+			if (err) {
+				console.error("Error connecting to MySQL pool:", err);
+			} else {
+				console.log("MySQL pool connected successfully.");
+				connection.release();
+			}
+		});
+
+		DBConnection.instance = this;
 	}
 
 	exampleQuery() {

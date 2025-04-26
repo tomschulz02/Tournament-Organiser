@@ -22,13 +22,14 @@ TODO:
 
 // Importing required modules
 import dotenv from "dotenv";
+import path, { dirname } from "path";
 dotenv.config();
-import DBConnection from "./config.js";
 import { formatCombiTournamentForStorage, formatTournamentsForBrowse, formatTournamentView } from "./formatter.js";
+import DBConnection from "./config.js";
 import express, { json } from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
-import path, { dirname } from "path";
+// import path, { dirname } from "path";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import logger from "./logger.cjs";
@@ -60,7 +61,10 @@ app.use(logger);
 app.use(express.static(path.join(__dirname, "../")));
 
 // Database connection
+// const { default: DBConnection } = await import("./config.js");
 const db = new DBConnection();
+
+// console.log(process.env);
 
 // Request handling
 // TODO

@@ -123,6 +123,19 @@ export default function TournamentView() {
 }
 
 function TournamentDetails({ details, loggedIn, creator }) {
+	const [status, setStatus] = useState(details.status === "Not Started" ? "Start Tournament" : "Tournament Started");
+	const [loading, setLoading] = useState(false);
+	const { showMessage } = useMessage();
+
+	const startTournament = () => {
+		setLoading(true);
+		// Logic to start the tournament
+		console.log("Tournament started");
+		setStatus("Tournament Started");
+		setLoading(false);
+		showMessage("Tournament started successfully", "success");
+	};
+
 	return (
 		<>
 			<div className="tournament-info">
@@ -147,6 +160,20 @@ function TournamentDetails({ details, loggedIn, creator }) {
 						{" " + details.teams}
 					</p>
 				</div>
+				{creator && (
+					<button
+						className="start-tournament-btn"
+						disabled={details.status !== "Not Started"}
+						onClick={startTournament}>
+						{loading ? (
+							<div className="loading-spinner">
+								<div className="spinner"></div>
+							</div>
+						) : (
+							status
+						)}
+					</button>
+				)}
 			</div>
 			<div className="tournament-info-fixtures">
 				<h3>Upcoming Fixtures</h3>

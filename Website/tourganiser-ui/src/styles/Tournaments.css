@@ -340,6 +340,7 @@
 	color: white;
 	font-size: 18px;
 	display: flex;
+	position: relative;
 }
 
 .tournament-info-heading {
@@ -891,4 +892,40 @@ Collection popup
 	color: var(--main-color);
 	text-decoration: none;
 	width: 200px;
+}
+
+.start-tournament-btn {
+	position: absolute;
+	top: 20px;
+	right: 20px;
+	padding: 12px 24px;
+	background-color: #04aa6d;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	font-size: 1.1em;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.3s ease, transform 0.2s ease;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.start-tournament-btn:hover {
+	background-color: #14be39;
+	transform: translateY(-2px);
+}
+
+.start-tournament-btn:disabled {
+	background-color: #cccccc;
+	cursor: not-allowed;
+	transform: none;
+}
+
+/* Add mobile responsiveness for the button */
+@media (max-width: 768px) {
+	.start-tournament-btn {
+		position: static;
+		width: 100%;
+		margin-top: 10px;
+	}
 }

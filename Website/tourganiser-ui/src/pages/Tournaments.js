@@ -575,7 +575,7 @@ function CollectionPopup({ onClose, onSubmit }) {
 	);
 }
 
-function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
+export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 	const handleSubmit = (e) => {
 		e.preventDefault();
 		const newName = document.getElementById("newTeamName").value;

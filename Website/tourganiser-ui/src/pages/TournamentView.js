@@ -4,6 +4,7 @@ import { fetchTournamentData } from "../requests";
 import "../styles/Tournaments.css";
 import { useMessage } from "../MessageContext";
 import { AuthContext } from "../AuthContext";
+import { TeamNameChangePopup } from "./Tournaments";
 
 const defaultTournamentData = {
 	details: {
@@ -55,6 +56,7 @@ export default function TournamentView() {
 					showMessage("Tournament not found", "error");
 				} else {
 					setTournamentData(response.message);
+					console.log(response.message);
 					setCreator(response.creator);
 					setNotFound(false);
 				}
@@ -115,9 +117,9 @@ export default function TournamentView() {
 			{currentTab === "info" && (
 				<TournamentDetails details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />
 			)}
-			{currentTab === "fixtures" && <div className="tournament-fixtures">Fixtures</div>}
-			{currentTab === "results" && <div className="tournament-results">Results</div>}
-			{currentTab === "teams" && <div className="tournament-teams">Teams</div>}
+			{currentTab === "fixtures" && <TournamentFixtures fixtures={tournamentData.fixtures} />}
+			{currentTab === "results" && <TournamentResults results={tournamentData.fixtures.results} />}
+			{currentTab === "teams" && <TournamentTeams teams={tournamentData.teams} />}
 		</div>
 	);
 }
@@ -230,5 +232,86 @@ function TournamentDetails({ details, loggedIn, creator }) {
 				</div>
 			</div>
 		</>
+	);
+}
+
+function TournamentFixtures({ fixtures }) {
+	return (
+		<div className="tournament-fixtures">
+			<h3>Fixtures</h3>
+			{fixtures.remainingFixtures.length > 0 ? (
+				fixtures.remainingFixtures.map((fixture) => {
+					return (
+						<div className="fixture-card" key={fixture.match_no}>
+							<p>Match #{fixture.match_no}</p>
+							<p>
+								{fixture.team1} vs. {fixture.team2}
+							</p>
+							<p>{fixture.round}</p>
+						</div>
+					);
+				})
+			) : (
+				<div className="fixture-card">
+					<p>No remaining fixtures</p>
+				</div>
+			)}
+		</div>
+	);
+}
+
+function TournamentResults({ results }) {
+	return (
+		<div className="tournament-results">
+			<h3>Results</h3>
+			{results.length > 0 ? (
+				results.map((result) => {
+					return (
+						<div className="result-card" key={result.match_no}>
+							<p>Match #{result.match_no}</p>
+							<table>
+								<tr>
+									<td style={{ width: "auto" }}>{result.team1}</td>
+									{result.score.map((score, index) => {
+										return <td key={index}>{score[0]}</td>;
+									})}
+								</tr>
+								<tr>
+									<td style={{ width: "auto" }}>{result.team2}</td>
+									{result.score.map((score, index) => {
+										return <td key={index}>{score[1]}</td>;
+									})}
+								</tr>
+							</table>
+						</div>
+					);
+				})
+			) : (
+				<div className="result-card">
+					<p>No results available</p>
+				</div>
+			)}
+		</div>
+	);
+}
+
+function TournamentTeams({ teams }) {
+	return (
+		<div className="tournament-teams">
+			<h3>Teams</h3>
+			{teams.length > 0 ? (
+				teams.map((team) => {
+					return (
+						<div className="team-card" key={team}>
+							{team}
+						</div>
+					);
+				})
+			) : (
+				<div className="team-card">
+					<p>No teams available</p>
+				</div>
+			)}
+		</div>
 	);
 }

@@ -51,7 +51,8 @@ const corsOptions = {
 	optionsSuccessStatus: 200,
 };
 
-const hashids = new Hashids("finest salt in all the land", 10);
+const tournamentHash = new Hashids("finest salt in all the land", 10);
+const collectionHash = new Hashids("a mountain of salt", 10);
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
@@ -141,12 +142,24 @@ app.get("/api/check-login", verifyToken, (req, res) => {
 
 app.get("/api/tournaments", (req, res) => {
 	try {
+		var tournaments = [],
+			collections = [];
 		db.getAllTournaments((result) => {
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
 			}
-			res.status(200).json({ message: formatTournamentsForBrowse(result.message, hashids) });
+			tournaments = result.message;
 		});
+		db.getAllCollections((result) => {
+			if (!result.success) {
+				return res.status(500).json({ error: result.message });
+			}
+			collections = result.message;
+		});
+
+		res
+			.status(200)
+			.json({ message: formatTournamentsForBrowse(tournaments, collections, tournamentHash, collectionHash) });
 	} catch (error) {
 		console.log("Error: " + error);
 		res.status(500).json({ message: "Server error" });
@@ -281,31 +294,30 @@ app.post("/api/signup", async (req, res) => {
 					return res.status(500).json({ error: result.message });
 				}
 			}
-		});
+			db.loginUser(email, password, (result) => {
+				if (!result.success) {
+					return res.status(400).json({ error: result.message });
+				}
 
-		db.loginUser(email, password, (result) => {
-			if (!result.success) {
-				return res.status(400).json({ error: result.message });
-			}
+				const token = jwt.sign(
+					{
+						user: result.message.username,
+						email: result.message.email,
+						id: result.message.idusers,
+					},
+					SECRET_KEY,
+					{ expiresIn: "24h" }
+				);
 
-			const token = jwt.sign(
-				{
-					user: result.message.username,
-					email: result.message.email,
-					id: result.message.idusers,
-				},
-				SECRET_KEY,
-				{ expiresIn: "24h" }
-			);
-
-			res.cookie("authToken", token, {
-				httpOnly: true,
-				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
-				maxAge: 1000 * 60 * 60 * 24,
-			});
-			return res.status(200).json({
-				message: "User account created successfully",
+				res.cookie("authToken", token, {
+					httpOnly: true,
+					secure: process.env.NODE_ENV === "production",
+					sameSite: "strict",
+					maxAge: 1000 * 60 * 60 * 24,
+				});
+				return res.status(200).json({
+					message: "User account created successfully",
+				});
 			});
 		});
 	} catch (error) {
@@ -402,6 +414,22 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ error: "Failed to create tournament" });
+	}
+});
+
+app.post("/api/collection/create", verifyToken, (req, res) => {
+	try {
+		const { name } = req.body;
+		const userId = req.user.id;
+
+		db.createCollection(name, userId, (result) => {
+			if (!result.success) {
+				return res.status(400).json({ error: result.message });
+			}
+			res.status(201).json({ message: "Collection created successfully" });
+		});
+	} catch (error) {
+		res.status(500).json({ error: "Failed to create collection" });
 	}
 });
 

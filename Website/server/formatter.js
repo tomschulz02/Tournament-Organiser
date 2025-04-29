@@ -47,6 +47,7 @@ export function formatCombiTournamentForStorage(data) {
 			type: data["structure"]["type"],
 		},
 		created_by: data["user"],
+		collection: data["collection"] || null,
 		fixtures: [],
 	};
 
@@ -243,12 +244,12 @@ export function populateGroups(numGroups, teamList) {
 	return groups;
 }
 
-export function formatTournamentsForBrowse(tournaments, hashids) {
+export function formatTournamentsForBrowse(tournaments, collections, tournamentHash, collectionHash) {
 	var result = [];
 	tournaments.forEach((tour) => {
 		var date = getDate(tour.date);
 		const tournament = {
-			id: hashids.encode(tour.id),
+			id: tournamentHash.encode(tour.id),
 			name: tour.name,
 			date: date,
 			location: tour.location,
@@ -256,6 +257,12 @@ export function formatTournamentsForBrowse(tournaments, hashids) {
 			format: expandFormat(tour.format),
 		};
 		result.push(tournament);
+	});
+	collections.forEach((col) => {
+		result.push({
+			id: collectionHash.encode(col.id),
+			name: col.name,
+		});
 	});
 	return result;
 }

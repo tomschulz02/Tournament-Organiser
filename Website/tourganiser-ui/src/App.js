@@ -70,7 +70,7 @@ function Footer() {
 				<div className="footer-section">
 					<h4>Connect With Us</h4>
 					<div className="social-links">
-						<a href="/" target="_blank" rel="noreferror">
+						<a href="https://discord.gg/jwq963ugYR" target="_blank" rel="noreferror">
 							<i className="fab fa-discord"></i> Discord
 						</a>
 						<a href="https://github.com/tomschulz02/Tournament-Organiser" target="_blank" rel="noreferrer">
@@ -80,8 +80,7 @@ function Footer() {
 				</div>
 				<div className="footer-section">
 					<h4>Contact</h4>
-					<p>Email: info@tourganiser.com</p>
-					<p>Support: support@tourganiser.com</p>
+					<p>Email: support@tourganiser.co.za</p>
 				</div>
 			</div>
 			<div className="footer-bottom">

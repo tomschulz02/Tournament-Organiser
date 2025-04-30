@@ -43,7 +43,8 @@ function BrowseTournaments() {
 				if (response.message.length > 0) {
 					setTournaments(response.message);
 				} else {
-					showMessage("Failed to fetch tournaments", "error");
+					// showMessage("Failed to fetch tournaments", "error");
+					setTournaments([]);
 				}
 			} catch (error) {
 				showMessage("Error fetching tournaments", "error");
@@ -66,19 +67,23 @@ function BrowseTournaments() {
 				</select>
 			</div>
 			<div className="tournaments-grid" id="tournamentsGrid">
-				{tournaments.map((tournament) => {
-					return (
-						<div className="tournament-card" key={tournament.id}>
-							<h3>{tournament.name}</h3>
-							<p className="tournament-date">Starting: {tournament.date}</p>
-							<p className="tournament-format">Format: {tournament.format}</p>
-							<p className="tournament-location">Location: {tournament.location}</p>
-							<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
-								View Tournament
-							</Link>
-						</div>
-					);
-				})}
+				{tournaments.length > 0 ? (
+					tournaments.map((tournament) => {
+						return (
+							<div className="tournament-card" key={tournament.id}>
+								<h3>{tournament.name}</h3>
+								<p className="tournament-date">Starting: {tournament.date}</p>
+								<p className="tournament-format">Format: {tournament.format}</p>
+								<p className="tournament-location">Location: {tournament.location}</p>
+								<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
+									View Tournament
+								</Link>
+							</div>
+						);
+					})
+				) : (
+					<div className="no-tournaments-message">No tournaments available</div>
+				)}
 				{/* <!-- Example tournament cards --> */}
 				{/* <div className="tournament-card">
 					<h3>Summer Volleyball Championship</h3>

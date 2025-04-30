@@ -255,6 +255,7 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 			location: tour.location,
 			type: tour["state"]["type"],
 			format: expandFormat(tour.format),
+			classification: "tournament",
 		};
 		result.push(tournament);
 	});
@@ -262,6 +263,8 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 		result.push({
 			id: collectionHash.encode(col.id),
 			name: col.name,
+			num_tournaments: col.tournament_count,
+			classification: "collection",
 		});
 	});
 	return result;

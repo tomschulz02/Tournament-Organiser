@@ -114,7 +114,100 @@ class DBConnection {
 		});
 	}
 
-	// You can continue rewriting the other methods similarly...
+	getAllTournaments(callback) {
+		const query = "SELECT * FROM tournaments WHERE collection IS NULL;";
+		this.query(query, [], callback);
+	}
+
+	getAllCollections(callback) {
+		const query =
+			"SELECT c.*, COUNT(t.id) AS tournament_count FROM collections c JOIN tournaments t ON c.id = t.collection_id GROUP BY c.id;";
+		this.query(query, [], callback);
+	}
+
+	createCollection(name, userId, callback) {
+		const sql = "INSERT INTO collections (name, user_id) VALUES ($1, $2) RETURNING id";
+		this.query(sql, [name, userId], (res) => {
+			if (!res.success) return callback(res);
+			return callback({ success: true, object: true, message: res.message[0].id });
+		});
+	}
+
+	joinTournament(userId, tournamentId, callback) {
+		const sql = "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES ($1, $2)";
+		this.query(sql, [userId, tournamentId], callback);
+	}
+
+	getFixtures(tournamentId, callback) {
+		const sql = "SELECT * FROM fixtures WHERE tournament_id = $1";
+		this.query(sql, [tournamentId], callback);
+	}
+
+	async getTournamentDetails(tournamentId, callback) {
+		const client = await this.pool.connect();
+		try {
+			const details = {};
+
+			const tournamentRes = await client.query("SELECT * FROM tournaments WHERE id = $1", [tournamentId]);
+			if (tournamentRes.rows.length === 0) {
+				throw new Error("Tournament not found");
+			}
+
+			details.details = tournamentRes.rows[0];
+
+			const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1", [tournamentId]);
+			details.fixtures = fixturesRes.rows;
+
+			callback({ success: true, object: true, message: details });
+		} catch (err) {
+			callback({ success: false, object: true, message: err });
+		} finally {
+			client.release();
+		}
+	}
+
+	async getTournamentDetailsByCollectionId(collectionId, callback) {
+		const client = await this.pool.connect();
+		try {
+			const tournaments = [];
+
+			const tournamentRes = await client.query("SELECT * FROM tournaments WHERE collection_id = $1", [collectionId]);
+			if (tournamentRes.rows.length === 0) {
+				throw new Error("Tournament not found");
+			}
+
+			await Promise.all(
+				tournamentRes.rows.map(async (tournament) => {
+					const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1", [tournament.id]);
+					tournaments.push({
+						...tournament,
+						fixtures: fixturesRes.rows,
+					});
+				})
+			);
+
+			callback({ success: true, object: true, message: tournaments });
+		} catch (err) {
+			callback({ success: false, object: true, message: err });
+		} finally {
+			client.release();
+		}
+	}
+
+	getResults(tournamentId, callback) {
+		const sql = "SELECT * FROM fixtures WHERE tournament_id = $1 AND status = 'COMPLETED'";
+		this.query(sql, [tournamentId], callback);
+	}
+
+	getSavedTournaments(userId, callback) {
+		const sql = "SELECT * FROM saved_tournaments WHERE user_id = $1";
+		this.query(sql, [userId], callback);
+	}
+
+	getUserCollections(userId, callback) {
+		const sql = "SELECT * FROM collections WHERE user_id = $1";
+		this.query(sql, [userId], callback);
+	}
 
 	test() {
 		console.log("test");
@@ -122,188 +215,3 @@ class DBConnection {
 }
 
 export default DBConnection;
-
-/* 
-createCollection(name, userId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "INSERT INTO collections (name, user_id) VALUES (?, ?)";
-
-			connection.query(query, [name, userId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				console.log("Collection created");
-
-				connection.release();
-
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result.insertId });
-			});
-		});
-	}
-
-	joinTournament(userId, tournamentId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES (?, ?)";
-
-			connection.query(query, [userId, tournamentId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				console.log("User joined tournament");
-
-				connection.release();
-
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
-			});
-		});
-	}
-
-	getFixtures(tournamentId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "SELECT * FROM fixtures WHERE tournament_id = ?";
-
-			connection.query(query, [tournamentId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				console.log("Fixtures retrieved");
-
-				connection.release();
-
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
-			});
-		});
-	}
-
-	getTournamentDetails(tournamentId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "SELECT * FROM tournaments WHERE id = ?";
-
-			var details = {};
-
-			connection.query(query, [tournamentId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				// console.log(result);
-				details["details"] = result[0];
-				// console.log(details);
-
-				query = "SELECT * FROM fixtures WHERE tournament_id = ?";
-
-				connection.query(query, [tournamentId], function (err, res) {
-					if (err) {
-						connection.release();
-						return callback({ success: false, object: true, message: err });
-					}
-
-					details["fixtures"] = res;
-
-					connection.release();
-
-					if (err) return callback({ success: false, object: true, message: err });
-					else return callback({ success: true, object: true, message: details });
-				});
-			});
-		});
-	}
-
-	getResults(tournamentId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "SELECT * FROM fixtures WHERE tournament_id = ? AND status IS 'COMPLETED'";
-
-			connection.query(query, [tournamentId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				console.log("Results retrieved");
-
-				connection.release();
-
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
-			});
-		});
-	}
-
-	getSavedTournaments(userId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "SELECT * FROM saved_tournaments WHERE user_id = ?";
-
-			connection.query(query, [userId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				console.log("Tournaments retrieved");
-
-				connection.release();
-
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
-			});
-		});
-	}
-
-	getAllTournaments(callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "SELECT * FROM tournaments;";
-			connection.query(query, function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				connection.release();
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
-			});
-		});
-	}
-
-	getUserCollections(userId, callback) {
-		this.pool.getConnection(function (err, connection) {
-			if (err) return callback({ success: false, object: true, message: err });
-
-			var query = "SELECT id, name FROM collections WHERE user=?;";
-			connection.query(query, [userId], function (err, result) {
-				if (err) {
-					connection.release();
-					return callback({ success: false, object: true, message: err });
-				}
-
-				connection.release();
-				if (err) return callback({ success: false, object: true, message: err });
-				else return callback({ success: true, object: true, message: result });
-			});
-		});
-	}
-*/

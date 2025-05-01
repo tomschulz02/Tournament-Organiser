@@ -897,6 +897,7 @@ Collection popup
 	color: var(--main-color);
 	text-decoration: none;
 	width: 200px;
+	cursor: pointer;
 }
 
 .start-tournament-btn {

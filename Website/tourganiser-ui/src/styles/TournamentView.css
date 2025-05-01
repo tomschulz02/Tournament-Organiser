@@ -1,0 +1,110 @@
+.collection-info {
+	max-width: 1200px;
+	margin: 20px auto;
+	padding: 20px;
+}
+
+.collection-info h2 {
+	color: #2962ff;
+	font-size: 2em;
+	margin-bottom: 30px;
+	border-bottom: 2px solid #e0e0e0;
+	padding-bottom: 10px;
+}
+
+.collection-tournaments {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 20px;
+}
+
+.collection-tournament-card {
+	display: grid;
+	grid-template-columns: 2fr 3fr 1fr 1fr;
+	gap: 20px;
+	align-items: center;
+	background: white;
+	padding: 20px;
+	margin-bottom: 15px;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.collection-tournament-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.tournament-name {
+	font-weight: 600;
+	color: #333;
+	font-size: 1.1em;
+}
+
+.tournament-description {
+	color: #666;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	padding-right: 20px;
+}
+
+.tournament-status {
+	text-align: center;
+	padding: 6px 12px;
+	border-radius: 15px;
+	font-size: 0.9em;
+	font-weight: 500;
+}
+
+.tournament-status.not-started {
+	background-color: #e3f2fd;
+	color: #1565c0;
+}
+
+.tournament-status.in-progress {
+	background-color: #e8f5e9;
+	color: #2e7d32;
+}
+
+.tournament-status.completed {
+	background-color: #fafafa;
+	color: #616161;
+}
+
+.view-tournament-btn {
+	padding: 8px 16px;
+	background-color: #2962ff;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+	text-align: center;
+	text-decoration: none;
+	font-weight: 500;
+}
+
+.view-tournament-btn:hover {
+	background-color: #1565c0;
+}
+
+@media (max-width: 768px) {
+	.collection-tournament-card {
+		grid-template-columns: 1fr;
+		gap: 10px;
+	}
+
+	.tournament-description {
+		white-space: normal;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
+
+	.tournament-status {
+		text-align: left;
+	}
+}

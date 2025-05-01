@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import React, { useState, useEffect, useContext } from "react";
 import { fetchTournamentData } from "../requests";
 import "../styles/Tournaments.css";
+import "../styles/TournamentView.css";
 import { useMessage } from "../MessageContext";
 import { AuthContext } from "../AuthContext";
 import { TeamNameChangePopup } from "./Tournaments";
@@ -66,21 +67,27 @@ export default function TournamentView() {
 	}
 
 	return !collection ? (
-		<TournamentManager tournamentData={tournamentData} creator={creator} />
+		<TournamentManager
+			tournamentData={tournamentData}
+			creator={creator}
+			backButton={
+				<Link to="/tournaments" className="back-to-browse">
+					&lt; Back to browse
+				</Link>
+			}
+		/>
 	) : (
 		<CollectionView collection={tournamentData} creator={creator} collectionName={collectionName} />
 	);
 }
 
-function TournamentManager({ tournamentData, creator }) {
+function TournamentManager({ tournamentData, creator, backButton }) {
 	const [currentTab, setCurrentTab] = useState("info");
 	const { isLoggedIn } = useContext(AuthContext);
 
 	return (
 		<div className="tournament-view">
-			<Link to="/tournaments" className="back-to-browse">
-				&lt; Back to browse
-			</Link>
+			{backButton}
 			<div className="tab-navigation">
 				<button
 					className={`view-tab-btn ${currentTab === "info" ? "active" : ""}`}
@@ -314,13 +321,46 @@ function CollectionView({ collection, collectionName, creator }) {
 	const { showMessage } = useMessage();
 	const [loading, setLoading] = useState(true);
 	const { isLoggedIn } = useContext(AuthContext);
+	const [selectedTournament, setSelectedTournament] = useState(null);
 
 	return (
 		<>
-			<div className="collection-info">
-				<h2>{collectionName}</h2>
-			</div>
-			<div className="collection-tournaments"></div>
+			{!selectedTournament ? (
+				<>
+					<Link to="/tournaments" className="back-to-browse">
+						&lt; Back to browse
+					</Link>
+					<div className="collection-info">
+						<h2>{collectionName}</h2>
+					</div>
+					<div className="collection-tournaments">
+						{collection.map((tournament) => {
+							return (
+								<div key={tournament.details.id} className="collection-tournament-card">
+									<div className="tournament-name">{tournament.details.name}</div>
+									<div className="tournament-description">{tournament.details.description}</div>
+									<div className={`tournament-status ${tournament.details.status.toLowerCase().replace(" ", "-")}`}>
+										{tournament.details.status}
+									</div>
+									<button onClick={() => setSelectedTournament(tournament)} className="view-tournament-btn">
+										View
+									</button>
+								</div>
+							);
+						})}
+					</div>
+				</>
+			) : (
+				<TournamentManager
+					tournamentData={selectedTournament}
+					creator={creator}
+					backButton={
+						<div className="back-to-browse" onClick={() => setSelectedTournament(null)}>
+							&lt; Back to Collection
+						</div>
+					}
+				/>
+			)}
 		</>
 	);
 }

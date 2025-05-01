@@ -6,46 +6,18 @@ import { useMessage } from "../MessageContext";
 import { AuthContext } from "../AuthContext";
 import { TeamNameChangePopup } from "./Tournaments";
 
-const defaultTournamentData = {
-	details: {
-		name: "Tournament Name",
-		description: "Tournament Description",
-		format: "Tournament Format",
-		teams: 16,
-		startDate: "2023-10-01",
-		status: "Upcoming",
-		upcomingFixtures: [
-			{ match: "Team A vs Team B", date: "2023-10-01" },
-			{ match: "Team C vs Team D", date: "2023-10-02" },
-		],
-		results: [
-			{ match: "Team E vs Team F", date: "2023-09-30", result: "Team E won" },
-			{ match: "Team G vs Team H", date: "2023-09-29", result: "Team H won" },
-		],
-	},
-	fixtures: {
-		remainingFixtures: [
-			{ match: "Team I vs Team J", date: "2023-10-03" },
-			{ match: "Team K vs Team L", date: "2023-10-04" },
-		],
-		results: [
-			{ match: "Team M vs Team N", date: "2023-09-28", result: "Team M won" },
-			{ match: "Team O vs Team P", date: "2023-09-27", result: "Team P won" },
-		],
-	},
-	standings: {},
-	teams: ["Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H"],
-};
-
 export default function TournamentView() {
 	const { id } = useParams();
 	const [tournamentData, setTournamentData] = useState(null);
+	const [status, setStatus] = useState("Not Started");
 	const [creator, setCreator] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [notFound, setNotFound] = useState(false);
 	const [currentTab, setCurrentTab] = useState("info");
 	const { showMessage } = useMessage();
 	const { isLoggedIn } = useContext(AuthContext);
+	const [collection, setCollection] = useState(false);
+	const [collectionName, setCollectionName] = useState("");
 
 	useEffect(() => {
 		const getTournamentDetails = async () => {
@@ -54,11 +26,17 @@ export default function TournamentView() {
 				if (response.error) {
 					setNotFound(true);
 					showMessage("Tournament not found", "error");
-				} else {
+					return;
+				}
+				setCreator(response.creator);
+				setNotFound(false);
+				if (!response.collection) {
+					setCollection(false);
 					setTournamentData(response.message);
-					console.log(response.message);
-					setCreator(response.creator);
-					setNotFound(false);
+				} else {
+					setCollection(true);
+					setTournamentData(response.message);
+					setCollectionName(response.collection);
 				}
 			} catch (error) {
 				setNotFound(true);
@@ -86,6 +64,17 @@ export default function TournamentView() {
 			</div>
 		);
 	}
+
+	return !collection ? (
+		<TournamentManager tournamentData={tournamentData} creator={creator} />
+	) : (
+		<CollectionView collection={tournamentData} creator={creator} collectionName={collectionName} />
+	);
+}
+
+function TournamentManager({ tournamentData, creator }) {
+	const [currentTab, setCurrentTab] = useState("info");
+	const { isLoggedIn } = useContext(AuthContext);
 
 	return (
 		<div className="tournament-view">
@@ -132,6 +121,11 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	const startTournament = () => {
 		setLoading(true);
 		// Logic to start the tournament
+		const confirm = window.confirm("Are you sure you want to start the tournament? This action cannot be undone.");
+		if (!confirm) {
+			setLoading(false);
+			return;
+		}
 		console.log("Tournament started");
 		setStatus("Tournament Started");
 		setLoading(false);
@@ -313,5 +307,20 @@ function TournamentTeams({ teams }) {
 				</div>
 			)}
 		</div>
+	);
+}
+
+function CollectionView({ collection, collectionName, creator }) {
+	const { showMessage } = useMessage();
+	const [loading, setLoading] = useState(true);
+	const { isLoggedIn } = useContext(AuthContext);
+
+	return (
+		<>
+			<div className="collection-info">
+				<h2>{collectionName}</h2>
+			</div>
+			<div className="collection-tournaments"></div>
+		</>
 	);
 }

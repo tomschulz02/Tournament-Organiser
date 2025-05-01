@@ -34,29 +34,30 @@
 } */
 export function formatCombiTournamentForStorage(data) {
 	var format = {
-		name: data["name"],
-		date: data["date"],
+		name: data["tournamentName"],
+		date: data["startDate"],
 		location: data["location"],
-		description: data["description"] == undefined ? "Default description" : data["description"],
+		description: data["description"] == "" ? "Default description" : data["description"],
 		format: "C",
-		num_teams: data["structure"]["numTeams"],
-		num_groups: data["structure"]["numGroups"] || 0,
-		knockout: data["structure"]["knockout"] || 0,
+		num_teams: data["teamCount"],
+		num_groups: data["numGroups"] || 0,
+		knockout: parseInt(data["knockoutRound"]) == 0 ? false : true,
 		state: {
-			groups: populateGroups(data["structure"]["numGroups"], data["teams"]),
-			type: data["structure"]["type"],
+			groups: populateGroups(data["numGroups"], data["teams"]),
+			type: data["type"],
 		},
 		created_by: data["user"],
-		collection: data["collection"] || null,
+		collection: data["tournamentCollection"] || null,
 		fixtures: [],
 	};
 
-	format["fixtures"] = generateFixturesCombi(format["state"]["groups"], data["structure"]["knockout"]);
+	format["fixtures"] = generateFixturesCombi(format["state"]["groups"], parseInt(data["knockoutRound"]));
 
 	return format;
 }
 
 function generateFixturesCombi(groups, knockout) {
+	// console.log(groups, knockout);
 	var fixtures = [];
 	// generate all possible fixtures for groups (unordered)
 	groups.forEach((group, groupIndex) => {
@@ -249,7 +250,7 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 	tournaments.forEach((tour) => {
 		var date = getDate(tour.date);
 		const tournament = {
-			id: tournamentHash.encode(tour.id),
+			id: "t_" + tournamentHash.encode(tour.id),
 			name: tour.name,
 			date: date,
 			location: tour.location,
@@ -261,7 +262,7 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 	});
 	collections.forEach((col) => {
 		result.push({
-			id: collectionHash.encode(col.id),
+			id: "c_" + collectionHash.encode(col.id),
 			name: col.name,
 			num_tournaments: col.tournament_count,
 			classification: "collection",

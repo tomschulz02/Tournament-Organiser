@@ -219,6 +219,8 @@
 	border-radius: 8px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	transition: transform 0.3s ease;
+	position: relative;
+	height: 200px;
 }
 
 .tournament-card:hover {
@@ -235,7 +237,7 @@
 	box-sizing: border-box;
 	vertical-align: middle;
 	text-align: center;
-	width: 100%;
+	width: calc(100% - 30px);
 	padding: 10px;
 	background: #2962ff;
 	color: white;
@@ -245,6 +247,9 @@
 	margin-top: 15px;
 	transition: background 0.3s ease;
 	text-decoration: none;
+	position: absolute;
+	bottom: 15px;
+	left: 15px;
 }
 
 .view-btn:hover {

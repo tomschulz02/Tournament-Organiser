@@ -34,6 +34,7 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import logger from "./logger.cjs";
 import Hashids from "hashids";
+import { hash } from "crypto";
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
@@ -137,7 +138,8 @@ app.get("/api/check-login", verifyToken, (req, res) => {
 			error: "A valid token is required for authentication",
 			loggedIn: false,
 		});
-	return res.status(200).json({ loggedIn: true, user: req.user.user });
+	// console.log("User logged in: " + JSON.stringify(req.user));
+	return res.status(200).json({ loggedIn: true, user: req.user.username });
 });
 
 app.get("/api/tournaments", (req, res) => {
@@ -149,52 +151,93 @@ app.get("/api/tournaments", (req, res) => {
 				return res.status(500).json({ error: result.message });
 			}
 			tournaments = result.message;
-		});
-		db.getAllCollections((result) => {
-			if (!result.success) {
-				return res.status(500).json({ error: result.message });
-			}
-			collections = result.message;
-		});
 
-		res
-			.status(200)
-			.json({ message: formatTournamentsForBrowse(tournaments, collections, tournamentHash, collectionHash) });
+			db.getAllCollections((cRes) => {
+				if (!cRes.success) {
+					return res.status(500).json({ error: cRes.message });
+				}
+				collections = cRes.message;
+				res
+					.status(200)
+					.json({ message: formatTournamentsForBrowse(tournaments, collections, tournamentHash, collectionHash) });
+			});
+		});
 	} catch (error) {
-		console.log("Error: " + error);
 		res.status(500).json({ message: "Server error" });
 	}
 });
 
 // Get tournament information
 app.get("/api/tournament/:id", verifyToken, (req, res) => {
+	const { id } = req.params;
+	var classification = null;
+	if (id.startsWith("t_")) {
+		classification = "tournament";
+	} else if (id.startsWith("c_")) {
+		classification = "collection";
+	}
+	const hashId = id.substring(2);
 	// Get tournament information
 	try {
-		const decodedId = hashids.decode(req.params.id);
-		if (decodedId.length === 0) {
-			return res.status(400).json({ error: "Invalid tournament ID" });
-		}
-		const tournamentId = decodedId[0];
-		db.getTournamentDetails(tournamentId, (result) => {
-			if (!result.success) {
-				return res.status(500).json({ error: result.message });
+		if (classification === "tournament") {
+			const decodedId = tournamentHash.decode(hashId);
+			if (decodedId.length === 0) {
+				return res.status(400).json({ error: "Invalid tournament ID" });
 			}
-			if (result.message.details == undefined) {
-				return res.status(404).json({ error: "Tournament not found" });
-			}
-			// console.log(result);
-			var loggedIn = false;
-			var creator = false;
-			if (req.user) {
-				loggedIn = true;
-				if (req.user.user === result["message"]["details"]["created_by"]) {
-					creator = true;
+			const tournamentId = decodedId[0];
+			db.getTournamentDetails(tournamentId, (result) => {
+				if (!result.success) {
+					return res.status(500).json({ error: result.message });
 				}
+				if (result.message.details == undefined) {
+					return res.status(404).json({ error: "Tournament not found" });
+				}
+				// console.log(result);
+				var loggedIn = false;
+				var creator = false;
+				if (req.user) {
+					loggedIn = true;
+					if (req.user.id === result["message"]["details"]["created_by"]) {
+						creator = true;
+					}
+				}
+				// console.log({ message: result, log: loggedIn, creator: creator });
+				// filter out specific tournament information depending on user request parameters
+				res.status(200).json({ message: formatTournamentView(result.message), loggedIn: loggedIn, creator: creator });
+			});
+		} else if (classification === "collection") {
+			const decodedId = collectionHash.decode(hashId);
+			if (decodedId.length === 0) {
+				return res.status(400).json({ error: "Invalid collection ID" });
 			}
-			// console.log({ message: result, log: loggedIn, creator: creator });
-			// filter out specific tournament information depending on user request parameters
-			res.status(200).json({ message: formatTournamentView(result.message), loggedIn: loggedIn, creator: creator });
-		});
+			const collectionId = decodedId[0];
+			db.getTournamentDetailsByCollectionId(collectionId, (result) => {
+				if (!result.success) {
+					return res.status(500).json({ error: result.message });
+				}
+				if (result.message.length === 0) {
+					return res.status(404).json({ error: "Collection not found" });
+				}
+				// console.log(result);
+				var loggedIn = false;
+				var creator = false;
+				if (req.user) {
+					loggedIn = true;
+					if (req.user.id === result["message"][0]["details"]["created_by"]) {
+						creator = true;
+					}
+				}
+				const tournaments = result.message.map((tournament) => {
+					return formatTournamentView(tournament);
+				});
+				// console.log(tournaments);
+				res
+					.status(200)
+					.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
+			});
+		} else {
+			return res.status(404).json({ error: "Not found" });
+		}
 	} catch (error) {
 		console.log("Error: " + error);
 		res.status(500).json({ message: "Server error" });
@@ -280,6 +323,28 @@ app.get("/api/user/:id/tournaments", verifyToken, (req, res) => {
 	}
 });
 
+app.get("/api/collections", verifyToken, (req, res) => {
+	// Get user collections
+	try {
+		const userId = req.user.id;
+		console.log("Getting collections for user ID: " + userId);
+
+		db.getUserCollections(userId, (result) => {
+			if (!result.success) {
+				return res.status(500).json({ error: result.message });
+			} else {
+				result.message.forEach((col) => {
+					col.id = collectionHash.encode(col.id);
+				});
+				console.log(result.message);
+				return res.status(200).json(result);
+			}
+		});
+	} catch (error) {
+		res.status(500).json({ message: "Server error" });
+	}
+});
+
 // create account
 app.post("/api/signup", async (req, res) => {
 	try {
@@ -301,9 +366,9 @@ app.post("/api/signup", async (req, res) => {
 
 				const token = jwt.sign(
 					{
-						user: result.message.username,
+						username: result.message.username,
 						email: result.message.email,
-						id: result.message.idusers,
+						id: result.message.id,
 					},
 					SECRET_KEY,
 					{ expiresIn: "24h" }
@@ -333,15 +398,13 @@ app.post("/api/signin", async (req, res) => {
 
 		db.loginUser(email, password, (result) => {
 			if (!result.success) {
-				console.log(result);
 				return res.status(400).json({ error: result.message });
 			}
-
 			const token = jwt.sign(
 				{
-					user: result.message.username,
+					username: result.message.username,
 					email: result.message.email,
-					id: result.message.idusers,
+					id: result.message.id,
 				},
 				SECRET_KEY,
 				{ expiresIn: "24h" }
@@ -404,15 +467,16 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 		var data = JSON.parse(JSON.stringify(req.body));
 		data["user"] = req.user.id;
 		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
-		console.dir(details, { depth: null });
+		details["collection"] = collectionHash.decode(details.collection)[0];
+		// console.dir(details, { depth: null });
 		// console.dir(fixtures, { depth: null });
 		// Add logic to save tournament to database
 		db.createTournament(details, fixtures, (result) => {
-			console.log(result);
+			// console.log(result);
+			res.status(201).json(result);
 		});
-		res.status(201).json({ message: "Tournament created successfully" });
 	} catch (error) {
-		console.error(error);
+		// console.error(error);
 		res.status(500).json({ error: "Failed to create tournament" });
 	}
 });
@@ -420,13 +484,15 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 app.post("/api/collection/create", verifyToken, (req, res) => {
 	try {
 		const { name } = req.body;
+		// console.log("User object: " + JSON.stringify(req.user));
 		const userId = req.user.id;
-
+		// console.log("Creating collection for user ID: " + userId);
 		db.createCollection(name, userId, (result) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
-			res.status(201).json({ message: "Collection created successfully" });
+			console.log({ ...result, message: collectionHash.encode(result.message) });
+			res.status(201).json({ ...result, message: collectionHash.encode(result.message) });
 		});
 	} catch (error) {
 		res.status(500).json({ error: "Failed to create collection" });

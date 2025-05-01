@@ -40,7 +40,7 @@ class DBConnection {
 		bcrypt.hash(password, saltRounds, (err, hash) => {
 			if (err) return callback({ success: false, object: true, message: err });
 
-			const sql = "INSERT INTO users (username, password, email) VALUES ($1, $2, $3)";
+			const sql = "INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id, username, email";
 			this.query(sql, [username, hash, email], callback);
 		});
 	}
@@ -48,7 +48,6 @@ class DBConnection {
 	loginUser(username, password, callback) {
 		const sql = "SELECT * FROM users WHERE email = $1";
 		this.query(sql, [username], (res) => {
-			console.log(res);
 			if (!res.success || res.message.length === 0)
 				return callback({ success: false, object: false, message: "User does not exist" });
 
@@ -71,8 +70,8 @@ class DBConnection {
 	}
 
 	createTournament(details, fixtures, callback) {
-		const sql = `INSERT INTO tournaments (name, date, location, description, format, num_teams, num_groups, knockout, state, created_by)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`;
+		const sql = `INSERT INTO tournaments (name, date, location, description, format, num_teams, num_groups, knockout, state, created_by, collection_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`;
 		const values = [
 			details.name,
 			details.date,
@@ -84,6 +83,7 @@ class DBConnection {
 			details.knockout,
 			JSON.stringify(details.state),
 			details.created_by,
+			details.collection,
 		];
 
 		this.pool.query(sql, values, (err, result) => {
@@ -115,7 +115,7 @@ class DBConnection {
 	}
 
 	getAllTournaments(callback) {
-		const query = "SELECT * FROM tournaments WHERE collection IS NULL;";
+		const query = "SELECT * FROM tournaments WHERE collection_id IS NULL;";
 		this.query(query, [], callback);
 	}
 
@@ -155,7 +155,9 @@ class DBConnection {
 
 			details.details = tournamentRes.rows[0];
 
-			const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1", [tournamentId]);
+			const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1 ORDER BY match_no", [
+				tournamentId,
+			]);
 			details.fixtures = fixturesRes.rows;
 
 			callback({ success: true, object: true, message: details });
@@ -171,6 +173,9 @@ class DBConnection {
 		try {
 			const tournaments = [];
 
+			const collectionRes = await client.query("SELECT name FROM collections WHERE id = $1", [collectionId]);
+			const collectionName = collectionRes.rows[0]?.name;
+
 			const tournamentRes = await client.query("SELECT * FROM tournaments WHERE collection_id = $1", [collectionId]);
 			if (tournamentRes.rows.length === 0) {
 				throw new Error("Tournament not found");
@@ -180,13 +185,13 @@ class DBConnection {
 				tournamentRes.rows.map(async (tournament) => {
 					const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1", [tournament.id]);
 					tournaments.push({
-						...tournament,
+						details: tournament,
 						fixtures: fixturesRes.rows,
 					});
 				})
 			);
 
-			callback({ success: true, object: true, message: tournaments });
+			callback({ success: true, object: true, message: tournaments, collection: collectionName });
 		} catch (err) {
 			callback({ success: false, object: true, message: err });
 		} finally {
@@ -205,7 +210,7 @@ class DBConnection {
 	}
 
 	getUserCollections(userId, callback) {
-		const sql = "SELECT * FROM collections WHERE user_id = $1";
+		const sql = "SELECT id, name FROM collections WHERE user_id = $1";
 		this.query(sql, [userId], callback);
 	}
 

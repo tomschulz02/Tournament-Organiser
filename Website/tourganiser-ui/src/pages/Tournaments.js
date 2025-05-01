@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useContext, use } from "react";
+import React, { useEffect, useState, useContext, useRef } from "react";
 import { Link } from "react-router-dom";
 import { AuthContext } from "../AuthContext";
 import { useMessage } from "../MessageContext";
-import { getTournaments } from "../requests";
+import { getTournaments, createCollection, createTournament, fetchUserCollections } from "../requests";
 import "../styles/Tournaments.css";
 
 export default function Tournaments() {
@@ -35,6 +35,7 @@ function BrowseTournaments() {
 	const [tournaments, setTournaments] = useState([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const { showMessage } = useMessage();
+	const hasFetchedTournaments = useRef(false);
 
 	useEffect(() => {
 		const fetchTournaments = async () => {
@@ -42,6 +43,7 @@ function BrowseTournaments() {
 				const response = await getTournaments();
 				if (response.message.length > 0) {
 					setTournaments(response.message);
+					console.log("Fetched tournaments:", response.message);
 				} else {
 					// showMessage("Failed to fetch tournaments", "error");
 					setTournaments([]);
@@ -50,7 +52,10 @@ function BrowseTournaments() {
 				showMessage("Error fetching tournaments", "error");
 			}
 		};
-		fetchTournaments();
+		if (!hasFetchedTournaments.current) {
+			hasFetchedTournaments.current = true;
+			fetchTournaments();
+		}
 		setIsLoading(false);
 	}, []);
 
@@ -69,21 +74,34 @@ function BrowseTournaments() {
 			<div className="tournaments-grid" id="tournamentsGrid">
 				{tournaments.length > 0 ? (
 					tournaments.map((tournament) => {
-						return (
-							<div className="tournament-card" key={tournament.id}>
-								<h3>{tournament.name}</h3>
-								<p className="tournament-date">Starting: {tournament.date}</p>
-								<p className="tournament-format">Format: {tournament.format}</p>
-								<p className="tournament-location">Location: {tournament.location}</p>
-								<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
-									View Tournament
-								</Link>
-							</div>
-						);
+						if (tournament.classification === "tournament") {
+							return (
+								<div className="tournament-card" key={tournament.id}>
+									<h3>{tournament.name}</h3>
+									<p className="tournament-date">Starting: {tournament.date}</p>
+									<p className="tournament-format">Format: {tournament.format}</p>
+									<p className="tournament-location">Location: {tournament.location}</p>
+									<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
+										View Tournament
+									</Link>
+								</div>
+							);
+						} else if (tournament.classification === "collection") {
+							return (
+								<div className="tournament-card" key={tournament.id}>
+									<h3>{tournament.name}</h3>
+									<p className="tournament-date">Tournaments: {tournament.num_tournaments}</p>
+									<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
+										View Collection
+									</Link>
+								</div>
+							);
+						}
 					})
 				) : (
 					<div className="no-tournaments-message">No tournaments available</div>
 				)}
+
 				{/* <!-- Example tournament cards --> */}
 				{/* <div className="tournament-card">
 					<h3>Summer Volleyball Championship</h3>
@@ -107,7 +125,7 @@ function CreateTournament() {
 		startDate: "",
 		location: "",
 		description: "",
-		tournamentCollection: "",
+		tournamentCollection: null,
 		format: "combi",
 		type: "indoor",
 		teamCount: "",
@@ -125,6 +143,12 @@ function CreateTournament() {
 		name: "",
 		rank: 0,
 	});
+	const { showMessage } = useMessage();
+	const [collectionOptions, setCollectionOptions] = useState([
+		{ name: "Create new collection", id: "new" },
+		{ name: "--", id: "null" },
+	]);
+	const hasFetchedCollections = useRef(false);
 
 	useEffect(() => {
 		// setTempTeamCount(tournamentData.teamCount);
@@ -146,6 +170,22 @@ function CreateTournament() {
 			return updatedList;
 		});
 	}, [tournamentData.teamCount]);
+
+	useEffect(() => {
+		const fetchCollections = async () => {
+			try {
+				const response = await fetchUserCollections();
+				if (response.message.length > 0) {
+					setCollectionOptions((prevOptions) => [...prevOptions, ...response.message]);
+				}
+			} catch (error) {
+				showMessage("Error fetching collections", "error");
+			}
+		};
+		if (hasFetchedCollections.current) return;
+		hasFetchedCollections.current = true;
+		fetchCollections();
+	}, []);
 
 	const validateFirstSlide = () => {
 		const tournamentName = tournamentData.tournamentName;
@@ -242,8 +282,23 @@ function CreateTournament() {
 		}
 	};
 
-	const handleSubmit = (e) => {
+	const handleSubmit = async (e) => {
 		e.preventDefault();
+		console.log("Tournament data submitted:", tournamentData);
+
+		// show loading spinner
+
+		const response = await createTournament(tournamentData);
+		console.log("Tournament creation response:", response);
+		if (response.success) {
+			// hide loading spinner
+			// show success message
+			showMessage("Tournament created successfully!", "success");
+		} else {
+			// hide loading spinner
+			// show error message
+			showMessage("Failed to create tournament", "error");
+		}
 	};
 
 	const handleTeamNameChangePopup = (action, name, rank) => {
@@ -268,9 +323,9 @@ function CreateTournament() {
 		setOpenCollectionPopup(action === "open");
 	};
 
-	const handleCollectionSubmit = (collectionName) => {
+	const handleCollectionSubmit = (collectionName, collectionId) => {
 		let newCollection = document.createElement("option");
-		newCollection.value = collectionName;
+		newCollection.value = collectionId;
 		newCollection.innerHTML = collectionName;
 		document.getElementById("tournamentCollection").appendChild(newCollection);
 		setTournamentData({
@@ -338,8 +393,13 @@ function CreateTournament() {
 							<label htmlFor="tournamentCollection">Collection </label>
 							<span id="collectionTooltip">?</span>
 							<select id="tournamentCollection" onChange={handleChange} value={tournamentData.tournamentCollection}>
-								<option value="null">--</option>
-								<option value="new">Create new Collection</option>
+								{collectionOptions.map((option) => {
+									return (
+										<option key={option.id} value={option.id}>
+											{option.name}
+										</option>
+									);
+								})}
 							</select>
 						</div>
 						<p>*required</p>
@@ -422,12 +482,12 @@ function CreateTournament() {
 								<div className={`form-group ${expandOptions ? "" : "hidden"}`} id="knockout">
 									<label htmlFor="knockoutRound">First Knockout Round*</label>
 									<select type="number" id="knockoutRound" onChange={handleChange} value={tournamentData.knockoutRound}>
-										<option value="12">Round of 24</option>
-										<option value="8">Round of 16</option>
-										<option value="6">Round of 12</option>
-										<option value="4">Quarterfinals</option>
-										<option value="2">Semifinals</option>
-										<option value="1">Finals</option>
+										<option value={12}>Round of 24</option>
+										<option value={8}>Round of 16</option>
+										<option value={6}>Round of 12</option>
+										<option value={4}>Quarterfinals</option>
+										<option value={2}>Semifinals</option>
+										<option value={1}>Finals</option>
 									</select>
 								</div>
 								<p>*required</p>
@@ -505,8 +565,10 @@ function CreateTournament() {
 									<h3>Team names</h3>
 									<p>
 										The teams are pre-generated based on the number of teams you selected in a previous step. <br />
-										You can change the names of the teams here in this list, or you can also do that later in the
-										tournament manager after creating this tournament.
+										You can change the names of the teams here in this list, however the names will be final once you
+										create the tournament. <br />
+										You <strong>cannot</strong> change the number of teams or the team names after you create the
+										tournament. <br />
 									</p>
 								</div>
 							</div>
@@ -547,10 +609,20 @@ function CreateTournament() {
 
 function CollectionPopup({ onClose, onSubmit }) {
 	const [collection, setCollection] = useState("");
+	const [isLoading, setIsLoading] = useState(false);
+	const { showMessage } = useMessage();
 
-	const handleSubmit = (e) => {
+	const handleSubmit = async (e) => {
 		e.preventDefault();
-		onSubmit(collection);
+		setIsLoading(true);
+		const response = await createCollection(collection);
+		if (!response.success) {
+			setIsLoading(false);
+			showMessage("Failed to create collection", "error");
+			return;
+		}
+		onSubmit(collection, response.message);
+		setIsLoading(false);
 		onClose("close");
 	};
 
@@ -572,7 +644,13 @@ function CollectionPopup({ onClose, onSubmit }) {
 						<input type="text" id="collectionName" value={collection} onChange={handleChange} required />
 					</div>
 					<button type="submit" className="collection-button">
-						Create Collection
+						{isLoading ? (
+							<div className="loading-spinner">
+								<div className="spinner"></div>
+							</div>
+						) : (
+							"Create Collection"
+						)}
 					</button>
 				</form>
 			</div>

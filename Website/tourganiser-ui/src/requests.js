@@ -117,3 +117,59 @@ export async function fetchTournamentData(tournamentId) {
 		throw error;
 	}
 }
+
+export async function createCollection(name) {
+	try {
+		const response = await fetch("http://localhost:5000/api/collection/create", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ name }),
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to create collection");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+export async function fetchUserCollections() {
+	try {
+		const response = await fetch("http://localhost:5000/api/collections", {
+			method: "GET",
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to fetch collections");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+export async function createTournament(tournamentData) {
+	try {
+		const response = await fetch("http://localhost:5000/api/tournament/create", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(tournamentData),
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to create tournament");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}

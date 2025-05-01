@@ -1,10 +1,11 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useRef } from "react";
 import { checkLoginStatus } from "./requests";
 
 export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
 	const [isLoggedIn, setIsLoggedIn] = useState(false);
+	const hasCheckedLogin = useRef(false);
 
 	useEffect(() => {
 		const checkLogin = async () => {
@@ -15,6 +16,8 @@ export function AuthProvider({ children }) {
 				setIsLoggedIn(false);
 			}
 		};
+		if (hasCheckedLogin.current) return;
+		hasCheckedLogin.current = true;
 		checkLogin();
 	}, []);
 

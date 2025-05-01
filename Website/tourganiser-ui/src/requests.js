@@ -173,3 +173,41 @@ export async function createTournament(tournamentData) {
 		throw error;
 	}
 }
+
+export async function joinTournament(tournamentId) {
+	try {
+		const response = await fetch(`http://localhost:5000/api/tournaments/${tournamentId}/join`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to join tournament");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+export async function leaveTournament(tournamentId) {
+	try {
+		const response = await fetch(`http://localhost:5000/api/tournaments/${tournamentId}/leave`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to leave tournament");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}

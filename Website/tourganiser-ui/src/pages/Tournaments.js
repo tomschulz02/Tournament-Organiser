@@ -43,7 +43,7 @@ function BrowseTournaments() {
 				const response = await getTournaments();
 				if (response.message.length > 0) {
 					setTournaments(response.message);
-					console.log("Fetched tournaments:", response.message);
+					// console.log("Fetched tournaments:", response.message);
 				} else {
 					// showMessage("Failed to fetch tournaments", "error");
 					setTournaments([]);
@@ -76,7 +76,10 @@ function BrowseTournaments() {
 					tournaments.map((tournament) => {
 						if (tournament.classification === "tournament") {
 							return (
-								<div className="tournament-card" key={tournament.id}>
+								<div
+									className="tournament-card"
+									key={tournament.id}
+									style={{ "--card-bg": `url(/assets/bg-${tournament.type}.jpg)` }}>
 									<h3>{tournament.name}</h3>
 									<p className="tournament-date">Starting: {tournament.date}</p>
 									<p className="tournament-format">Format: {tournament.format}</p>

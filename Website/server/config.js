@@ -205,13 +205,18 @@ class DBConnection {
 	}
 
 	getSavedTournaments(userId, callback) {
-		const sql = "SELECT * FROM saved_tournaments WHERE user_id = $1";
+		const sql = "SELECT tournament_id FROM saved_tournaments WHERE user_id = $1";
 		this.query(sql, [userId], callback);
 	}
 
 	getUserCollections(userId, callback) {
 		const sql = "SELECT id, name FROM collections WHERE user_id = $1";
 		this.query(sql, [userId], callback);
+	}
+
+	unfollowTournament(userId, tournamentId, callback) {
+		const sql = "DELETE FROM saved_tournaments WHERE user_id = $1 AND tournament_id = $2";
+		this.query(sql, [userId, tournamentId], callback);
 	}
 
 	test() {

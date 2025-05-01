@@ -271,11 +271,12 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 	return result;
 }
 
-export function formatTournamentView(tournament) {
+export function formatTournamentView(tournament, tournamentHash, following) {
 	const remainingFixtures = separateFixturesAndResults(tournament.fixtures).remainingFixtures;
 	const results = separateFixturesAndResults(tournament.fixtures).results;
 	var pages = {
 		details: {
+			id: tournamentHash.encode(tournament.details.id),
 			name: tournament.details.name,
 			description: tournament.details.description,
 			format: expandFormat(tournament.details.format),
@@ -284,6 +285,8 @@ export function formatTournamentView(tournament) {
 			status: tournament.details.status,
 			upcomingFixtures: remainingFixtures.slice(0, 10),
 			results: results.slice(0, 10),
+			following: following,
+			location: tournament.details.location,
 		},
 		fixtures: {
 			remainingFixtures: remainingFixtures,
@@ -292,7 +295,6 @@ export function formatTournamentView(tournament) {
 		standings: {},
 		teams: [tournament.details.state.groups],
 	};
-
 	return pages;
 }
 

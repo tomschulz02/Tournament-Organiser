@@ -1,11 +1,13 @@
 import { Link, useParams } from "react-router-dom";
 import React, { useState, useEffect, useContext } from "react";
-import { fetchTournamentData } from "../requests";
+import { fetchTournamentData, joinTournament, leaveTournament } from "../requests";
 import "../styles/Tournaments.css";
 import "../styles/TournamentView.css";
 import { useMessage } from "../MessageContext";
+import { useConfirm } from "../components/ConfirmDialog";
 import { AuthContext } from "../AuthContext";
 import { TeamNameChangePopup } from "./Tournaments";
+import LoadingScreen from "../components/LoadingScreen";
 
 export default function TournamentView() {
 	const { id } = useParams();
@@ -33,6 +35,7 @@ export default function TournamentView() {
 				setNotFound(false);
 				if (!response.collection) {
 					setCollection(false);
+					console.log("Tournament data:", response.message);
 					setTournamentData(response.message);
 				} else {
 					setCollection(true);
@@ -50,11 +53,7 @@ export default function TournamentView() {
 	}, [id]);
 
 	if (loading) {
-		return (
-			<div style={{ textAlign: "center", marginTop: "2rem" }}>
-				<h2>Loading...</h2>
-			</div>
-		);
+		return <LoadingScreen />;
 	}
 
 	if (notFound) {
@@ -123,13 +122,15 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 function TournamentDetails({ details, loggedIn, creator }) {
 	const [status, setStatus] = useState(details.status === "Not Started" ? "Start Tournament" : "Tournament Started");
 	const [loading, setLoading] = useState(false);
+	const [following, setFollowing] = useState(creator);
 	const { showMessage } = useMessage();
+	const confirm = useConfirm();
 
-	const startTournament = () => {
+	const startTournament = async () => {
 		setLoading(true);
 		// Logic to start the tournament
-		const confirm = window.confirm("Are you sure you want to start the tournament? This action cannot be undone.");
-		if (!confirm) {
+		const confirmed = await confirm("Are you sure you want to start the tournament? This action cannot be undone.");
+		if (!confirmed) {
 			setLoading(false);
 			return;
 		}
@@ -139,14 +140,51 @@ function TournamentDetails({ details, loggedIn, creator }) {
 		showMessage("Tournament started successfully", "success");
 	};
 
+	const handleFollow = async () => {
+		if (!loggedIn) {
+			showMessage("You must be logged in to follow tournaments", "error");
+			return;
+		}
+		setLoading(true);
+		if (following) {
+			// Logic to unfollow the tournament
+			const confirmed = await confirm("Are you sure you want to unfollow the tournament?");
+			if (!confirmed) {
+				setLoading(false);
+				return;
+			}
+			const response = await leaveTournament(details.id);
+			if (response.error) {
+				showMessage("Error unfollowing tournament", "error");
+				setLoading(false);
+				return;
+			}
+			showMessage("Tournament unfollowed successfully", "success");
+			setFollowing(false);
+			setLoading(false);
+			return;
+		}
+
+		const response = await joinTournament(details.id);
+		if (response.error) {
+			showMessage("Error following tournament", "error");
+			setLoading(false);
+			return;
+		}
+		showMessage("Tournament followed successfully", "success");
+		setFollowing(true);
+		setLoading(false);
+	};
+
 	return (
 		<>
+			{loading && <LoadingScreen />}
 			<div className="tournament-info">
 				<div className="tournament-info-heading">
 					<h2>{details.name}</h2>
 					<p>{details.description}</p>
-					<button className="follow-tournament-btn" disabled={!loggedIn}>
-						Follow Tournament
+					<button onClick={handleFollow} className="follow-tournament-btn" disabled={!loggedIn || creator}>
+						{following ? "Following" : "Follow"}
 					</button>
 				</div>
 				<div className="tournament-info-format">
@@ -168,13 +206,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 						className="start-tournament-btn"
 						disabled={details.status !== "Not Started"}
 						onClick={startTournament}>
-						{loading ? (
-							<div className="loading-spinner">
-								<div className="spinner"></div>
-							</div>
-						) : (
-							status
-						)}
+						{status}
 					</button>
 				)}
 			</div>

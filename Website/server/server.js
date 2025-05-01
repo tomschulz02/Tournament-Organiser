@@ -195,15 +195,32 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				// console.log(result);
 				var loggedIn = false;
 				var creator = false;
+				var following = false;
 				if (req.user) {
 					loggedIn = true;
 					if (req.user.id === result["message"]["details"]["created_by"]) {
 						creator = true;
+						following = true;
+					} else {
+						db.getSavedTournaments(req.user.id, (savedRes) => {
+							if (!savedRes.success) {
+								following = false;
+							} else {
+								following = savedRes.message.some((id) => id.tournament_id === tournamentId);
+							}
+						});
 					}
+					return res.status(200).json({
+						message: formatTournamentView(result.message, tournamentHash, following),
+						loggedIn: loggedIn,
+						creator: creator,
+					});
 				}
-				// console.log({ message: result, log: loggedIn, creator: creator });
-				// filter out specific tournament information depending on user request parameters
-				res.status(200).json({ message: formatTournamentView(result.message), loggedIn: loggedIn, creator: creator });
+				res.status(200).json({
+					message: formatTournamentView(result.message, tournamentHash, following),
+					loggedIn: loggedIn,
+					creator: creator,
+				});
 			});
 		} else if (classification === "collection") {
 			const decodedId = collectionHash.decode(hashId);
@@ -221,19 +238,29 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				// console.log(result);
 				var loggedIn = false;
 				var creator = false;
+				var following = false;
 				if (req.user) {
 					loggedIn = true;
 					if (req.user.id === result["message"][0]["details"]["created_by"]) {
 						creator = true;
+						following = true;
 					}
 				}
-				const tournaments = result.message.map((tournament) => {
-					return formatTournamentView(tournament);
+				db.getSavedTournaments(req.user.id, (savedRes) => {
+					const tournaments = result.message.map((tournament) => {
+						if (!savedRes.success) {
+							following = false;
+						} else {
+							following = savedRes.message.some((id) => id.tournament_id === tournament.details.id);
+						}
+						return formatTournamentView(tournament, tournamentHash, following);
+					});
+					res
+						.status(200)
+						.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
 				});
+
 				// console.log(tournaments);
-				res
-					.status(200)
-					.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
 			});
 		} else {
 			return res.status(404).json({ error: "Not found" });
@@ -515,6 +542,23 @@ app.post("/api/tournaments/:id/join", verifyToken, async (req, res) => {
 		res.status(200).json({ message: "User joined tournament successfully" });
 	} catch (error) {
 		res.status(500).json({ error: "Failed to join tournament" });
+	}
+});
+
+app.post("/api/tournaments/:id/leave", verifyToken, async (req, res) => {
+	try {
+		const { userId } = req.body;
+		const { id } = req.params;
+
+		db.unfollowTournament(userId, id, (result) => {
+			if (!result.success) {
+				return res.status(400).json({ error: result.message });
+			}
+		});
+
+		res.status(200).json({ message: "User left tournament successfully" });
+	} catch (error) {
+		res.status(500).json({ error: "Failed to leave tournament" });
 	}
 });
 

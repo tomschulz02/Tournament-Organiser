@@ -10,6 +10,7 @@ import About from "./pages/About";
 import Login from "./pages/Login";
 import { AuthProvider } from "./AuthContext";
 import { MessageProvider } from "./MessageContext";
+import { ConfirmProvider } from "./components/ConfirmDialog";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 
 import reportWebVitals from "./reportWebVitals";
@@ -36,7 +37,9 @@ root.render(
 	<React.StrictMode>
 		<MessageProvider>
 			<AuthProvider>
-				<RoutesComponent />
+				<ConfirmProvider>
+					<RoutesComponent />
+				</ConfirmProvider>
 			</AuthProvider>
 		</MessageProvider>
 	</React.StrictMode>

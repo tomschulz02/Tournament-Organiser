@@ -9,12 +9,11 @@ class DBConnection {
 		if (DBConnection.instance) return DBConnection.instance;
 
 		this.pool = new Pool({
-			host: process.env.DB_HOST,
-			user: process.env.POSTGRES_USER,
-			password: process.env.DB_PASSWORD,
-			port: process.env.POSTGRES_PORT,
-			database: process.env.DB_DATABASE,
-			max: 50,
+			connectionString: process.env.DATABASE_URL,
+			ssl: {
+				rejectUnauthorized: false,
+			},
+			max: 20, // max number of clients in the pool
 		});
 
 		this.pool
@@ -183,7 +182,9 @@ class DBConnection {
 
 			await Promise.all(
 				tournamentRes.rows.map(async (tournament) => {
-					const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1", [tournament.id]);
+					const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1 ORDER BY match_no", [
+						tournament.id,
+					]);
 					tournaments.push({
 						details: tournament,
 						fixtures: fixturesRes.rows,

@@ -108,3 +108,296 @@
 		text-align: left;
 	}
 }
+
+.fixtures-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+}
+
+.fixtures-filter {
+	display: flex;
+	gap: 10px;
+	padding: 5px;
+	background: #f5f5f5;
+	border-radius: 8px;
+}
+
+.filter-btn {
+	padding: 8px 16px;
+	border: none;
+	background: transparent;
+	color: #666;
+	font-weight: 500;
+	cursor: pointer;
+	border-radius: 6px;
+	transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+	background: #e0e0e0;
+	color: #333;
+}
+
+.filter-btn.active {
+	background: #2962ff;
+	color: white;
+}
+
+.tournament-fixtures {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 20px;
+}
+
+.tournament-fixtures h3 {
+	color: #333;
+	margin-bottom: 20px;
+	padding-bottom: 10px;
+	border-bottom: 2px solid #e0e0e0;
+}
+
+.tournament-fixture-card {
+	display: grid;
+	grid-template-columns: 0.5fr 1fr 2fr 1fr 1fr;
+	align-items: center;
+	background: white;
+	padding: 15px 20px;
+	margin-bottom: 12px;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tournament-fixture-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.fixture-match-number {
+	font-weight: 600;
+	color: #666;
+	font-size: 0.9em;
+}
+
+.fixture-match-details {
+	color: #666;
+	font-size: 0.9em;
+}
+
+.fixture-teams {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.fixture-team {
+	font-weight: 500;
+	color: #333;
+}
+
+.fixture-result {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: center;
+	min-width: 60px;
+}
+
+.fixture-score {
+	font-weight: 600;
+	font-size: 1.1em;
+	color: #333;
+	display: flex;
+	flex-direction: row;
+	gap: 15px;
+}
+
+.fixture-status {
+	text-align: center;
+	padding: 6px 12px;
+	border-radius: 15px;
+	font-size: 0.9em;
+	font-weight: 500;
+	min-width: 150px;
+}
+
+.fixture-status.waiting {
+	background-color: #e3f2fd;
+	color: #1565c0;
+}
+
+.fixture-status.ongoing {
+	background-color: #fff3e0;
+	color: #e65100;
+}
+
+.fixture-status.completed {
+	background-color: #e8f5e9;
+	color: #2e7d32;
+}
+
+.fixture-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.update-score-btn {
+	padding: 8px;
+	height: 40px;
+	background-color: white;
+	color: #2962ff;
+	border: 1px solid #2962ff;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.9em;
+	transition: background-color 0.2s ease;
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: transform 0.2s ease;
+}
+
+.update-score-btn:hover {
+	transform: scale(1.05);
+}
+
+.update-score-btn:disabled {
+	background-color: #cccccc;
+	cursor: not-allowed;
+}
+
+.update-score-btn svg {
+	fill: #666666;
+	transition: transform 0.2s ease;
+}
+
+.update-score-btn:hover svg {
+	animation: rotate-once 0.5s ease;
+}
+
+@keyframes rotate-once {
+	0% {
+		transform: rotate(0deg);
+	}
+	30% {
+		transform: rotate(15deg);
+	}
+	60% {
+		transform: rotate(-10deg);
+	}
+	100% {
+		transform: rotate(0deg);
+	}
+}
+
+.tournament-teams {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 20px;
+}
+
+.tournament-teams h3 {
+	color: #333;
+	margin-bottom: 20px;
+	padding-bottom: 10px;
+	border-bottom: 2px solid #e0e0e0;
+}
+
+.teams-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+	gap: 20px;
+	padding: 20px 0;
+}
+
+.teams-pools {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 20px;
+	padding: 20px;
+}
+
+.team-pool {
+	background: white;
+	padding: 20px;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.team-pool h4 {
+	margin-bottom: 15px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #e0e0e0;
+	color: #333;
+}
+
+.pool-teams {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 10px;
+}
+
+.team-card {
+	background: white;
+	padding: 15px 20px;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+	font-weight: 500;
+	color: #333;
+	margin: 10px 0;
+}
+
+.team-card:hover {
+	transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+	.fixture-card {
+		grid-template-columns: 1fr;
+		gap: 10px;
+		padding: 15px;
+	}
+
+	.fixture-match-number,
+	.fixture-match-details,
+	.fixture-teams,
+	.fixture-result,
+	.fixture-status {
+		text-align: left;
+	}
+
+	.fixture-status {
+		width: fit-content;
+	}
+
+	.fixture-result {
+		align-items: flex-start;
+	}
+
+	.fixtures-header {
+		flex-direction: column;
+		gap: 15px;
+	}
+
+	.fixtures-filter {
+		width: 100%;
+		overflow-x: auto;
+		padding: 5px;
+	}
+
+	.filter-btn {
+		white-space: nowrap;
+	}
+	.teams-pools {
+		grid-template-columns: 1fr;
+	}
+
+	.teams-grid {
+		grid-template-columns: 1fr;
+	}
+}

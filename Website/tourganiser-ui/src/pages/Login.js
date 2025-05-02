@@ -79,7 +79,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 			const response = await loginUser(email, password);
 			if (response.success) {
 				setLoggedIn(true);
-				showMessage("Successfully logged in!", "success");
+				showMessage(`Welcome, ${response.user}`, "success");
 				onClose();
 			}
 		} catch (error) {

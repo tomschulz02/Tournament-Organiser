@@ -235,30 +235,40 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				if (result.message.length === 0) {
 					return res.status(404).json({ error: "Collection not found" });
 				}
-				// console.log(result);
+				// console.log(req.user);
 				var loggedIn = false;
 				var creator = false;
 				var following = false;
 				if (req.user) {
 					loggedIn = true;
-					if (req.user.id === result["message"][0]["details"]["created_by"]) {
-						creator = true;
-						following = true;
-					}
-				}
-				db.getSavedTournaments(req.user.id, (savedRes) => {
+					db.getSavedTournaments(req.user.id, (savedRes) => {
+						const tournaments = result.message.map((tournament) => {
+							if (req.user.id === result["message"][0]["details"]["created_by"]) {
+								creator = true;
+								following = true;
+							} else if (!savedRes.success) {
+								following = false;
+							} else {
+								following = savedRes.message.some((id) => id.tournament_id === tournament.details.id);
+							}
+							return formatTournamentView(tournament, tournamentHash, following);
+						});
+						// console.log(tournaments);
+						return res
+							.status(200)
+							.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
+					});
+				} else {
+					// console.log(result);
 					const tournaments = result.message.map((tournament) => {
-						if (!savedRes.success) {
-							following = false;
-						} else {
-							following = savedRes.message.some((id) => id.tournament_id === tournament.details.id);
-						}
+						// console.log(tournament.details);
 						return formatTournamentView(tournament, tournamentHash, following);
 					});
-					res
+					// console.log(tournaments);
+					return res
 						.status(200)
 						.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
-				});
+				}
 
 				// console.log(tournaments);
 			});
@@ -354,7 +364,7 @@ app.get("/api/collections", verifyToken, (req, res) => {
 	// Get user collections
 	try {
 		const userId = req.user.id;
-		console.log("Getting collections for user ID: " + userId);
+		// console.log("Getting collections for user ID: " + userId);
 
 		db.getUserCollections(userId, (result) => {
 			if (!result.success) {
@@ -363,7 +373,7 @@ app.get("/api/collections", verifyToken, (req, res) => {
 				result.message.forEach((col) => {
 					col.id = collectionHash.encode(col.id);
 				});
-				console.log(result.message);
+				// console.log(result.message);
 				return res.status(200).json(result);
 			}
 		});
@@ -381,7 +391,7 @@ app.post("/api/signup", async (req, res) => {
 		db.createUser(username, email, password, (result) => {
 			if (!result.success) {
 				if (result.object && result.message.code === "ER_DUP_ENTRY") {
-					return res.status(400).json({ error: "Email already exists" });
+					return res.status(400).json({ error: "Email already in use" });
 				} else {
 					return res.status(500).json({ error: result.message });
 				}
@@ -408,6 +418,7 @@ app.post("/api/signup", async (req, res) => {
 					maxAge: 1000 * 60 * 60 * 24,
 				});
 				return res.status(200).json({
+					success: true,
 					message: "User account created successfully",
 				});
 			});
@@ -495,7 +506,7 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 		data["user"] = req.user.id;
 		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
 		details["collection"] = collectionHash.decode(details.collection)[0];
-		// console.dir(details, { depth: null });
+		console.dir(details, { depth: null });
 		// console.dir(fixtures, { depth: null });
 		// Add logic to save tournament to database
 		db.createTournament(details, fixtures, (result) => {

@@ -3,7 +3,15 @@ import { Link } from "react-router-dom";
 import { AuthContext } from "../AuthContext";
 import { useMessage } from "../MessageContext";
 import { getTournaments, createCollection, createTournament, fetchUserCollections } from "../requests";
+import Tooltip from "../components/Tooltip";
+import { useConfirm } from "../components/ConfirmDialog";
+import LoadingScreen from "../components/LoadingScreen";
 import "../styles/Tournaments.css";
+
+const tooltips = {
+	collections:
+		"You can group tournaments in collections so that they can be viewed together. Tournaments that are part of a collection will not be displayed on the browse page, but rather in the view page of the collection it belongs to.",
+};
 
 export default function Tournaments() {
 	const [currentPage, setCurrentPage] = useState("browse");
@@ -25,7 +33,11 @@ export default function Tournaments() {
 				</button>
 			</div>
 			<div className="tab-content active">
-				{currentPage === "browse" ? <BrowseTournaments /> : <CreateTournament />}
+				{currentPage === "browse" ? (
+					<BrowseTournaments />
+				) : (
+					<CreateTournament goBack={() => setCurrentPage("browse")} />
+				)}
 			</div>
 		</div>
 	);
@@ -38,6 +50,7 @@ function BrowseTournaments() {
 	const hasFetchedTournaments = useRef(false);
 
 	useEffect(() => {
+		setIsLoading(true);
 		const fetchTournaments = async () => {
 			try {
 				const response = await getTournaments();
@@ -50,17 +63,19 @@ function BrowseTournaments() {
 				}
 			} catch (error) {
 				showMessage("Error fetching tournaments", "error");
+			} finally {
+				setIsLoading(false);
 			}
 		};
 		if (!hasFetchedTournaments.current) {
 			hasFetchedTournaments.current = true;
 			fetchTournaments();
 		}
-		setIsLoading(false);
 	}, []);
 
 	return (
 		<div className="browse-tournaments">
+			{isLoading && <LoadingScreen />}
 			<div className="search-section">
 				<input type="text" id="searchTournaments" placeholder="Search tournaments..." />
 				<select id="filterFormat">
@@ -121,14 +136,14 @@ function BrowseTournaments() {
 	);
 }
 
-function CreateTournament() {
+function CreateTournament({ goBack }) {
 	const [currentSlide, setCurrentSlide] = useState(1);
 	const [tournamentData, setTournamentData] = useState({
 		tournamentName: "",
 		startDate: "",
 		location: "",
 		description: "",
-		tournamentCollection: null,
+		tournamentCollection: "",
 		format: "combi",
 		type: "indoor",
 		teamCount: "",
@@ -148,10 +163,12 @@ function CreateTournament() {
 	});
 	const { showMessage } = useMessage();
 	const [collectionOptions, setCollectionOptions] = useState([
+		{ name: "--", id: "" },
 		{ name: "Create new collection", id: "new" },
-		{ name: "--", id: "null" },
 	]);
 	const hasFetchedCollections = useRef(false);
+	const confirm = useConfirm();
+	const [loading, setLoading] = useState(false);
 
 	useEffect(() => {
 		// setTempTeamCount(tournamentData.teamCount);
@@ -290,18 +307,23 @@ function CreateTournament() {
 		console.log("Tournament data submitted:", tournamentData);
 
 		// show loading spinner
-
-		const response = await createTournament(tournamentData);
-		console.log("Tournament creation response:", response);
-		if (response.success) {
-			// hide loading spinner
-			// show success message
-			showMessage("Tournament created successfully!", "success");
-		} else {
-			// hide loading spinner
-			// show error message
-			showMessage("Failed to create tournament", "error");
+		const confirmResult = await confirm("Are you sure you want to create this tournament?");
+		setLoading(true);
+		if (confirmResult) {
+			const response = await createTournament(tournamentData);
+			// console.log("Tournament creation response:", response);
+			if (response.success) {
+				// hide loading spinner
+				// show success message
+				showMessage("Tournament created successfully!", "success");
+				goBack();
+			} else {
+				// hide loading spinner
+				// show error message
+				showMessage("Failed to create tournament. Please try again later", "error");
+			}
 		}
+		setLoading(false);
 	};
 
 	const handleTeamNameChangePopup = (action, name, rank) => {
@@ -339,6 +361,7 @@ function CreateTournament() {
 
 	return (
 		<div className="create-tournament">
+			{loading && <LoadingScreen />}
 			{openCollectionPopup && <CollectionPopup onClose={handleCollectionPopup} onSubmit={handleCollectionSubmit} />}
 			{openTeamNameChangePopup && (
 				<TeamNameChangePopup
@@ -393,8 +416,10 @@ function CreateTournament() {
 							<textarea id="description" onChange={handleChange} value={tournamentData.description} rows="4"></textarea>
 						</div>
 						<div className="form-group">
-							<label htmlFor="tournamentCollection">Collection </label>
-							<span id="collectionTooltip">?</span>
+							<label htmlFor="tournamentCollection">
+								Collection <Tooltip message={tooltips.collections} />
+							</label>
+
 							<select id="tournamentCollection" onChange={handleChange} value={tournamentData.tournamentCollection}>
 								{collectionOptions.map((option) => {
 									return (

@@ -1,0 +1,33 @@
+/* Tooltip container stays inline with label text */
+.tooltip-container {
+	position: relative;
+	display: inline-block;
+	vertical-align: middle;
+	width: 24px;
+	height: 24px;
+}
+
+/* The icon itself */
+.tooltip-icon {
+	width: 24px;
+	height: 24px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+/* Tooltip box shown on hover */
+.tooltip-box {
+	position: fixed; /* fixed positioning to follow mouse */
+	background-color: #333;
+	color: #fff;
+	padding: 0.5em 0.75em;
+	border-radius: 4px;
+	font-size: 0.9em;
+	white-space: normal;
+	max-width: 220px;
+	z-index: 1000000;
+	pointer-events: none;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}

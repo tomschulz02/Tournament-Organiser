@@ -211,3 +211,18 @@ export async function leaveTournament(tournamentId) {
 		throw error;
 	}
 }
+
+export async function updateScore(fixtureId, scores, status) {
+	try {
+		const response = await fetch(`http://localhose:5000/api/tournament/${fixtureId}/results`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include",
+			body: JSON.stringify({ scores, status }),
+		});
+	} catch (error) {
+		throw error;
+	}
+}

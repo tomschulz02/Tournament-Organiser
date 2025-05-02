@@ -47,7 +47,7 @@ export function formatCombiTournamentForStorage(data) {
 			type: data["type"],
 		},
 		created_by: data["user"],
-		collection: data["tournamentCollection"] || null,
+		collection: data["tournamentCollection"] != "" ? data["tournamentCollection"] : null,
 		fixtures: [],
 	};
 
@@ -272,8 +272,10 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 }
 
 export function formatTournamentView(tournament, tournamentHash, following) {
+	// console.log(tournament);
 	const remainingFixtures = separateFixturesAndResults(tournament.fixtures).remainingFixtures;
 	const results = separateFixturesAndResults(tournament.fixtures).results;
+	// console.log("Test");
 	var pages = {
 		details: {
 			id: tournamentHash.encode(tournament.details.id),
@@ -295,6 +297,7 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 		standings: {},
 		teams: [tournament.details.state.groups],
 	};
+	// console.log("SUCCESS");
 	return pages;
 }
 

@@ -408,7 +408,7 @@
 	display: flex;
 	gap: 20px;
 	padding: 20px;
-	overflow-y: none;
+	overflow-y: hidden;
 	overflow-x: scroll;
 	text-align: center;
 	color: black;
@@ -437,47 +437,73 @@
 }
 
 .fixture-card {
-	background: var(--secondary-color);
+	background: white;
 	min-width: 200px;
-	height: 150px;
-	padding: 10px;
+	height: auto;
+	padding: 15px;
 	border-radius: 8px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 8px var(--secondary-color);
 	display: flex;
 	flex-direction: column;
-	justify-content: space-around;
+	gap: 12px;
+}
+
+.fixture-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+}
+
+.fixture-match-number {
+	font-weight: 600;
+	font-size: 0.9em;
+	color: #666;
+}
+
+.fixture-match-details {
+	color: #666;
+	font-size: 0.9em;
+}
+
+.details-fixture-teams {
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+	gap: 10px;
+	margin: 10px 0;
+}
+
+.details-fixture-team {
+	font-weight: 500;
+	color: #333;
 }
 
 .result-card {
-	background: #14d33d;
+	background: white;
 	min-width: 250px;
-	max-width: 250px;
-	height: 150px;
-	padding: 10px;
+	height: auto;
+	padding: 15px;
 	border-radius: 8px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 8px #04aa6d;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
 }
 
 .result-card table {
 	width: 100%;
-	background: rgba(255, 255, 255, 0.5);
-	margin: 10px 0;
-	border: none;
-	table-layout: fixed;
-	text-align: left;
+	border-collapse: collapse;
 }
 
 .result-card tr {
-	height: 25px;
-	border: none;
+	display: flex;
+	justify-content: space-between;
+	padding: 5px 0;
 }
 
-.result-card td {
-	width: 24px;
-	padding: 2px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+.result-card td:first-child {
+	font-weight: 500;
 }
 
 .follow-tournament-btn {

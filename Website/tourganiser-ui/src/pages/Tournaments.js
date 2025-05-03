@@ -48,6 +48,20 @@ function BrowseTournaments() {
 	const [isLoading, setIsLoading] = useState(true);
 	const { showMessage } = useMessage();
 	const hasFetchedTournaments = useRef(false);
+	const [filter, setFilter] = useState({
+		format: "all",
+		search: "",
+	});
+
+	const filteredTournaments = tournaments.filter((tournament) => {
+		if (filter.format !== "all" && tournament.type !== filter.format) {
+			return false;
+		}
+		if (filter.search && !tournament.name.toLowerCase().includes(filter.search.toLowerCase())) {
+			return false;
+		}
+		return true;
+	});
 
 	useEffect(() => {
 		setIsLoading(true);
@@ -73,22 +87,35 @@ function BrowseTournaments() {
 		}
 	}, []);
 
+	const handlefilterChange = (e) => {
+		if (e.target.id === "searchTournaments") {
+			setFilter((prev) => ({ ...prev, search: e.target.value }));
+		} else if (e.target.id === "filterFormat") {
+			setFilter((prev) => ({ ...prev, format: e.target.value }));
+		}
+	};
+
 	return (
 		<div className="browse-tournaments">
 			{isLoading && <LoadingScreen />}
 			<div className="search-section">
-				<input type="text" id="searchTournaments" placeholder="Search tournaments..." />
-				<select id="filterFormat">
-					<option value="all">All Formats</option>
-					<option value="single">Single Elimination</option>
-					<option value="double">Double Elimination</option>
-					<option value="round">Round Robin</option>
-					<option value="combi">Round Robin + Knockout</option>
+				<input
+					type="text"
+					id="searchTournaments"
+					value={filter.search}
+					onChange={handlefilterChange}
+					placeholder="Search tournaments..."
+				/>
+				<select id="filterFormat" value={filter.format} onChange={handlefilterChange}>
+					<option value="all">All</option>
+					<option value="beach">Beach Tournaments</option>
+					<option value="indoor">Indoor Tournaments</option>
+					<option value="collection">Collections</option>
 				</select>
 			</div>
 			<div className="tournaments-grid" id="tournamentsGrid">
-				{tournaments.length > 0 ? (
-					tournaments.map((tournament) => {
+				{filteredTournaments.length > 0 ? (
+					filteredTournaments.map((tournament) => {
 						if (tournament.classification === "tournament") {
 							return (
 								<div className="tournament-card" key={tournament.id}>

@@ -406,6 +406,13 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 		score = formatScore(score);
 		setLoading(true);
 		// console.log("Formatted score:", JSON.stringify(score));
+		const confirmed = await confirm(
+			"Are you sure you want to end the match? You won't be able to update the score after this."
+		);
+		if (!confirmed) {
+			setLoading(false);
+			return;
+		}
 		const response = await updateScore(id, score, "COMPLETED", hashId);
 		console.log(response);
 		if (!response.success) {

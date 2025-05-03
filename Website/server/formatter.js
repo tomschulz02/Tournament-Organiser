@@ -265,6 +265,7 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 			id: "c_" + collectionHash.encode(col.id),
 			name: col.name,
 			num_tournaments: col.tournament_count,
+			type: "collection",
 			classification: "collection",
 		});
 	});

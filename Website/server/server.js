@@ -179,7 +179,6 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	var classification = null;
 	var responseObject = null;
 	if (cacheManager.get(id)) {
-		console.log("Cache hit for tournament ID: " + id);
 		return res.status(200).json(cacheManager.get(id));
 	}
 	if (id.startsWith("t_")) {
@@ -617,9 +616,7 @@ app.post("/api/tournament/:id/start", verifyToken, async (req, res) => {
 			return res.status(400).json({ error: "Invalid tournament ID" });
 		}
 		const tournamentId = decodedId[0];
-		console.log({ tournamentId, userId });
 		db.startTournament(tournamentId, userId, (result) => {
-			console.log(result);
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}

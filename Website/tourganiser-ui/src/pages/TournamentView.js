@@ -103,11 +103,11 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 					onClick={() => setCurrentTab("fixtures")}>
 					Fixtures
 				</button>
-				{/* <button
-					className={`view-tab-btn ${currentTab === "results" ? "active" : ""}`}
-					onClick={() => setCurrentTab("results")}>
-					Results
-				</button> */}
+				<button
+					className={`view-tab-btn ${currentTab === "standings" ? "active" : ""}`}
+					onClick={() => setCurrentTab("standings")}>
+					Standings
+				</button>
 				<button
 					className={`view-tab-btn ${currentTab === "teams" ? "active" : ""}`}
 					onClick={() => setCurrentTab("teams")}>
@@ -118,7 +118,9 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 				<TournamentDetails details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />
 			)}
 			{currentTab === "fixtures" && <TournamentFixtures fixtures={tournamentData.fixtures} creator={creator} />}
-			{/* {currentTab === "results" && <TournamentResults results={tournamentData.fixtures.results} />} */}
+			{currentTab === "standings" && (
+				<TournamentStandings standings={tournamentData.standings} format={tournamentData.details.format} />
+			)}
 			{currentTab === "teams" && <TournamentTeams teams={tournamentData.teams[0]} />}
 		</div>
 	);
@@ -133,15 +135,12 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	const handleTournamentStart = async () => {
 		setLoading(true);
 		// Logic to start the tournament
-		console.log("Opening confirmation dialog...");
 		const confirmed = await confirm("Are you sure you want to start the tournament? This action cannot be undone.");
-		console.log("Confirmed:", confirmed);
 		if (!confirmed) {
 			setLoading(false);
 			return;
 		} else {
 			const response = await startTournament(details.id);
-			console.log("Tournament start response:", response);
 			if (!response.success) {
 				showMessage("Error starting tournament", "error");
 				setLoading(false);
@@ -477,36 +476,71 @@ function TournamentFixtures({ fixtures, creator }) {
 	);
 }
 
-function TournamentResults({ results }) {
-	return (
-		<div className="tournament-results">
-			<h3>Results</h3>
-			{results.length > 0 ? (
-				results.map((result) => {
-					return (
-						<div className="result-card" key={result.match_no}>
-							<p>Match #{result.match_no}</p>
-							<table>
-								<tr>
-									<td style={{ width: "auto" }}>{result.team1}</td>
-									{result.score.map((score, index) => {
-										return <td key={index}>{score[0]}</td>;
-									})}
-								</tr>
-								<tr>
-									<td style={{ width: "auto" }}>{result.team2}</td>
-									{result.score.map((score, index) => {
-										return <td key={index}>{score[1]}</td>;
-									})}
-								</tr>
-							</table>
-						</div>
-					);
-				})
-			) : (
-				<div className="result-card">
-					<p>No results available</p>
+function TournamentStandings({ standings, format }) {
+	console.log("Standings:", standings.length);
+	if (!standings || standings.length === 0) {
+		return (
+			<div className="tournament-standings">
+				<h3>Standings</h3>
+				<div className="standings-placeholder">
+					<div className="placeholder-icon">📊</div>
+					<p>Standings will be available once matches have been played</p>
+					{format && <p className="format-info">Format: {format}</p>}
 				</div>
+			</div>
+		);
+	}
+
+	// Helper function to determine if standings are for pools
+	const isPoolFormat = Array.isArray(standings[0]);
+
+	const renderStandingsTable = (data, poolIndex = null) => (
+		<table className="standings-table">
+			<thead>
+				<tr>
+					<th>Position</th>
+					<th>Team</th>
+					<th>Played</th>
+					<th>Won</th>
+					<th>Lost</th>
+					<th>Points For</th>
+					<th>Points Against</th>
+					<th>Points Ratio</th>
+					<th>Points</th>
+				</tr>
+			</thead>
+			<tbody>
+				{data.map((team, index) => (
+					<tr key={`${poolIndex}-${index}`}>
+						<td>{index + 1}</td>
+						<td>{team.name}</td>
+						<td>{team.played}</td>
+						<td>{team.won}</td>
+						<td>{team.lost}</td>
+						<td>{team.pointsFor}</td>
+						<td>{team.pointsAgainst}</td>
+						<td>{team.pointsRatio.toFixed(3)}</td>
+						<td>{team.points}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	);
+
+	return (
+		<div className="tournament-standings">
+			<h3>Standings</h3>
+			{isPoolFormat ? (
+				<div className="pools-standings">
+					{standings.map((pool, index) => (
+						<div key={index} className="pool-standings">
+							<h4>Pool {index + 1}</h4>
+							{renderStandingsTable(pool, index)}
+						</div>
+					))}
+				</div>
+			) : (
+				renderStandingsTable(standings)
 			)}
 		</div>
 	);

@@ -295,7 +295,7 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 			remainingFixtures: remainingFixtures,
 			results: results,
 		},
-		standings: {},
+		standings: determineStandings(tournament.details.state.groups, results, tournament.details.format),
 		teams: [tournament.details.state.groups],
 	};
 	// console.log("SUCCESS");
@@ -335,18 +335,6 @@ function getDate(date) {
 	return start;
 }
 
-// structure for the result object for each match:
-/* 
-{
-    status: 'Not Started'/'Ongoing'/'Finished'
-    winner: team1/team2
-    score: [
-        [21,16],
-        [17,21],
-        [15,9]
-    ]
-}
-*/
 function separateFixturesAndResults(fixtures) {
 	var remainingFixtures = [];
 	var results = [];
@@ -363,4 +351,90 @@ function separateFixturesAndResults(fixtures) {
 	});
 
 	return { remainingFixtures, results };
+}
+
+function determineStandings(teams, results, format) {
+	console.log({ teams, results, format });
+	var standings = [];
+	if (format == "C") {
+		teams.forEach((group) => {
+			var groupStandings = [];
+			group.forEach((team) => {
+				groupStandings.push({
+					name: team,
+					pointsFor: 0,
+					pointsAgainst: 0,
+					setsWon: 0,
+					setsLost: 0,
+					won: 0,
+					lost: 0,
+					played: 0,
+					pointsRatio: 0,
+					setsRatio: 0,
+				});
+			});
+			standings.push(groupStandings);
+		});
+
+		// updates standings based on the results of the fixtures
+		results.forEach((result) => {
+			var res = determineResult(result);
+			if (res == null) return;
+			res.forEach((team) => {
+				standings.forEach((group) => {
+					group.forEach((groupTeam) => {
+						if (groupTeam.name == team.name) {
+							groupTeam.pointsFor += team.pointsFor;
+							groupTeam.pointsAgainst += team.pointsAgainst;
+							groupTeam.setsWon += team.setsWon;
+							groupTeam.setsLost += team.setsLost;
+							groupTeam.played++;
+							if (team.won) groupTeam.won++;
+							else groupTeam.lost++;
+						}
+					});
+				});
+			});
+		});
+
+		// updates calculated values for each team in the standings
+		standings.forEach((group) => {
+			group.forEach((team) => {
+				team.pointsRatio = team.pointsFor / team.pointsAgainst || 0;
+				team.setsRatio = team.setsWon / team.setsLost || 0;
+				team.played = team.won + team.lost;
+			});
+		});
+
+		// sorts the standings based on the points ratio and sets ratio
+		standings.forEach((group) => {
+			group.sort((a, b) => b.won - a.won || b.pointsRatio - a.pointsRatio || b.setsRatio - a.setsRatio);
+		});
+	}
+	// console.log("STANDINGS", standings);
+	return standings;
+}
+
+function determineResult(result) {
+	var resObject = [
+		{ name: result.team1, pointsFor: 0, pointsAgainst: 0, setsWon: 0, setsLost: 0, won: false },
+		{ name: result.team2, pointsFor: 0, pointsAgainst: 0, setsWon: 0, setsLost: 0, won: false },
+	];
+	result.result.map((set) => {
+		resObject[0].pointsFor += set[0];
+		resObject[0].pointsAgainst += set[1];
+		resObject[1].pointsFor += set[1];
+		resObject[1].pointsAgainst += set[0];
+		if (set[0] > set[1]) {
+			resObject[0].setsWon++;
+			resObject[1].setsLost++;
+		} else {
+			resObject[1].setsWon++;
+			resObject[0].setsLost++;
+		}
+	});
+	resObject[0].won = resObject[0].setsWon > resObject[1].setsWon;
+	resObject[1].won = resObject[1].setsWon > resObject[0].setsWon;
+	console.log("RESULT", resObject);
+	return resObject;
 }

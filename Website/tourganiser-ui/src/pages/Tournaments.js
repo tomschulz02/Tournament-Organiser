@@ -359,6 +359,13 @@ function CreateTournament({ goBack }) {
 
 	const handleTeamNameChangeSubmit = (e, rank, newName) => {
 		e.preventDefault();
+
+		for (var team of teamList) {
+			if (team === newName) {
+				return false;
+			}
+		}
+
 		setTeamList((prevTeamList) => {
 			const updatedList = [...prevTeamList];
 			updatedList[rank - 1] = newName;
@@ -368,6 +375,8 @@ function CreateTournament({ goBack }) {
 			});
 			return updatedList;
 		});
+
+		return true;
 	};
 
 	const handleCollectionPopup = (action) => {
@@ -713,6 +722,7 @@ function CollectionPopup({ onClose, onSubmit }) {
 }
 
 export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
+	const { showMessage } = useMessage();
 	const handleSubmit = (e) => {
 		e.preventDefault();
 		const newName = document.getElementById("newTeamName").value;
@@ -720,9 +730,16 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 			document.getElementById("newTeamName").classList.add("error");
 			return;
 		}
+		if (newName === "TBD") {
+			showMessage("Team name cannot be 'TBD'", "error");
+			return;
+		}
 		document.getElementById("newTeamName").classList.remove("error");
 
-		onSubmit(e, rank, newName);
+		if (!onSubmit(e, rank, newName)) {
+			showMessage("Team name already exists", "error");
+			return;
+		}
 		onClose();
 	};
 

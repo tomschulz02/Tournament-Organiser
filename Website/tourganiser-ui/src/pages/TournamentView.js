@@ -9,6 +9,7 @@ import { AuthContext } from "../AuthContext";
 // import { TeamNameChangePopup } from "./Tournaments";
 import LoadingScreen from "../components/LoadingScreen";
 import ScoreUpdateModal from "../components/ScoreUpdateModal";
+import Tooltip from "../components/Tooltip";
 
 export default function TournamentView() {
 	const { id } = useParams();
@@ -482,7 +483,8 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 									className="update-score-btn"
 									title="Update Score"
 									onClick={() => handleUpdateScore(fixture)}
-									disabled={fixture.status === "COMPLETED"}>
+									disabled={fixture.status === "COMPLETED"}
+									style={fixture.editable ? {} : { display: "none" }}>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										height="24px"
@@ -506,11 +508,15 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 }
 
 function TournamentStandings({ standings, format }) {
-	console.log("Standings:", standings.length);
+	const standingsMessage =
+		"Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, and points ration (in that order)";
+	// console.log("Standings:", standings.length);
 	if (!standings || standings.length === 0) {
 		return (
 			<div className="tournament-standings">
-				<h3>Standings</h3>
+				<h3>
+					Standings <Tooltip message={standingsMessage} />
+				</h3>
 				<div className="standings-placeholder">
 					<div className="placeholder-icon">📊</div>
 					<p>Standings will be available once matches have been played</p>
@@ -550,10 +556,10 @@ function TournamentStandings({ standings, format }) {
 						<td>{team.lost}</td>
 						<td>{team.setsWon}</td>
 						<td>{team.setsLost}</td>
-						<td>{team.setsRatio.toFixed(3)}</td>
+						<td>{team.setsRatio !== null ? team.setsRatio.toFixed(3) : "MAX"}</td>
 						<td>{team.pointsFor}</td>
 						<td>{team.pointsAgainst}</td>
-						<td>{team.pointsRatio.toFixed(3)}</td>
+						<td>{team.pointsRatio !== null ? team.pointsRatio.toFixed(3) : "MAX"}</td>
 					</tr>
 				))}
 			</tbody>
@@ -562,7 +568,9 @@ function TournamentStandings({ standings, format }) {
 
 	return (
 		<div className="tournament-standings">
-			<h3>Standings</h3>
+			<h3>
+				Standings <Tooltip message={standingsMessage} />
+			</h3>
 			{isPoolFormat ? (
 				<div className="pools-standings">
 					{standings.map((pool, index) => (

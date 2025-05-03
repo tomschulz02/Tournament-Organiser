@@ -350,10 +350,12 @@ function separateFixturesAndResults(fixtures) {
 	fixtures.forEach((fix) => {
 		var result = fix.result;
 		if (!result || fix.status != "COMPLETED") {
+			fix.editable = (fix.status == "WAITING" || fix.status == "ONGOING") && fix.team1 != "TBD" && fix.team2 != "TBD";
 			remainingFixtures.push(fix);
 		} else {
 			// console.log("RESULT", result);
 			// fix.result = JSON.parse(result);
+			fix.editable = false;
 			results.push(fix);
 		}
 	});

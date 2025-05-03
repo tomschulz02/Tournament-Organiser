@@ -41,6 +41,7 @@ export default function TournamentView() {
 					setTournamentData(response.message);
 				} else {
 					setCollection(true);
+					console.log("Collection data:", response);
 					setTournamentData(response.message);
 					setCollectionName(response.collection);
 				}
@@ -251,13 +252,13 @@ function TournamentDetails({ details, loggedIn, creator }) {
 									<table>
 										<tr>
 											<td style={{ width: "auto" }}>{result.team1}</td>
-											{result.score.map((score, index) => {
+											{result.result.map((score, index) => {
 												return <td key={index}>{score[0]}</td>;
 											})}
 										</tr>
 										<tr>
 											<td style={{ width: "auto" }}>{result.team2}</td>
-											{result.score.map((score, index) => {
+											{result.result.map((score, index) => {
 												return <td key={index}>{score[1]}</td>;
 											})}
 										</tr>
@@ -293,6 +294,7 @@ function TournamentFixtures({ fixtures, creator }) {
 	const [filter, setFilter] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
+	const hashId = useParams().id;
 
 	const filteredFixtures = fixtures.remainingFixtures.filter((fixture) => {
 		switch (filter) {
@@ -307,11 +309,18 @@ function TournamentFixtures({ fixtures, creator }) {
 		}
 	});
 
-	const formatResults = (score) => {
+	const formatResults = (score, team) => {
 		const scores = score.map((s, index) => {
-			return <div key={index}>{s}</div>;
+			return <div key={index}>{s[team]}</div>;
 		});
 		return scores;
+	};
+
+	const formatScore = (score) => {
+		const updatedScores = score.map((s) => {
+			return [s.team1, s.team2];
+		});
+		return updatedScores;
 	};
 
 	const handleUpdateScore = (fixture) => {
@@ -324,10 +333,20 @@ function TournamentFixtures({ fixtures, creator }) {
 
 	const handleSaveScore = async (score) => {
 		const id = selectedFixture.id;
-		const response = await updateScore(id, score, "ONGOING");
+		score = formatScore(score);
+		// console.log("Formatted score:", JSON.stringify(score));
+		const response = await updateScore(id, score, "ONGOING", hashId);
+		console.log(response);
 		if (!response.success) {
 			showMessage("Error updating score. Please try again later", "error");
+			handleCloseScoreModal();
 			return;
+		} else {
+			selectedFixture.status = "ONGOING";
+			selectedFixture.result = score;
+
+			handleCloseScoreModal();
+			showMessage("Score updated successfully", "success");
 		}
 	};
 
@@ -376,14 +395,15 @@ function TournamentFixtures({ fixtures, creator }) {
 							<div className="fixture-team">{fixture.team2}</div>
 						</div>
 						<div className="fixture-result">
-							<div className="fixture-score">{fixture.score ? formatResults(fixture.score) : formatResults([0])}</div>
-							<div className="fixture-score">{fixture.score ? formatResults(fixture.score) : formatResults([0])}</div>
+							<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 0) : 0}</div>
+							<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 1) : 0}</div>
 						</div>
 						<div className="fixture-footer">
 							<div className={`fixture-status ${fixture.status.toLowerCase()}`}>{fixture.status}</div>
 							{creator && (
 								<button
 									className="update-score-btn"
+									title="Update Score"
 									onClick={() => handleUpdateScore(fixture)}
 									disabled={fixture.status === "COMPLETED"}>
 									<svg
@@ -391,8 +411,8 @@ function TournamentFixtures({ fixtures, creator }) {
 										height="24px"
 										viewBox="0 -960 960 960"
 										width="24px"
-										fill="#2962ff">
-										<path d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z" />
+										fill="#000000">
+										<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
 									</svg>
 								</button>
 							)}

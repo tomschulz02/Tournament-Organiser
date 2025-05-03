@@ -212,16 +212,21 @@ export async function leaveTournament(tournamentId) {
 	}
 }
 
-export async function updateScore(fixtureId, scores, status) {
+export async function updateScore(fixtureId, scores, status, hashId) {
 	try {
-		const response = await fetch(`http://localhose:5000/api/tournament/${fixtureId}/results`, {
+		const response = await fetch(`http://localhost:5000/api/tournament/${fixtureId}/results`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 			},
 			credentials: "include",
-			body: JSON.stringify({ scores, status }),
+			body: JSON.stringify({ scores, status, hashId }),
 		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to update score");
+		}
+		return data;
 	} catch (error) {
 		throw error;
 	}

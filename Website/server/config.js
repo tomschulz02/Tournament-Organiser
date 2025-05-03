@@ -220,6 +220,11 @@ class DBConnection {
 		this.query(sql, [userId, tournamentId], callback);
 	}
 
+	updateFixture(fixtureId, score, status, callback) {
+		const sql = "UPDATE fixtures SET result = $1, status = $2 WHERE id = $3";
+		this.query(sql, [score, status, fixtureId], callback);
+	}
+
 	test() {
 		console.log("test");
 	}

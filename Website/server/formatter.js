@@ -352,9 +352,11 @@ function separateFixturesAndResults(fixtures) {
 
 	fixtures.forEach((fix) => {
 		var result = fix.result;
-		if (!result || result.status != "Finished") {
+		if (!result || fix.status != "COMPLETED") {
 			remainingFixtures.push(fix);
 		} else {
+			console.log("RESULT", result);
+			// fix.result = JSON.parse(result);
 			results.push(fix);
 		}
 	});

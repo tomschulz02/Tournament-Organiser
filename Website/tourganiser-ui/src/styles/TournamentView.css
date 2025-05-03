@@ -249,7 +249,7 @@
 	height: 40px;
 	background-color: white;
 	color: #2962ff;
-	border: 1px solid #2962ff;
+	border: none;
 	border-radius: 4px;
 	cursor: pointer;
 	font-size: 0.9em;

@@ -1,8 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "../styles/ScoreUpdateModal.css";
 
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
+
+	useEffect(() => {
+		if (fixture.result) {
+			const result = fixture.result.map((set) => ({
+				team1: set[0] || 0,
+				team2: set[1] || 0,
+			}));
+			setSets(result);
+		}
+	}, []);
 
 	const handleAddSet = () => {
 		setSets([...sets, { team1: 0, team2: 0 }]);

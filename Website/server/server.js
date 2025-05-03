@@ -34,7 +34,7 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import logger from "./logger.cjs";
 import Hashids from "hashids";
-import { hash } from "crypto";
+import CacheManager from "./utils/CacheManager.js";
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
@@ -54,6 +54,8 @@ const corsOptions = {
 
 const tournamentHash = new Hashids("finest salt in all the land", 10);
 const collectionHash = new Hashids("a mountain of salt", 10);
+
+const cacheManager = new CacheManager();
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
@@ -146,6 +148,10 @@ app.get("/api/tournaments", (req, res) => {
 	try {
 		var tournaments = [],
 			collections = [];
+		if (cacheManager.get("all")) {
+			// console.log("Cache hit for all tournaments");
+			return res.status(200).json({ message: cacheManager.get("all") });
+		}
 		db.getAllTournaments((result) => {
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
@@ -157,9 +163,9 @@ app.get("/api/tournaments", (req, res) => {
 					return res.status(500).json({ error: cRes.message });
 				}
 				collections = cRes.message;
-				res
-					.status(200)
-					.json({ message: formatTournamentsForBrowse(tournaments, collections, tournamentHash, collectionHash) });
+				const all = formatTournamentsForBrowse(tournaments, collections, tournamentHash, collectionHash);
+				cacheManager.set("all", all);
+				res.status(200).json({ message: all });
 			});
 		});
 	} catch (error) {
@@ -171,6 +177,11 @@ app.get("/api/tournaments", (req, res) => {
 app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	const { id } = req.params;
 	var classification = null;
+	var responseObject = null;
+	if (cacheManager.get(id)) {
+		console.log("Cache hit for tournament ID: " + id);
+		return res.status(200).json(cacheManager.get(id));
+	}
 	if (id.startsWith("t_")) {
 		classification = "tournament";
 	} else if (id.startsWith("c_")) {
@@ -210,17 +221,21 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							}
 						});
 					}
-					return res.status(200).json({
+					responseObject = {
 						message: formatTournamentView(result.message, tournamentHash, following),
 						loggedIn: loggedIn,
 						creator: creator,
-					});
+					};
+					cacheManager.set(id, responseObject);
+					return res.status(200).json(responseObject);
 				}
-				res.status(200).json({
+				responseObject = {
 					message: formatTournamentView(result.message, tournamentHash, following),
 					loggedIn: loggedIn,
 					creator: creator,
-				});
+				};
+				cacheManager.set(id, responseObject);
+				return res.status(200).json(responseObject);
 			});
 		} else if (classification === "collection") {
 			const decodedId = collectionHash.decode(hashId);
@@ -254,9 +269,14 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							return formatTournamentView(tournament, tournamentHash, following);
 						});
 						// console.log(tournaments);
-						return res
-							.status(200)
-							.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
+						responseObject = {
+							message: tournaments,
+							loggedIn: loggedIn,
+							creator: creator,
+							collection: result.collection,
+						};
+						cacheManager.set(id, responseObject);
+						return res.status(200).json(responseObject);
 					});
 				} else {
 					// console.log(result);
@@ -265,9 +285,14 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						return formatTournamentView(tournament, tournamentHash, following);
 					});
 					// console.log(tournaments);
-					return res
-						.status(200)
-						.json({ message: tournaments, loggedIn: loggedIn, creator: creator, collection: result.collection });
+					responseObject = {
+						message: tournaments,
+						loggedIn: loggedIn,
+						creator: creator,
+						collection: result.collection,
+					};
+					cacheManager.set(id, responseObject);
+					return res.status(200).json(responseObject);
 				}
 
 				// console.log(tournaments);
@@ -323,10 +348,10 @@ app.get("/api/tournament/:id/results", (req, res) => {
 });
 
 // Get friends
-app.get("/api/user/:id/friends", verifyToken, (req, res) => {
+app.get("/api/user/friends", verifyToken, (req, res) => {
 	// Get friends
 	try {
-		const userId = req.params.id;
+		const userId = req.user.id;
 		console.log("Getting friends for user ID: " + userId);
 
 		db.getFriends(userId, (result) => {
@@ -342,10 +367,10 @@ app.get("/api/user/:id/friends", verifyToken, (req, res) => {
 });
 
 // get saved tournaments
-app.get("/api/user/:id/tournaments", verifyToken, (req, res) => {
+app.get("/api/user/tournaments", verifyToken, (req, res) => {
 	// Get saved tournaments
 	try {
-		const userId = req.params.id;
+		const userId = req.user.id;
 		console.log("Getting saved tournaments for user ID: " + userId);
 
 		db.getSavedTournaments(userId, (result) => {
@@ -479,21 +504,30 @@ app.post("/api/signout", verifyToken, async (req, res) => {
 app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 	// Update tournament results
 	try {
-		const tournamentId = req.params.id;
-		console.log("Updating tournament results for tournament ID: " + tournamentId);
-		res.status(200).json({ message: "Tournament results updated successfully" });
+		const fixtureId = req.params.id;
+		const { scores, status, hashId } = req.body;
+		console.log({ scores, status, hashId });
+		db.updateFixture(fixtureId, JSON.stringify(scores), status, (result) => {
+			console.log(result);
+			if (!result.success) {
+				return res.status(500).json({ error: result.message });
+			}
+			// console.log(result);
+			cacheManager.invalidate(hashId);
+			res.status(200).json({ success: true, message: "Tournament results updated successfully" });
+		});
 	} catch (error) {
 		res.status(500).json({ error: "Failed to update tournament results" });
 	}
 });
 
 // Add friend
-app.post("/api/user/:id/friends", verifyToken, (req, res) => {
+app.post("/api/user/friends", verifyToken, (req, res) => {
 	// Add friend
 	try {
-		const userId = req.params.id;
+		const userId = req.user.id;
 		console.log("Adding friend for user ID: " + userId);
-		res.status(200).json({ message: "Friend added successfully" });
+		res.status(200).json({ success: true, message: "Friend added successfully" });
 	} catch (error) {
 		res.status(500).json({ error: "Failed to add friend" });
 	}
@@ -506,11 +540,12 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 		data["user"] = req.user.id;
 		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
 		details["collection"] = collectionHash.decode(details.collection)[0];
-		console.dir(details, { depth: null });
+		// console.dir(details, { depth: null });
 		// console.dir(fixtures, { depth: null });
 		// Add logic to save tournament to database
 		db.createTournament(details, fixtures, (result) => {
 			// console.log(result);
+			cacheManager.invalidate("all");
 			res.status(201).json(result);
 		});
 	} catch (error) {

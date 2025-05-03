@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { fetchTournamentData, joinTournament, leaveTournament, updateScore } from "../requests";
+import { fetchTournamentData, joinTournament, leaveTournament, updateScore, startTournament } from "../requests";
 import "../styles/Tournaments.css";
 import "../styles/TournamentView.css";
 import { useMessage } from "../MessageContext";
@@ -103,11 +103,11 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 					onClick={() => setCurrentTab("fixtures")}>
 					Fixtures
 				</button>
-				<button
+				{/* <button
 					className={`view-tab-btn ${currentTab === "results" ? "active" : ""}`}
 					onClick={() => setCurrentTab("results")}>
 					Results
-				</button>
+				</button> */}
 				<button
 					className={`view-tab-btn ${currentTab === "teams" ? "active" : ""}`}
 					onClick={() => setCurrentTab("teams")}>
@@ -118,31 +118,39 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 				<TournamentDetails details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />
 			)}
 			{currentTab === "fixtures" && <TournamentFixtures fixtures={tournamentData.fixtures} creator={creator} />}
-			{currentTab === "results" && <TournamentResults results={tournamentData.fixtures.results} />}
+			{/* {currentTab === "results" && <TournamentResults results={tournamentData.fixtures.results} />} */}
 			{currentTab === "teams" && <TournamentTeams teams={tournamentData.teams[0]} />}
 		</div>
 	);
 }
 
 function TournamentDetails({ details, loggedIn, creator }) {
-	const [status, setStatus] = useState(details.status === "Not Started" ? "Start Tournament" : "Tournament Started");
 	const [loading, setLoading] = useState(false);
 	const [following, setFollowing] = useState(creator);
 	const { showMessage } = useMessage();
 	const confirm = useConfirm();
 
-	const startTournament = async () => {
+	const handleTournamentStart = async () => {
 		setLoading(true);
 		// Logic to start the tournament
+		console.log("Opening confirmation dialog...");
 		const confirmed = await confirm("Are you sure you want to start the tournament? This action cannot be undone.");
+		console.log("Confirmed:", confirmed);
 		if (!confirmed) {
 			setLoading(false);
 			return;
+		} else {
+			const response = await startTournament(details.id);
+			console.log("Tournament start response:", response);
+			if (!response.success) {
+				showMessage("Error starting tournament", "error");
+				setLoading(false);
+				return;
+			}
+			details.status = "Ongoing";
+			setLoading(false);
+			showMessage("Tournament started successfully", "success");
 		}
-		console.log("Tournament started");
-		setStatus("Tournament Started");
-		setLoading(false);
-		showMessage("Tournament started successfully", "success");
 	};
 
 	const handleFollow = async () => {
@@ -185,35 +193,46 @@ function TournamentDetails({ details, loggedIn, creator }) {
 		<>
 			{loading && <LoadingScreen />}
 			<div className="tournament-info">
-				<div className="tournament-info-heading">
-					<h2>{details.name}</h2>
-					<p>{details.description}</p>
-					<button onClick={handleFollow} className="follow-tournament-btn" disabled={!loggedIn || creator}>
-						{following ? "Following" : "Follow"}
-					</button>
+				<div className="tournament-info-banner" style={{ "--banner-image": `url(/assets/bg-${details.type}.webp)` }}>
+					<div className="tournament-info-heading">
+						<div className="tournament-title-row">
+							<h2>{details.name}</h2>
+							<div className={`tournament-status-badge ${details.status.toLowerCase().replace(" ", "-")}`}>
+								{details.status}
+							</div>
+						</div>
+						<p>{details.description}</p>
+						{!creator && (
+							<button onClick={handleFollow} className="follow-tournament-btn" disabled={!loggedIn}>
+								{following ? "Following" : "Follow"}
+							</button>
+						)}
+					</div>
+
+					<div className="tournament-info-format">
+						<p>
+							<strong>Format:</strong>
+							{details.format}
+						</p>
+						<p>
+							<strong>Location:</strong>
+							{details.location}
+						</p>
+						<p>
+							<strong>Teams:</strong>
+							{details.teams}
+						</p>
+					</div>
+					{creator && (
+						<button
+							className="start-tournament-btn"
+							disabled={details.status !== "Not Started"}
+							style={details.status === "Not Started" ? {} : { display: "none" }}
+							onClick={handleTournamentStart}>
+							Start Tournament
+						</button>
+					)}
 				</div>
-				<div className="tournament-info-format">
-					<p>
-						<strong>Format:</strong>
-						{" " + details.format}
-					</p>
-					<p>
-						<strong>Status:</strong>
-						{" " + details.status}
-					</p>
-					<p>
-						<strong>Teams:</strong>
-						{" " + details.teams}
-					</p>
-				</div>
-				{creator && (
-					<button
-						className="start-tournament-btn"
-						disabled={details.status !== "Not Started"}
-						onClick={startTournament}>
-						{status}
-					</button>
-				)}
 			</div>
 			<div className="tournament-info-fixtures">
 				<h3>Upcoming Fixtures</h3>
@@ -247,21 +266,25 @@ function TournamentDetails({ details, loggedIn, creator }) {
 						details.results.map((result) => {
 							return (
 								<div className="result-card" key={result.match_no}>
-									<div className="fixture-match-number">Match #{result.match_no}</div>
-									<div className="fixture-match-details">{result.round}</div>
+									<div className="fixture-header">
+										<div className="fixture-match-number">Match #{result.match_no}</div>
+										<div className="fixture-match-details">{result.round}</div>
+									</div>
 									<table>
-										<tr>
-											<td style={{ width: "auto" }}>{result.team1}</td>
-											{result.result.map((score, index) => {
-												return <td key={index}>{score[0]}</td>;
-											})}
-										</tr>
-										<tr>
-											<td style={{ width: "auto" }}>{result.team2}</td>
-											{result.result.map((score, index) => {
-												return <td key={index}>{score[1]}</td>;
-											})}
-										</tr>
+										<tbody>
+											<tr>
+												<td>{result.team1}</td>
+												{result.result.map((score, index) => {
+													return <td key={index}>{score[0]}</td>;
+												})}
+											</tr>
+											<tr>
+												<td>{result.team2}</td>
+												{result.result.map((score, index) => {
+													return <td key={index}>{score[1]}</td>;
+												})}
+											</tr>
+										</tbody>
 									</table>
 								</div>
 							);
@@ -295,8 +318,14 @@ function TournamentFixtures({ fixtures, creator }) {
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
 	const hashId = useParams().id;
+	const confirm = useConfirm();
+	const [loading, setLoading] = useState(false);
 
-	const filteredFixtures = fixtures.remainingFixtures.filter((fixture) => {
+	// console.log("Fixtures:", fixtures);
+
+	const allFixtures = [...fixtures.remainingFixtures, ...fixtures.results];
+
+	const filteredFixtures = allFixtures.filter((fixture) => {
 		switch (filter) {
 			case "upcoming":
 				return fixture.status === "WAITING";
@@ -334,28 +363,48 @@ function TournamentFixtures({ fixtures, creator }) {
 	const handleSaveScore = async (score) => {
 		const id = selectedFixture.id;
 		score = formatScore(score);
+		setLoading(true);
 		// console.log("Formatted score:", JSON.stringify(score));
 		const response = await updateScore(id, score, "ONGOING", hashId);
 		console.log(response);
 		if (!response.success) {
 			showMessage("Error updating score. Please try again later", "error");
 			handleCloseScoreModal();
+			setLoading(false);
 			return;
 		} else {
 			selectedFixture.status = "ONGOING";
 			selectedFixture.result = score;
-
+			setLoading(false);
 			handleCloseScoreModal();
 			showMessage("Score updated successfully", "success");
 		}
 	};
 
-	const handleEndMatch = (result) => {
-		console.log(fixtures);
+	const handleEndMatch = async (score) => {
+		const id = selectedFixture.id;
+		score = formatScore(score);
+		setLoading(true);
+		// console.log("Formatted score:", JSON.stringify(score));
+		const response = await updateScore(id, score, "COMPLETED", hashId);
+		console.log(response);
+		if (!response.success) {
+			showMessage("Error updating score. Please try again later", "error");
+			handleCloseScoreModal();
+			setLoading(false);
+			return;
+		} else {
+			selectedFixture.status = "COMPLETED";
+			selectedFixture.result = score;
+			setLoading(false);
+			handleCloseScoreModal();
+			showMessage("Score updated successfully", "success");
+		}
 	};
 
 	return (
 		<div className="tournament-fixtures">
+			{loading && <LoadingScreen />}
 			{selectedFixture && (
 				<ScoreUpdateModal
 					fixture={selectedFixture}

@@ -225,6 +225,11 @@ class DBConnection {
 		this.query(sql, [score, status, fixtureId], callback);
 	}
 
+	startTournament(tournamentId, userID, callback) {
+		const sql = "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1 AND created_by = $2";
+		this.query(sql, [tournamentId, userID], callback);
+	}
+
 	test() {
 		console.log("test");
 	}

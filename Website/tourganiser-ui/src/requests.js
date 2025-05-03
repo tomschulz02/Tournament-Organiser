@@ -231,3 +231,23 @@ export async function updateScore(fixtureId, scores, status, hashId) {
 		throw error;
 	}
 }
+
+export async function startTournament(tournamentId) {
+	console.log("Starting tournament with ID:", tournamentId);
+	try {
+		const response = await fetch(`http://localhost:5000/api/tournament/${tournamentId}/start`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include",
+		});
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data.error || "Failed to start tournament");
+		}
+		return data;
+	} catch (error) {
+		throw error;
+	}
+}

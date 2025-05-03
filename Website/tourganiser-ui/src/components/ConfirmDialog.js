@@ -19,7 +19,9 @@ export const ConfirmProvider = ({ children }) => {
 
 	const handleResult = (result) => {
 		setOptions(null);
-		if (resolver.current) resolver.current(result);
+		setTimeout(() => {
+			if (resolver.current) resolver.current(result);
+		}, 0);
 	};
 
 	return (

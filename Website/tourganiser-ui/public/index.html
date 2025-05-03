@@ -21,6 +21,8 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
+		<link rel="preload" href="%PUBLIC_URL%/assets/bg-beach.jpg" as="image" />
+		<link rel="preload" href="%PUBLIC_URL%/assets/bg-indoor.jpg" as="image" />
 		<title>Tourganiser</title>
 	</head>
 	<body>
@@ -37,4 +39,21 @@
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
 	</body>
+	<style>
+		.tournament-info-banner::before {
+			content: "";
+			position: absolute;
+			top: 0;
+			left: 50%;
+			right: 0;
+			bottom: 0;
+			background-image: var(--banner-image);
+			background-size: cover;
+			background-position: center;
+			opacity: 0.7;
+			transform: scale(1.1);
+			transition: transform 0.3s ease-out;
+			z-index: 0;
+		}
+	</style>
 </html>

@@ -289,6 +289,7 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 			results: results.slice(0, 10),
 			following: following,
 			location: tournament.details.location,
+			type: tournament.details.state.type,
 		},
 		fixtures: {
 			remainingFixtures: remainingFixtures,
@@ -355,7 +356,7 @@ function separateFixturesAndResults(fixtures) {
 		if (!result || fix.status != "COMPLETED") {
 			remainingFixtures.push(fix);
 		} else {
-			console.log("RESULT", result);
+			// console.log("RESULT", result);
 			// fix.result = JSON.parse(result);
 			results.push(fix);
 		}

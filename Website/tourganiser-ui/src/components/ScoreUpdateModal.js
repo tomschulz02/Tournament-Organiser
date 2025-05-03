@@ -69,7 +69,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 							<button type="button" className="cancel-btn" onClick={onClose}>
 								Cancel
 							</button>
-							<button type="submit" className="save-btn" onClick={() => onSave(sets)}>
+							<button type="submit" className="save-btn">
 								Save
 							</button>
 							<button type="button" className="end-match-btn" onClick={() => onEndMatch(sets)}>

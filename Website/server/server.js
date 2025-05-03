@@ -608,6 +608,29 @@ app.post("/api/tournaments/:id/leave", verifyToken, async (req, res) => {
 	}
 });
 
+app.post("/api/tournament/:id/start", verifyToken, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user.id;
+		const decodedId = tournamentHash.decode(id);
+		if (decodedId.length === 0) {
+			return res.status(400).json({ error: "Invalid tournament ID" });
+		}
+		const tournamentId = decodedId[0];
+		console.log({ tournamentId, userId });
+		db.startTournament(tournamentId, userId, (result) => {
+			console.log(result);
+			if (!result.success) {
+				return res.status(400).json({ error: result.message });
+			}
+			cacheManager.invalidate("t_" + id);
+			res.status(200).json({ success: true, message: "Tournament started successfully" });
+		});
+	} catch (error) {
+		res.status(500).json({ error: "Failed to start tournament" });
+	}
+});
+
 app.get("*", (req, res) => {
 	// console.log(`Catch-all triggered for: ${req.originalUrl}`);
 	res.sendFile(path.join(__dirname, "../index.html"));

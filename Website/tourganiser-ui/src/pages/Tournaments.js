@@ -91,10 +91,8 @@ function BrowseTournaments() {
 					tournaments.map((tournament) => {
 						if (tournament.classification === "tournament") {
 							return (
-								<div
-									className="tournament-card"
-									key={tournament.id}
-									style={{ "--card-bg": `url(/assets/bg-${tournament.type}.jpg)` }}>
+								<div className="tournament-card" key={tournament.id}>
+									<div className={`type-indicator ${tournament.type}`}>{tournament.type}</div>
 									<h3>{tournament.name}</h3>
 									<p className="tournament-date">Starting: {tournament.date}</p>
 									<p className="tournament-format">Format: {tournament.format}</p>
@@ -107,6 +105,7 @@ function BrowseTournaments() {
 						} else if (tournament.classification === "collection") {
 							return (
 								<div className="tournament-card" key={tournament.id}>
+									<div className="type-indicator collection">Collection</div>
 									<h3>{tournament.name}</h3>
 									<p className="tournament-date">Tournaments: {tournament.num_tournaments}</p>
 									<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>

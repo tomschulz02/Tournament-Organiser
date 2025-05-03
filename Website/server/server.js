@@ -505,9 +505,9 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 	try {
 		const fixtureId = req.params.id;
 		const { scores, status, hashId } = req.body;
-		console.log({ scores, status, hashId });
+		// console.log({ scores, status, hashId });
 		db.updateFixture(fixtureId, JSON.stringify(scores), status, (result) => {
-			console.log(result);
+			// console.log(result);
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
 			}

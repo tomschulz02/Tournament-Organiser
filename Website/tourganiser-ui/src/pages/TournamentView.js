@@ -88,9 +88,23 @@ export default function TournamentView() {
 function TournamentManager({ tournamentData, creator, backButton }) {
 	const [currentTab, setCurrentTab] = useState("info");
 	const { isLoggedIn } = useContext(AuthContext);
+	const [showUpdateWarning, setShowUpdateWarning] = useState(false);
 
 	return (
 		<div className="tournament-view">
+			{showUpdateWarning && (
+				<div className="update-warning-banner">
+					<div className="warning-content">
+						<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#000000">
+							<path d="M480-280q17 0 28.5-11.5T520-320q0-17-11.5-28.5T480-360q-17 0-28.5 11.5T440-320q0 17 11.5 28.5T480-280Zm-40-160h80v-240h-80v240Zm40 360q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+						</svg>
+						<span>Some data may be outdated. Refresh the page to see the latest information.</span>
+						<button className="close-warning" onClick={() => setShowUpdateWarning(false)}>
+							×
+						</button>
+					</div>
+				</div>
+			)}
 			{backButton}
 			<div className="tab-navigation">
 				<button
@@ -117,7 +131,13 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 			{currentTab === "info" && (
 				<TournamentDetails details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />
 			)}
-			{currentTab === "fixtures" && <TournamentFixtures fixtures={tournamentData.fixtures} creator={creator} />}
+			{currentTab === "fixtures" && (
+				<TournamentFixtures
+					fixtures={tournamentData.fixtures}
+					creator={creator}
+					onUpdate={() => setShowUpdateWarning(true)}
+				/>
+			)}
 			{currentTab === "standings" && (
 				<TournamentStandings standings={tournamentData.standings} format={tournamentData.details.format} />
 			)}
@@ -312,7 +332,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	);
 }
 
-function TournamentFixtures({ fixtures, creator }) {
+function TournamentFixtures({ fixtures, creator, onUpdate }) {
 	const [filter, setFilter] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
@@ -377,6 +397,7 @@ function TournamentFixtures({ fixtures, creator }) {
 			setLoading(false);
 			handleCloseScoreModal();
 			showMessage("Score updated successfully", "success");
+			onUpdate();
 		}
 	};
 
@@ -398,6 +419,7 @@ function TournamentFixtures({ fixtures, creator }) {
 			setLoading(false);
 			handleCloseScoreModal();
 			showMessage("Score updated successfully", "success");
+			onUpdate();
 		}
 	};
 
@@ -503,10 +525,12 @@ function TournamentStandings({ standings, format }) {
 					<th>Played</th>
 					<th>Won</th>
 					<th>Lost</th>
+					<th>Sets Won</th>
+					<th>Sets Lost</th>
+					<th>Set Ratio</th>
 					<th>Points For</th>
 					<th>Points Against</th>
 					<th>Points Ratio</th>
-					<th>Points</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -517,10 +541,12 @@ function TournamentStandings({ standings, format }) {
 						<td>{team.played}</td>
 						<td>{team.won}</td>
 						<td>{team.lost}</td>
+						<td>{team.setsWon}</td>
+						<td>{team.setsLost}</td>
+						<td>{team.setsRatio.toFixed(3)}</td>
 						<td>{team.pointsFor}</td>
 						<td>{team.pointsAgainst}</td>
 						<td>{team.pointsRatio.toFixed(3)}</td>
-						<td>{team.points}</td>
 					</tr>
 				))}
 			</tbody>

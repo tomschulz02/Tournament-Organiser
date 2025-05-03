@@ -799,3 +799,52 @@
 	font-size: 0.9em;
 	color: #2962ff;
 }
+
+.update-warning-banner {
+	position: sticky;
+	top: 0;
+	z-index: 100;
+	width: 100%;
+	background-color: #fff3e0;
+	border-bottom: 1px solid #ffe0b2;
+	padding: 8px 16px;
+	animation: slideDown 0.3s ease-out;
+}
+
+.warning-content {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	max-width: 1200px;
+	margin: 0 auto;
+	color: #e65100;
+	font-size: 0.9em;
+}
+
+.warning-content svg {
+	flex-shrink: 0;
+	fill: #e65100;
+}
+
+.close-warning {
+	margin-left: auto;
+	background: none;
+	border: none;
+	color: #e65100;
+	font-size: 1.5em;
+	cursor: pointer;
+	padding: 0 8px;
+}
+
+.close-warning:hover {
+	color: #bf360c;
+}
+
+@keyframes slideDown {
+	from {
+		transform: translateY(-100%);
+	}
+	to {
+		transform: translateY(0);
+	}
+}

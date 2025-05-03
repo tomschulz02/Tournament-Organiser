@@ -298,6 +298,13 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 		standings: determineStandings(tournament.details.state.groups, results, tournament.details.format),
 		teams: [tournament.details.state.groups],
 	};
+	// update knockout round fixtures
+	if (
+		!tournament.details.state.knockoutStarted &&
+		areGroupMatchesComplete(tournament.fixtures) &&
+		tournament.details.knockout
+	) {
+	}
 	// console.log("SUCCESS");
 	return pages;
 }
@@ -354,7 +361,7 @@ function separateFixturesAndResults(fixtures) {
 }
 
 function determineStandings(teams, results, format) {
-	console.log({ teams, results, format });
+	// console.log({ teams, results, format });
 	var standings = [];
 	if (format == "C") {
 		teams.forEach((group) => {
@@ -408,7 +415,7 @@ function determineStandings(teams, results, format) {
 
 		// sorts the standings based on the points ratio and sets ratio
 		standings.forEach((group) => {
-			group.sort((a, b) => b.won - a.won || b.pointsRatio - a.pointsRatio || b.setsRatio - a.setsRatio);
+			group.sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
 		});
 	}
 	// console.log("STANDINGS", standings);
@@ -435,6 +442,69 @@ function determineResult(result) {
 	});
 	resObject[0].won = resObject[0].setsWon > resObject[1].setsWon;
 	resObject[1].won = resObject[1].setsWon > resObject[0].setsWon;
-	console.log("RESULT", resObject);
+	// console.log("RESULT", resObject);
 	return resObject;
+}
+
+function areGroupMatchesComplete(fixtures) {
+	var complete = true;
+	fixtures.forEach((fix) => {
+		if (fix.status != "COMPLETED" && fix.round.includes("Pool")) complete = false;
+	});
+	return complete;
+}
+
+function determineQualifiedTeams(standings, teamsPerGroup, wildcards) {
+	var qualifiedTeams = [];
+	standings.forEach((group, groupIndex) => {
+		group.forEach((team, index) => {
+			if (index < teamsPerGroup) {
+				qualifiedTeams[index * standings.length + groupIndex] = team.name;
+			}
+		});
+	});
+	if (wildcards > 0) {
+		var options = [];
+		standings.forEach((group) => {
+			options.push(group[teamsPerGroup]);
+		});
+		options.sort((a, b) => b.wins - a.wins || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
+		for (var i = 0; i < wildcards; i++) {
+			qualifiedTeams.push(options[i].name);
+		}
+	}
+	return qualifiedTeams;
+}
+
+function determineFirstKnockoutRound(fixtures) {
+	var knockoutRound = 1;
+	fixtures.forEach((fix) => {
+		var currentRound = 0;
+		switch (fix.round) {
+			case "Round of 24":
+				currentRound = 12;
+				break;
+			case "Round of 16":
+				currentRound = 8;
+				break;
+			case "Round of 12":
+				currentRound = 6;
+				break;
+			case "Quarterfinals":
+				currentRound = 4;
+				break;
+			case "Semifinals":
+				currentRound = 2;
+				break;
+			case "Finals":
+				currentRound = 1;
+				break;
+			default:
+				break;
+		}
+		if (currentRound > knockoutRound) {
+			knockoutRound = currentRound;
+		}
+	});
+	return knockoutRound;
 }

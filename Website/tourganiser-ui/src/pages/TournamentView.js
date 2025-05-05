@@ -1,6 +1,13 @@
-import { Link, useParams } from "react-router-dom";
-import React, { useState, useEffect, useContext, useRef } from "react";
-import { fetchTournamentData, joinTournament, leaveTournament, updateScore, startTournament } from "../requests";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState, useEffect, useContext, useRef, use } from "react";
+import {
+	fetchTournamentData,
+	joinTournament,
+	leaveTournament,
+	updateScore,
+	startTournament,
+	deleteTournament,
+} from "../requests";
 import "../styles/Tournaments.css";
 import "../styles/TournamentView.css";
 import { useMessage } from "../MessageContext";
@@ -10,6 +17,7 @@ import { AuthContext } from "../AuthContext";
 import LoadingScreen from "../components/LoadingScreen";
 import ScoreUpdateModal from "../components/ScoreUpdateModal";
 import Tooltip from "../components/Tooltip";
+import NextRoundModal from "../components/NextRoundModal";
 
 export default function TournamentView() {
 	const { id } = useParams();
@@ -87,9 +95,17 @@ export default function TournamentView() {
 }
 
 function TournamentManager({ tournamentData, creator, backButton }) {
-	const [currentTab, setCurrentTab] = useState("info");
+	const [searchParams, setSearchParams] = useSearchParams();
+	const currentTab = searchParams.get("tab") || "info";
 	const { isLoggedIn } = useContext(AuthContext);
 	const [showUpdateWarning, setShowUpdateWarning] = useState(false);
+
+	const handleTabChange = (tab) => {
+		const newParams = new URLSearchParams(searchParams.toString());
+		newParams.set("tab", tab);
+		setSearchParams(newParams);
+		// setSearchParams({ tab });
+	};
 
 	return (
 		<div className="tournament-view">
@@ -110,22 +126,22 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 			<div className="tab-navigation">
 				<button
 					className={`view-tab-btn ${currentTab === "info" ? "active" : ""}`}
-					onClick={() => setCurrentTab("info")}>
+					onClick={() => handleTabChange("info")}>
 					Overview
 				</button>
 				<button
 					className={`view-tab-btn ${currentTab === "fixtures" ? "active" : ""}`}
-					onClick={() => setCurrentTab("fixtures")}>
+					onClick={() => handleTabChange("fixtures")}>
 					Fixtures
 				</button>
 				<button
 					className={`view-tab-btn ${currentTab === "standings" ? "active" : ""}`}
-					onClick={() => setCurrentTab("standings")}>
+					onClick={() => handleTabChange("standings")}>
 					Standings
 				</button>
 				<button
 					className={`view-tab-btn ${currentTab === "teams" ? "active" : ""}`}
-					onClick={() => setCurrentTab("teams")}>
+					onClick={() => handleTabChange("teams")}>
 					Teams
 				</button>
 			</div>
@@ -137,6 +153,7 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 					fixtures={tournamentData.fixtures}
 					creator={creator}
 					onUpdate={() => setShowUpdateWarning(true)}
+					standings={tournamentData.standings}
 				/>
 			)}
 			{currentTab === "standings" && (
@@ -152,6 +169,29 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	const [following, setFollowing] = useState(creator);
 	const { showMessage } = useMessage();
 	const confirm = useConfirm();
+	const { id } = useParams();
+
+	const navigate = useNavigate();
+
+	const handleDeleteTournament = async () => {
+		const confirmed = await confirm("Are you sure you want to delete this tournament? This action cannot be undone.");
+
+		if (!confirmed) return;
+
+		setLoading(true);
+		const response = await deleteTournament(details.id, id);
+
+		if (response.error) {
+			showMessage("Error deleting tournament", "error");
+			setLoading(false);
+			return;
+		}
+
+		// setLoading(false);
+
+		showMessage("Tournament deleted successfully", "success");
+		navigate("/tournaments");
+	};
 
 	const handleTournamentStart = async () => {
 		setLoading(true);
@@ -243,15 +283,29 @@ function TournamentDetails({ details, loggedIn, creator }) {
 							{details.teams}
 						</p>
 					</div>
-					{creator && (
-						<button
-							className="start-tournament-btn"
-							disabled={details.status !== "Not Started"}
-							style={details.status === "Not Started" ? {} : { display: "none" }}
-							onClick={handleTournamentStart}>
-							Start Tournament
-						</button>
-					)}
+					<div className="tournament-admin-actions">
+						{creator && (
+							<>
+								<button className="delete-tournament-btn" onClick={handleDeleteTournament} title="Delete Tournament">
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										height="20px"
+										viewBox="0 -960 960 960"
+										width="20px"
+										fill="#FFFFFF">
+										<path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+									</svg>
+								</button>
+								<button
+									className="start-tournament-btn"
+									disabled={details.status !== "Not Started"}
+									style={details.status === "Not Started" ? {} : { display: "none" }}
+									onClick={handleTournamentStart}>
+									Start Tournament
+								</button>
+							</>
+						)}
+					</div>
 				</div>
 			</div>
 			<div className="tournament-info-fixtures">
@@ -333,13 +387,16 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	);
 }
 
-function TournamentFixtures({ fixtures, creator, onUpdate }) {
+function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
 	const [filter, setFilter] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
 	const hashId = useParams().id;
 	const confirm = useConfirm();
 	const [loading, setLoading] = useState(false);
+	const [roundComplete, setRoundComplete] = useState(false);
+	const [currentRound, setCurrentRound] = useState({});
+	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
 
 	// console.log("Fixtures:", fixtures);
 
@@ -357,6 +414,12 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 				return true;
 		}
 	});
+
+	useEffect(() => {
+		const cRound = fixtures.rounds[fixtures.currentRound];
+		setCurrentRound(cRound);
+		setRoundComplete(cRound.completed === cRound.matches);
+	}, []);
 
 	const formatResults = (score, team) => {
 		const scores = score.map((s, index) => {
@@ -385,7 +448,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 		score = formatScore(score);
 		setLoading(true);
 		// console.log("Formatted score:", JSON.stringify(score));
-		const response = await updateScore(id, score, "ONGOING", hashId);
+		const response = await updateScore(id, score, "ONGOING", hashId, null);
 		console.log(response);
 		if (!response.success) {
 			showMessage("Error updating score. Please try again later", "error");
@@ -405,7 +468,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 	const handleEndMatch = async (score) => {
 		const id = selectedFixture.id;
 		score = formatScore(score);
-		setLoading(true);
+
 		// console.log("Formatted score:", JSON.stringify(score));
 		const confirmed = await confirm(
 			"Are you sure you want to end the match? You won't be able to update the score after this."
@@ -414,95 +477,142 @@ function TournamentFixtures({ fixtures, creator, onUpdate }) {
 			setLoading(false);
 			return;
 		}
-		const response = await updateScore(id, score, "COMPLETED", hashId);
+		setLoading(true);
+		fixtures.rounds[fixtures.currentRound].completed += 1;
+		const response = await updateScore(id, score, "COMPLETED", hashId, fixtures.rounds);
 		console.log(response);
 		if (!response.success) {
 			showMessage("Error updating score. Please try again later", "error");
+			fixtures.rounds[fixtures.currentRound].completed -= 1;
 			handleCloseScoreModal();
 			setLoading(false);
 			return;
 		} else {
 			selectedFixture.status = "COMPLETED";
 			selectedFixture.result = score;
+
+			if (fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches) {
+				setRoundComplete(true);
+			}
 			setLoading(false);
 			handleCloseScoreModal();
 			showMessage("Score updated successfully", "success");
 			onUpdate();
+			window.location.reload();
 		}
 	};
 
+	const handleNextRound = async () => {
+		setShowNextRoundModal(true);
+	};
+
 	return (
-		<div className="tournament-fixtures">
-			{loading && <LoadingScreen />}
-			{selectedFixture && (
-				<ScoreUpdateModal
-					fixture={selectedFixture}
-					onClose={handleCloseScoreModal}
-					onSave={handleSaveScore}
-					onEndMatch={handleEndMatch}
-				/>
-			)}
-			<div className="fixtures-header">
-				<h3>Fixtures</h3>
-				<div className="fixtures-filter">
-					<button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
-						All
-					</button>
-					<button
-						className={`filter-btn ${filter === "upcoming" ? "active" : ""}`}
-						onClick={() => setFilter("upcoming")}>
-						Upcoming
-					</button>
-					<button className={`filter-btn ${filter === "live" ? "active" : ""}`} onClick={() => setFilter("live")}>
-						Live
-					</button>
-					<button
-						className={`filter-btn ${filter === "completed" ? "active" : ""}`}
-						onClick={() => setFilter("completed")}>
-						Completed
-					</button>
-				</div>
-			</div>
-			{filteredFixtures.length > 0 ? (
-				filteredFixtures.map((fixture) => (
-					<div className="tournament-fixture-card" key={fixture.match_no}>
-						<div className="fixture-match-number">Match #{fixture.match_no}</div>
-						<div className="fixture-match-details">{fixture.round}</div>
-						<div className="fixture-teams">
-							<div className="fixture-team">{fixture.team1}</div>
-							<div className="fixture-team">{fixture.team2}</div>
+		<div className="tournament-fixtures-container">
+			<div className="tournament-fixtures">
+				{loading && <LoadingScreen />}
+				{selectedFixture && (
+					<ScoreUpdateModal
+						fixture={selectedFixture}
+						onClose={handleCloseScoreModal}
+						onSave={handleSaveScore}
+						onEndMatch={handleEndMatch}
+					/>
+				)}
+				{showNextRoundModal && (
+					<NextRoundModal
+						standings={standings}
+						onCancel={() => setShowNextRoundModal(false)}
+						onConfirm={() => setShowNextRoundModal(false)}
+					/>
+				)}
+				<div className="fixtures-summary">
+					<div className="round-info-banner">
+						<div className="round-status">
+							<h4>Current Round</h4>
+							<p className="current-round">{currentRound.round}</p>
+							<div className="round-progress">
+								<div className="round-progress-bar">
+									<div
+										className="progress-fill"
+										style={{
+											width: `${(currentRound.completed / currentRound.matches) * 100}%`,
+										}}></div>
+								</div>
+							</div>
 						</div>
-						<div className="fixture-result">
-							<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 0) : 0}</div>
-							<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 1) : 0}</div>
-						</div>
-						<div className="fixture-footer">
-							<div className={`fixture-status ${fixture.status.toLowerCase()}`}>{fixture.status}</div>
-							{creator && (
-								<button
-									className="update-score-btn"
-									title="Update Score"
-									onClick={() => handleUpdateScore(fixture)}
-									disabled={fixture.status === "COMPLETED"}
-									style={fixture.editable ? {} : { display: "none" }}>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										height="24px"
-										viewBox="0 -960 960 960"
-										width="24px"
-										fill="#000000">
-										<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
-									</svg>
+						{creator && (
+							<button className="next-round-btn" disabled={!roundComplete} onClick={handleNextRound}>
+								Start Next Round
+							</button>
+						)}
+					</div>
+					<div className="fixtures-content">
+						<div className="fixtures-header">
+							<h3>Fixtures</h3>
+							<div className="fixtures-filter">
+								<button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
+									All
 								</button>
+								<button
+									className={`filter-btn ${filter === "upcoming" ? "active" : ""}`}
+									onClick={() => setFilter("upcoming")}>
+									Upcoming
+								</button>
+								<button className={`filter-btn ${filter === "live" ? "active" : ""}`} onClick={() => setFilter("live")}>
+									Live
+								</button>
+								<button
+									className={`filter-btn ${filter === "completed" ? "active" : ""}`}
+									onClick={() => setFilter("completed")}>
+									Completed
+								</button>
+							</div>
+						</div>
+						<div className="fixtures-list">
+							{filteredFixtures.length > 0 ? (
+								filteredFixtures.map((fixture) => (
+									<div className="tournament-fixture-card" key={fixture.match_no}>
+										<div className="fixture-match-number">Match #{fixture.match_no}</div>
+										<div className="fixture-match-details">{fixture.round}</div>
+										<div className="fixture-teams">
+											<div className="fixture-team">{fixture.team1}</div>
+											<div className="fixture-team">{fixture.team2}</div>
+										</div>
+										<div className="fixture-result">
+											<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 0) : 0}</div>
+											<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 1) : 0}</div>
+										</div>
+										<div className="fixture-footer">
+											<div className={`fixture-status ${fixture.status.toLowerCase()}`}>{fixture.status}</div>
+											{creator && (
+												<button
+													className="update-score-btn"
+													title="Update Score"
+													onClick={() => handleUpdateScore(fixture)}
+													disabled={fixture.status === "COMPLETED"}
+													style={fixture.editable ? {} : { display: "none" }}>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														height="24px"
+														viewBox="0 -960 960 960"
+														width="24px"
+														fill="#000000">
+														<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
+													</svg>
+												</button>
+											)}
+										</div>
+									</div>
+								))
+							) : (
+								<div className="no-tournaments-message">
+									<p>No {filter !== "all" ? filter : ""} fixtures found</p>
+								</div>
 							)}
 						</div>
 					</div>
-				))
-			) : (
-				<div className="no-tournaments-message">
-					<p>No {filter !== "all" ? filter : ""} fixtures found</p>
 				</div>
-			)}
+			</div>
 		</div>
 	);
 }
@@ -631,10 +741,16 @@ function TournamentTeams({ teams }) {
 }
 
 function CollectionView({ collection, collectionName, creator }) {
-	const { showMessage } = useMessage();
-	const [loading, setLoading] = useState(true);
-	const { isLoggedIn } = useContext(AuthContext);
-	const [selectedTournament, setSelectedTournament] = useState(null);
+	const [searchParams, setSearchParams] = useSearchParams();
+	const selectedTournament = collection[searchParams.get("selected")] || null;
+
+	const handleTournamentSelect = (tournament) => {
+		if (tournament !== null) {
+			setSearchParams({ selected: tournament });
+		} else {
+			setSearchParams({});
+		}
+	};
 
 	return (
 		<>
@@ -647,7 +763,7 @@ function CollectionView({ collection, collectionName, creator }) {
 						<h2>{collectionName}</h2>
 					</div>
 					<div className="collection-tournaments">
-						{collection.map((tournament) => {
+						{collection.map((tournament, index) => {
 							return (
 								<div key={tournament.details.id} className="collection-tournament-card">
 									<div className="tournament-name">{tournament.details.name}</div>
@@ -655,7 +771,7 @@ function CollectionView({ collection, collectionName, creator }) {
 									<div className={`tournament-status ${tournament.details.status.toLowerCase().replace(" ", "-")}`}>
 										{tournament.details.status}
 									</div>
-									<button onClick={() => setSelectedTournament(tournament)} className="view-tournament-btn">
+									<button onClick={() => handleTournamentSelect(index)} className="view-tournament-btn">
 										View
 									</button>
 								</div>
@@ -668,7 +784,7 @@ function CollectionView({ collection, collectionName, creator }) {
 					tournamentData={selectedTournament}
 					creator={creator}
 					backButton={
-						<div className="back-to-browse" onClick={() => setSelectedTournament(null)}>
+						<div className="back-to-browse" onClick={() => handleTournamentSelect(null)}>
 							&lt; Back to Collection
 						</div>
 					}

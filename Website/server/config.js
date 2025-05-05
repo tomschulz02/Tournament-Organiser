@@ -220,13 +220,24 @@ class DBConnection {
 		this.query(sql, [userId, tournamentId], callback);
 	}
 
-	updateFixture(fixtureId, score, status, callback) {
-		const sql = "UPDATE fixtures SET result = $1, status = $2 WHERE id = $3";
-		this.query(sql, [score, status, fixtureId], callback);
+	updateFixture(fixtureId, score, status, rounds, callback) {
+		const sql = "UPDATE fixtures SET result = $1, status = $2 WHERE id = $3 RETURNING tournament_id";
+		this.query(sql, [score, status, fixtureId], (res) => {
+			if (!res.success || rounds === null) return callback(res);
+			const tournamentId = res.message[0].tournament_id;
+			const updateSql = "UPDATE tournaments SET state = jsonb_set(state, '{rounds}', $1::jsonb) WHERE id = $2";
+			this.query(updateSql, [JSON.stringify(rounds), tournamentId], callback);
+		});
+		// this.query(sql, [score, status, fixtureId], callback);
 	}
 
 	startTournament(tournamentId, userID, callback) {
 		const sql = "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1 AND created_by = $2";
+		this.query(sql, [tournamentId, userID], callback);
+	}
+
+	deleteTournament(tournamentId, userID, callback) {
+		const sql = "DELETE FROM tournaments WHERE id = $1 AND created_by = $2";
 		this.query(sql, [tournamentId, userID], callback);
 	}
 

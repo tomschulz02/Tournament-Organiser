@@ -342,11 +342,13 @@ function CreateTournament({ goBack }) {
 				// hide loading spinner
 				// show success message
 				showMessage("Tournament created successfully!", "success");
+				setLoading(false);
 				goBack();
 			} else {
 				// hide loading spinner
 				// show error message
 				showMessage("Failed to create tournament. Please try again later", "error");
+				setLoading(false);
 			}
 		}
 		setLoading(false);

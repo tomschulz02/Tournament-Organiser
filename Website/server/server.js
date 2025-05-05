@@ -504,9 +504,9 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 	// Update tournament results
 	try {
 		const fixtureId = req.params.id;
-		const { scores, status, hashId } = req.body;
+		const { scores, status, hashId, rounds } = req.body;
 		// console.log({ scores, status, hashId });
-		db.updateFixture(fixtureId, JSON.stringify(scores), status, (result) => {
+		db.updateFixture(fixtureId, JSON.stringify(scores), status, rounds, (result) => {
 			// console.log(result);
 			if (!result.success) {
 				return res.status(500).json({ error: result.message });
@@ -625,6 +625,39 @@ app.post("/api/tournament/:id/start", verifyToken, async (req, res) => {
 		});
 	} catch (error) {
 		res.status(500).json({ error: "Failed to start tournament" });
+	}
+});
+
+app.post("/api/tournament/:id/advance", verifyToken, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user.id;
+	} catch (error) {
+		res.status(500).json({ error: "Failed to start next round" });
+	}
+});
+
+app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user.id;
+		const { cacheId } = req.body;
+		const decodedId = tournamentHash.decode(id);
+		if (decodedId.length === 0) {
+			return res.status(400).json({ error: "Invalid tournament ID" });
+		}
+		const tournamentId = decodedId[0];
+		console.log("Deleting tournament with ID: " + tournamentId);
+		db.deleteTournament(tournamentId, userId, (result) => {
+			if (!result.success) {
+				return res.status(400).json({ error: result.message });
+			}
+			console.log("Decaching tournament with ID: " + cacheId);
+			cacheManager.invalidate(cacheId);
+			res.status(200).json({ success: true, message: "Tournament deleted successfully" });
+		});
+	} catch (error) {
+		res.status(500).json({ error: "Failed to delete tournament" });
 	}
 });
 

@@ -59,7 +59,7 @@ export function formatCombiTournamentForStorage(data) {
 		parseInt(data["knockoutRound"]),
 		format.state.rounds
 	);
-	console.dir(format, { depth: null });
+	// console.dir(format, { depth: null });
 	return format;
 }
 
@@ -317,13 +317,7 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 		standings: determineStandings(tournament.details.state.groups, results, tournament.details.format),
 		teams: [tournament.details.state.groups],
 	};
-	// update knockout round fixtures
-	if (
-		!tournament.details.state.knockoutStarted &&
-		areGroupMatchesComplete(tournament.fixtures) &&
-		tournament.details.knockout
-	) {
-	}
+
 	// console.log("SUCCESS");
 	return pages;
 }

@@ -114,6 +114,7 @@
 	justify-content: space-between;
 	align-items: center;
 	margin-bottom: 20px;
+	width: 100%;
 }
 
 .fixtures-filter {
@@ -146,8 +147,8 @@
 }
 
 .tournament-fixtures {
-	max-width: 1200px;
-	margin: 0 auto;
+	/* max-width: 1200px; */
+	margin: 0 20px;
 	padding: 20px;
 }
 
@@ -847,4 +848,146 @@
 	to {
 		transform: translateY(0);
 	}
+}
+
+.tournament-fixtures-container {
+	width: 100%;
+}
+
+.fixtures-summary {
+	display: flex;
+	flex-direction: row-reverse;
+	gap: 20px;
+}
+
+.round-info-banner {
+	background: white;
+	border-radius: 8px;
+	padding: 20px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	height: fit-content;
+	position: sticky;
+	top: 100px;
+	z-index: 100;
+	width: 300px;
+}
+
+.round-status h4 {
+	color: #333;
+	margin: 0 0 10px 0;
+	font-size: 1.1em;
+}
+
+.current-round {
+	color: #2962ff;
+	font-size: 1.2em;
+	font-weight: 500;
+	margin: 0 0 15px 0;
+}
+
+.round-progress {
+	margin-top: 15px;
+}
+
+.round-progress-bar {
+	width: 100%;
+	height: 8px;
+	background: #e0e0e0;
+	border-radius: 4px;
+	overflow: hidden;
+	margin-bottom: 8px;
+}
+
+.progress-fill {
+	height: 100%;
+	background: #2962ff;
+	transition: width 0.3s ease;
+}
+
+.progress-text {
+	color: #666;
+	font-size: 0.9em;
+}
+
+.next-round-btn {
+	width: 100%;
+	padding: 10px;
+	margin-top: 20px;
+	background: #04aa6d;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.next-round-btn:hover:not(:disabled) {
+	background: #038857;
+}
+
+.next-round-btn:disabled {
+	background: #cccccc;
+	cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+	.fixtures-summary {
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.round-info-banner {
+		top: 120px;
+		width: 100%;
+	}
+}
+
+.tournament-admin-actions {
+	display: flex;
+	gap: 15px;
+	margin-top: 20px;
+}
+
+.delete-tournament-btn {
+	padding: 10px 15px;
+	background: #dc3545;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: 500;
+	margin-top: 20px;
+	transition: background-color 0.2s ease;
+	z-index: 2;
+}
+
+.delete-tournament-btn:hover {
+	background: #c82333;
+}
+
+@media (max-width: 768px) {
+	.tournament-admin-actions {
+		flex-direction: column;
+	}
+}
+
+.fixtures-content {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+	padding: 20px;
+	background: white;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	margin: 0 auto 20px auto;
+	width: 100%;
+	max-width: 1200px;
+}
+
+.no-tournaments-message {
+	width: 100%;
+}
+.fixtures-list {
+	width: 100%;
 }

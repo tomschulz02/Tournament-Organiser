@@ -1,37 +1,38 @@
 // formats the passed in data into a readable UI to send to the user
 // Structure :
 
-/* {
-    "name": "Test",
-    "date": "2025-02-22",
-    "location": "Home",
-    "description": "this is a test description",
-    "structure": {
-        "format": "combi",
-        "numTeams": 16,
-        "numGroups": 4,
-        "knockout": 6,
-        "type": "beach",
-    },
-    "teams": [
-        "Team 1",
-        "Team 2",
-        "Team 3",
-        "Team 4",
-        "Team 5",
-        "Team 6",
-        "Team 7",
-        "Team 8",
-        "Team 9",
-        "Team 10",
-        "Team 11",
-        "Team 12",
-        "Team 13",
-        "Team 14",
-        "Team 15",
-        "Team 16"
-    ]
-} */
+const tournamentData = {
+	tournamentName: "Test",
+	startDate: "2025-02-22",
+	location: "Home",
+	description: "this is a test description",
+	format: "combi",
+	teamCount: 16,
+	numGroups: 4,
+	knockoutRound: 6,
+	type: "beach",
+	teams: [
+		"Team 1",
+		"Team 2",
+		"Team 3",
+		"Team 4",
+		"Team 5",
+		"Team 6",
+		"Team 7",
+		"Team 8",
+		"Team 9",
+		"Team 10",
+		"Team 11",
+		"Team 12",
+		"Team 13",
+		"Team 14",
+		"Team 15",
+		"Team 16",
+	],
+};
+
+// formatCombiTournamentForStorage(tournamentData);
+
 export function formatCombiTournamentForStorage(data) {
 	var format = {
 		name: data["tournamentName"],
@@ -45,26 +46,32 @@ export function formatCombiTournamentForStorage(data) {
 		state: {
 			groups: populateGroups(data["numGroups"], data["teams"]),
 			type: data["type"],
+			rounds: [],
+			currentRound: 0,
 		},
 		created_by: data["user"],
 		collection: data["tournamentCollection"] != "" ? data["tournamentCollection"] : null,
 		fixtures: [],
 	};
 
-	format["fixtures"] = generateFixturesCombi(format["state"]["groups"], parseInt(data["knockoutRound"]));
-
+	format["fixtures"] = generateFixturesCombi(
+		format["state"]["groups"],
+		parseInt(data["knockoutRound"]),
+		format.state.rounds
+	);
+	console.dir(format, { depth: null });
 	return format;
 }
 
-function generateFixturesCombi(groups, knockout) {
+function generateFixturesCombi(groups, knockout, rounds) {
 	// console.log(groups, knockout);
 	var fixtures = [];
 	// generate all possible fixtures for groups (unordered)
 	groups.forEach((group, groupIndex) => {
-		const rounds = group.length % 2 == 0 ? group.length - 1 : group.length;
+		const numrounds = group.length % 2 == 0 ? group.length - 1 : group.length;
 		var groupFixtures = [];
 
-		for (var round = 1; round <= rounds; round++) {
+		for (var round = 1; round <= numrounds; round++) {
 			var i = 1;
 			var remainingTeams = [...group];
 			while (remainingTeams.length > 0) {
@@ -110,9 +117,11 @@ function generateFixturesCombi(groups, knockout) {
 		totalMatches += group.length;
 	});
 
+	rounds.push({ round: "Group Stage", matches: totalMatches, completed: 0 });
+
 	//sort unordered group matches
+	var round = 0;
 	while (matchNo <= totalMatches) {
-		var round = 0;
 		fixtures.forEach((group, index) => {
 			const mpr = Math.floor(groups[index].length / 2);
 			for (var i = round * mpr; i < (round + 1) * mpr; i++) {
@@ -146,6 +155,7 @@ function generateFixturesCombi(groups, knockout) {
 				matchNo++;
 			}
 			knockout = knockout - 4;
+			rounds.push({ round: "Round of 24", matches: 8, completed: 0 });
 		case 8:
 			var dec = 1;
 			for (var i = 0; i < 8; i++) {
@@ -161,6 +171,7 @@ function generateFixturesCombi(groups, knockout) {
 				if (i >= 4) dec += 2;
 			}
 			knockout = knockout - 4;
+			rounds.push({ round: "Round of 16", matches: 8, completed: 0 });
 		case 6:
 			for (var i = 0; i < 4; i++) {
 				sortedFixtures.push({
@@ -174,6 +185,7 @@ function generateFixturesCombi(groups, knockout) {
 				matchNo++;
 			}
 			knockout = knockout - 2;
+			rounds.push({ round: "Round of 12", matches: 4, completed: 0 });
 		case 4:
 			var dec = 1;
 			for (var i = 0; i < 4; i++) {
@@ -189,6 +201,7 @@ function generateFixturesCombi(groups, knockout) {
 				if (i >= 2) dec += 2;
 			}
 			knockout = knockout - 2;
+			rounds.push({ round: "Quarterfinals", matches: 4, completed: 0 });
 		case 2:
 			for (var i = 0; i < 2; i++) {
 				sortedFixtures.push({
@@ -202,6 +215,7 @@ function generateFixturesCombi(groups, knockout) {
 				matchNo++;
 			}
 			knockout = knockout - 1;
+			rounds.push({ round: "Semifinals", matches: 2, completed: 0 });
 		case 1:
 			sortedFixtures.push({
 				match_no: matchNo,
@@ -211,6 +225,7 @@ function generateFixturesCombi(groups, knockout) {
 				round: `Finals`,
 				next_game: null,
 			});
+			rounds.push({ round: "Finals", matches: 1, completed: 0 });
 			break;
 
 		default:
@@ -226,6 +241,7 @@ function generateFixturesCombi(groups, knockout) {
 // i figured out that teams that would be at an even index in the group (0,2,6,etc) share a formula
 // to find which team in a seeded team list should be in the group, same as well for the odd indices
 export function populateGroups(numGroups, teamList) {
+	// console.log(numGroups, teamList);
 	let groups = [];
 	numGroups = parseInt(numGroups);
 	var teamsPerGroup = Math.ceil(teamList.length / numGroups);
@@ -295,6 +311,8 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 		fixtures: {
 			remainingFixtures: remainingFixtures,
 			results: results,
+			rounds: tournament.details.state.rounds,
+			currentRound: parseInt(tournament.details.state.currentRound),
 		},
 		standings: determineStandings(tournament.details.state.groups, results, tournament.details.format),
 		teams: [tournament.details.state.groups],

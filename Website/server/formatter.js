@@ -7,9 +7,9 @@ const tournamentData = {
 	location: "Home",
 	description: "this is a test description",
 	format: "combi",
-	teamCount: 16,
+	teamCount: 18,
 	numGroups: 4,
-	knockoutRound: 6,
+	knockoutRound: 8,
 	type: "beach",
 	teams: [
 		"Team 1",
@@ -31,7 +31,210 @@ const tournamentData = {
 	],
 };
 
+const tournamentDataForView = {
+	details: {
+		id: 4,
+		name: "TuksVolleyball Beach HS Tournament - Boys",
+		date: "2025-05-23T22:00:00.000Z",
+		location: "Pretoria",
+		description:
+			"The official TuksVolleyball Beach HST. Here you can find all information regarding the boys/mixed division",
+		format: "C",
+		num_teams: 8,
+		num_groups: 2,
+		knockout: true,
+		state: {
+			type: "beach",
+			rounds: [
+				{
+					round: "Group Stage",
+					groups: [
+						["DSP 1", "DSJ 1", "DSJ 2", "Cooper"],
+						["DSP 2", "DSP 3", "St. Vincent 1", "St. Vincent 2"],
+					],
+					matches: 12,
+					completed: 12,
+				},
+				{ round: "Semifinals", groups: [], matches: 2, completed: 0 },
+				{ round: "Finals", groups: [], matches: 1, completed: 0 },
+			],
+			currentRound: 0,
+		},
+		created_by: 4,
+		status: "Ongoing",
+		collection_id: 1,
+	},
+	fixtures: [
+		{
+			id: 70,
+			tournament_id: 4,
+			match_no: 1,
+			team1: "DSP 1",
+			team2: "Cooper",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool A",
+			next_game: null,
+		},
+		{
+			id: 75,
+			tournament_id: 4,
+			match_no: 2,
+			team1: "DSJ 1",
+			team2: "DSJ 2",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool A",
+			next_game: null,
+		},
+		{
+			id: 71,
+			tournament_id: 4,
+			match_no: 3,
+			team1: "DSP 2",
+			team2: "St. Vincent 2",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool B",
+			next_game: null,
+		},
+		{
+			id: 73,
+			tournament_id: 4,
+			match_no: 4,
+			team1: "DSP 3",
+			team2: "St. Vincent 1",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool B",
+			next_game: null,
+		},
+		{
+			id: 72,
+			tournament_id: 4,
+			match_no: 5,
+			team1: "DSP 1",
+			team2: "DSJ 2",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool A",
+			next_game: null,
+		},
+		{
+			id: 76,
+			tournament_id: 4,
+			match_no: 6,
+			team1: "DSJ 1",
+			team2: "Cooper",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool A",
+			next_game: null,
+		},
+		{
+			id: 74,
+			tournament_id: 4,
+			match_no: 7,
+			team1: "DSP 2",
+			team2: "St. Vincent 1",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool B",
+			next_game: null,
+		},
+		{
+			id: 78,
+			tournament_id: 4,
+			match_no: 8,
+			team1: "DSP 3",
+			team2: "St. Vincent 2",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool B",
+			next_game: null,
+		},
+		{
+			id: 82,
+			tournament_id: 4,
+			match_no: 9,
+			team1: "DSP 1",
+			team2: "DSJ 1",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool A",
+			next_game: null,
+		},
+		{
+			id: 77,
+			tournament_id: 4,
+			match_no: 10,
+			team1: "DSJ 2",
+			team2: "Cooper",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool A",
+			next_game: null,
+		},
+		{
+			id: 79,
+			tournament_id: 4,
+			match_no: 11,
+			team1: "DSP 2",
+			team2: "DSP 3",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool B",
+			next_game: null,
+		},
+		{
+			id: 83,
+			tournament_id: 4,
+			match_no: 12,
+			team1: "St. Vincent 1",
+			team2: "St. Vincent 2",
+			status: "COMPLETED",
+			result: [[1, 0]],
+			round: "Pool B",
+			next_game: null,
+		},
+		{
+			id: 80,
+			tournament_id: 4,
+			match_no: 13,
+			team1: "TBD",
+			team2: "TBD",
+			status: "WAITING",
+			result: null,
+			round: "Semifinals",
+			next_game: 15,
+		},
+		{
+			id: 81,
+			tournament_id: 4,
+			match_no: 14,
+			team1: "TBD",
+			team2: "TBD",
+			status: "WAITING",
+			result: null,
+			round: "Semifinals",
+			next_game: 15,
+		},
+		{
+			id: 84,
+			tournament_id: 4,
+			match_no: 15,
+			team1: "TBD",
+			team2: "TBD",
+			status: "WAITING",
+			result: null,
+			round: "Finals",
+			next_game: null,
+		},
+	],
+};
+
 // formatCombiTournamentForStorage(tournamentData);
+// formatTournamentView(tournamentDataForView, { encode: (id) => id }, true);
 
 export function formatCombiTournamentForStorage(data) {
 	var format = {
@@ -44,7 +247,7 @@ export function formatCombiTournamentForStorage(data) {
 		num_groups: data["numGroups"] || 0,
 		knockout: parseInt(data["knockoutRound"]) == 0 ? false : true,
 		state: {
-			groups: populateGroups(data["numGroups"], data["teams"]),
+			// groups: populateGroups(data["numGroups"], data["teams"]),
 			type: data["type"],
 			rounds: [],
 			currentRound: 0,
@@ -53,12 +256,15 @@ export function formatCombiTournamentForStorage(data) {
 		collection: data["tournamentCollection"] != "" ? data["tournamentCollection"] : null,
 		fixtures: [],
 	};
+	// console.log(format.state.rounds);
+	// format.state.rounds[0].groups = populateGroups(data["numGroups"], data["teams"]);
 
 	format["fixtures"] = generateFixturesCombi(
-		format["state"]["groups"],
+		populateGroups(data["numGroups"], data["teams"]),
 		parseInt(data["knockoutRound"]),
 		format.state.rounds
 	);
+
 	// console.dir(format, { depth: null });
 	return format;
 }
@@ -117,7 +323,7 @@ function generateFixturesCombi(groups, knockout, rounds) {
 		totalMatches += group.length;
 	});
 
-	rounds.push({ round: "Group Stage", matches: totalMatches, completed: 0 });
+	rounds.push({ round: "Group Stage", matches: totalMatches, completed: 0, groups: groups });
 
 	//sort unordered group matches
 	var round = 0;
@@ -155,7 +361,7 @@ function generateFixturesCombi(groups, knockout, rounds) {
 				matchNo++;
 			}
 			knockout = knockout - 4;
-			rounds.push({ round: "Round of 24", matches: 8, completed: 0 });
+			rounds.push({ round: "Round of 24", matches: 8, completed: 0, groups: [] });
 		case 8:
 			var dec = 1;
 			for (var i = 0; i < 8; i++) {
@@ -171,7 +377,7 @@ function generateFixturesCombi(groups, knockout, rounds) {
 				if (i >= 4) dec += 2;
 			}
 			knockout = knockout - 4;
-			rounds.push({ round: "Round of 16", matches: 8, completed: 0 });
+			rounds.push({ round: "Round of 16", matches: 8, completed: 0, groups: [] });
 		case 6:
 			for (var i = 0; i < 4; i++) {
 				sortedFixtures.push({
@@ -185,7 +391,7 @@ function generateFixturesCombi(groups, knockout, rounds) {
 				matchNo++;
 			}
 			knockout = knockout - 2;
-			rounds.push({ round: "Round of 12", matches: 4, completed: 0 });
+			rounds.push({ round: "Round of 12", matches: 4, completed: 0, groups: [] });
 		case 4:
 			var dec = 1;
 			for (var i = 0; i < 4; i++) {
@@ -201,7 +407,7 @@ function generateFixturesCombi(groups, knockout, rounds) {
 				if (i >= 2) dec += 2;
 			}
 			knockout = knockout - 2;
-			rounds.push({ round: "Quarterfinals", matches: 4, completed: 0 });
+			rounds.push({ round: "Quarterfinals", matches: 4, completed: 0, groups: [] });
 		case 2:
 			for (var i = 0; i < 2; i++) {
 				sortedFixtures.push({
@@ -215,17 +421,27 @@ function generateFixturesCombi(groups, knockout, rounds) {
 				matchNo++;
 			}
 			knockout = knockout - 1;
-			rounds.push({ round: "Semifinals", matches: 2, completed: 0 });
+			rounds.push({ round: "Semifinals", matches: 2, completed: 0, groups: [] });
 		case 1:
-			sortedFixtures.push({
-				match_no: matchNo,
-				team1: "TBD",
-				team2: "TBD",
-				status: "WAITING",
-				round: `Finals`,
-				next_game: null,
-			});
-			rounds.push({ round: "Finals", matches: 1, completed: 0 });
+			sortedFixtures.push(
+				{
+					match_no: matchNo++,
+					team1: "TBD",
+					team2: "TBD",
+					status: "WAITING",
+					round: `3rd Place Playoff`,
+					next_game: null,
+				},
+				{
+					match_no: matchNo,
+					team1: "TBD",
+					team2: "TBD",
+					status: "WAITING",
+					round: `Finals`,
+					next_game: null,
+				}
+			);
+			rounds.push({ round: "Finals", matches: 2, completed: 0, groups: [] });
 			break;
 
 		default:
@@ -289,7 +505,7 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 }
 
 export function formatTournamentView(tournament, tournamentHash, following) {
-	// console.log(tournament);
+	// console.dir(tournament, { depth: null });
 	const remainingFixtures = separateFixturesAndResults(tournament.fixtures).remainingFixtures;
 	const results = separateFixturesAndResults(tournament.fixtures).results;
 	// console.log("Test");
@@ -314,10 +530,13 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 			rounds: tournament.details.state.rounds,
 			currentRound: parseInt(tournament.details.state.currentRound),
 		},
-		standings: determineStandings(tournament.details.state.groups, results, tournament.details.format),
-		teams: [tournament.details.state.groups],
+		standings: determineStandings(tournament.details.state.rounds[0].groups, results, tournament.details.format),
+		teams: [tournament.details.state.rounds[0].groups],
 	};
-
+	// tournament.details.state.rounds.forEach((round) => {
+	// 	pages.standings.push(determineStandings(round.groups, results, tournament.details.format));
+	// });
+	// console.dir(pages.standings, { depth: null });
 	// console.log("SUCCESS");
 	return pages;
 }
@@ -424,7 +643,7 @@ function determineStandings(teams, results, format) {
 			group.forEach((team) => {
 				team.pointsRatio = team.pointsFor / team.pointsAgainst || 0;
 				team.setsRatio = team.setsWon / team.setsLost || 0;
-				team.played = team.won + team.lost;
+				// team.played = team.won + team.lost;
 			});
 		});
 

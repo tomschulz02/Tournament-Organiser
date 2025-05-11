@@ -157,7 +157,11 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 				/>
 			)}
 			{currentTab === "standings" && (
-				<TournamentStandings standings={tournamentData.standings} format={tournamentData.details.format} />
+				<TournamentStandings
+					standings={tournamentData.standings}
+					format={tournamentData.details.format}
+					rounds={tournamentData.fixtures.rounds}
+				/>
 			)}
 			{currentTab === "teams" && <TournamentTeams teams={tournamentData.teams[0]} />}
 		</div>
@@ -617,7 +621,8 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
 	);
 }
 
-function TournamentStandings({ standings, format }) {
+function TournamentStandings({ standings, format, rounds }) {
+	console.log("Standings:", standings);
 	const standingsMessage =
 		"Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, and points ration (in that order)";
 	// console.log("Standings:", standings.length);
@@ -637,7 +642,8 @@ function TournamentStandings({ standings, format }) {
 	}
 
 	// Helper function to determine if standings are for pools
-	const isPoolFormat = Array.isArray(standings[0]);
+	const isPoolFormat = format.includes("Pool") || format.includes("pool") || format.includes("Pooled");
+	console.log("Is Pool Format:", isPoolFormat);
 
 	const renderStandingsTable = (data, poolIndex = null) => (
 		<table className="standings-table">

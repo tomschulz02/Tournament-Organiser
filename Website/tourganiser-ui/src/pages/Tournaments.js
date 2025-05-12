@@ -547,12 +547,24 @@ function CreateTournament({ goBack }) {
 								<div className={`form-group ${expandOptions ? "" : "hidden"}`} id="knockout">
 									<label htmlFor="knockoutRound">First Knockout Round*</label>
 									<select type="number" id="knockoutRound" onChange={handleChange} value={tournamentData.knockoutRound}>
-										<option value={12}>Round of 24</option>
-										<option value={8}>Round of 16</option>
-										<option value={6}>Round of 12</option>
-										<option value={4}>Quarterfinals</option>
-										<option value={2}>Semifinals</option>
-										<option value={1}>Finals</option>
+										<option value={12} disabled={parseInt(tempTeamCount) < 24}>
+											Round of 24
+										</option>
+										<option value={8} disabled={parseInt(tempTeamCount) < 16}>
+											Round of 16
+										</option>
+										<option value={6} disabled={parseInt(tempTeamCount) < 12}>
+											Round of 12
+										</option>
+										<option value={4} disabled={parseInt(tempTeamCount) < 8}>
+											Quarterfinals
+										</option>
+										<option value={2} disabled={parseInt(tempTeamCount) < 4}>
+											Semifinals
+										</option>
+										<option value={1} disabled={parseInt(tempTeamCount) < 2}>
+											Finals
+										</option>
 									</select>
 								</div>
 								<p>*required</p>

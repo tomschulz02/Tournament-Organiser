@@ -251,7 +251,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				if (result.message.length === 0) {
 					return res.status(404).json({ error: "Collection not found" });
 				}
-				// console.log(req.user);
+				// console.log(result.message);
 				var loggedIn = false;
 				var creator = false;
 				var following = false;
@@ -540,13 +540,15 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 		var data = JSON.parse(JSON.stringify(req.body));
 		data["user"] = req.user.id;
 		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
-		details["collection"] = collectionHash.decode(details.collection)[0];
+		const collection = collectionHash.decode(details.collection)[0];
+		details["collection"] = collection;
 		// console.dir(details, { depth: null });
 		// console.dir(fixtures, { depth: null });
 		// Add logic to save tournament to database
 		db.createTournament(details, fixtures, (result) => {
 			// console.log(result);
 			cacheManager.invalidate("all");
+			cacheManager.invalidate("c_" + details.collection);
 			res.status(201).json(result);
 		});
 	} catch (error) {

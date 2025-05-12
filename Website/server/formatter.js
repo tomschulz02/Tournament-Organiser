@@ -234,7 +234,7 @@ const tournamentDataForView = {
 };
 
 // formatCombiTournamentForStorage(tournamentData);
-// formatTournamentView(tournamentDataForView, { encode: (id) => id }, true);
+// console.log(formatTournamentView(tournamentDataForView, { encode: (id) => id }, true));
 
 export function formatCombiTournamentForStorage(data) {
 	var format = {
@@ -506,9 +506,13 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 
 export function formatTournamentView(tournament, tournamentHash, following) {
 	// console.dir(tournament, { depth: null });
-	const remainingFixtures = separateFixturesAndResults(tournament.fixtures).remainingFixtures;
-	const results = separateFixturesAndResults(tournament.fixtures).results;
+	const remainingFixtures = separateFixturesAndResults(
+		tournament.fixtures,
+		tournament.details.status
+	).remainingFixtures;
+	const results = separateFixturesAndResults(tournament.fixtures, tournament.details.status).results;
 	// console.log("Test");
+	// console.log("RESULTS", results);
 	var pages = {
 		details: {
 			id: tournamentHash.encode(tournament.details.id),
@@ -574,14 +578,18 @@ function getDate(date) {
 	return start;
 }
 
-function separateFixturesAndResults(fixtures) {
+function separateFixturesAndResults(fixtures, tourStatus) {
 	var remainingFixtures = [];
 	var results = [];
 
 	fixtures.forEach((fix) => {
 		var result = fix.result;
 		if (!result || fix.status != "COMPLETED") {
-			fix.editable = (fix.status == "WAITING" || fix.status == "ONGOING") && fix.team1 != "TBD" && fix.team2 != "TBD";
+			fix.editable =
+				(fix.status == "WAITING" || fix.status == "ONGOING") &&
+				fix.team1 != "TBD" &&
+				fix.team2 != "TBD" &&
+				tourStatus == "Ongoing";
 			remainingFixtures.push(fix);
 		} else {
 			// console.log("RESULT", result);

@@ -13,7 +13,7 @@ import "../styles/TournamentView.css";
 import { useMessage } from "../MessageContext";
 import { useConfirm } from "../components/ConfirmDialog";
 import { AuthContext } from "../AuthContext";
-// import { TeamNameChangePopup } from "./Tournaments";
+import { TeamNameChangePopup } from "./Tournaments";
 import LoadingScreen from "../components/LoadingScreen";
 import ScoreUpdateModal from "../components/ScoreUpdateModal";
 import Tooltip from "../components/Tooltip";
@@ -163,7 +163,9 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 					rounds={tournamentData.fixtures.rounds}
 				/>
 			)}
-			{currentTab === "teams" && <TournamentTeams teams={tournamentData.teams[0]} />}
+			{currentTab === "teams" && (
+				<TournamentTeams teams={tournamentData.teams[0]} status={tournamentData.details.status} />
+			)}
 		</div>
 	);
 }
@@ -198,23 +200,23 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	};
 
 	const handleTournamentStart = async () => {
-		setLoading(true);
+		// setLoading(true);
 		// Logic to start the tournament
 		const confirmed = await confirm("Are you sure you want to start the tournament? This action cannot be undone.");
 		if (!confirmed) {
+			// setLoading(false);
+			return;
+		}
+		setLoading(true);
+		const response = await startTournament(details.id);
+		if (!response.success) {
+			showMessage("Error starting tournament", "error");
 			setLoading(false);
 			return;
-		} else {
-			const response = await startTournament(details.id);
-			if (!response.success) {
-				showMessage("Error starting tournament", "error");
-				setLoading(false);
-				return;
-			}
-			details.status = "Ongoing";
-			setLoading(false);
-			showMessage("Tournament started successfully", "success");
 		}
+		details.status = "Ongoing";
+		setLoading(false);
+		showMessage("Tournament started successfully", "success");
 	};
 
 	const handleFollow = async () => {
@@ -578,13 +580,15 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
 									<div className="tournament-fixture-card" key={fixture.match_no}>
 										<div className="fixture-match-number">Match #{fixture.match_no}</div>
 										<div className="fixture-match-details">{fixture.round}</div>
-										<div className="fixture-teams">
-											<div className="fixture-team">{fixture.team1}</div>
-											<div className="fixture-team">{fixture.team2}</div>
-										</div>
-										<div className="fixture-result">
-											<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 0) : 0}</div>
-											<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 1) : 0}</div>
+										<div className="fixture-teams-container">
+											<div className="fixture-teams">
+												<div className="fixture-team">{fixture.team1}</div>
+												<div className="fixture-team">{fixture.team2}</div>
+											</div>
+											<div className="fixture-result">
+												<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 0) : 0}</div>
+												<div className="fixture-score">{fixture.result ? formatResults(fixture.result, 1) : 0}</div>
+											</div>
 										</div>
 										<div className="fixture-footer">
 											<div className={`fixture-status ${fixture.status.toLowerCase()}`}>{fixture.status}</div>
@@ -624,7 +628,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
 function TournamentStandings({ standings, format, rounds }) {
 	console.log("Standings:", standings);
 	const standingsMessage =
-		"Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, and points ration (in that order)";
+		"Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, then points ratio (in that order)";
 	// console.log("Standings:", standings.length);
 	if (!standings || standings.length === 0) {
 		return (
@@ -650,7 +654,7 @@ function TournamentStandings({ standings, format, rounds }) {
 			<thead>
 				<tr>
 					<th>Position</th>
-					<th>Team</th>
+					<th className="sticky-column">Team</th>
 					<th>Played</th>
 					<th>Won</th>
 					<th>Lost</th>
@@ -666,7 +670,9 @@ function TournamentStandings({ standings, format, rounds }) {
 				{data.map((team, index) => (
 					<tr key={`${poolIndex}-${index}`}>
 						<td>{index + 1}</td>
-						<td>{team.name}</td>
+						<td className="sticky-column" style={{ backgroundColor: "white" }}>
+							{team.name}
+						</td>
 						<td>{team.played}</td>
 						<td>{team.won}</td>
 						<td>{team.lost}</td>
@@ -703,7 +709,14 @@ function TournamentStandings({ standings, format, rounds }) {
 	);
 }
 
-function TournamentTeams({ teams }) {
+function TournamentTeams({ teams, status }) {
+	const editTeams = status === "Not Started";
+	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
+	const [currentTeam, setCurrentTeam] = useState(null);
+	const [pool, setPool] = useState(0);
+	const [poolTeam, setPoolTeam] = useState(0);
+	const { showMessage } = useMessage();
+
 	if (!Array.isArray(teams) || teams.length === 0) {
 		return (
 			<div className="tournament-teams">
@@ -714,35 +727,90 @@ function TournamentTeams({ teams }) {
 			</div>
 		);
 	}
-	console.log("Teams:", teams);
-	const isPooled = Array.isArray(teams[0]);
+	const isPooled = teams[0].length > 2;
+
+	const handleTeamNameChange = async (event, teamIndex, poolIndex) => {
+		setCurrentTeam({ element: event.currentTarget });
+		setPool(poolIndex);
+		setPoolTeam(teamIndex);
+		setOpenTeamNameChangePopup(true);
+	};
+
+	const changeTeamName = (e, rank, newName) => {
+		for (var pools of teams) {
+			for (var team of pools) {
+				if (team === newName) {
+					return false;
+				}
+			}
+		}
+		teams[parseInt(pool)][parseInt(poolTeam)] = newName;
+		console.log(teams);
+		// currentTeam.element.parentElement.innerText = newName;
+		currentTeam.element.parentElement.classList.add("team-name-changed");
+		console.log(currentTeam.element.parentElement.classList);
+
+		setCurrentTeam(null);
+		return true;
+	};
 
 	return (
-		<div className="tournament-teams">
-			<h3>Teams</h3>
-			{isPooled ? (
-				<div className="teams-pools">
-					{teams.map((pool, poolIndex) => (
-						<div key={poolIndex} className="team-pool">
-							<h4>Pool {poolIndex + 1}</h4>
-							{pool.map((team, teamIndex) => (
-								<div key={`${poolIndex}-${teamIndex}`} className="team-card">
-									{team}
-								</div>
-							))}
-						</div>
-					))}
-				</div>
-			) : (
-				<div className="teams-grid">
-					{teams.map((team, index) => (
-						<div key={index} className="team-card">
-							{team}
-						</div>
-					))}
-				</div>
+		<>
+			{openTeamNameChangePopup && (
+				<TeamNameChangePopup
+					onClose={() => setOpenTeamNameChangePopup(false)}
+					onSubmit={changeTeamName}
+					currName={currentTeam.element.parentElement.innerText ? currentTeam.element.parentElement.innerText : ""}
+					rank={poolTeam + 1}
+				/>
 			)}
-		</div>
+			<div className="tournament-teams">
+				<h3>Teams</h3>
+				{isPooled ? (
+					<div className="teams-pools">
+						{teams.map((pool, poolIndex) => (
+							<div key={poolIndex} className="team-pool">
+								<h4>Pool {poolIndex + 1}</h4>
+								{pool.map((team, teamIndex) => (
+									<div key={`${poolIndex}-${teamIndex}`} className="team-card">
+										{team}
+										{editTeams && (
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												height="24px"
+												viewBox="0 -960 960 960"
+												width="24px"
+												fill="#FFFFFF"
+												onClick={(e) => handleTeamNameChange(e, teamIndex, poolIndex)}>
+												<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
+											</svg>
+										)}
+									</div>
+								))}
+							</div>
+						))}
+					</div>
+				) : (
+					<div className="teams-grid">
+						{teams.map((team, index) => (
+							<div key={index} className="team-card">
+								{team}
+								{editTeams && (
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										height="24px"
+										viewBox="0 -960 960 960"
+										width="24px"
+										fill="#FFFFFF">
+										<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
+									</svg>
+								)}
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+		</>
 	);
 }
 

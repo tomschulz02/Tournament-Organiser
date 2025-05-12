@@ -161,7 +161,7 @@
 
 .tournament-fixture-card {
 	display: grid;
-	grid-template-columns: 0.5fr 1fr 2fr 1fr 1fr;
+	grid-template-columns: 0.5fr 1fr 2fr 1fr;
 	align-items: center;
 	background: white;
 	padding: 15px 20px;
@@ -185,6 +185,15 @@
 .fixture-match-details {
 	color: #666;
 	font-size: 0.9em;
+}
+
+.fixture-teams-container {
+	display: flex;
+	flex-direction: row;
+	gap: 20px;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
 }
 
 .fixture-teams {
@@ -350,10 +359,23 @@
 	font-weight: 500;
 	color: #333;
 	margin: 10px 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
 }
 
 .team-card:hover {
 	transform: translateY(-2px);
+}
+
+.team-card svg {
+	fill: #555;
+	cursor: pointer;
+	transition: fill 0.2s ease;
+}
+
+.team-card svg:hover {
+	fill: #2962ff;
 }
 
 @media (max-width: 768px) {
@@ -365,19 +387,29 @@
 
 	.fixture-match-number,
 	.fixture-match-details,
-	.fixture-teams,
 	.fixture-result,
 	.fixture-status {
 		text-align: left;
 	}
 
+	/* .fixture-teams {
+		flex-direction: column;
+		gap: 20px;
+		justify-content: space-between;
+		width: 40%;
+	} */
+
 	.fixture-status {
 		width: fit-content;
 	}
 
-	.fixture-result {
+	/* .fixture-result {
+		display: inline-flex;
 		align-items: flex-start;
-	}
+		flex-direction: column;
+		gap: 20px;
+		width: 50%;
+	} */
 
 	.fixtures-header {
 		flex-direction: column;
@@ -409,6 +441,19 @@
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 10px;
+	}
+
+	.tournament-fixture-card {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 15px;
+	}
+
+	.round-info-banner {
+		margin-bottom: 20px;
+		border-radius: 8px;
+		padding: 15px;
 	}
 }
 
@@ -755,7 +800,28 @@
 .standings-table td:nth-child(2) {
 	text-align: left;
 	font-weight: 500;
+	min-width: 150px;
+	position: sticky;
+	left: 0;
+	background-color: white;
+	z-index: 2;
 }
+
+.standings-table th:nth-child(2) {
+	text-align: left;
+	position: sticky;
+	left: 0;
+	background-color: #f5f5f5;
+	z-index: 2;
+	overflow-x: hidden;
+}
+
+/* .standings-table .sticky-column {
+	position: sticky;
+	left: 0;
+	background-color: white;
+	z-index: 2;
+} */
 
 .no-standings-message {
 	text-align: center;
@@ -764,6 +830,9 @@
 }
 
 @media (max-width: 768px) {
+	.pool-standings {
+		overflow-x: scroll;
+	}
 	.standings-table {
 		font-size: 0.9em;
 	}

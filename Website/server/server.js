@@ -202,7 +202,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				if (result.message.details == undefined) {
 					return res.status(404).json({ error: "Tournament not found" });
 				}
-				// console.log(result);
+				// console.log(req.user);
 				var loggedIn = false;
 				var creator = false;
 				var following = false;
@@ -220,11 +220,13 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							}
 						});
 					}
+					// console.log("Here");
 					responseObject = {
 						message: formatTournamentView(result.message, tournamentHash, following),
 						loggedIn: loggedIn,
 						creator: creator,
 					};
+					// console.log("Hello");
 					cacheManager.set(id, responseObject);
 					return res.status(200).json(responseObject);
 				}

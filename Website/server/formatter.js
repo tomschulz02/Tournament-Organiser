@@ -535,7 +535,7 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 			currentRound: parseInt(tournament.details.state.currentRound),
 		},
 		standings: determineStandings(tournament.details.state.rounds[0].groups, results, tournament.details.format),
-		teams: [tournament.details.state.rounds[0].groups],
+		teams: tournament.details.state.teams,
 	};
 	// tournament.details.state.rounds.forEach((round) => {
 	// 	pages.standings.push(determineStandings(round.groups, results, tournament.details.format));

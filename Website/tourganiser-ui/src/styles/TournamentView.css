@@ -307,20 +307,56 @@
 	max-width: 1200px;
 	margin: 0 auto;
 	padding: 20px;
+	position: relative;
 }
 
-.tournament-teams h3 {
-	color: #333;
+.tournament-teams-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
 	margin-bottom: 20px;
-	padding-bottom: 10px;
+	width: 100%;
 	border-bottom: 2px solid #e0e0e0;
+}
+
+.tournament-teams-header h3 {
+	color: #333;
+	padding-bottom: 10px;
+}
+
+.tournament-teams-header .button-group {
+	display: flex;
+	gap: 10px;
+}
+
+.tournament-teams-header button {
+	padding: 8px 16px;
+	background: #2962ff;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+	font-weight: 500;
+	margin-bottom: 10px;
+}
+.tournament-teams-header button:nth-child(1):hover {
+	background: #1565c0;
+}
+
+.tournament-teams-header button:nth-child(2) {
+	background: #969696;
+}
+
+.tournament-teams-header button:nth-child(2):hover {
+	background: #dc3545;
 }
 
 .teams-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+	grid-template-columns: 2fr 1fr;
 	gap: 20px;
-	padding: 20px 0;
+	padding: 20px;
 }
 
 .teams-pools {
@@ -351,17 +387,16 @@
 }
 
 .team-card {
-	background: white;
-	padding: 15px 20px;
+	position: relative;
+	background: #fff;
+	padding: 15px;
 	border-radius: 8px;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-	transition: transform 0.2s ease, box-shadow 0.2s ease;
-	font-weight: 500;
-	color: #333;
-	margin: 10px 0;
 	display: flex;
-	align-items: center;
 	justify-content: space-between;
+	align-items: center;
+	transition: all 0.3s ease;
+	margin: 5px 0;
 }
 
 .team-card:hover {
@@ -376,6 +411,30 @@
 
 .team-card svg:hover {
 	fill: #2962ff;
+}
+
+.team-card.team-name-changed {
+	background: rgba(41, 98, 255, 0.1);
+	border-left: 3px solid #2962ff;
+	animation: highlight 1s ease-out;
+}
+
+.team-card.team-name-changed::after {
+	content: "✏️";
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	font-size: 12px;
+	opacity: 0.7;
+}
+
+@keyframes highlight {
+	from {
+		background: rgba(41, 98, 255, 0.3);
+	}
+	to {
+		background: rgba(41, 98, 255, 0.1);
+	}
 }
 
 @media (max-width: 768px) {

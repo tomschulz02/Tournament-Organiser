@@ -272,3 +272,22 @@ export async function deleteTournament(id, cacheId) {
 		return { error: "Failed to delete tournament" };
 	}
 }
+
+export async function updateTeams(tournamentId, teams) {
+	try {
+		return await fetchWithRetry(`http://localhost:5000/api/tournament/${tournamentId}/updateTeams`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include",
+			body: JSON.stringify({ teams }),
+		});
+	} catch (error) {
+		if (error.isConnectionError) {
+			// showMessage("Unable to connect to server. Please try again later.", "error");
+			return { error: error.message };
+		}
+		throw error;
+	}
+}

@@ -641,6 +641,28 @@ app.post("/api/tournament/:id/advance", verifyToken, async (req, res) => {
 	}
 });
 
+app.post("/api/tournament/:id/updateTeams", verifyToken, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user.id;
+		const { teams } = req.body;
+		const decodedId = tournamentHash.decode(id);
+		if (decodedId.length === 0) {
+			return res.status(400).json({ error: "Invalid tournament ID" });
+		}
+		const tournamentId = decodedId[0];
+		db.updateTeams(tournamentId, userId, teams, (result) => {
+			if (!result.success) {
+				return res.status(400).json({ error: result.message });
+			}
+			cacheManager.invalidate("t_" + id);
+			res.status(200).json({ success: true, message: "Tournament teams updated successfully" });
+		});
+	} catch (error) {
+		res.status(500).json({ error: "Failed to update tournament teams" });
+	}
+});
+
 app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 	try {
 		const { id } = req.params;

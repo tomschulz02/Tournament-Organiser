@@ -7,6 +7,7 @@ import {
 	updateScore,
 	startTournament,
 	deleteTournament,
+	updateTeams,
 } from "../requests";
 import "../styles/Tournaments.css";
 import "../styles/TournamentView.css";
@@ -32,6 +33,8 @@ export default function TournamentView() {
 	const [collection, setCollection] = useState(false);
 	const [collectionName, setCollectionName] = useState("");
 	const hasFetchedDetails = useRef(false);
+	const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+	const navigate = useNavigate();
 
 	useEffect(() => {
 		const getTournamentDetails = async () => {
@@ -66,6 +69,17 @@ export default function TournamentView() {
 		getTournamentDetails();
 	}, [id]);
 
+	const handleBackButtonClick = () => {
+		if (hasUnsavedChanges) {
+			const confirmed = window.confirm("You have unsaved changes. Are you sure you want to leave?");
+			if (!confirmed) {
+				return;
+			}
+		}
+
+		navigate("/tournaments");
+	};
+
 	if (loading) {
 		return <LoadingScreen />;
 	}
@@ -84,21 +98,43 @@ export default function TournamentView() {
 			tournamentData={tournamentData}
 			creator={creator}
 			backButton={
-				<Link to="/tournaments" className="back-to-browse">
+				<div onClick={handleBackButtonClick} className="back-to-browse">
 					&lt; Back to browse
-				</Link>
+				</div>
 			}
+			unsavedChanges={hasUnsavedChanges}
+			setUnsavedChanges={setHasUnsavedChanges}
 		/>
 	) : (
-		<CollectionView collection={tournamentData} creator={creator} collectionName={collectionName} />
+		<CollectionView
+			collection={tournamentData}
+			creator={creator}
+			collectionName={collectionName}
+			unsavedChanges={hasUnsavedChanges}
+			setUnsavedChanges={setHasUnsavedChanges}
+		/>
 	);
 }
 
-function TournamentManager({ tournamentData, creator, backButton }) {
+function TournamentManager({ tournamentData, creator, backButton, unsavedChanges, setUnsavedChanges }) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const currentTab = searchParams.get("tab") || "info";
 	const { isLoggedIn } = useContext(AuthContext);
 	const [showUpdateWarning, setShowUpdateWarning] = useState(false);
+
+	useEffect(() => {
+		const handleBeforeUnload = (event) => {
+			if (unsavedChanges) {
+				event.preventDefault();
+				event.returnValue = "";
+				return "";
+			}
+		};
+		window.addEventListener("beforeunload", handleBeforeUnload);
+		return () => {
+			window.removeEventListener("beforeunload", handleBeforeUnload);
+		};
+	}, [unsavedChanges]);
 
 	const handleTabChange = (tab) => {
 		const newParams = new URLSearchParams(searchParams.toString());
@@ -164,7 +200,13 @@ function TournamentManager({ tournamentData, creator, backButton }) {
 				/>
 			)}
 			{currentTab === "teams" && (
-				<TournamentTeams teams={tournamentData.teams[0]} status={tournamentData.details.status} />
+				<TournamentTeams
+					teams={tournamentData.teams}
+					status={tournamentData.details.status}
+					setPageUnsavedChanges={setUnsavedChanges}
+					tournamentId={tournamentData.details.id}
+					creator={creator}
+				/>
 			)}
 		</div>
 	);
@@ -370,22 +412,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 							);
 						})
 					) : (
-						<div className="result-card">
-							<div className="fixture-match-number">Match #1</div>
-							<div className="fixture-match-details">Group Stage - Round 1</div>
-							<table>
-								<tbody>
-									<tr>
-										<td>Team Alpha</td>
-										<td>2</td>
-									</tr>
-									<tr>
-										<td>Team Beta</td>
-										<td>1</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
+						<div className="result-card">No results yet</div>
 					)}
 				</div>
 			</div>
@@ -709,13 +736,16 @@ function TournamentStandings({ standings, format, rounds }) {
 	);
 }
 
-function TournamentTeams({ teams, status }) {
-	const editTeams = status === "Not Started";
+function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, creator }) {
+	const editTeams = status === "Not Started" && creator;
 	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
 	const [currentTeam, setCurrentTeam] = useState(null);
-	const [pool, setPool] = useState(0);
-	const [poolTeam, setPoolTeam] = useState(0);
+	const [selectedTeamIndex, setSelectedTeamIndex] = useState(null);
 	const { showMessage } = useMessage();
+	const [unsavedChanges, setUnsavedChanges] = useState(false);
+	const [originalTeams, setOriginalTeams] = useState(teams);
+	const [stagedTeams, setStagedTeams] = useState(JSON.parse(JSON.stringify(teams)));
+	const [loading, setLoading] = useState(false);
 
 	if (!Array.isArray(teams) || teams.length === 0) {
 		return (
@@ -727,31 +757,67 @@ function TournamentTeams({ teams, status }) {
 			</div>
 		);
 	}
-	const isPooled = teams[0].length > 2;
 
-	const handleTeamNameChange = async (event, teamIndex, poolIndex) => {
+	const handleTeamNameChange = async (event, teamIndex) => {
 		setCurrentTeam({ element: event.currentTarget });
-		setPool(poolIndex);
-		setPoolTeam(teamIndex);
+		setSelectedTeamIndex(teamIndex);
 		setOpenTeamNameChangePopup(true);
 	};
 
 	const changeTeamName = (e, rank, newName) => {
-		for (var pools of teams) {
-			for (var team of pools) {
-				if (team === newName) {
-					return false;
-				}
-			}
+		if (stagedTeams.includes(newName)) {
+			return false;
 		}
-		teams[parseInt(pool)][parseInt(poolTeam)] = newName;
-		console.log(teams);
-		// currentTeam.element.parentElement.innerText = newName;
+		const updated = [...stagedTeams];
+		updated[selectedTeamIndex] = newName;
+		setStagedTeams(updated);
+		console.log(stagedTeams);
 		currentTeam.element.parentElement.classList.add("team-name-changed");
-		console.log(currentTeam.element.parentElement.classList);
-
+		setUnsavedChanges(true);
+		setPageUnsavedChanges(true);
 		setCurrentTeam(null);
 		return true;
+	};
+
+	const handleDiscardChanges = () => {
+		setStagedTeams(JSON.parse(JSON.stringify(originalTeams)));
+		document.querySelectorAll(".team-name-changed").forEach((element) => {
+			element.classList.remove("team-name-changed");
+		});
+		setUnsavedChanges(false);
+		setPageUnsavedChanges(false);
+		showMessage("Changes discarded", "success");
+	};
+
+	const handleSaveChanges = async () => {
+		setLoading(true);
+		if (JSON.stringify(originalTeams) === JSON.stringify(stagedTeams)) {
+			setLoading(false);
+			showMessage("No changes to save", "info");
+			return;
+		}
+		if (stagedTeams.includes("")) {
+			setLoading(false);
+			showMessage("Team names cannot be empty", "error");
+			return;
+		}
+		console.log(tournamentId, stagedTeams);
+		const response = await updateTeams(tournamentId, stagedTeams);
+		console.log("Response:", response);
+		if (!response.success) {
+			setLoading(false);
+			showMessage("Error saving changes. Please try again later", "error");
+			return;
+		} else {
+			setLoading(false);
+			setOriginalTeams(JSON.parse(JSON.stringify(stagedTeams)));
+			document.querySelectorAll(".team-name-changed").forEach((element) => {
+				element.classList.remove("team-name-changed");
+			});
+			setUnsavedChanges(false);
+			setPageUnsavedChanges(false);
+			showMessage("Changes saved successfully", "success");
+		}
 	};
 
 	return (
@@ -761,38 +827,22 @@ function TournamentTeams({ teams, status }) {
 					onClose={() => setOpenTeamNameChangePopup(false)}
 					onSubmit={changeTeamName}
 					currName={currentTeam.element.parentElement.innerText ? currentTeam.element.parentElement.innerText : ""}
-					rank={poolTeam + 1}
+					rank={selectedTeamIndex + 1}
 				/>
 			)}
 			<div className="tournament-teams">
-				<h3>Teams</h3>
-				{isPooled ? (
-					<div className="teams-pools">
-						{teams.map((pool, poolIndex) => (
-							<div key={poolIndex} className="team-pool">
-								<h4>Pool {poolIndex + 1}</h4>
-								{pool.map((team, teamIndex) => (
-									<div key={`${poolIndex}-${teamIndex}`} className="team-card">
-										{team}
-										{editTeams && (
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												height="24px"
-												viewBox="0 -960 960 960"
-												width="24px"
-												fill="#FFFFFF"
-												onClick={(e) => handleTeamNameChange(e, teamIndex, poolIndex)}>
-												<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
-											</svg>
-										)}
-									</div>
-								))}
-							</div>
-						))}
-					</div>
-				) : (
-					<div className="teams-grid">
-						{teams.map((team, index) => (
+				<div className="tournament-teams-header">
+					<h3>Teams</h3>
+					{unsavedChanges && (
+						<div className="button-group">
+							<button onClick={handleSaveChanges}>Save Changes</button>
+							<button onClick={handleDiscardChanges}>Discard Changes</button>
+						</div>
+					)}
+				</div>
+				<div className="teams-grid">
+					<div>
+						{stagedTeams.map((team, index) => (
 							<div key={index} className="team-card">
 								{team}
 								{editTeams && (
@@ -801,20 +851,22 @@ function TournamentTeams({ teams, status }) {
 										height="24px"
 										viewBox="0 -960 960 960"
 										width="24px"
-										fill="#FFFFFF">
+										fill="#FFFFFF"
+										onClick={(e) => handleTeamNameChange(e, index)}>
 										<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
 									</svg>
 								)}
 							</div>
 						))}
 					</div>
-				)}
+					<div>{"Num teams num groups knockout"}</div>
+				</div>
 			</div>
 		</>
 	);
 }
 
-function CollectionView({ collection, collectionName, creator }) {
+function CollectionView({ collection, collectionName, creator, unsavedChanges, setUnsavedChanges }) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const selectedTournament = collection[searchParams.get("selected")] || null;
 
@@ -822,6 +874,12 @@ function CollectionView({ collection, collectionName, creator }) {
 		if (tournament !== null) {
 			setSearchParams({ selected: tournament });
 		} else {
+			if (unsavedChanges) {
+				const confirmed = window.confirm("You have unsaved changes. Are you sure you want to leave?");
+				if (!confirmed) {
+					return;
+				}
+			}
 			setSearchParams({});
 		}
 	};
@@ -862,6 +920,8 @@ function CollectionView({ collection, collectionName, creator }) {
 							&lt; Back to Collection
 						</div>
 					}
+					unsavedChanges={unsavedChanges}
+					setUnsavedChanges={setUnsavedChanges}
 				/>
 			)}
 		</>

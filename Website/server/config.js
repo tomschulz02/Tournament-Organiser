@@ -241,6 +241,12 @@ class DBConnection {
 		this.query(sql, [tournamentId, userID], callback);
 	}
 
+	updateTeams(tournamentId, userId, teams, callback) {
+		const sql =
+			"UPDATE tournaments SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2 AND created_by = $3";
+		this.query(sql, [JSON.stringify(teams), tournamentId, userId], callback);
+	}
+
 	test() {
 		console.log("test");
 	}

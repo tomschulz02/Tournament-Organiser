@@ -8,7 +8,7 @@ import { MessagePopup, useMessage } from "../MessageContext";
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
-export default function Login() {
+export default function Login({ setUsername }) {
 	const [currentForm, setCurrentForm] = useState("login");
 	const { setIsLoggedIn } = useContext(AuthContext);
 	const navigate = useNavigate();
@@ -44,16 +44,26 @@ export default function Login() {
 			<MessagePopup />
 			<div className="login-popup">
 				{currentForm === "login" ? (
-					<LoginForm onFormSwitch={() => toggleForm("register")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+					<LoginForm
+						onFormSwitch={() => toggleForm("register")}
+						onClose={handleClose}
+						setLoggedIn={setIsLoggedIn}
+						setUsername={setUsername}
+					/>
 				) : (
-					<RegisterForm onFormSwitch={() => toggleForm("login")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+					<RegisterForm
+						onFormSwitch={() => toggleForm("login")}
+						onClose={handleClose}
+						setLoggedIn={setIsLoggedIn}
+						setUsername={setUsername}
+					/>
 				)}
 			</div>
 		</>
 	);
 }
 
-function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
+function LoginForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
 	const [loginDetails, setLoginDetails] = useState({ email: "", password: "" });
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
@@ -80,6 +90,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 			if (response.success) {
 				setLoggedIn(true);
 				showMessage(`Welcome, ${response.user}`, "success");
+				setUsername(response.user);
 				onClose();
 			}
 		} catch (error) {
@@ -140,7 +151,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 	);
 }
 
-function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
+function RegisterForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
 	const [registerDetails, setRegisterDetails] = useState({
 		newUsername: "",
 		newEmail: "",
@@ -171,6 +182,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			if (response.success) {
 				setLoggedIn(true);
 				showMessage("Account created successfully!", "success");
+				setUsername(response.user);
 				onClose();
 			}
 		} catch (error) {

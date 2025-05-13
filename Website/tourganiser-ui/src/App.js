@@ -6,11 +6,11 @@ import { AuthContext } from "./AuthContext";
 import { MessagePopup, useMessage } from "./MessageContext";
 import { logoutUser } from "./requests";
 
-export default function App() {
+export default function App({ username, setUsername }) {
 	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
 	return (
 		<>
-			<Header loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} />
+			<Header loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} username={username} setUsername={setUsername} />
 			<main id="app">
 				<Outlet />
 			</main>
@@ -20,7 +20,7 @@ export default function App() {
 	);
 }
 
-function Header({ loggedIn, setLoggedIn }) {
+function Header({ loggedIn, setLoggedIn, username, setUsername }) {
 	const [profileOpen, setProfileOpen] = useState(false);
 
 	return (
@@ -44,7 +44,16 @@ function Header({ loggedIn, setLoggedIn }) {
 					</ul>
 				</nav>
 			</header>
-			{<Profile isOpen={profileOpen} onClose={() => setProfileOpen(false)} loggedIn={loggedIn} logout={setLoggedIn} />}
+			{
+				<Profile
+					isOpen={profileOpen}
+					onClose={() => setProfileOpen(false)}
+					loggedIn={loggedIn}
+					logout={setLoggedIn}
+					username={username}
+					setUsername={setUsername}
+				/>
+			}
 		</>
 	);
 }
@@ -94,7 +103,7 @@ function Footer() {
 	);
 }
 
-function Profile({ isOpen, onClose, loggedIn, logout }) {
+function Profile({ isOpen, onClose, loggedIn, logout, username, setUsername }) {
 	const { showMessage } = useMessage();
 
 	useEffect(() => {
@@ -118,6 +127,7 @@ function Profile({ isOpen, onClose, loggedIn, logout }) {
 			if (response.success) {
 				logout(false);
 				showMessage("Successfully logged out!", "success");
+				setUsername("Guest");
 			} else {
 				showMessage("Logout failed. Please try again.", "error");
 			}
@@ -134,7 +144,7 @@ function Profile({ isOpen, onClose, loggedIn, logout }) {
 				&times;
 			</button>
 			<div className="profile-content">
-				<h2>Profile - Username</h2>
+				<h2>Profile - {username !== "" ? username : "Guest"}</h2>
 				<div className="profile-item no-hover"></div>
 				<div className="profile-item">
 					<h4>My Tournament</h4>

@@ -446,6 +446,7 @@ app.post("/api/signup", async (req, res) => {
 				return res.status(200).json({
 					success: true,
 					message: "User account created successfully",
+					user: result.message.username,
 				});
 			});
 		});

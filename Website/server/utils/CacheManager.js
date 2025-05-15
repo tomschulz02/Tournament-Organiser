@@ -18,6 +18,12 @@ class CacheManager {
 	}
 
 	invalidate(key) {
+		this.cache.forEach((value, cacheKey) => {
+			if (cacheKey.startsWith(key)) {
+				this.cache.delete(cacheKey);
+				this.timestamps.delete(cacheKey);
+			}
+		});
 		this.cache.delete(key);
 		this.timestamps.delete(key);
 	}

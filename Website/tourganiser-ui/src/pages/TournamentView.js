@@ -8,6 +8,7 @@ import {
 	startTournament,
 	deleteTournament,
 	updateTeams,
+	updateRounds,
 } from "../requests";
 import "../styles/Tournaments.css";
 import "../styles/TournamentView.css";
@@ -190,6 +191,7 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 					creator={creator}
 					onUpdate={() => setShowUpdateWarning(true)}
 					standings={tournamentData.standings}
+					tournamentId={tournamentData.details.id}
 				/>
 			)}
 			{currentTab === "standings" && (
@@ -420,7 +422,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	);
 }
 
-function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
+function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournamentId }) {
 	const [filter, setFilter] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
@@ -527,16 +529,43 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
 			if (fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches) {
 				setRoundComplete(true);
 			}
+			showMessage("Score updated successfully", "success");
 			setLoading(false);
 			handleCloseScoreModal();
-			showMessage("Score updated successfully", "success");
-			onUpdate();
+
 			window.location.reload();
 		}
 	};
 
-	const handleNextRound = async () => {
+	const handleNextRound = () => {
 		setShowNextRoundModal(true);
+	};
+
+	const handleNextRoundConfirm = async (qualifiedTeams) => {
+		const confirmed = await confirm("Are you sure you want to start the next round? This action cannot be undone.");
+		if (!confirmed) {
+			setShowNextRoundModal(false);
+			return;
+		}
+		setLoading(true);
+
+		// send qualified teams, standings, remaining fixtures, currentRound, and rounds to server
+		const response = await updateRounds(
+			tournamentId,
+			fixtures.rounds,
+			qualifiedTeams,
+			standings,
+			fixtures.remainingFixtures,
+			fixtures.currentRound
+		);
+		console.log(response);
+		setLoading(false);
+		if (!response.success) {
+			showMessage("Error starting next round. Please try again later", "error");
+			return;
+		}
+		setShowNextRoundModal(false);
+		showMessage("Started next round. Please refresh to see changes", "success");
 	};
 
 	return (
@@ -555,7 +584,8 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings }) {
 					<NextRoundModal
 						standings={standings}
 						onCancel={() => setShowNextRoundModal(false)}
-						onConfirm={() => setShowNextRoundModal(false)}
+						onConfirm={handleNextRoundConfirm}
+						fixtures={fixtures}
 					/>
 				)}
 				<div className="fixtures-summary">
@@ -859,7 +889,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 							</div>
 						))}
 					</div>
-					<div>{"Num teams num groups knockout"}</div>
+					<div>{"Feature coming soon..."}</div>
 				</div>
 			</div>
 		</>

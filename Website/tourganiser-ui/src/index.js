@@ -16,19 +16,17 @@ import "@fortawesome/fontawesome-free/css/all.min.css";
 import reportWebVitals from "./reportWebVitals";
 
 function RoutesComponent() {
-	const [username, setUsername] = useState("Guest");
-
 	return (
 		<BrowserRouter>
 			<Routes>
-				<Route path="/" element={<App username={username} setUsername={setUsername} />}>
+				<Route path="/" element={<App />}>
 					<Route path="/" element={<Home />} />
 					<Route path="/home" element={<Home />} />
 					<Route path="/tournaments" element={<Tournaments />} />
 					<Route path="/tournaments/view/:id" element={<TournamentView />} />
 					<Route path="/about" element={<About />} />
 				</Route>
-				<Route path="/login" element={<Login setUsername={setUsername} />} />
+				<Route path="/login" element={<Login />} />
 			</Routes>
 		</BrowserRouter>
 	);

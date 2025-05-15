@@ -247,6 +247,43 @@ class DBConnection {
 		this.query(sql, [JSON.stringify(teams), tournamentId, userId], callback);
 	}
 
+	async updateRounds({ tournamentId, userId, updatedRounds, updatedFixtures, nextRound }, callback) {
+		const client = await this.pool.connect();
+
+		try {
+			await client.query("BEGIN");
+
+			await client.query(
+				`UPDATE tournaments SET state = jsonb_set(jsonb_set(state, '{rounds}', $1::jsonb), '{currentRound}', $2::jsonb) WHERE id=$3::INTEGER AND created_by=$4::INTEGER`,
+				[JSON.stringify(updatedRounds), JSON.stringify(nextRound), tournamentId, userId]
+			);
+
+			if (updatedFixtures.length > 0) {
+				const values = [];
+				const placeholders = updatedFixtures
+					.map((fixture, i) => {
+						values.push(fixture.id, fixture.team1, fixture.team2);
+						const offset = i * 3;
+						return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
+					})
+					.join(", ");
+
+				await client.query(
+					`UPDATE fixtures AS f SET team1=u.team1, team2=u.team2 FROM(VALUES ${placeholders}) AS u(id, team1, team2) WHERE f.id=u.id::INTEGER`,
+					values
+				);
+			}
+
+			await client.query("COMMIT");
+			callback({ success: true, object: false, message: "Round progressed" });
+		} catch (error) {
+			await client.query("ROLLBACK");
+			callback({ success: false, object: true, message: error });
+		} finally {
+			client.release();
+		}
+	}
+
 	test() {
 		console.log("test");
 	}

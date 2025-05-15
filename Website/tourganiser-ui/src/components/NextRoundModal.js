@@ -4,6 +4,8 @@ import "../styles/NextRoundModal.css";
 function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	const [qualifiedSpots, setQualifiedSpots] = useState([]);
 	const [availableTeams, setAvailableTeams] = useState([]);
+	const currentRound = fixtures.rounds[fixtures.currentRound];
+	const nextRound = fixtures.rounds[fixtures.currentRound + 1];
 
 	useEffect(() => {
 		// Initialize qualified spots with calculated teams
@@ -15,22 +17,43 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	}, [standings]);
 
 	function getQualifiedTeams(standings) {
-		if (Array.isArray(standings[0])) {
-			return standings.flatMap((pool) => pool.slice(0, 2));
+		let qualifiedTeams = [];
+		let currentStandings = [...standings];
+		for (let i = 0; i < Math.floor(nextRound.qualifyingTeams / currentStandings.length); i++) {
+			currentStandings.forEach((group) => {
+				qualifiedTeams.push(group[i]);
+			});
 		}
-		return standings.slice(0, standings.length / 2);
+		currentStandings = currentStandings.slice(
+			Math.floor(nextRound.qualifyingTeams / currentStandings.length) * currentStandings.length
+		);
+
+		currentStandings.flat().sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
+		qualifiedTeams.push(...currentStandings.slice(0, nextRound.qualifyingTeams - qualifiedTeams.length));
+
+		// console.log("Qualified Teams:", qualifiedTeams);
+
+		return qualifiedTeams;
 	}
 
 	function generateFixtures(teams) {
 		const fixtures = [];
-		for (let i = 0; i < teams.length; i += 2) {
-			if (i + 1 < teams.length) {
-				fixtures.push({
-					team1: teams[i],
-					team2: teams[i + 1],
-				});
+		const gap = nextRound.qualifyingTeams - nextRound.matches * 2;
+		// console.log("Gap:", gap, "Teams:", teams);
+		for (let i = gap; i < teams.length - nextRound.matches; i++) {
+			const team1 = teams[i];
+			const team2 = teams[teams.length - (i - gap) - 1];
+			// console.log("Team1:", team1, "Team2:", team2);
+			if (team1 && team2) {
+				fixtures.push({ team1: team1, team2: team2 });
 			}
 		}
+		for (let i = 0; i < gap; i++) {
+			fixtures.push({ team1: teams[i], team2: "TBD" });
+		}
+
+		// console.log("Fixtures for next round:", fixtures);
+
 		return fixtures;
 	}
 
@@ -43,8 +66,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	};
 
 	const handleConfirm = () => {
-		const fixtures = generateFixtures(qualifiedSpots);
-		onConfirm(qualifiedSpots, fixtures);
+		onConfirm(qualifiedSpots);
 	};
 
 	return (
@@ -59,6 +81,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 								const teamData = availableTeams.find((t) => t.name === selectedTeam);
 								return (
 									<div key={index} className="team-selection">
+										<label>{index + 1}.</label>
 										<select
 											value={selectedTeam}
 											onChange={(e) => handleTeamSelect(index, e.target.value)}

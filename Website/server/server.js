@@ -24,7 +24,12 @@ TODO:
 import dotenv from "dotenv";
 import path, { dirname } from "path";
 dotenv.config();
-import { formatCombiTournamentForStorage, formatTournamentsForBrowse, formatTournamentView } from "./formatter.js";
+import {
+	formatCombiTournamentForStorage,
+	formatTournamentsForBrowse,
+	formatTournamentView,
+	determineQualifiedTeams,
+} from "./formatter.js";
 import DBConnection from "./config.js";
 import express, { json } from "express";
 import cors from "cors";
@@ -35,6 +40,7 @@ import { fileURLToPath } from "url";
 import logger from "./logger.cjs";
 import Hashids from "hashids";
 import CacheManager from "./utils/CacheManager.js";
+import { error } from "console";
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
@@ -178,8 +184,8 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	const { id } = req.params;
 	var classification = null;
 	var responseObject = null;
-	if (cacheManager.get(id)) {
-		return res.status(200).json(cacheManager.get(id));
+	if (cacheManager.get(id + "_" + (req.user ? req.user.id : "null"))) {
+		return res.status(200).json(cacheManager.get(id + "_" + (req.user ? req.user.id : "null")));
 	}
 	if (id.startsWith("t_")) {
 		classification = "tournament";
@@ -187,6 +193,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 		classification = "collection";
 	}
 	const hashId = id.substring(2);
+	const cacheId = req.user ? id + "_" + req.user.id : id + "_null";
 	// Get tournament information
 	try {
 		if (classification === "tournament") {
@@ -227,7 +234,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						creator: creator,
 					};
 					// console.log("Hello");
-					cacheManager.set(id, responseObject);
+					cacheManager.set(cacheId, responseObject);
 					return res.status(200).json(responseObject);
 				}
 				responseObject = {
@@ -235,7 +242,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 					loggedIn: loggedIn,
 					creator: creator,
 				};
-				cacheManager.set(id, responseObject);
+				cacheManager.set(cacheId, responseObject);
 				return res.status(200).json(responseObject);
 			});
 		} else if (classification === "collection") {
@@ -276,7 +283,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							creator: creator,
 							collection: result.collection,
 						};
-						cacheManager.set(id, responseObject);
+						cacheManager.set(cacheId, responseObject);
 						return res.status(200).json(responseObject);
 					});
 				} else {
@@ -292,7 +299,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						creator: creator,
 						collection: result.collection,
 					};
-					cacheManager.set(id, responseObject);
+					cacheManager.set(cacheId, responseObject);
 					return res.status(200).json(responseObject);
 				}
 
@@ -509,15 +516,17 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 		const fixtureId = req.params.id;
 		const { scores, status, hashId, rounds } = req.body;
 		// console.log({ scores, status, hashId });
-		db.updateFixture(fixtureId, JSON.stringify(scores), status, rounds, (result) => {
-			// console.log(result);
-			if (!result.success) {
-				return res.status(500).json({ error: result.message });
-			}
-			// console.log(result);
-			cacheManager.invalidate(hashId);
-			res.status(200).json({ success: true, message: "Tournament results updated successfully" });
-		});
+		if (req.user) {
+			db.updateFixture(fixtureId, JSON.stringify(scores), status, rounds, (result) => {
+				// console.log(result);
+				if (!result.success) {
+					return res.status(500).json({ error: result.message });
+				}
+				// console.log(result);
+				cacheManager.invalidate(hashId);
+				res.status(200).json({ success: true, message: "Tournament results updated successfully" });
+			});
+		}
 	} catch (error) {
 		res.status(500).json({ error: "Failed to update tournament results" });
 	}
@@ -661,6 +670,47 @@ app.post("/api/tournament/:id/updateTeams", verifyToken, async (req, res) => {
 		});
 	} catch (error) {
 		res.status(500).json({ error: "Failed to update tournament teams" });
+	}
+});
+
+app.post("/api/tournament/:id/updateRounds", verifyToken, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user.id;
+		const { rounds, qualifiedTeams, standings, fixtures, currentRound } = req.body;
+		const decodedId = tournamentHash.decode(id);
+		if (decodedId.length === 0) {
+			return res.status(400).json({ error: "Invalid tournament ID" });
+		}
+		const tournamentId = decodedId[0];
+		const details = determineQualifiedTeams({
+			rounds: rounds,
+			teams: qualifiedTeams,
+			fixtures: fixtures,
+			currentRound: currentRound,
+			previousStandings: standings,
+		});
+		console.dir({ details, tournamentId, userId }, { depth: null });
+		db.updateRounds(
+			{
+				tournamentId,
+				userId,
+				updatedRounds: details.rounds,
+				updatedFixtures: details.updatedFixtures,
+				nextRound: details.currentRound,
+			},
+			(result) => {
+				console.log(result);
+				if (!result.success) {
+					return res.status(400).json({ error: result.message });
+				}
+				cacheManager.invalidate("t_" + id);
+				return res.status(200).json({ success: true, message: "Next round started" });
+			}
+		);
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ error: "Failed to update tournament" });
 	}
 });
 

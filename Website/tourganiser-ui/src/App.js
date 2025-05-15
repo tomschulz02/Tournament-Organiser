@@ -6,11 +6,11 @@ import { AuthContext } from "./AuthContext";
 import { MessagePopup, useMessage } from "./MessageContext";
 import { logoutUser } from "./requests";
 
-export default function App({ username, setUsername }) {
+export default function App() {
 	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
 	return (
 		<>
-			<Header loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} username={username} setUsername={setUsername} />
+			<Header loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} />
 			<main id="app">
 				<Outlet />
 			</main>
@@ -20,7 +20,7 @@ export default function App({ username, setUsername }) {
 	);
 }
 
-function Header({ loggedIn, setLoggedIn, username, setUsername }) {
+function Header({ loggedIn, setLoggedIn }) {
 	const [profileOpen, setProfileOpen] = useState(false);
 
 	return (
@@ -44,16 +44,7 @@ function Header({ loggedIn, setLoggedIn, username, setUsername }) {
 					</ul>
 				</nav>
 			</header>
-			{
-				<Profile
-					isOpen={profileOpen}
-					onClose={() => setProfileOpen(false)}
-					loggedIn={loggedIn}
-					logout={setLoggedIn}
-					username={username}
-					setUsername={setUsername}
-				/>
-			}
+			{<Profile isOpen={profileOpen} onClose={() => setProfileOpen(false)} loggedIn={loggedIn} logout={setLoggedIn} />}
 		</>
 	);
 }
@@ -103,8 +94,9 @@ function Footer() {
 	);
 }
 
-function Profile({ isOpen, onClose, loggedIn, logout, username, setUsername }) {
+function Profile({ isOpen, onClose, loggedIn, logout }) {
 	const { showMessage } = useMessage();
+	const { username, setUsername } = useContext(AuthContext);
 
 	useEffect(() => {
 		const profileTab = document.getElementById("profileTab");

@@ -44,26 +44,16 @@ export default function Login({ setUsername }) {
 			<MessagePopup />
 			<div className="login-popup">
 				{currentForm === "login" ? (
-					<LoginForm
-						onFormSwitch={() => toggleForm("register")}
-						onClose={handleClose}
-						setLoggedIn={setIsLoggedIn}
-						setUsername={setUsername}
-					/>
+					<LoginForm onFormSwitch={() => toggleForm("register")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
 				) : (
-					<RegisterForm
-						onFormSwitch={() => toggleForm("login")}
-						onClose={handleClose}
-						setLoggedIn={setIsLoggedIn}
-						setUsername={setUsername}
-					/>
+					<RegisterForm onFormSwitch={() => toggleForm("login")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
 				)}
 			</div>
 		</>
 	);
 }
 
-function LoginForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
+function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 	const [loginDetails, setLoginDetails] = useState({ email: "", password: "" });
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
@@ -90,7 +80,6 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
 			if (response.success) {
 				setLoggedIn(true);
 				showMessage(`Welcome, ${response.user}`, "success");
-				setUsername(response.user);
 				onClose();
 			}
 		} catch (error) {
@@ -151,7 +140,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
 	);
 }
 
-function RegisterForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
+function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 	const [registerDetails, setRegisterDetails] = useState({
 		newUsername: "",
 		newEmail: "",
@@ -182,7 +171,6 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn, setUsername }) {
 			if (response.success) {
 				setLoggedIn(true);
 				showMessage("Account created successfully!", "success");
-				setUsername(response.user);
 				onClose();
 			}
 		} catch (error) {

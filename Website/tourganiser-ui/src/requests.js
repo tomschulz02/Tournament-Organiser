@@ -291,3 +291,22 @@ export async function updateTeams(tournamentId, teams) {
 		throw error;
 	}
 }
+
+export async function updateRounds(tournamentId, rounds, qualifiedTeams, standings, fixtures, currentRound) {
+	try {
+		return await fetchWithRetry(`http://localhost:5000/api/tournament/${tournamentId}/updateRounds`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			credentials: "include",
+			body: JSON.stringify({ rounds, qualifiedTeams, standings, fixtures, currentRound }),
+		});
+	} catch (error) {
+		if (error.isConnectionError) {
+			// showMessage("Unable to connect to server. Please try again later.", "error");
+			return { error: error.message };
+		}
+		throw error;
+	}
+}

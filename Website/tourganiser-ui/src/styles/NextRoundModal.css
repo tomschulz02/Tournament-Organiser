@@ -47,6 +47,12 @@
 	border-bottom: 1px solid #f0f0f0;
 }
 
+.team-selection label {
+	font-size: 1.1em;
+	color: #333;
+	width: 20px;
+}
+
 .team-checkbox {
 	display: flex;
 	align-items: center;
@@ -133,8 +139,8 @@
 
 .team-selection {
 	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 15px;
+	grid-template-columns: 1fr 10fr auto;
+	gap: 5px;
 	align-items: center;
 	padding: 10px;
 	border-bottom: 1px solid #f0f0f0;

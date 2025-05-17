@@ -1,4 +1,4 @@
-import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams, data } from "react-router-dom";
 import React, { useState, useEffect, useContext, useRef, use } from "react";
 import {
 	fetchTournamentData,
@@ -554,7 +554,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 			tournamentId,
 			fixtures.rounds,
 			qualifiedTeams,
-			standings,
+			null,
 			fixtures.remainingFixtures,
 			fixtures.currentRound
 		);
@@ -683,66 +683,78 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 }
 
 function TournamentStandings({ standings, format, rounds }) {
-	console.log("Standings:", standings);
+	const [expandedRounds, setExpandedRounds] = useState(new Set([0])); // First round expanded by default
+
+	const toggleRound = (roundIndex) => {
+		setExpandedRounds((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(roundIndex)) {
+				newSet.delete(roundIndex);
+			} else {
+				newSet.add(roundIndex);
+			}
+			return newSet;
+		});
+	};
+
 	const standingsMessage =
 		"Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, then points ratio (in that order)";
-	// console.log("Standings:", standings.length);
-	if (!standings || standings.length === 0) {
-		return (
-			<div className="tournament-standings">
-				<h3>
-					Standings <Tooltip message={standingsMessage} />
-				</h3>
-				<div className="standings-placeholder">
-					<div className="placeholder-icon">📊</div>
-					<p>Standings will be available once matches have been played</p>
-					{format && <p className="format-info">Format: {format}</p>}
-				</div>
+
+	const renderStandingsTable = (data, poolIndex = null) =>
+		data.length > 0 ? (
+			<table className="standings-table">
+				<thead>
+					<tr>
+						<th>Position</th>
+						<th className="sticky-column">Team</th>
+						<th>Played</th>
+						<th>Won</th>
+						<th>Lost</th>
+						<th>Sets Won</th>
+						<th>Sets Lost</th>
+						<th>Set Ratio</th>
+						<th>Points For</th>
+						<th>Points Against</th>
+						<th>Points Ratio</th>
+					</tr>
+				</thead>
+				<tbody>
+					{data.map((team, index) => (
+						<tr key={`${poolIndex}-${index}`}>
+							<td>{index + 1}</td>
+							<td className="sticky-column" style={{ backgroundColor: "white" }}>
+								{team.name}
+							</td>
+							<td>{team.played}</td>
+							<td>{team.won}</td>
+							<td>{team.lost}</td>
+							<td>{team.setsWon}</td>
+							<td>{team.setsLost}</td>
+							<td>{team.setsRatio !== null ? team.setsRatio.toFixed(3) : "MAX"}</td>
+							<td>{team.pointsFor}</td>
+							<td>{team.pointsAgainst}</td>
+							<td>{team.pointsRatio !== null ? team.pointsRatio.toFixed(3) : "MAX"}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		) : (
+			<div className="standings-placeholder">
+				<div className="placeholder-icon">📊</div>
+				<p>Standings will be available once matches have been played</p>
+				{format && <p className="format-info">Format: {format}</p>}
 			</div>
 		);
-	}
 
-	// Helper function to determine if standings are for pools
-	const isPoolFormat = format.includes("Pool") || format.includes("pool") || format.includes("Pooled");
-	console.log("Is Pool Format:", isPoolFormat);
-
-	const renderStandingsTable = (data, poolIndex = null) => (
-		<table className="standings-table">
-			<thead>
-				<tr>
-					<th>Position</th>
-					<th className="sticky-column">Team</th>
-					<th>Played</th>
-					<th>Won</th>
-					<th>Lost</th>
-					<th>Sets Won</th>
-					<th>Sets Lost</th>
-					<th>Set Ratio</th>
-					<th>Points For</th>
-					<th>Points Against</th>
-					<th>Points Ratio</th>
-				</tr>
-			</thead>
-			<tbody>
-				{data.map((team, index) => (
-					<tr key={`${poolIndex}-${index}`}>
-						<td>{index + 1}</td>
-						<td className="sticky-column" style={{ backgroundColor: "white" }}>
-							{team.name}
-						</td>
-						<td>{team.played}</td>
-						<td>{team.won}</td>
-						<td>{team.lost}</td>
-						<td>{team.setsWon}</td>
-						<td>{team.setsLost}</td>
-						<td>{team.setsRatio !== null ? team.setsRatio.toFixed(3) : "MAX"}</td>
-						<td>{team.pointsFor}</td>
-						<td>{team.pointsAgainst}</td>
-						<td>{team.pointsRatio !== null ? team.pointsRatio.toFixed(3) : "MAX"}</td>
-					</tr>
-				))}
-			</tbody>
-		</table>
+	const renderEmptyRound = (round) => (
+		<div className="empty-round-placeholder">
+			<div className="placeholder-content">
+				<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+					<path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z" />
+				</svg>
+				<p>Standings for {round.round} will be available once matches begin</p>
+			</div>
+		</div>
 	);
 
 	return (
@@ -750,18 +762,36 @@ function TournamentStandings({ standings, format, rounds }) {
 			<h3>
 				Standings <Tooltip message={standingsMessage} />
 			</h3>
-			{isPoolFormat ? (
-				<div className="pools-standings">
-					{standings.map((pool, index) => (
-						<div key={index} className="pool-standings">
-							<h4>Pool {index + 1}</h4>
-							{renderStandingsTable(pool, index)}
-						</div>
-					))}
+			{standings.map((round, roundIndex) => (
+				<div key={roundIndex} className="round-standings">
+					<div
+						className={`round-header ${expandedRounds.has(roundIndex) ? "expanded" : ""}`}
+						onClick={() => toggleRound(roundIndex)}>
+						<h4>{round.round}</h4>
+						<svg
+							className="expand-icon"
+							xmlns="http://www.w3.org/2000/svg"
+							height="24"
+							viewBox="0 -960 960 960"
+							width="24">
+							<path d="M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z" />
+						</svg>
+					</div>
+					<div className={`round-content ${expandedRounds.has(roundIndex) ? "expanded" : ""}`}>
+						{round.groups && round.groups.length > 0 ? (
+							<div className="pools-standings">
+								{round.groups.map((pool, index) => (
+									<div key={index} className="pool-standings">
+										{renderStandingsTable(pool, index)}
+									</div>
+								))}
+							</div>
+						) : (
+							renderEmptyRound(round)
+						)}
+					</div>
 				</div>
-			) : (
-				renderStandingsTable(standings)
-			)}
+			))}
 		</div>
 	);
 }

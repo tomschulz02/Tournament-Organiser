@@ -355,7 +355,7 @@ const nextRoundData = {
 
 // console.dir(determineQualifiedTeams(nextRoundData), { depth: null });
 // formatCombiTournamentForStorage(tournamentData);
-// console.log(formatTournamentView(tournamentDataForView, { encode: (id) => id }, true));
+// console.dir(formatTournamentView(tournamentDataForView, { encode: (id) => id }, true), { depth: null });
 
 export function formatCombiTournamentForStorage(data) {
 	var format = {
@@ -655,7 +655,7 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 			rounds: tournament.details.state.rounds,
 			currentRound: parseInt(tournament.details.state.currentRound),
 		},
-		standings: determineStandings(tournament.details.state.rounds[0].groups, results, tournament.details.format),
+		standings: determineStandings(tournament.details.state.rounds, results, tournament.details.format),
 		teams: tournament.details.state.teams,
 	};
 	// tournament.details.state.rounds.forEach((round) => {
@@ -723,66 +723,78 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 	return { remainingFixtures, results };
 }
 
-function determineStandings(teams, results, format) {
+function determineStandings(rounds, results, format) {
 	// console.log({ teams, results, format });
-	var standings = [];
+	const allStandings = [];
 	if (format == "C") {
-		teams.forEach((group) => {
-			var groupStandings = [];
-			group.forEach((team) => {
-				groupStandings.push({
-					name: team,
-					pointsFor: 0,
-					pointsAgainst: 0,
-					setsWon: 0,
-					setsLost: 0,
-					won: 0,
-					lost: 0,
-					played: 0,
-					pointsRatio: 0,
-					setsRatio: 0,
-				});
-			});
-			standings.push(groupStandings);
-		});
-
-		// updates standings based on the results of the fixtures
-		results.forEach((result) => {
-			var res = determineResult(result);
-			if (res == null) return;
-			res.forEach((team) => {
-				standings.forEach((group) => {
-					group.forEach((groupTeam) => {
-						if (groupTeam.name == team.name) {
-							groupTeam.pointsFor += team.pointsFor;
-							groupTeam.pointsAgainst += team.pointsAgainst;
-							groupTeam.setsWon += team.setsWon;
-							groupTeam.setsLost += team.setsLost;
-							groupTeam.played++;
-							if (team.won) groupTeam.won++;
-							else groupTeam.lost++;
-						}
+		rounds.forEach((round) => {
+			const teams = round.groups;
+			const standings = { round: round.round, groups: [] };
+			teams.forEach((group) => {
+				var groupStandings = [];
+				group.forEach((team) => {
+					groupStandings.push({
+						name: team,
+						pointsFor: 0,
+						pointsAgainst: 0,
+						setsWon: 0,
+						setsLost: 0,
+						won: 0,
+						lost: 0,
+						played: 0,
+						pointsRatio: 0,
+						setsRatio: 0,
 					});
 				});
+				standings.groups.push(groupStandings);
 			});
-		});
 
-		// updates calculated values for each team in the standings
-		standings.forEach((group) => {
-			group.forEach((team) => {
-				team.pointsRatio = team.pointsFor / team.pointsAgainst || 0;
-				team.setsRatio = team.setsWon / team.setsLost || 0;
-				// team.played = team.won + team.lost;
+			// updates standings based on the results of the fixtures
+			results.forEach((result) => {
+				if (
+					(round.round == "Group Stage" && result.round.includes("Pool")) ||
+					round.round == result.round ||
+					(round.round == "Finals" && result.round.includes("Playoff"))
+				) {
+					var res = determineResult(result);
+					if (res == null) return;
+					res.forEach((team) => {
+						standings.groups.forEach((group) => {
+							group.forEach((groupTeam) => {
+								if (groupTeam.name == team.name) {
+									groupTeam.pointsFor += team.pointsFor;
+									groupTeam.pointsAgainst += team.pointsAgainst;
+									groupTeam.setsWon += team.setsWon;
+									groupTeam.setsLost += team.setsLost;
+									groupTeam.played++;
+									if (team.won) groupTeam.won++;
+									else groupTeam.lost++;
+								}
+							});
+						});
+					});
+				}
 			});
-		});
 
-		// sorts the standings based on the points ratio and sets ratio
-		standings.forEach((group) => {
-			group.sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
+			// updates calculated values for each team in the standings
+			standings.groups.forEach((group) => {
+				group.forEach((team) => {
+					team.pointsRatio = team.pointsFor / team.pointsAgainst || 0;
+					team.setsRatio = team.setsWon / team.setsLost || 0;
+					// team.played = team.won + team.lost;
+				});
+			});
+
+			// sorts the standings based on the points ratio and sets ratio
+			standings.groups.forEach((group) => {
+				group.sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
+			});
+
+			allStandings.push(standings);
 		});
 	}
 	// console.log("STANDINGS", standings);
-	return standings;
+	return allStandings;
 }
 
 function determineResult(result) {
@@ -809,16 +821,8 @@ function determineResult(result) {
 	return resObject;
 }
 
-function areGroupMatchesComplete(fixtures) {
-	var complete = true;
-	fixtures.forEach((fix) => {
-		if (fix.status != "COMPLETED" && fix.round.includes("Pool")) complete = false;
-	});
-	return complete;
-}
-
 export function determineQualifiedTeams({ rounds, teams, fixtures, currentRound, previousStandings }) {
-	rounds[currentRound] = { ...rounds[currentRound], standings: previousStandings };
+	// rounds[currentRound] = { ...rounds[currentRound], standings: previousStandings };
 	currentRound = parseInt(currentRound) + 1;
 	const gap = rounds[currentRound].qualifyingTeams - rounds[currentRound].matches * 2;
 	for (let i = gap; i < teams.length - rounds[currentRound].matches; i++) {
@@ -849,37 +853,4 @@ export function determineQualifiedTeams({ rounds, teams, fixtures, currentRound,
 	}
 
 	return { rounds, updatedFixtures, currentRound };
-}
-
-function determineFirstKnockoutRound(fixtures) {
-	var knockoutRound = 1;
-	fixtures.forEach((fix) => {
-		var currentRound = 0;
-		switch (fix.round) {
-			case "Round of 24":
-				currentRound = 12;
-				break;
-			case "Round of 16":
-				currentRound = 8;
-				break;
-			case "Round of 12":
-				currentRound = 6;
-				break;
-			case "Quarterfinals":
-				currentRound = 4;
-				break;
-			case "Semifinals":
-				currentRound = 2;
-				break;
-			case "Finals":
-				currentRound = 1;
-				break;
-			default:
-				break;
-		}
-		if (currentRound > knockoutRound) {
-			knockoutRound = currentRound;
-		}
-	});
-	return knockoutRound;
 }

@@ -447,7 +447,7 @@ app.post("/api/signup", async (req, res) => {
 				res.cookie("authToken", token, {
 					httpOnly: true,
 					secure: process.env.NODE_ENV === "production",
-					sameSite: "strict",
+					sameSite: "none",
 					maxAge: 1000 * 60 * 60 * 24,
 				});
 				return res.status(200).json({
@@ -485,7 +485,7 @@ app.post("/api/signin", async (req, res) => {
 			res.cookie("authToken", token, {
 				httpOnly: true,
 				secure: true,
-				sameSite: "strict",
+				sameSite: "none",
 				maxAge: 1000 * 60 * 60 * 24,
 			});
 			return res.status(200).json({
@@ -504,7 +504,7 @@ app.post("/api/signout", verifyToken, async (req, res) => {
 	res.clearCookie("authToken", {
 		httpOnly: true,
 		secure: process.env.NODE_ENV === "production",
-		sameSite: "strict",
+		sameSite: "none",
 	});
 	res.json({ success: true, message: "User logged out" });
 });

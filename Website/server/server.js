@@ -762,7 +762,7 @@ app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 
 app.get("*", (req, res) => {
 	// console.log(`Catch-all triggered for: ${req.originalUrl}`);
-	res.sendFile(path.join(__dirname, "../tourganiser/build/index.html"));
+	res.sendFile(path.join(__dirname, "../tourganiser-ui/build/index.html"));
 });
 
 // Start the server

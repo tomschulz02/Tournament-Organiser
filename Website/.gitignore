@@ -1,0 +1,4 @@
+.env
+node_modules/
+ideas.txt
+server/server.log

@@ -1,0 +1,671 @@
+/* CSS file with all the common styles between pages */
+
+/* Add these viewport breakpoints at the top of your file */
+:root {
+	--main-font-family: "Segoe UI", "Roboto", sans-serif;
+	--main-color: #2962ff;
+	--secondary-color: #658eff;
+	--mobile-breakpoint: 480px;
+	--tablet-breakpoint: 768px;
+	--desktop-breakpoint: 1024px;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+	font-family: var(--main-font-family);
+}
+
+body {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+}
+
+main {
+	padding-top: 80px;
+	flex: 1;
+}
+
+#app {
+	flex: 1 0 auto;
+}
+
+/* 
+Styles for the header i.e. navigation bar
+It will be persistent on all pages 
+*/
+
+header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: calc(100% - 10px);
+	margin: 5px;
+	box-sizing: border-box;
+	padding: 20px 24px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background-color: var(--main-color);
+	font-family: var(--main-font-family);
+	backdrop-filter: blur(8px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	z-index: 1000;
+	transition: background-color 0.3s ease;
+	color: #fff;
+}
+
+header.scrolled {
+	background-color: rgba(41, 98, 255, 0.8);
+}
+
+header h1 {
+	margin: 0;
+	font-size: 1.5em;
+	font-weight: 500;
+}
+
+header nav {
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	justify-content: flex-end;
+	width: 100%;
+}
+
+header nav .nav-links {
+	color: rgba(255, 255, 255, 0.9);
+	text-decoration: none;
+	font-size: 1rem;
+	font-weight: 500;
+	transition: all 0.2s ease;
+	padding: 6px 12px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+header nav .nav-links:hover {
+	color: #fff;
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 
+Styles for the footer, which will be persistent on all pages
+*/
+
+.site-footer {
+	background-color: #1a1a1a;
+	color: #fff;
+	padding: 40px 20px 20px;
+	margin-top: auto;
+	font-family: var(--main-font-family);
+	height: auto;
+	width: 100%;
+	flex-shrink: 0;
+	position: absolute;
+	bottom: 0;
+}
+
+.footer-content {
+	max-width: 1200px;
+	margin: 0 auto;
+	display: flex;
+	justify-content: space-between;
+	gap: 40px;
+	flex-wrap: wrap;
+}
+
+.footer-section {
+	flex: 1;
+	min-width: 250px;
+}
+
+.footer-section h4 {
+	color: var(--main-color);
+	font-size: 1.2em;
+	margin-bottom: 20px;
+}
+
+.footer-section nav {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.footer-section a {
+	color: #fff;
+	text-decoration: none;
+	transition: color 0.3s ease;
+	cursor: pointer;
+}
+
+.footer-section a:hover {
+	color: var(--main-color);
+}
+
+.social-links {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.social-links i {
+	width: 20px;
+	margin-right: 10px;
+}
+
+.footer-bottom {
+	max-width: 1200px;
+	margin: 40px auto 0;
+	padding-top: 20px;
+	border-top: 1px solid #333;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 20px;
+}
+
+.legal-links {
+	display: flex;
+	gap: 20px;
+}
+
+.legal-links a {
+	color: #888;
+	text-decoration: none;
+	transition: color 0.3s ease;
+}
+
+.legal-links a:hover {
+	color: #fff;
+}
+
+@media (max-width: 768px) {
+	.footer-content {
+		flex-direction: column;
+		text-align: center;
+	}
+
+	.footer-bottom {
+		flex-direction: column;
+		text-align: center;
+	}
+}
+
+/* 
+Styles for a donation banner that could be used on multiple pages
+*/
+
+/* .donation-banner {
+	background: linear-gradient(135deg, var(--main-color), #8b0000);
+	color: white;
+	padding: 30px 20px;
+	text-align: left;
+	margin: 20px 0;
+	display: flex;
+	font-family: var(--main-font-family);
+	max-height: 130px;
+}
+
+.banner-content {
+	margin: 0 100px;
+	flex: 5;
+}
+
+.banner-content h3 {
+	font-size: 1.6em;
+	margin-bottom: 15px;
+}
+
+.banner-content p {
+	margin-bottom: 20px;
+}
+
+.donate-button {
+	padding: 5px 24px;
+	background-color: #fff;
+	color: var(--main-color);
+	border: none;
+	border-radius: 4px;
+	font-size: 1em;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s ease, transform 0.1s ease;
+	white-space: nowrap;
+}
+
+.donate-button:hover:not(:disabled) {
+	background-color: #ffffffd9;
+	transform: translateY(-1px);
+}
+
+.donate-button:active:not(:disabled) {
+	transform: translateY(0);
+}
+
+.donate-button:disabled {
+	background-color: #cccccc;
+	color: #666666;
+	cursor: not-allowed;
+	position: relative;
+}
+
+.donate-button:disabled::after {
+	content: attr(aria-label);
+	position: absolute;
+	bottom: -30px;
+	left: 50%;
+	transform: translateX(-50%);
+	background-color: rgba(0, 0, 0, 0.8);
+	color: white;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-size: 0.8rem;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	pointer-events: none;
+}
+
+.donate-button:disabled:hover::after {
+	opacity: 1;
+}
+
+@media (max-width: 768px) {
+	.donate-button {
+		padding: 8px 16px;
+		font-size: 0.9rem;
+	}
+} */
+
+/* 
+    Styles for the user profile tab
+*/
+.profile-tab {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100%;
+	background-color: rgba(0, 0, 0, 0.4);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(8px);
+	z-index: 1001;
+	animation: slideLeft 0.3s ease-out;
+}
+
+.profile-tab.closing {
+	display: none;
+	animation: slideRight 0.3s ease-out;
+}
+
+.profile-tab.open {
+	display: flex;
+	animation: slideLeft 0.3s ease-out;
+}
+
+.profile-content {
+	position: relative;
+	top: 0;
+	right: 0;
+	background-color: white;
+	height: 100%;
+	width: 90vw;
+	max-width: 400px;
+	margin: 0;
+	padding: 15px 20px;
+}
+
+.profile-close-btn {
+	position: relative;
+	top: 0;
+	right: 0;
+	width: 60px;
+	height: 60px;
+	padding: 10px;
+	padding-top: 0;
+	background-color: white;
+	border-radius: 0 0 0 40px;
+	border: none;
+	margin: 0 0 auto auto;
+	cursor: pointer;
+	font-size: 30px;
+}
+
+@keyframes slideLeft {
+	from {
+		transform: translateX(100%);
+	}
+
+	to {
+		transform: translateX(0);
+	}
+}
+
+@keyframes slideRight {
+	from {
+		transform: translateX(0);
+	}
+
+	to {
+		transform: translateX(100%);
+	}
+}
+
+.profile-item {
+	border-bottom: #1a1a1a 1px solid;
+	padding: 10px 0;
+	display: flex;
+	transition-duration: 0.5s;
+	cursor: pointer;
+}
+
+.profile-item:not(.no-hover):hover {
+	padding-left: 10px;
+	background: #88888888;
+}
+
+.no-hover {
+	pointer-events: none;
+}
+
+.profile-item h4 {
+	font-size: 1.1em;
+}
+
+.profile-actions {
+	height: 80px;
+	width: 100%;
+	padding: 15px;
+	margin-left: -20px;
+	position: absolute;
+	bottom: 0;
+	display: flex;
+	justify-content: space-between;
+	background-color: var(--secondary-color);
+	border-radius: 10px 10px 0 0;
+}
+
+.profile-actions-settings {
+	flex: 1;
+	max-width: 50px;
+	background: grey;
+	cursor: pointer;
+	border-radius: 25px;
+}
+
+.profile-actions-item {
+	flex: 1;
+	max-width: 60px;
+	align-content: center;
+	text-align: center;
+	font-weight: bold;
+	font-size: 1.1em;
+	color: white;
+	cursor: pointer;
+	display: inline-block;
+	box-sizing: border-box;
+	vertical-align: middle;
+	text-decoration: none;
+}
+
+/* Update header styles for mobile */
+@media (max-width: 768px) {
+	header {
+		flex-direction: column;
+		align-items: center;
+		padding: 10px;
+		height: 100px;
+		background-color: var(--main-color);
+	}
+
+	header h1 {
+		margin-bottom: 10px;
+	}
+
+	header.scrolled {
+		background-color: rgba(41, 98, 255, 0.6);
+	}
+
+	header nav {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		padding: 10px;
+		justify-content: space-around;
+	}
+
+	header nav a {
+		font-size: 0.9rem;
+		padding: 8px;
+	}
+
+	header nav ul {
+		display: flex;
+		justify-content: space-around;
+		width: 100%;
+	}
+
+	main {
+		padding-top: 100px;
+		padding-bottom: 300px;
+		/* Space for bottom navigation */
+	}
+}
+
+/* Add responsive form styles */
+@media (max-width: 768px) {
+	.form-container {
+		padding: 10px;
+	}
+
+	.two-column-layout {
+		flex-direction: column;
+	}
+
+	.column {
+		width: 100%;
+	}
+
+	.form-group {
+		margin-bottom: 15px;
+	}
+
+	input,
+	select,
+	textarea {
+		width: 100%;
+		padding: 8px;
+	}
+}
+
+/* Make tables responsive */
+/* @media (max-width: 768px) {
+	table {
+		display: block;
+		overflow-x: auto;
+		white-space: nowrap;
+	}
+
+	td,
+	th {
+		padding: 8px;
+	}
+} */
+
+/* Adjust donation banner for mobile */
+@media (max-width: 768px) {
+	.donation-banner {
+		flex-direction: column;
+		max-height: none;
+		padding: 15px;
+	}
+
+	.banner-content {
+		margin: 0;
+		text-align: center;
+	}
+
+	.donate-button {
+		margin: 15px auto;
+	}
+}
+
+/* Add responsive profile tab styles */
+@media (max-width: 768px) {
+	.profile-tab .profile-content {
+		width: 100%;
+		max-width: none;
+	}
+
+	.profile-actions {
+		padding: 10px;
+	}
+}
+
+/* Add general responsive utilities */
+@media (max-width: 768px) {
+	.hide-mobile {
+		display: none !important;
+	}
+
+	.text-center-mobile {
+		text-align: center !important;
+	}
+
+	.full-width-mobile {
+		width: 100% !important;
+	}
+
+	/* Adjust font sizes for mobile */
+	h1 {
+		font-size: 1.8em;
+	}
+
+	h2 {
+		font-size: 1.5em;
+	}
+
+	h3 {
+		font-size: 1.3em;
+	}
+
+	p {
+		font-size: 1rem;
+	}
+}
+
+/* Add tablet-specific styles */
+@media (min-width: 769px) and (max-width: 1024px) {
+	.hide-tablet {
+		display: none !important;
+	}
+
+	.two-column-layout {
+		gap: 20px;
+	}
+}
+
+/* Ensure images are responsive */
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+/* Add flexible container */
+.container {
+	width: 100%;
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 15px;
+	box-sizing: border-box;
+}
+
+.loading-spinner {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 21px;
+	width: 21px;
+	margin: 0 auto;
+	border: 2px solid white;
+	border-top: 2px solid transparent;
+	animation: reverse-spin 1s linear infinite;
+	border-radius: 50%;
+}
+.loading-spinner .spinner {
+	width: 15px;
+	height: 15px;
+	border: 2px solid white;
+	border-top: 2px solid transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	50% {
+		transform: rotate(360deg);
+	}
+	100% {
+		transform: rotate(720deg);
+	}
+}
+@keyframes reverse-spin {
+	0% {
+		transform: rotate(360deg);
+	}
+	100% {
+		transform: rotate(0deg);
+	}
+}
+
+.message-popup {
+	position: fixed;
+	top: 20px;
+	right: calc(50% - 150px);
+	width: 300px;
+	background: white;
+	color: black;
+	padding: 12px 20px;
+	border-radius: 8px;
+	z-index: 10000;
+	text-align: center;
+	text-wrap: normal;
+	animation: fadeInOut 3s ease-in-out;
+}
+
+.message-popup.success {
+	background: #4caf50;
+	color: white;
+}
+.message-popup.error {
+	background: #f44336;
+	color: white;
+}
+
+@keyframes fadeInOut {
+	0% {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	10% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	90% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+}

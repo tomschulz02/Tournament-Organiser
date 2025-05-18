@@ -81,6 +81,8 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 				setLoggedIn(true);
 				showMessage(`Welcome, ${response.user}`, "success");
 				onClose();
+			} else {
+				showMessage("Username or password is incorrect", "error");
 			}
 		} catch (error) {
 			showMessage(error.message, "error"); // Show error message to user

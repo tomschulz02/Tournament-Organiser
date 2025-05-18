@@ -9,6 +9,7 @@ import {
 	deleteTournament,
 	updateTeams,
 	updateRounds,
+	endTournament,
 } from "../requests";
 import "../styles/Tournaments.css";
 import "../styles/TournamentView.css";
@@ -192,13 +193,14 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 					onUpdate={() => setShowUpdateWarning(true)}
 					standings={tournamentData.standings}
 					tournamentId={tournamentData.details.id}
+					status={tournamentData.details.status}
 				/>
 			)}
 			{currentTab === "standings" && (
 				<TournamentStandings
 					standings={tournamentData.standings}
 					format={tournamentData.details.format}
-					rounds={tournamentData.fixtures.rounds}
+					currentRound={tournamentData.fixtures.currentRound}
 				/>
 			)}
 			{currentTab === "teams" && (
@@ -213,7 +215,6 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 		</div>
 	);
 }
-
 function TournamentDetails({ details, loggedIn, creator }) {
 	const [loading, setLoading] = useState(false);
 	const [following, setFollowing] = useState(creator);
@@ -422,7 +423,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	);
 }
 
-function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournamentId }) {
+function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournamentId, status }) {
 	const [filter, setFilter] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
@@ -432,6 +433,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 	const [roundComplete, setRoundComplete] = useState(false);
 	const [currentRound, setCurrentRound] = useState({});
 	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
+	const [isLastRound, setIsLastRound] = useState(false);
 
 	// console.log("Fixtures:", fixtures);
 
@@ -453,8 +455,9 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 	useEffect(() => {
 		const cRound = fixtures.rounds[fixtures.currentRound];
 		setCurrentRound(cRound);
+		setIsLastRound(fixtures.currentRound === fixtures.rounds.length - 1);
 		setRoundComplete(cRound.completed === cRound.matches);
-	}, []);
+	}, [fixtures]);
 
 	const formatResults = (score, team) => {
 		const scores = score.map((s, index) => {
@@ -568,6 +571,24 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		showMessage("Started next round. Please refresh to see changes", "success");
 	};
 
+	const handleEndTournament = async () => {
+		const confirmed = await confirm("Are you sure you want to end the tournament? This action cannot be undone.");
+
+		if (!confirmed) return;
+
+		setLoading(true);
+		const response = await endTournament(tournamentId);
+
+		if (!response.success) {
+			showMessage("Error ending tournament", "error");
+			setLoading(false);
+			return;
+		}
+
+		showMessage("Tournament completed successfully", "success");
+		window.location.reload();
+	};
+
 	return (
 		<div className="tournament-fixtures-container">
 			<div className="tournament-fixtures">
@@ -603,11 +624,18 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 								</div>
 							</div>
 						</div>
-						{creator && (
-							<button className="next-round-btn" disabled={!roundComplete} onClick={handleNextRound}>
-								Start Next Round
-							</button>
-						)}
+						{creator &&
+							roundComplete &&
+							status !== "Finished" &&
+							(isLastRound ? (
+								<button className="end-tournament-btn" onClick={handleEndTournament}>
+									End Tournament
+								</button>
+							) : (
+								<button className="next-round-btn" onClick={handleNextRound}>
+									Start Next Round
+								</button>
+							))}
 					</div>
 					<div className="fixtures-content">
 						<div className="fixtures-header">
@@ -682,8 +710,8 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 	);
 }
 
-function TournamentStandings({ standings, format, rounds }) {
-	const [expandedRounds, setExpandedRounds] = useState(new Set([0])); // First round expanded by default
+function TournamentStandings({ standings, format, currentRound }) {
+	const [expandedRounds, setExpandedRounds] = useState(new Set([currentRound])); // First round expanded by default
 
 	const toggleRound = (roundIndex) => {
 		setExpandedRounds((prev) => {

@@ -4,17 +4,17 @@ import "../styles/NextRoundModal.css";
 function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	const [qualifiedSpots, setQualifiedSpots] = useState([]);
 	const [availableTeams, setAvailableTeams] = useState([]);
-	const currentRound = fixtures.rounds[fixtures.currentRound];
 	const nextRound = fixtures.rounds[fixtures.currentRound + 1];
+	const currentRoundStandings = standings[fixtures.currentRound].groups;
 
 	useEffect(() => {
 		// Initialize qualified spots with calculated teams
-		const initialQualified = getQualifiedTeams(standings);
-		const allTeams = Array.isArray(standings[0]) ? standings.flat() : standings;
+		const initialQualified = getQualifiedTeams(currentRoundStandings);
+		const allTeams = Array.isArray(currentRoundStandings[0]) ? currentRoundStandings.flat() : currentRoundStandings;
 
 		setAvailableTeams(allTeams);
 		setQualifiedSpots(initialQualified.map((team) => team.name));
-	}, [standings]);
+	}, [currentRoundStandings]);
 
 	function getQualifiedTeams(standings) {
 		let qualifiedTeams = [];
@@ -31,7 +31,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 		currentStandings.flat().sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
 		qualifiedTeams.push(...currentStandings.slice(0, nextRound.qualifyingTeams - qualifiedTeams.length));
 
-		// console.log("Qualified Teams:", qualifiedTeams);
+		console.log("Qualified Teams:", qualifiedTeams);
 
 		return qualifiedTeams;
 	}

@@ -200,7 +200,7 @@ Styles for the footer, which will be persistent on all pages
 Styles for a donation banner that could be used on multiple pages
 */
 
-.donation-banner {
+/* .donation-banner {
 	background: linear-gradient(135deg, var(--main-color), #8b0000);
 	color: white;
 	padding: 30px 20px;
@@ -212,7 +212,6 @@ Styles for a donation banner that could be used on multiple pages
 }
 
 .banner-content {
-	/* max-width: 800px; */
 	margin: 0 100px;
 	flex: 5;
 }
@@ -227,21 +226,61 @@ Styles for a donation banner that could be used on multiple pages
 }
 
 .donate-button {
-	display: inline-block;
-	padding: 12px 30px;
+	padding: 5px 24px;
 	background-color: #fff;
 	color: var(--main-color);
-	text-decoration: none;
-	border-radius: 25px;
-	font-weight: 600;
-	transition: transform 0.3s ease;
-	max-height: 45px;
-	margin: auto 20px auto 0;
+	border: none;
+	border-radius: 4px;
+	font-size: 1em;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s ease, transform 0.1s ease;
+	white-space: nowrap;
 }
 
-.donate-button:hover {
-	transform: scale(1.05);
+.donate-button:hover:not(:disabled) {
+	background-color: #ffffffd9;
+	transform: translateY(-1px);
 }
+
+.donate-button:active:not(:disabled) {
+	transform: translateY(0);
+}
+
+.donate-button:disabled {
+	background-color: #cccccc;
+	color: #666666;
+	cursor: not-allowed;
+	position: relative;
+}
+
+.donate-button:disabled::after {
+	content: attr(aria-label);
+	position: absolute;
+	bottom: -30px;
+	left: 50%;
+	transform: translateX(-50%);
+	background-color: rgba(0, 0, 0, 0.8);
+	color: white;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-size: 0.8rem;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	pointer-events: none;
+}
+
+.donate-button:disabled:hover::after {
+	opacity: 1;
+}
+
+@media (max-width: 768px) {
+	.donate-button {
+		padding: 8px 16px;
+		font-size: 0.9rem;
+	}
+} */
 
 /* 
     Styles for the user profile tab

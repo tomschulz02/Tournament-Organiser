@@ -284,6 +284,11 @@ class DBConnection {
 		}
 	}
 
+	endTournament(tournamentId, userID, callback) {
+		const sql = "UPDATE tournaments SET status = 'Finished' WHERE id = $1 AND created_by = $2";
+		this.query(sql, [tournamentId, userID], callback);
+	}
+
 	test() {
 		console.log("test");
 	}

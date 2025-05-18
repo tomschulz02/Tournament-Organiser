@@ -3,25 +3,25 @@ Styles for the welcome message section to new users
 */
 
 #home {
-    padding: 40px;
-    text-align: center;
-    align-content: center;
-    height: 400px;
+	padding: 40px;
+	text-align: center;
+	align-content: center;
+	height: 400px;
 }
 
 #home h2 {
-    color: var(--main-color);
-    font-size: 2.5em;
-    margin-bottom: 20px;
-    font-weight: 600;
-    font-family: var(--main-font-family);
+	color: var(--main-color);
+	font-size: 2.5em;
+	margin-bottom: 20px;
+	font-weight: 600;
+	font-family: var(--main-font-family);
 }
 
 #home p {
-    font-size: 1.2em;
-    line-height: 1.6;
-    margin-bottom: 30px;
-    font-family: var(--main-font-family);
+	font-size: 1.2em;
+	line-height: 1.6;
+	margin-bottom: 30px;
+	font-family: var(--main-font-family);
 }
 
 /* 
@@ -31,100 +31,205 @@ might show for users who are already signed in, or that could be in a separate "
 */
 
 .features {
-    padding: 45px 20px;
-    max-width: 1200px;
-    margin: 0 auto;
+	padding: 45px 20px;
+	max-width: 1200px;
+	margin: 0 auto;
 }
 
 .features-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
 }
 
 .feature-card {
-    display: flex;
-    align-items: center;
-    margin: 10px;
-    padding: 40px;
-    background-color: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    position: relative;
-    min-height: 300px;
-    overflow: hidden;
-    transition: all 0.3s ease;
+	display: flex;
+	align-items: center;
+	margin: 10px;
+	padding: 40px;
+	background-color: #fff;
+	border-radius: 8px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	position: relative;
+	min-height: 300px;
+	overflow: hidden;
+	transition: all 0.3s ease;
 }
 
 .feature-card:hover {
-    transform: scale(1.01);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+	transform: scale(1.01);
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .feature-card::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(70, 87, 117, 0.7);
-    z-index: 2;
-    transition: background 0.3s ease;
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(70, 87, 117, 0.7);
+	z-index: 2;
+	transition: background 0.3s ease;
 }
 
 .feature-card:hover::after {
-    background: rgba(70, 87, 117, 0.8);
+	background: rgba(70, 87, 117, 0.8);
 }
 
 .feature-card:nth-child(even) {
-    flex-direction: row-reverse;
+	flex-direction: row-reverse;
 }
 
 .feature-content {
-    text-align: left;
-    flex: 1;
-    padding: 0 30px;
-    position: relative;
-    z-index: 3;
-    color: white;
+	text-align: left;
+	flex: 1;
+	padding: 0 30px;
+	position: relative;
+	z-index: 3;
+	color: white;
 }
 
 .features-grid .feature-card:nth-child(even) .feature-content {
-    text-align: right;
+	text-align: right;
 }
 
 .feature-image {
-    flex: 1;
-    min-height: 300px;
-    background-position: center;
-    background-size: cover;
-    border-radius: 6px;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
+	flex: 1;
+	min-height: 300px;
+	background-position: center;
+	background-size: cover;
+	border-radius: 6px;
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
 }
 
 .feature-card h3 {
-    color: white;
-    font-size: 1.8em;
-    margin-bottom: 15px;
-    font-family: var(--main-font-family);
+	color: white;
+	font-size: 1.8em;
+	margin-bottom: 15px;
+	font-family: var(--main-font-family);
 }
 
 .feature-card p {
-    color: white;
-    font-size: 1.1em;
-    line-height: 1.5;
-    font-family: var(--main-font-family);
+	color: white;
+	font-size: 1.1em;
+	line-height: 1.5;
+	font-family: var(--main-font-family);
 }
 
 .section-title {
-    text-align: center;
-    color: var(--main-color);
-    font-size: 2.5em;
-    margin-bottom: 20px;
-    font-weight: 600;
-    font-family: var(--main-font-family);
+	text-align: center;
+	color: var(--main-color);
+	font-size: 2.5em;
+	margin-bottom: 20px;
+	font-weight: 600;
+	font-family: var(--main-font-family);
+}
+
+.cta-button {
+	display: inline-block;
+	padding: 14px 32px;
+	background-color: #2962ff;
+	color: white;
+	text-decoration: none;
+	border-radius: 8px;
+	font-size: 1.1em;
+	font-weight: 600;
+	margin-top: 24px;
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 6px rgba(41, 98, 255, 0.2);
+}
+
+.cta-button:hover {
+	background-color: #1565c0;
+	transform: translateY(-2px);
+	box-shadow: 0 6px 12px rgba(41, 98, 255, 0.3);
+}
+
+.cta-button:active {
+	transform: translateY(0);
+	box-shadow: 0 2px 4px rgba(41, 98, 255, 0.2);
+}
+
+.donate-button {
+	display: inline-flex;
+	align-items: center;
+	padding: 10px 20px;
+	background-color: white;
+	color: var(--main-color);
+	border: none;
+	border-radius: 4px;
+	font-size: 1rem;
+	font-weight: 500;
+	text-decoration: none;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	white-space: nowrap;
+}
+
+.donate-button:hover {
+	background-color: #ffffffba;
+	transform: translateY(-1px);
+	text-decoration: none;
+}
+
+.donate-button:active {
+	transform: translateY(0);
+}
+
+.donation-banner {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 24px;
+	background-color: #f8f9fa;
+	border-bottom: 1px solid #e9ecef;
+	background: linear-gradient(135deg, var(--main-color), #8b0000);
+	color: white;
+	padding: 30px 20px;
+	text-align: left;
+	margin: 20px 0;
+	display: flex;
+	font-family: var(--main-font-family);
+	max-height: 130px;
+}
+
+.banner-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.banner-content h3 {
+	margin: 0;
+	font-size: 1.1rem;
+}
+
+.banner-content p {
+	margin: 0;
+	font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+	.cta-button {
+		padding: 12px 24px;
+		font-size: 1em;
+		width: 100%;
+		text-align: center;
+	}
+
+	.donation-banner {
+		flex-direction: column;
+		gap: 12px;
+		text-align: center;
+		padding: 16px;
+	}
+
+	.donate-button {
+		width: 100%;
+		justify-content: center;
+	}
 }

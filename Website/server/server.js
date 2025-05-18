@@ -690,7 +690,7 @@ app.post("/api/tournament/:id/updateRounds", verifyToken, async (req, res) => {
 			currentRound: currentRound,
 			previousStandings: standings,
 		});
-		console.dir({ details, tournamentId, userId }, { depth: null });
+		// console.dir({ details, tournamentId, userId }, { depth: null });
 		db.updateRounds(
 			{
 				tournamentId,
@@ -700,7 +700,7 @@ app.post("/api/tournament/:id/updateRounds", verifyToken, async (req, res) => {
 				nextRound: details.currentRound,
 			},
 			(result) => {
-				console.log(result);
+				// console.log(result);
 				if (!result.success) {
 					return res.status(400).json({ error: result.message });
 				}
@@ -711,6 +711,28 @@ app.post("/api/tournament/:id/updateRounds", verifyToken, async (req, res) => {
 	} catch (error) {
 		console.log(error);
 		res.status(500).json({ error: "Failed to update tournament" });
+	}
+});
+
+app.put("/api/tournament/:id/end", verifyToken, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const userID = req.user.id;
+		const decodedId = tournamentHash.decode(id);
+		if (decodedId.length === 0) {
+			return res.status(400).json({ error: "Invalid tournament ID" });
+		}
+		const tournamentId = decodedId[0];
+
+		db.endTournament(tournamentId, userID, (result) => {
+			if (!result.success) {
+				return res.status(400).json({ error: result.message });
+			}
+			cacheManager.invalidate("t_" + id);
+			return res.status(200).json({ success: true, message: "Tournament Ended" });
+		});
+	} catch (error) {
+		res.status(500).json({ error: "Failed to end tournament" });
 	}
 });
 

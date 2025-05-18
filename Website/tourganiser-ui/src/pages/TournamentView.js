@@ -47,15 +47,13 @@ export default function TournamentView() {
 					showMessage("Tournament not found", "error");
 					return;
 				}
-				setCreator(response.creator);
 				setNotFound(false);
 				if (!response.collection) {
 					setCollection(false);
-					console.log("Tournament data:", response.message);
 					setTournamentData(response.message);
+					setCreator(response.creator);
 				} else {
 					setCollection(true);
-					console.log("Collection data:", response);
 					setTournamentData(response.message);
 					setCollectionName(response.collection);
 				}
@@ -110,7 +108,6 @@ export default function TournamentView() {
 	) : (
 		<CollectionView
 			collection={tournamentData}
-			creator={creator}
 			collectionName={collectionName}
 			unsavedChanges={hasUnsavedChanges}
 			setUnsavedChanges={setHasUnsavedChanges}
@@ -215,6 +212,7 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 		</div>
 	);
 }
+
 function TournamentDetails({ details, loggedIn, creator }) {
 	const [loading, setLoading] = useState(false);
 	const [following, setFollowing] = useState(creator);
@@ -435,8 +433,6 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
 	const [isLastRound, setIsLastRound] = useState(false);
 
-	// console.log("Fixtures:", fixtures);
-
 	const allFixtures = [...fixtures.remainingFixtures, ...fixtures.results];
 
 	const filteredFixtures = allFixtures.filter((fixture) => {
@@ -485,9 +481,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		const id = selectedFixture.id;
 		score = formatScore(score);
 		setLoading(true);
-		// console.log("Formatted score:", JSON.stringify(score));
-		const response = await updateScore(id, score, "ONGOING", hashId, null);
-		console.log(response);
+		const response = await updateScore(id, score, "ONGOING", tournamentId, null);
 		if (!response.success) {
 			showMessage("Error updating score. Please try again later", "error");
 			handleCloseScoreModal();
@@ -507,7 +501,6 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		const id = selectedFixture.id;
 		score = formatScore(score);
 
-		// console.log("Formatted score:", JSON.stringify(score));
 		const confirmed = await confirm(
 			"Are you sure you want to end the match? You won't be able to update the score after this."
 		);
@@ -517,8 +510,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		}
 		setLoading(true);
 		fixtures.rounds[fixtures.currentRound].completed += 1;
-		const response = await updateScore(id, score, "COMPLETED", hashId, fixtures.rounds);
-		console.log(response);
+		const response = await updateScore(id, score, "COMPLETED", tournamentId, fixtures.rounds);
 		if (!response.success) {
 			showMessage("Error updating score. Please try again later", "error");
 			fixtures.rounds[fixtures.currentRound].completed -= 1;
@@ -561,7 +553,6 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 			fixtures.remainingFixtures,
 			fixtures.currentRound
 		);
-		console.log(response);
 		setLoading(false);
 		if (!response.success) {
 			showMessage("Error starting next round. Please try again later", "error");
@@ -859,7 +850,6 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 		const updated = [...stagedTeams];
 		updated[selectedTeamIndex] = newName;
 		setStagedTeams(updated);
-		console.log(stagedTeams);
 		currentTeam.element.parentElement.classList.add("team-name-changed");
 		setUnsavedChanges(true);
 		setPageUnsavedChanges(true);
@@ -889,9 +879,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 			showMessage("Team names cannot be empty", "error");
 			return;
 		}
-		console.log(tournamentId, stagedTeams);
 		const response = await updateTeams(tournamentId, stagedTeams);
-		console.log("Response:", response);
 		if (!response.success) {
 			setLoading(false);
 			showMessage("Error saving changes. Please try again later", "error");
@@ -954,7 +942,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 	);
 }
 
-function CollectionView({ collection, collectionName, creator, unsavedChanges, setUnsavedChanges }) {
+function CollectionView({ collection, collectionName, unsavedChanges, setUnsavedChanges }) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const selectedTournament = collection[searchParams.get("selected")] || null;
 
@@ -985,11 +973,14 @@ function CollectionView({ collection, collectionName, creator, unsavedChanges, s
 					<div className="collection-tournaments">
 						{collection.map((tournament, index) => {
 							return (
-								<div key={tournament.details.id} className="collection-tournament-card">
-									<div className="tournament-name">{tournament.details.name}</div>
-									<div className="tournament-description">{tournament.details.description}</div>
-									<div className={`tournament-status ${tournament.details.status.toLowerCase().replace(" ", "-")}`}>
-										{tournament.details.status}
+								<div key={tournament.message.details.id} className="collection-tournament-card">
+									<div className="tournament-name">{tournament.message.details.name}</div>
+									<div className="tournament-description">{tournament.message.details.description}</div>
+									<div
+										className={`tournament-status ${tournament.message.details.status
+											.toLowerCase()
+											.replace(" ", "-")}`}>
+										{tournament.message.details.status}
 									</div>
 									<button onClick={() => handleTournamentSelect(index)} className="view-tournament-btn">
 										View
@@ -1001,8 +992,8 @@ function CollectionView({ collection, collectionName, creator, unsavedChanges, s
 				</>
 			) : (
 				<TournamentManager
-					tournamentData={selectedTournament}
-					creator={creator}
+					tournamentData={selectedTournament.message}
+					creator={selectedTournament.creator}
 					backButton={
 						<div className="back-to-browse" onClick={() => handleTournamentSelect(null)}>
 							&lt; Back to Collection

@@ -8,9 +8,9 @@ import { MessagePopup, useMessage } from "../MessageContext";
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
-export default function Login({ setUsername }) {
+export default function Login() {
 	const [currentForm, setCurrentForm] = useState("login");
-	const { setIsLoggedIn } = useContext(AuthContext);
+	const { setIsLoggedIn, setUsername } = useContext(AuthContext);
 	const navigate = useNavigate();
 	const { showMessage } = useMessage();
 
@@ -22,6 +22,7 @@ export default function Login({ setUsername }) {
 				if (response.loggedIn) {
 					setIsLoggedIn(true);
 					showMessage("Successfully logged in!", "success");
+					setUsername(response.user);
 					navigate("/home"); // Redirect to home page if already logged in
 				}
 			} catch (error) {
@@ -57,6 +58,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 	const [loginDetails, setLoginDetails] = useState({ email: "", password: "" });
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
+	const { setUsername } = useContext(AuthContext);
 
 	const handleChange = (e) => {
 		const { id, value } = e.target;
@@ -80,6 +82,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 			if (response.success) {
 				setLoggedIn(true);
 				showMessage(`Welcome, ${response.user}`, "success");
+				setUsername(response.user);
 				onClose();
 			} else {
 				showMessage("Username or password is incorrect", "error");
@@ -151,6 +154,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 	});
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
+	const { setUsername } = useContext(AuthContext);
 
 	const handleChange = (e) => {
 		const { id, value } = e.target;
@@ -173,6 +177,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			if (response.success) {
 				setLoggedIn(true);
 				showMessage("Account created successfully!", "success");
+				setUsername(response.user);
 				onClose();
 			}
 		} catch (error) {

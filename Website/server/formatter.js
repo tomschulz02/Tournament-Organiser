@@ -1,362 +1,3 @@
-// formats the passed in data into a readable UI to send to the user
-// Structure :
-
-const tournamentData = {
-	tournamentName: "Test",
-	startDate: "2025-02-22",
-	location: "Home",
-	description: "this is a test description",
-	format: "combi",
-	teamCount: 18,
-	numGroups: 4,
-	knockoutRound: 8,
-	type: "beach",
-	teams: [
-		"Team 1",
-		"Team 2",
-		"Team 3",
-		"Team 4",
-		"Team 5",
-		"Team 6",
-		"Team 7",
-		"Team 8",
-		"Team 9",
-		"Team 10",
-		"Team 11",
-		"Team 12",
-		"Team 13",
-		"Team 14",
-		"Team 15",
-		"Team 16",
-	],
-};
-
-const tournamentDataForView = {
-	details: {
-		id: 4,
-		name: "TuksVolleyball Beach HS Tournament - Boys",
-		date: "2025-05-23T22:00:00.000Z",
-		location: "Pretoria",
-		description:
-			"The official TuksVolleyball Beach HST. Here you can find all information regarding the boys/mixed division",
-		format: "C",
-		num_teams: 8,
-		num_groups: 2,
-		knockout: true,
-		state: {
-			type: "beach",
-			rounds: [
-				{
-					round: "Group Stage",
-					groups: [
-						["DSP 1", "DSJ 1", "DSJ 2", "Cooper"],
-						["DSP 2", "DSP 3", "St. Vincent 1", "St. Vincent 2"],
-					],
-					matches: 12,
-					completed: 12,
-				},
-				{ round: "Semifinals", groups: [], matches: 2, completed: 0 },
-				{ round: "Finals", groups: [], matches: 1, completed: 0 },
-			],
-			currentRound: 0,
-		},
-		created_by: 4,
-		status: "Ongoing",
-		collection_id: 1,
-	},
-	fixtures: [
-		{
-			id: 70,
-			tournament_id: 4,
-			match_no: 1,
-			team1: "DSP 1",
-			team2: "Cooper",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool A",
-			next_game: null,
-		},
-		{
-			id: 75,
-			tournament_id: 4,
-			match_no: 2,
-			team1: "DSJ 1",
-			team2: "DSJ 2",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool A",
-			next_game: null,
-		},
-		{
-			id: 71,
-			tournament_id: 4,
-			match_no: 3,
-			team1: "DSP 2",
-			team2: "St. Vincent 2",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool B",
-			next_game: null,
-		},
-		{
-			id: 73,
-			tournament_id: 4,
-			match_no: 4,
-			team1: "DSP 3",
-			team2: "St. Vincent 1",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool B",
-			next_game: null,
-		},
-		{
-			id: 72,
-			tournament_id: 4,
-			match_no: 5,
-			team1: "DSP 1",
-			team2: "DSJ 2",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool A",
-			next_game: null,
-		},
-		{
-			id: 76,
-			tournament_id: 4,
-			match_no: 6,
-			team1: "DSJ 1",
-			team2: "Cooper",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool A",
-			next_game: null,
-		},
-		{
-			id: 74,
-			tournament_id: 4,
-			match_no: 7,
-			team1: "DSP 2",
-			team2: "St. Vincent 1",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool B",
-			next_game: null,
-		},
-		{
-			id: 78,
-			tournament_id: 4,
-			match_no: 8,
-			team1: "DSP 3",
-			team2: "St. Vincent 2",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool B",
-			next_game: null,
-		},
-		{
-			id: 82,
-			tournament_id: 4,
-			match_no: 9,
-			team1: "DSP 1",
-			team2: "DSJ 1",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool A",
-			next_game: null,
-		},
-		{
-			id: 77,
-			tournament_id: 4,
-			match_no: 10,
-			team1: "DSJ 2",
-			team2: "Cooper",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool A",
-			next_game: null,
-		},
-		{
-			id: 79,
-			tournament_id: 4,
-			match_no: 11,
-			team1: "DSP 2",
-			team2: "DSP 3",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool B",
-			next_game: null,
-		},
-		{
-			id: 83,
-			tournament_id: 4,
-			match_no: 12,
-			team1: "St. Vincent 1",
-			team2: "St. Vincent 2",
-			status: "COMPLETED",
-			result: [[1, 0]],
-			round: "Pool B",
-			next_game: null,
-		},
-		{
-			id: 80,
-			tournament_id: 4,
-			match_no: 13,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Semifinals",
-			next_game: 15,
-		},
-		{
-			id: 81,
-			tournament_id: 4,
-			match_no: 14,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Semifinals",
-			next_game: 15,
-		},
-		{
-			id: 84,
-			tournament_id: 4,
-			match_no: 15,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Finals",
-			next_game: null,
-		},
-	],
-};
-
-const nextRoundData = {
-	rounds: [
-		{
-			round: "Group Stage",
-			groups: [],
-			matches: 24,
-			completed: 24,
-		},
-		{
-			round: "Quarterfinals",
-			groups: [],
-			matches: 4,
-			completed: 0,
-			qualifyingTeams: 8,
-		},
-		{
-			round: "Semifinals",
-			groups: [],
-			matches: 2,
-			completed: 0,
-			qualifyingTeams: 4,
-		},
-		{
-			round: "Finals",
-			groups: [],
-			matches: 2,
-			completed: 0,
-			qualifyingTeams: 4,
-		},
-	],
-	teams: ["Team 1", "Team 2", "Team 14", "Team 12", "Team 8", "Team 7", "Team 6", "Team 13"],
-	fixtures: [
-		{
-			id: 100,
-			tournament_id: 5,
-			match_no: 25,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Quarterfinals",
-			next_game: 29,
-			editable: false,
-		},
-		{
-			id: 110,
-			tournament_id: 5,
-			match_no: 26,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Quarterfinals",
-			next_game: 30,
-			editable: false,
-		},
-		{
-			id: 111,
-			tournament_id: 5,
-			match_no: 27,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Quarterfinals",
-			next_game: 30,
-			editable: false,
-		},
-		{
-			id: 112,
-			tournament_id: 5,
-			match_no: 28,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Quarterfinals",
-			next_game: 29,
-			editable: false,
-		},
-		{
-			id: 114,
-			tournament_id: 5,
-			match_no: 29,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Semifinals",
-			next_game: 31,
-			editable: false,
-		},
-		{
-			id: 113,
-			tournament_id: 5,
-			match_no: 30,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Semifinals",
-			next_game: 31,
-			editable: false,
-		},
-		{
-			id: 115,
-			tournament_id: 5,
-			match_no: 31,
-			team1: "TBD",
-			team2: "TBD",
-			status: "WAITING",
-			result: null,
-			round: "Finals",
-			next_game: null,
-			editable: false,
-		},
-	],
-	currentRound: 0,
-};
-
-// console.dir(determineQualifiedTeams(nextRoundData), { depth: null });
-// formatCombiTournamentForStorage(tournamentData);
-// console.dir(formatTournamentView(tournamentDataForView, { encode: (id) => id }, true), { depth: null });
-
 export function formatCombiTournamentForStorage(data) {
 	var format = {
 		name: data["tournamentName"],
@@ -370,6 +11,7 @@ export function formatCombiTournamentForStorage(data) {
 		state: {
 			// groups: populateGroups(data["numGroups"], data["teams"]),
 			type: data["type"],
+			teams: data["teams"],
 			rounds: [],
 			currentRound: 0,
 		},
@@ -377,8 +19,6 @@ export function formatCombiTournamentForStorage(data) {
 		collection: data["tournamentCollection"] != "" ? data["tournamentCollection"] : null,
 		fixtures: [],
 	};
-	// console.log(format.state.rounds);
-	// format.state.rounds[0].groups = populateGroups(data["numGroups"], data["teams"]);
 
 	format["fixtures"] = generateFixturesCombi(
 		populateGroups(data["numGroups"], data["teams"]),
@@ -386,12 +26,10 @@ export function formatCombiTournamentForStorage(data) {
 		format.state.rounds
 	);
 
-	// console.dir(format, { depth: null });
 	return format;
 }
 
 function generateFixturesCombi(groups, knockout, rounds) {
-	// console.log(groups, knockout);
 	var fixtures = [];
 	// generate all possible fixtures for groups (unordered)
 	groups.forEach((group, groupIndex) => {
@@ -578,7 +216,6 @@ function generateFixturesCombi(groups, knockout, rounds) {
 // i figured out that teams that would be at an even index in the group (0,2,6,etc) share a formula
 // to find which team in a seeded team list should be in the group, same as well for the odd indices
 export function populateGroups(numGroups, teamList) {
-	// console.log(numGroups, teamList);
 	let groups = [];
 	numGroups = parseInt(numGroups);
 	var teamsPerGroup = Math.ceil(teamList.length / numGroups);
@@ -626,14 +263,12 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 }
 
 export function formatTournamentView(tournament, tournamentHash, following) {
-	// console.dir(tournament, { depth: null });
 	const remainingFixtures = separateFixturesAndResults(
 		tournament.fixtures,
 		tournament.details.status
 	).remainingFixtures;
 	const results = separateFixturesAndResults(tournament.fixtures, tournament.details.status).results;
-	// console.log("Test");
-	// console.log("RESULTS", results);
+
 	var pages = {
 		details: {
 			id: tournamentHash.encode(tournament.details.id),
@@ -658,11 +293,6 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 		standings: determineStandings(tournament.details.state.rounds, results, tournament.details.format),
 		teams: tournament.details.state.teams,
 	};
-	// tournament.details.state.rounds.forEach((round) => {
-	// 	pages.standings.push(determineStandings(round.groups, results, tournament.details.format));
-	// });
-	// console.dir(pages.standings, { depth: null });
-	// console.log("SUCCESS");
 	return pages;
 }
 
@@ -713,8 +343,6 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 				tourStatus == "Ongoing";
 			remainingFixtures.push(fix);
 		} else {
-			// console.log("RESULT", result);
-			// fix.result = JSON.parse(result);
 			fix.editable = false;
 			results.push(fix);
 		}
@@ -724,7 +352,6 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 }
 
 function determineStandings(rounds, results, format) {
-	// console.log({ teams, results, format });
 	const allStandings = [];
 	if (format == "C") {
 		rounds.forEach((round) => {
@@ -793,7 +420,6 @@ function determineStandings(rounds, results, format) {
 			allStandings.push(standings);
 		});
 	}
-	// console.log("STANDINGS", standings);
 	return allStandings;
 }
 
@@ -810,14 +436,13 @@ function determineResult(result) {
 		if (set[0] > set[1]) {
 			resObject[0].setsWon++;
 			resObject[1].setsLost++;
-		} else {
+		} else if (set[0] < set[1]) {
 			resObject[1].setsWon++;
 			resObject[0].setsLost++;
 		}
 	});
 	resObject[0].won = resObject[0].setsWon > resObject[1].setsWon;
 	resObject[1].won = resObject[1].setsWon > resObject[0].setsWon;
-	// console.log("RESULT", resObject);
 	return resObject;
 }
 

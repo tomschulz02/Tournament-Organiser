@@ -31,19 +31,15 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 		currentStandings.flat().sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
 		qualifiedTeams.push(...currentStandings.slice(0, nextRound.qualifyingTeams - qualifiedTeams.length));
 
-		console.log("Qualified Teams:", qualifiedTeams);
-
 		return qualifiedTeams;
 	}
 
 	function generateFixtures(teams) {
 		const fixtures = [];
 		const gap = nextRound.qualifyingTeams - nextRound.matches * 2;
-		// console.log("Gap:", gap, "Teams:", teams);
 		for (let i = gap; i < teams.length - nextRound.matches; i++) {
 			const team1 = teams[i];
 			const team2 = teams[teams.length - (i - gap) - 1];
-			// console.log("Team1:", team1, "Team2:", team2);
 			if (team1 && team2) {
 				fixtures.push({ team1: team1, team2: team2 });
 			}
@@ -51,8 +47,6 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 		for (let i = 0; i < gap; i++) {
 			fixtures.push({ team1: teams[i], team2: "TBD" });
 		}
-
-		// console.log("Fixtures for next round:", fixtures);
 
 		return fixtures;
 	}

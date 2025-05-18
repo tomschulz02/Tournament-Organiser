@@ -40,7 +40,6 @@ import { fileURLToPath } from "url";
 import logger from "./logger.cjs";
 import Hashids from "hashids";
 import CacheManager from "./utils/CacheManager.js";
-import { error } from "console";
 const SECRET_KEY = process.env.SECRET;
 const app = express();
 
@@ -71,19 +70,11 @@ app.use(logger);
 app.use(express.static(path.join(__dirname, "../")));
 
 // Database connection
-// const { default: DBConnection } = await import("./config.js");
 const db = new DBConnection();
-
-// console.log(process.env);
-
-// Request handling
-// TODO
 
 // token verification
 const verifyToken = (req, res, next) => {
 	const token = req.cookies.authToken;
-
-	// console.log(token);
 
 	if (!token) {
 		req.user = null;
@@ -99,46 +90,6 @@ const verifyToken = (req, res, next) => {
 	next();
 };
 
-// Testing formatter methods
-// simulated input for tournament creation
-var format = {
-	name: "Test",
-	date: "2025-02-22",
-	location: "Home",
-	description: "this is a test description",
-	structure: {
-		format: "combi",
-		numTeams: 16,
-		numGroups: 4,
-		knockout: 6,
-		type: "beach",
-	},
-	teams: [
-		"Team 1",
-		"Team 2",
-		"Team 3",
-		"Team 4",
-		"Team 5",
-		"Team 6",
-		"Team 7",
-		"Team 8",
-		"Team 9",
-		"Team 10",
-		"Team 11",
-		"Team 12",
-		"Team 13",
-		"Team 14",
-		"Team 15",
-		"Team 16",
-	],
-};
-// console.dir(formatCombiTournamentForStorage(format), { depth: null });
-
-// app.use((req, res, next) => {
-// 	console.log(`Incoming request: ${req.method} ${req.url}`);
-// 	next();
-// });
-
 // check whether the user is logged in or not
 app.get("/api/check-login", verifyToken, (req, res) => {
 	if (!req.user)
@@ -146,7 +97,6 @@ app.get("/api/check-login", verifyToken, (req, res) => {
 			error: "A valid token is required for authentication",
 			loggedIn: false,
 		});
-	// console.log("User logged in: " + JSON.stringify(req.user));
 	return res.status(200).json({ loggedIn: true, user: req.user.username });
 });
 
@@ -155,7 +105,6 @@ app.get("/api/tournaments", (req, res) => {
 		var tournaments = [],
 			collections = [];
 		if (cacheManager.get("all")) {
-			// console.log("Cache hit for all tournaments");
 			return res.status(200).json({ message: cacheManager.get("all") });
 		}
 		db.getAllTournaments((result) => {
@@ -193,10 +142,13 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 		classification = "collection";
 	}
 	const hashId = id.substring(2);
-	const cacheId = req.user ? id + "_" + req.user.id : id + "_null";
+	const cacheId = req.user ? hashId + "_" + req.user.id : hashId + "_null";
 	// Get tournament information
 	try {
 		if (classification === "tournament") {
+			if (cacheManager.get(hashId + "_" + (req.user ? req.user.id : "null"))) {
+				return res.status(200).json(cacheManager.get(id + "_" + (req.user ? req.user.id : "null")));
+			}
 			const decodedId = tournamentHash.decode(hashId);
 			if (decodedId.length === 0) {
 				return res.status(400).json({ error: "Invalid tournament ID" });
@@ -209,7 +161,6 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				if (result.message.details == undefined) {
 					return res.status(404).json({ error: "Tournament not found" });
 				}
-				// console.log(req.user);
 				var loggedIn = false;
 				var creator = false;
 				var following = false;
@@ -227,13 +178,11 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							}
 						});
 					}
-					// console.log("Here");
 					responseObject = {
 						message: formatTournamentView(result.message, tournamentHash, following),
 						loggedIn: loggedIn,
 						creator: creator,
 					};
-					// console.log("Hello");
 					cacheManager.set(cacheId, responseObject);
 					return res.status(200).json(responseObject);
 				}
@@ -251,14 +200,148 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 				return res.status(400).json({ error: "Invalid collection ID" });
 			}
 			const collectionId = decodedId[0];
-			db.getTournamentDetailsByCollectionId(collectionId, (result) => {
+
+			const tournamentsList = [];
+			const collectionInfo = { name: "", tournamentIds: [] };
+			if (cacheManager.get(hashId)) {
+				collectionInfo.name = cacheManager.get(hashId).name;
+				collectionInfo.tournamentIds = cacheManager.get(hashId).tournamentIds;
+
+				//fetch all tournaments data
+				let completed = 0;
+				collectionInfo.tournamentIds.forEach((ID) => {
+					if (cacheManager.get(ID + "_" + (req.user ? req.user.id : "null"))) {
+						tournamentsList.push(cacheManager.get(ID + "_" + (req.user ? req.user.id : "null")));
+						completed++;
+						if (completed === collectionInfo.tournamentIds.length) {
+							return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+						}
+					} else {
+						db.getTournamentDetails(tournamentHash.decode(ID)[0], (result) => {
+							if (!result.success) {
+								return res.status(500).json({ error: result.message });
+							}
+
+							if (req.user) {
+								if (req.user.id === result["message"]["details"]["created_by"]) {
+									const tournamentObject = {
+										message: formatTournamentView(result.message, tournamentHash, true),
+										loggedIn: true,
+										creator: true,
+									};
+									cacheManager.set(ID + "_" + (req.user ? req.user.id : "null"), tournamentObject);
+									tournamentsList.push(tournamentObject);
+								} else {
+									db.getSavedTournaments(req.user.id, (savedRes) => {
+										let following = false;
+										if (!savedRes.success) {
+											following = false;
+										} else {
+											following = savedRes.message.some((id) => id.tournament_id === tournamentId);
+										}
+										const tournamentObject = {
+											message: formatTournamentView(result.message, tournamentHash, following),
+											loggedIn: true,
+											creator: false,
+										};
+										cacheManager.set(ID + "_" + (req.user ? req.user.id : "null"), tournamentObject);
+										tournamentsList.push(tournamentObject);
+									});
+								}
+							} else {
+								const tournamentObject = {
+									message: formatTournamentView(result.message, tournamentHash, false),
+									loggedIn: false,
+									creator: false,
+								};
+								cacheManager.set(ID + "_" + (req.user ? req.user.id : "null"), tournamentObject);
+								tournamentsList.push(tournamentObject);
+							}
+							completed++;
+							if (completed === collectionInfo.tournamentIds.length) {
+								return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+							}
+						});
+					}
+				});
+			} else {
+				db.getTournamentDetailsByCollectionId(collectionId, (result) => {
+					if (!result.success) {
+						return res.status(500).json({ error: result.message });
+					}
+					collectionInfo.name = result.collection;
+					result.message.forEach((id) => {
+						collectionInfo.tournamentIds.push(tournamentHash.encode(id.id));
+					});
+					cacheManager.set(hashId, collectionInfo);
+
+					//fetch all tournaments data
+					let completed = 0;
+					collectionInfo.tournamentIds.forEach((ID) => {
+						if (cacheManager.get(ID + "_" + (req.user ? req.user.id : "null"))) {
+							tournamentsList.push(cacheManager.get(ID + "_" + (req.user ? req.user.id : "null")));
+							completed++;
+							if (completed === collectionInfo.tournamentIds.length) {
+								return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+							}
+						} else {
+							db.getTournamentDetails(tournamentHash.decode(ID)[0], (result) => {
+								if (!result.success) {
+									return res.status(500).json({ error: result.message });
+								}
+								console.log(result.message.details);
+								if (req.user) {
+									if (req.user.id === result["message"]["details"]["created_by"]) {
+										const tournamentObject = {
+											message: formatTournamentView(result.message, tournamentHash, true),
+											loggedIn: true,
+											creator: true,
+										};
+										cacheManager.set(ID + "_" + (req.user ? req.user.id : "null"), tournamentObject);
+										tournamentsList.push(tournamentObject);
+									} else {
+										db.getSavedTournaments(req.user.id, (savedRes) => {
+											let following = false;
+											if (!savedRes.success) {
+												following = false;
+											} else {
+												following = savedRes.message.some((id) => id.tournament_id === tournamentId);
+											}
+											const tournamentObject = {
+												message: formatTournamentView(result.message, tournamentHash, following),
+												loggedIn: true,
+												creator: false,
+											};
+											cacheManager.set(ID + "_" + (req.user ? req.user.id : "null"), tournamentObject);
+											tournamentsList.push(tournamentObject);
+										});
+									}
+								} else {
+									const tournamentObject = {
+										message: formatTournamentView(result.message, tournamentHash, false),
+										loggedIn: false,
+										creator: false,
+									};
+									cacheManager.set(ID + "_" + (req.user ? req.user.id : "null"), tournamentObject);
+									tournamentsList.push(tournamentObject);
+								}
+								completed++;
+								if (completed === collectionInfo.tournamentIds.length) {
+									return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+								}
+							});
+						}
+					});
+				});
+			}
+
+			/* db.getTournamentDetailsByCollectionId(collectionId, (result) => {
 				if (!result.success) {
 					return res.status(500).json({ error: result.message });
 				}
 				if (result.message.length === 0) {
 					return res.status(404).json({ error: "Collection not found" });
 				}
-				// console.log(result.message);
 				var loggedIn = false;
 				var creator = false;
 				var following = false;
@@ -276,7 +359,6 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							}
 							return formatTournamentView(tournament, tournamentHash, following);
 						});
-						// console.log(tournaments);
 						responseObject = {
 							message: tournaments,
 							loggedIn: loggedIn,
@@ -287,12 +369,9 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						return res.status(200).json(responseObject);
 					});
 				} else {
-					// console.log(result);
 					const tournaments = result.message.map((tournament) => {
-						// console.log(tournament.details);
 						return formatTournamentView(tournament, tournamentHash, following);
 					});
-					// console.log(tournaments);
 					responseObject = {
 						message: tournaments,
 						loggedIn: loggedIn,
@@ -303,14 +382,12 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 					return res.status(200).json(responseObject);
 				}
 
-				// console.log(tournaments);
-			});
+			});*/
 		} else {
 			return res.status(404).json({ error: "Not found" });
 		}
 	} catch (error) {
-		console.log("Error: " + error);
-		res.status(500).json({ message: "Server error" });
+		return res.status(500).json({ message: "Server error" });
 	}
 });
 
@@ -319,7 +396,6 @@ app.get("/api/user/:id", (req, res) => {
 	// Get user information
 	try {
 		const userId = req.params.id;
-		console.log("Getting user information for user ID: " + userId);
 		res.status(200).json({ message: "User information" });
 		db.getUserDetails(userId, (result) => {
 			if (!result.success) {
@@ -330,7 +406,6 @@ app.get("/api/user/:id", (req, res) => {
 		});
 		res.status(500).json({ message: "Server error" });
 	} catch (error) {
-		console.log("Error: " + error);
 		res.status(500).json({ message: "Server error" });
 	}
 });
@@ -340,7 +415,6 @@ app.get("/api/tournament/:id/results", (req, res) => {
 	// Get tournament results
 	try {
 		const tournamentId = req.params.id;
-		console.log("Getting tournament results for tournament ID: " + tournamentId);
 
 		db.getResults(tournamentId, (result) => {
 			if (!result.success) {
@@ -360,7 +434,6 @@ app.get("/api/user/friends", verifyToken, (req, res) => {
 	// Get friends
 	try {
 		const userId = req.user.id;
-		console.log("Getting friends for user ID: " + userId);
 
 		db.getFriends(userId, (result) => {
 			if (!result.success) {
@@ -379,7 +452,6 @@ app.get("/api/user/tournaments", verifyToken, (req, res) => {
 	// Get saved tournaments
 	try {
 		const userId = req.user.id;
-		console.log("Getting saved tournaments for user ID: " + userId);
 
 		db.getSavedTournaments(userId, (result) => {
 			if (!result.success) {
@@ -397,7 +469,6 @@ app.get("/api/collections", verifyToken, (req, res) => {
 	// Get user collections
 	try {
 		const userId = req.user.id;
-		// console.log("Getting collections for user ID: " + userId);
 
 		db.getUserCollections(userId, (result) => {
 			if (!result.success) {
@@ -406,7 +477,6 @@ app.get("/api/collections", verifyToken, (req, res) => {
 				result.message.forEach((col) => {
 					col.id = collectionHash.encode(col.id);
 				});
-				// console.log(result.message);
 				return res.status(200).json(result);
 			}
 		});
@@ -447,7 +517,7 @@ app.post("/api/signup", async (req, res) => {
 				res.cookie("authToken", token, {
 					httpOnly: true,
 					secure: process.env.NODE_ENV === "production",
-					sameSite: "none",
+					sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 					maxAge: 1000 * 60 * 60 * 24,
 				});
 				return res.status(200).json({
@@ -458,7 +528,6 @@ app.post("/api/signup", async (req, res) => {
 			});
 		});
 	} catch (error) {
-		console.log(error);
 		res.status(500).json({ error: "Failed to create account" });
 	}
 });
@@ -484,8 +553,8 @@ app.post("/api/signin", async (req, res) => {
 
 			res.cookie("authToken", token, {
 				httpOnly: true,
-				secure: true,
-				sameSite: "none",
+				secure: process.env.NODE_ENV === "production",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: 1000 * 60 * 60 * 24,
 			});
 			return res.status(200).json({
@@ -504,7 +573,8 @@ app.post("/api/signout", verifyToken, async (req, res) => {
 	res.clearCookie("authToken", {
 		httpOnly: true,
 		secure: process.env.NODE_ENV === "production",
-		sameSite: "none",
+		sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+		path: "/",
 	});
 	res.json({ success: true, message: "User logged out" });
 });
@@ -515,14 +585,11 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 	try {
 		const fixtureId = req.params.id;
 		const { scores, status, hashId, rounds } = req.body;
-		// console.log({ scores, status, hashId });
 		if (req.user) {
 			db.updateFixture(fixtureId, JSON.stringify(scores), status, rounds, (result) => {
-				// console.log(result);
 				if (!result.success) {
 					return res.status(500).json({ error: result.message });
 				}
-				// console.log(result);
 				cacheManager.invalidate(hashId);
 				res.status(200).json({ success: true, message: "Tournament results updated successfully" });
 			});
@@ -537,7 +604,6 @@ app.post("/api/user/friends", verifyToken, (req, res) => {
 	// Add friend
 	try {
 		const userId = req.user.id;
-		console.log("Adding friend for user ID: " + userId);
 		res.status(200).json({ success: true, message: "Friend added successfully" });
 	} catch (error) {
 		res.status(500).json({ error: "Failed to add friend" });
@@ -552,17 +618,13 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
 		const collection = collectionHash.decode(details.collection)[0];
 		details["collection"] = collection;
-		// console.dir(details, { depth: null });
-		// console.dir(fixtures, { depth: null });
-		// Add logic to save tournament to database
+
 		db.createTournament(details, fixtures, (result) => {
-			// console.log(result);
 			cacheManager.invalidate("all");
-			cacheManager.invalidate("c_" + details.collection);
+			cacheManager.invalidate(collection);
 			res.status(201).json(result);
 		});
 	} catch (error) {
-		// console.error(error);
 		res.status(500).json({ error: "Failed to create tournament" });
 	}
 });
@@ -570,14 +632,11 @@ app.post("/api/tournament/create", verifyToken, (req, res) => {
 app.post("/api/collection/create", verifyToken, (req, res) => {
 	try {
 		const { name } = req.body;
-		// console.log("User object: " + JSON.stringify(req.user));
 		const userId = req.user.id;
-		// console.log("Creating collection for user ID: " + userId);
 		db.createCollection(name, userId, (result) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
-			console.log({ ...result, message: collectionHash.encode(result.message) });
 			res.status(201).json({ ...result, message: collectionHash.encode(result.message) });
 		});
 	} catch (error) {
@@ -596,9 +655,9 @@ app.post("/api/tournaments/:id/join", verifyToken, async (req, res) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
+			cacheManager.invalidate(id);
+			res.status(200).json({ message: "User joined tournament successfully" });
 		});
-
-		res.status(200).json({ message: "User joined tournament successfully" });
 	} catch (error) {
 		res.status(500).json({ error: "Failed to join tournament" });
 	}
@@ -613,9 +672,9 @@ app.post("/api/tournaments/:id/leave", verifyToken, async (req, res) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
+			cacheManager.invalidate(id);
+			res.status(200).json({ message: "User left tournament successfully" });
 		});
-
-		res.status(200).json({ message: "User left tournament successfully" });
 	} catch (error) {
 		res.status(500).json({ error: "Failed to leave tournament" });
 	}
@@ -634,7 +693,7 @@ app.post("/api/tournament/:id/start", verifyToken, async (req, res) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
-			cacheManager.invalidate("t_" + id);
+			cacheManager.invalidate(id);
 			res.status(200).json({ success: true, message: "Tournament started successfully" });
 		});
 	} catch (error) {
@@ -665,7 +724,7 @@ app.post("/api/tournament/:id/updateTeams", verifyToken, async (req, res) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
-			cacheManager.invalidate("t_" + id);
+			cacheManager.invalidate(id);
 			res.status(200).json({ success: true, message: "Tournament teams updated successfully" });
 		});
 	} catch (error) {
@@ -690,7 +749,6 @@ app.post("/api/tournament/:id/updateRounds", verifyToken, async (req, res) => {
 			currentRound: currentRound,
 			previousStandings: standings,
 		});
-		// console.dir({ details, tournamentId, userId }, { depth: null });
 		db.updateRounds(
 			{
 				tournamentId,
@@ -700,16 +758,14 @@ app.post("/api/tournament/:id/updateRounds", verifyToken, async (req, res) => {
 				nextRound: details.currentRound,
 			},
 			(result) => {
-				// console.log(result);
 				if (!result.success) {
 					return res.status(400).json({ error: result.message });
 				}
-				cacheManager.invalidate("t_" + id);
+				cacheManager.invalidate(id);
 				return res.status(200).json({ success: true, message: "Next round started" });
 			}
 		);
 	} catch (error) {
-		console.log(error);
 		res.status(500).json({ error: "Failed to update tournament" });
 	}
 });
@@ -728,7 +784,7 @@ app.put("/api/tournament/:id/end", verifyToken, async (req, res) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
-			cacheManager.invalidate("t_" + id);
+			cacheManager.invalidate(id);
 			return res.status(200).json({ success: true, message: "Tournament Ended" });
 		});
 	} catch (error) {
@@ -746,12 +802,11 @@ app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 			return res.status(400).json({ error: "Invalid tournament ID" });
 		}
 		const tournamentId = decodedId[0];
-		console.log("Deleting tournament with ID: " + tournamentId);
 		db.deleteTournament(tournamentId, userId, (result) => {
 			if (!result.success) {
 				return res.status(400).json({ error: result.message });
 			}
-			console.log("Decaching tournament with ID: " + cacheId);
+			cacheManager.invalidate(id);
 			cacheManager.invalidate(cacheId);
 			res.status(200).json({ success: true, message: "Tournament deleted successfully" });
 		});
@@ -761,7 +816,6 @@ app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 });
 
 app.get("*", (req, res) => {
-	// console.log(`Catch-all triggered for: ${req.originalUrl}`);
 	res.sendFile(path.join(__dirname, "../tourganiser-ui/build/index.html"));
 });
 

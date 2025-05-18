@@ -1,5 +1,4 @@
 const API_URL = process.env.REACT_APP_API_BASE;
-console.log(process.env.REACT_APP_API_BASE);
 
 const MAX_RETRIES = 2;
 const RETRY_DELAY = 500;

@@ -170,29 +170,15 @@ class DBConnection {
 	async getTournamentDetailsByCollectionId(collectionId, callback) {
 		const client = await this.pool.connect();
 		try {
-			const tournaments = [];
-
 			const collectionRes = await client.query("SELECT name FROM collections WHERE id = $1", [collectionId]);
 			const collectionName = collectionRes.rows[0]?.name;
 
-			const tournamentRes = await client.query("SELECT * FROM tournaments WHERE collection_id = $1", [collectionId]);
+			const tournamentRes = await client.query("SELECT id FROM tournaments WHERE collection_id = $1", [collectionId]);
 			if (tournamentRes.rows.length === 0) {
 				throw new Error("Tournament not found");
 			}
 
-			await Promise.all(
-				tournamentRes.rows.map(async (tournament) => {
-					const fixturesRes = await client.query("SELECT * FROM fixtures WHERE tournament_id = $1 ORDER BY match_no", [
-						tournament.id,
-					]);
-					tournaments.push({
-						details: tournament,
-						fixtures: fixturesRes.rows,
-					});
-				})
-			);
-
-			callback({ success: true, object: true, message: tournaments, collection: collectionName });
+			callback({ success: true, object: true, message: tournamentRes.rows, collection: collectionName });
 		} catch (err) {
 			callback({ success: false, object: true, message: err });
 		} finally {

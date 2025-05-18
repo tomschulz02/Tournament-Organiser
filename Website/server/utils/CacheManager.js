@@ -10,6 +10,8 @@ class CacheManager {
 	}
 
 	get(key) {
+		console.log("Looking for cache: ", key);
+		console.log("CACHE: ", this.cache);
 		return this.cache.get(key);
 	}
 
@@ -19,13 +21,11 @@ class CacheManager {
 
 	invalidate(key) {
 		this.cache.forEach((value, cacheKey) => {
-			if (cacheKey.startsWith(key)) {
+			if (cacheKey.includes(key)) {
 				this.cache.delete(cacheKey);
 				this.timestamps.delete(cacheKey);
 			}
 		});
-		this.cache.delete(key);
-		this.timestamps.delete(key);
 	}
 
 	isStale(key, clientTimestamp) {

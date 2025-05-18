@@ -12,7 +12,6 @@ export function AuthProvider({ children }) {
 		const checkLogin = async () => {
 			try {
 				const response = await checkLoginStatus();
-				console.log("Login status response:", response); // Debugging line
 				setIsLoggedIn(response.loggedIn);
 				if (response.loggedIn) {
 					setUsername(response.user);

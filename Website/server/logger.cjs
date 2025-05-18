@@ -27,9 +27,7 @@ function logger(req, res, next) {
 		};
 
 		// Append the log to the file
-		fs.appendFile(logFilePath, JSON.stringify(logEntry) + "\n", (err) => {
-			if (err) console.error("Failed to write to log:", err);
-		});
+		console.log(JSON.stringify(logEntry, null, 2));
 
 		// Restore the original send method and continue
 		return originalSend.call(this, data);

@@ -70,9 +70,7 @@ function BrowseTournaments() {
 				const response = await getTournaments();
 				if (response.message.length > 0) {
 					setTournaments(response.message);
-					// console.log("Fetched tournaments:", response.message);
 				} else {
-					// showMessage("Failed to fetch tournaments", "error");
 					setTournaments([]);
 				}
 			} catch (error) {
@@ -145,18 +143,6 @@ function BrowseTournaments() {
 				) : (
 					<div className="no-tournaments-message">No tournaments available</div>
 				)}
-
-				{/* <!-- Example tournament cards --> */}
-				{/* <div className="tournament-card">
-					<h3>Summer Volleyball Championship</h3>
-					<p className="tournament-date">Starting: July 1, 2024</p>
-					<p className="tournament-format">Format: Single Elimination</p>
-					<p className="tournament-location">Location: London</p>
-					<Link to="/tournaments/view/1" className="view-btn" name="1">
-						Join Tournament
-					</Link>
-				</div> */}
-				{/* <!-- More tournament cards... --> */}
 			</div>
 		</div>
 	);
@@ -330,23 +316,16 @@ function CreateTournament({ goBack }) {
 
 	const handleSubmit = async (e) => {
 		e.preventDefault();
-		console.log("Tournament data submitted:", tournamentData);
 
-		// show loading spinner
 		const confirmResult = await confirm("Are you sure you want to create this tournament?");
 		setLoading(true);
 		if (confirmResult) {
 			const response = await createTournament(tournamentData);
-			// console.log("Tournament creation response:", response);
 			if (response.success) {
-				// hide loading spinner
-				// show success message
 				showMessage("Tournament created successfully!", "success");
 				setLoading(false);
 				goBack();
 			} else {
-				// hide loading spinner
-				// show error message
 				showMessage("Failed to create tournament. Please try again later", "error");
 				setLoading(false);
 			}

@@ -120,6 +120,7 @@ function Profile({ isOpen, onClose, loggedIn, logout }) {
 				logout(false);
 				showMessage("Successfully logged out!", "success");
 				setUsername("Guest");
+				window.location.reload();
 			} else {
 				showMessage("Logout failed. Please try again.", "error");
 			}

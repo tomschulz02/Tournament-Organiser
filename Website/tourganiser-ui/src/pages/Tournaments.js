@@ -539,7 +539,7 @@ function CreateTournament({ goBack }) {
 									<input
 										type="number"
 										id="numGroups"
-										min="2"
+										min="1"
 										onChange={handleChange}
 										value={tournamentData.numGroups}
 									/>

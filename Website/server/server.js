@@ -133,9 +133,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	const { id } = req.params;
 	var classification = null;
 	var responseObject = null;
-	if (cacheManager.get(id + "_" + (req.user ? req.user.id : "null"))) {
-		return res.status(200).json(cacheManager.get(id + "_" + (req.user ? req.user.id : "null")));
-	}
+	
 	if (id.startsWith("t_")) {
 		classification = "tournament";
 	} else if (id.startsWith("c_")) {
@@ -147,7 +145,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	try {
 		if (classification === "tournament") {
 			if (cacheManager.get(hashId + "_" + (req.user ? req.user.id : "null"))) {
-				return res.status(200).json(cacheManager.get(id + "_" + (req.user ? req.user.id : "null")));
+				return res.status(200).json({success:true, ...(cacheManager.get(id + "_" + (req.user ? req.user.id : "null")))});
 			}
 			const decodedId = tournamentHash.decode(hashId);
 			if (decodedId.length === 0) {
@@ -184,7 +182,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						creator: creator,
 					};
 					cacheManager.set(cacheId, responseObject);
-					return res.status(200).json(responseObject);
+					return res.status(200).json({success:true, ...responseObject});
 				}
 				responseObject = {
 					message: formatTournamentView(result.message, tournamentHash, following),
@@ -192,7 +190,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 					creator: creator,
 				};
 				cacheManager.set(cacheId, responseObject);
-				return res.status(200).json(responseObject);
+				return res.status(200).json({success:true, ...responseObject});
 			});
 		} else if (classification === "collection") {
 			const decodedId = collectionHash.decode(hashId);
@@ -214,7 +212,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						tournamentsList.push(cacheManager.get(ID + "_" + (req.user ? req.user.id : "null")));
 						completed++;
 						if (completed === collectionInfo.tournamentIds.length) {
-							return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+							return res.status(200).json({ success:true, message: tournamentsList, collection: collectionInfo.name });
 						}
 					} else {
 						db.getTournamentDetails(tournamentHash.decode(ID)[0], (result) => {
@@ -259,7 +257,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							}
 							completed++;
 							if (completed === collectionInfo.tournamentIds.length) {
-								return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+								return res.status(200).json({success:true, message: tournamentsList, collection: collectionInfo.name });
 							}
 						});
 					}
@@ -282,7 +280,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							tournamentsList.push(cacheManager.get(ID + "_" + (req.user ? req.user.id : "null")));
 							completed++;
 							if (completed === collectionInfo.tournamentIds.length) {
-								return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+								return res.status(200).json({success:true, message: tournamentsList, collection: collectionInfo.name });
 							}
 						} else {
 							db.getTournamentDetails(tournamentHash.decode(ID)[0], (result) => {
@@ -327,7 +325,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 								}
 								completed++;
 								if (completed === collectionInfo.tournamentIds.length) {
-									return res.status(200).json({ message: tournamentsList, collection: collectionInfo.name });
+									return res.status(200).json({success:true, message: tournamentsList, collection: collectionInfo.name });
 								}
 							});
 						}

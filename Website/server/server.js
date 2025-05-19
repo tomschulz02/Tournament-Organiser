@@ -840,6 +840,10 @@ app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 	}
 });
 
+app.get("/ping", (res, req) => {
+	return res.status(200).send("pong");
+});
+
 app.get("*", (req, res) => {
 	res.sendFile(path.join(__dirname, "../tourganiser-ui/build/index.html"));
 });

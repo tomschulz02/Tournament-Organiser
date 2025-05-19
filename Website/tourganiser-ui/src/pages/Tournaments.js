@@ -459,9 +459,9 @@ function CreateTournament({ goBack }) {
 									<label htmlFor="format">Tournament Format*</label>
 									<select id="format" onChange={handleChange} value={tournamentData.format} required>
 										{/* <!-- All options are disabled for now. Only combi is available for MVP --> */}
-										<option value="single">Single Elimination</option>
-										<option value="double">Double Elimination</option>
-										<option value="round">Round Robin</option>
+										<option value="single" disabled={true}>Single Elimination - Coming Soon</option>
+										<option value="double" disabled={true}>Double Elimination - Coming Soon</option>
+										<option value="round" disabled={true}>Round Robin - Coming Soon</option>
 										<option value="combi">Round Robin + Knockout</option>
 									</select>
 								</div>

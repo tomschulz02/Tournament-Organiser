@@ -394,7 +394,6 @@ Styles for a donation banner that could be used on multiple pages
 .profile-actions-settings {
 	flex: 1;
 	max-width: 50px;
-	background: grey;
 	cursor: pointer;
 	border-radius: 25px;
 }
@@ -500,7 +499,7 @@ Styles for a donation banner that could be used on multiple pages
 } */
 
 /* Adjust donation banner for mobile */
-@media (max-width: 768px) {
+/* @media (max-width: 768px) {
 	.donation-banner {
 		flex-direction: column;
 		max-height: none;
@@ -515,7 +514,7 @@ Styles for a donation banner that could be used on multiple pages
 	.donate-button {
 		margin: 15px auto;
 	}
-}
+} */
 
 /* Add responsive profile tab styles */
 @media (max-width: 768px) {

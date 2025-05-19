@@ -198,7 +198,7 @@ might show for users who are already signed in, or that could be in a separate "
 	color: white;
 	padding: 30px 20px;
 	text-align: left;
-	margin: 20px 0;
+	margin: 0 -20px;
 	display: flex;
 	font-family: var(--main-font-family);
 	max-height: 160px;
@@ -230,9 +230,9 @@ might show for users who are already signed in, or that could be in a separate "
 
 	.donation-banner {
 		flex-direction: column;
-		gap: 12px;
+		gap: 5px;
 		text-align: center;
-		padding: 16px;
+		padding: 10px;
 		justify-content: center;
 	}
 
@@ -244,5 +244,21 @@ might show for users who are already signed in, or that could be in a separate "
 	.donate-button {
 		width: 100%;
 		justify-content: center;
+	}
+
+	.features-section {
+		padding: 0px;
+	}
+
+	.feature-card {
+		padding: 15px;
+	}
+
+	.feature-content {
+		padding: 0 10px;
+	}
+
+	#home {
+		padding: 10px
 	}
 }

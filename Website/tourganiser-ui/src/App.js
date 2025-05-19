@@ -140,10 +140,10 @@ function Profile({ isOpen, onClose, loggedIn, logout }) {
 				<h2>Profile - {username !== "" ? username : "Guest"}</h2>
 				<div className="profile-item no-hover"></div>
 				<div className="profile-item">
-					<h4>My Tournament</h4>
+					<h4>My Tournaments - Coming soon</h4>
 				</div>
 				<div className="profile-item">
-					<h4>Friends</h4>
+					<h4>Friends - Coming soon</h4>
 				</div>
 				<div className="profile-actions">
 					<div className="profile-actions-settings"></div>
@@ -153,6 +153,7 @@ function Profile({ isOpen, onClose, loggedIn, logout }) {
 						</Link>
 					) : (
 						<div className="profile-actions-item" id="logout" onClick={handleLogout}>
+							Logout
 							<i className="fas fa-sign-out-alt" title="Logout"></i>
 						</div>
 					)}

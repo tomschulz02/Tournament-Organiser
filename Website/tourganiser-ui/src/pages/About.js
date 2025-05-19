@@ -76,6 +76,12 @@ export default function About() {
 							<a href="mailto:support@tourganiser.co.za">support@tourganiser.co.za</a>
 						</p>
 					</div>
+					<div className="contact-item">
+						<h3>Discord</h3>
+						<p>
+							<a href="https://discord.gg/jwq963ugYR" target="_blank" rel="noreferror">Tourganiser Discord</a>
+						</p>
+					</div>
 				</div>
 			</section>
 		</>

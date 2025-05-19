@@ -11,7 +11,7 @@ class CacheManager {
 
 	get(key) {
 		console.log("Looking for cache: ", key);
-		console.log("CACHE: ", this.cache);
+		// console.log("CACHE: ", this.cache);
 		return this.cache.get(key);
 	}
 

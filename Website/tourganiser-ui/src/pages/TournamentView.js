@@ -45,7 +45,7 @@ export default function TournamentView() {
 				if (!response.success) {
 					setNotFound(true);
 					showMessage("Tournament not found", "error");
-					navigate('/not-found', {replace:true})
+					navigate("/not-found", { replace: true });
 					return;
 				}
 				setNotFound(false);
@@ -208,6 +208,7 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 					setPageUnsavedChanges={setUnsavedChanges}
 					tournamentId={tournamentData.details.id}
 					creator={creator}
+					onUpdate={() => setShowUpdateWarning(true)}
 				/>
 			)}
 		</div>
@@ -261,6 +262,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 		details.status = "Ongoing";
 		setLoading(false);
 		showMessage("Tournament started successfully", "success");
+		window.location.reload();
 	};
 
 	const handleFollow = async () => {
@@ -816,7 +818,7 @@ function TournamentStandings({ standings, format, currentRound }) {
 	);
 }
 
-function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, creator }) {
+function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, creator, onUpdate }) {
 	const editTeams = status === "Not Started" && creator;
 	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
 	const [currentTeam, setCurrentTeam] = useState(null);
@@ -894,6 +896,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 			setUnsavedChanges(false);
 			setPageUnsavedChanges(false);
 			showMessage("Changes saved successfully", "success");
+			onUpdate();
 		}
 	};
 
@@ -907,6 +910,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 					rank={selectedTeamIndex + 1}
 				/>
 			)}
+			{loading && <LoadingScreen />}
 			<div className="tournament-teams">
 				<div className="tournament-teams-header">
 					<h3>Teams</h3>

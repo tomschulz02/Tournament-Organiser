@@ -27,7 +27,8 @@ function logger(req, res, next) {
 		};
 
 		// Append the log to the file
-		console.log(JSON.stringify(logEntry, null, 2));
+		// console.log(JSON.stringify(logEntry, null, 2));
+		console.debug(logEntry);
 
 		// Restore the original send method and continue
 		return originalSend.call(this, data);

@@ -33,6 +33,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 		<div className="modal-overlay">
 			<div className="score-modal">
 				<h3>Update Score - Match #{fixture.match_no}</h3>
+				<sub>Any match ending with a score of 0-0 (1st set only) will be considered cancelled</sub>
 				<div className="teams-header">
 					<span className="team-name">{fixture.team1}</span>
 					<span className="vs">vs</span>

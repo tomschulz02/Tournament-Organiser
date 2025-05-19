@@ -29,7 +29,7 @@ export function formatCombiTournamentForStorage(data) {
 	return format;
 }
 
-function generateFixturesCombi(groups, knockout, rounds) {
+export function generateFixturesCombi(groups, knockout, rounds) {
 	var fixtures = [];
 	// generate all possible fixtures for groups (unordered)
 	groups.forEach((group, groupIndex) => {
@@ -330,12 +330,16 @@ function getDate(date) {
 }
 
 function separateFixturesAndResults(fixtures, tourStatus) {
-	var remainingFixtures = [];
-	var results = [];
+	const remainingFixtures = [];
+	let results = [];
+	const cancelled = [];
 
 	fixtures.forEach((fix) => {
 		var result = fix.result;
-		if (!result || fix.status != "COMPLETED") {
+		if (fix.status == "CANCELLED") {
+			fix.editable = false;
+			cancelled.push(fix);
+		} else if (!result || fix.status != "COMPLETED") {
 			fix.editable =
 				(fix.status == "WAITING" || fix.status == "ONGOING") &&
 				fix.team1 != "TBD" &&
@@ -347,6 +351,8 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 			results.push(fix);
 		}
 	});
+
+	results = results.concat(cancelled);
 
 	return { remainingFixtures, results };
 }

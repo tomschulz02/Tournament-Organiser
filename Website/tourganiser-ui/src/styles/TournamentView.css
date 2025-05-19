@@ -248,6 +248,11 @@
 	color: #2e7d32;
 }
 
+.fixture-status.cancelled {
+	background-color: #ffebee;
+	color: #c62828;
+}
+
 .fixture-footer {
 	display: flex;
 	align-items: center;

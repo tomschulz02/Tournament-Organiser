@@ -233,9 +233,53 @@ class DBConnection {
 		this.query(sql, [JSON.stringify(teams), tournamentId, userId], callback);
 	}
 
-	updateGroups(tournamentId, userId, groups, callback){
-		const sql = "UPDATE tournaments SET state = jsonb_set(state, '{rounds,0,groups}, $1::jsonb') WHERE id=$2 AND created_by=$3;";
-		this.query(sql, [JSON.stringify(groups), tournamentId, userId], callback);
+	async updateGroups(tournamentId, userId, groups, fixtures, callback) {
+		const client = await this.pool.connect();
+		try {
+			await client.query("BEGIN");
+
+			await client.query(
+				"UPDATE tournaments SET state = jsonb_set(state, '{rounds,0,groups}', $1::jsonb) WHERE id=$2 AND created_by=$3;",
+				[JSON.stringify(groups), tournamentId, userId]
+			);
+
+			await client.query("DELETE FROM fixtures WHERE tournament_id=$1 AND round ILIKE '%pool%'", [tournamentId]);
+
+			if (fixtures.length > 0) {
+				const values = [];
+				const placeholders = fixtures
+					.map((fixture, i) => {
+						values.push(
+							tournamentId,
+							fixture.match_no,
+							fixture.team1,
+							fixture.team2,
+							fixture.status,
+							fixture.round,
+							fixture.next_game
+						);
+						const offset = i * 7;
+						return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${
+							offset + 7
+						})`;
+					})
+					.join(", ");
+
+				await client.query(
+					`INSERT INTO fixtures (tournament_id, match_no, team1, team2, status, round, next_game)
+					VALUES ${placeholders}`,
+					values
+				);
+			}
+
+			await client.query("COMMIT");
+			callback({ success: true, object: false, message: "Updated groups" });
+		} catch (error) {
+			await client.query("ROLLBACK");
+			callback({ success: false, object: true, message: error });
+		} finally {
+			client.release();
+		}
 	}
 
 	async updateRounds({ tournamentId, userId, updatedRounds, updatedFixtures, nextRound }, callback) {

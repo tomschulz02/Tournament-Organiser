@@ -375,6 +375,30 @@ function CreateTournament({ goBack }) {
 		});
 	};
 
+	const handleTeamCountChange = (e) => {
+		const newValue = e.target.value;
+		setTempTeamCount(newValue);
+
+		const select = document.getElementById("knockoutRound");
+		const options = select.options;
+
+		for (let i = 0; i < options.length; i++) {
+			const requiredTeams = parseInt(options[i].dataset.requiredTeams, 10);
+			if (requiredTeams > newValue) {
+				options[i].disabled = true;
+			} else {
+				options[i].disabled = false;
+			}
+		}
+
+		for (let i = 0; i < options.length; i++) {
+			if (!options[i].disabled) {
+				setTournamentData({ ...tournamentData, knockoutRound: parseInt(options[i].value, 10) });
+				break;
+			}
+		}
+	};
+
 	return (
 		<div className="create-tournament">
 			{loading && <LoadingScreen />}
@@ -459,9 +483,15 @@ function CreateTournament({ goBack }) {
 									<label htmlFor="format">Tournament Format*</label>
 									<select id="format" onChange={handleChange} value={tournamentData.format} required>
 										{/* <!-- All options are disabled for now. Only combi is available for MVP --> */}
-										<option value="single" disabled={true}>Single Elimination - Coming Soon</option>
-										<option value="double" disabled={true}>Double Elimination - Coming Soon</option>
-										<option value="round" disabled={true}>Round Robin - Coming Soon</option>
+										<option value="single" disabled={true}>
+											Single Elimination - Coming Soon
+										</option>
+										<option value="double" disabled={true}>
+											Double Elimination - Coming Soon
+										</option>
+										<option value="round" disabled={true}>
+											Round Robin - Coming Soon
+										</option>
 										<option value="combi">Round Robin + Knockout</option>
 									</select>
 								</div>
@@ -502,9 +532,7 @@ function CreateTournament({ goBack }) {
 											<input
 												type="number"
 												id="teamCount"
-												onChange={(e) => {
-													setTempTeamCount(e.target.value);
-												}}
+												onChange={handleTeamCountChange}
 												onBlur={handleBlur}
 												min="2"
 												value={tempTeamCount}
@@ -526,22 +554,22 @@ function CreateTournament({ goBack }) {
 								<div className={`form-group ${expandOptions ? "" : "hidden"}`} id="knockout">
 									<label htmlFor="knockoutRound">First Knockout Round*</label>
 									<select type="number" id="knockoutRound" onChange={handleChange} value={tournamentData.knockoutRound}>
-										<option value={12} disabled={parseInt(tempTeamCount) < 24}>
+										<option value={12} data-required-teams={24}>
 											Round of 24
 										</option>
-										<option value={8} disabled={parseInt(tempTeamCount) < 16}>
+										<option value={8} data-required-teams={16}>
 											Round of 16
 										</option>
-										<option value={6} disabled={parseInt(tempTeamCount) < 12}>
+										<option value={6} data-required-teams={12}>
 											Round of 12
 										</option>
-										<option value={4} disabled={parseInt(tempTeamCount) < 8}>
+										<option value={4} data-required-teams={8}>
 											Quarterfinals
 										</option>
-										<option value={2} disabled={parseInt(tempTeamCount) < 4}>
+										<option value={2} data-required-teams={4}>
 											Semifinals
 										</option>
-										<option value={1} disabled={parseInt(tempTeamCount) < 2}>
+										<option value={1} data-required-teams={2}>
 											Finals
 										</option>
 									</select>

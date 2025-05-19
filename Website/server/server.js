@@ -30,6 +30,7 @@ import {
 	formatTournamentView,
 	determineQualifiedTeams,
 	populateGroups,
+	generateFixturesCombi,
 } from "./formatter.js";
 import DBConnection from "./config.js";
 import express, { json } from "express";
@@ -134,7 +135,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	const { id } = req.params;
 	var classification = null;
 	var responseObject = null;
-	
+
 	if (id.startsWith("t_")) {
 		classification = "tournament";
 	} else if (id.startsWith("c_")) {
@@ -146,7 +147,9 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 	try {
 		if (classification === "tournament") {
 			if (cacheManager.get(hashId + "_" + (req.user ? req.user.id : "null"))) {
-				return res.status(200).json({success:true, ...(cacheManager.get(id + "_" + (req.user ? req.user.id : "null")))});
+				return res
+					.status(200)
+					.json({ success: true, ...cacheManager.get(id + "_" + (req.user ? req.user.id : "null")) });
 			}
 			const decodedId = tournamentHash.decode(hashId);
 			if (decodedId.length === 0) {
@@ -183,7 +186,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						creator: creator,
 					};
 					cacheManager.set(cacheId, responseObject);
-					return res.status(200).json({success:true, ...responseObject});
+					return res.status(200).json({ success: true, ...responseObject });
 				}
 				responseObject = {
 					message: formatTournamentView(result.message, tournamentHash, following),
@@ -191,7 +194,7 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 					creator: creator,
 				};
 				cacheManager.set(cacheId, responseObject);
-				return res.status(200).json({success:true, ...responseObject});
+				return res.status(200).json({ success: true, ...responseObject });
 			});
 		} else if (classification === "collection") {
 			const decodedId = collectionHash.decode(hashId);
@@ -213,10 +216,8 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 						tournamentsList.push(cacheManager.get(ID + "_" + (req.user ? req.user.id : "null")));
 						completed++;
 						if (completed === collectionInfo.tournamentIds.length) {
-							tournamentsList.sort((a, b) => 
-								a.message.details.name.localeCompare(b.message.details.name)
-							);
-							return res.status(200).json({ success:true, message: tournamentsList, collection: collectionInfo.name });
+							tournamentsList.sort((a, b) => a.message.details.name.localeCompare(b.message.details.name));
+							return res.status(200).json({ success: true, message: tournamentsList, collection: collectionInfo.name });
 						}
 					} else {
 						db.getTournamentDetails(tournamentHash.decode(ID)[0], (result) => {
@@ -261,10 +262,10 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							}
 							completed++;
 							if (completed === collectionInfo.tournamentIds.length) {
-								tournamentsList.sort((a, b) => 
-									a.message.details.name.localeCompare(b.message.details.name)
-								);
-								return res.status(200).json({success:true, message: tournamentsList, collection: collectionInfo.name });
+								tournamentsList.sort((a, b) => a.message.details.name.localeCompare(b.message.details.name));
+								return res
+									.status(200)
+									.json({ success: true, message: tournamentsList, collection: collectionInfo.name });
 							}
 						});
 					}
@@ -287,10 +288,10 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 							tournamentsList.push(cacheManager.get(ID + "_" + (req.user ? req.user.id : "null")));
 							completed++;
 							if (completed === collectionInfo.tournamentIds.length) {
-								tournamentsList.sort((a, b) => 
-									a.message.details.name.localeCompare(b.message.details.name)
-								);
-								return res.status(200).json({success:true, message: tournamentsList, collection: collectionInfo.name });
+								tournamentsList.sort((a, b) => a.message.details.name.localeCompare(b.message.details.name));
+								return res
+									.status(200)
+									.json({ success: true, message: tournamentsList, collection: collectionInfo.name });
 							}
 						} else {
 							db.getTournamentDetails(tournamentHash.decode(ID)[0], (result) => {
@@ -335,10 +336,10 @@ app.get("/api/tournament/:id", verifyToken, (req, res) => {
 								}
 								completed++;
 								if (completed === collectionInfo.tournamentIds.length) {
-									tournamentsList.sort((a, b) => 
-										a.message.details.name.localeCompare(b.message.details.name)
-									);
-									return res.status(200).json({success:true, message: tournamentsList, collection: collectionInfo.name });
+									tournamentsList.sort((a, b) => a.message.details.name.localeCompare(b.message.details.name));
+									return res
+										.status(200)
+										.json({ success: true, message: tournamentsList, collection: collectionInfo.name });
 								}
 							});
 						}
@@ -595,7 +596,10 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 	// Update tournament results
 	try {
 		const fixtureId = req.params.id;
-		const { scores, status, hashId, rounds } = req.body;
+		let { scores, status, hashId, rounds } = req.body;
+		if (scores[0][0] === 0 && scores[0][1] === 0 && status == "COMPLETED") {
+			status = "CANCELLED";
+		}
 		if (req.user) {
 			db.updateFixture(fixtureId, JSON.stringify(scores), status, rounds, (result) => {
 				if (!result.success) {
@@ -606,6 +610,7 @@ app.post("/api/tournament/:id/results", verifyToken, (req, res) => {
 			});
 		}
 	} catch (error) {
+		console.error(error);
 		res.status(500).json({ error: "Failed to update tournament results" });
 	}
 });
@@ -737,14 +742,17 @@ app.post("/api/tournament/:id/updateTeams", verifyToken, async (req, res) => {
 			}
 			const groupCount = result.message[0].num_groups;
 			const groups = populateGroups(groupCount, teams);
-			db.updateGroups(tournamentId, userId, groups, (groupResult) => {
+			const fixtures = generateFixturesCombi(groups, 0, []);
+			console.log(fixtures);
+			db.updateGroups(tournamentId, userId, groups, fixtures, (groupResult) => {
+				console.error(groupResult);
+				if (!groupResult.success) return res.status(400).json({ error: result.message });
 				cacheManager.invalidate(id);
-				res.status(200).json({ success: true, message: "Tournament teams updated successfully" });
-			})
-			
+				return res.status(200).json({ success: true, message: "Tournament teams updated successfully" });
+			});
 		});
 	} catch (error) {
-		res.status(500).json({ error: "Failed to update tournament teams" });
+		return res.status(500).json({ error: "Failed to update tournament teams" });
 	}
 });
 
@@ -823,7 +831,8 @@ app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 				return res.status(400).json({ error: result.message });
 			}
 			cacheManager.invalidate(id);
-			cacheManager.invalidate(cacheId);
+			cacheManager.invalidate(cacheId.substring(2));
+			cacheManager.invalidate("all");
 			res.status(200).json({ success: true, message: "Tournament deleted successfully" });
 		});
 	} catch (error) {

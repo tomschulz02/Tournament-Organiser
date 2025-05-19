@@ -42,9 +42,10 @@ export default function TournamentView() {
 		const getTournamentDetails = async () => {
 			try {
 				const response = await fetchTournamentData(id);
-				if (response.error) {
+				if (!response.success) {
 					setNotFound(true);
 					showMessage("Tournament not found", "error");
+					navigate('/not-found', {replace:true})
 					return;
 				}
 				setNotFound(false);

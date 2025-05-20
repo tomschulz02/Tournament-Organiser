@@ -840,7 +840,7 @@ app.delete("/api/tournament/:id", verifyToken, async (req, res) => {
 	}
 });
 
-app.get("/ping", (res, req) => {
+app.get("/ping", (req, res) => {
 	return res.status(200).send("pong");
 });
 

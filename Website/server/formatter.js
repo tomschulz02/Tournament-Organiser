@@ -1,28 +1,28 @@
 export function formatCombiTournamentForStorage(data) {
 	var format = {
-		name: data["tournamentName"],
-		date: data["startDate"],
-		location: data["location"],
-		description: data["description"] == "" ? "Default description" : data["description"],
-		format: "C",
-		num_teams: data["teamCount"],
-		num_groups: data["numGroups"] || 0,
-		knockout: parseInt(data["knockoutRound"]) == 0 ? false : true,
+		name: data['tournamentName'],
+		date: data['startDate'],
+		location: data['location'],
+		description: data['description'] == '' ? 'Default description' : data['description'],
+		format: 'C',
+		num_teams: data['teamCount'],
+		num_groups: data['numGroups'] || 0,
+		knockout: parseInt(data['knockoutRound']) == 0 ? false : true,
 		state: {
 			// groups: populateGroups(data["numGroups"], data["teams"]),
-			type: data["type"],
-			teams: data["teams"],
+			type: data['type'],
+			teams: data['teams'],
 			rounds: [],
 			currentRound: 0,
 		},
-		created_by: data["user"],
-		collection: data["tournamentCollection"] != "" ? data["tournamentCollection"] : null,
+		created_by: data['user'],
+		collection: data['tournamentCollection'] != '' ? data['tournamentCollection'] : null,
 		fixtures: [],
 	};
 
-	format["fixtures"] = generateFixturesCombi(
-		populateGroups(data["numGroups"], data["teams"]),
-		parseInt(data["knockoutRound"]),
+	format['fixtures'] = generateFixturesCombi(
+		populateGroups(data['numGroups'], data['teams']),
+		parseInt(data['knockoutRound']),
 		format.state.rounds
 	);
 
@@ -82,7 +82,7 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 		totalMatches += group.length;
 	});
 
-	rounds.push({ round: "Group Stage", matches: totalMatches, completed: 0, groups: groups, standings: [] });
+	rounds.push({ round: 'Group Stage', matches: totalMatches, completed: 0, groups: groups, standings: [] });
 
 	//sort unordered group matches
 	var round = 0;
@@ -94,7 +94,7 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 					match_no: matchNo,
 					team1: group[i][0],
 					team2: group[i][1],
-					status: "WAITING",
+					status: 'WAITING',
 					round: `Pool ${String.fromCharCode(65 + index)}`,
 					next_game: null,
 				};
@@ -111,24 +111,24 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 			for (var i = 0; i < 8; i++) {
 				sortedFixtures.push({
 					match_no: matchNo,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `Round of 24`,
 					next_game: matchNo + 8,
 				});
 				matchNo++;
 			}
 			knockout = knockout - 4;
-			rounds.push({ round: "Round of 24", matches: 8, completed: 0, groups: [], qualifyingTeams: 24, standings: [] });
+			rounds.push({ round: 'Round of 24', matches: 8, completed: 0, groups: [], qualifyingTeams: 24, standings: [] });
 		case 8:
 			var dec = 1;
 			for (var i = 0; i < 8; i++) {
 				sortedFixtures.push({
 					match_no: matchNo,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `Round of 16`,
 					next_game: i < 4 ? matchNo + 8 : matchNo + 8 - dec,
 				});
@@ -136,29 +136,29 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 				if (i >= 4) dec += 2;
 			}
 			knockout = knockout - 4;
-			rounds.push({ round: "Round of 16", matches: 8, completed: 0, groups: [], qualifyingTeams: 16, standings: [] });
+			rounds.push({ round: 'Round of 16', matches: 8, completed: 0, groups: [], qualifyingTeams: 16, standings: [] });
 		case 6:
 			for (var i = 0; i < 4; i++) {
 				sortedFixtures.push({
 					match_no: matchNo,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `Round of 12`,
 					next_game: matchNo + 4,
 				});
 				matchNo++;
 			}
 			knockout = knockout - 2;
-			rounds.push({ round: "Round of 12", matches: 4, completed: 0, groups: [], qualifyingTeams: 12, standings: [] });
+			rounds.push({ round: 'Round of 12', matches: 4, completed: 0, groups: [], qualifyingTeams: 12, standings: [] });
 		case 4:
 			var dec = 1;
 			for (var i = 0; i < 4; i++) {
 				sortedFixtures.push({
 					match_no: matchNo,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `Quarterfinals`,
 					next_game: i < 2 ? matchNo + 4 : matchNo + 4 - dec,
 				});
@@ -166,41 +166,41 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 				if (i >= 2) dec += 2;
 			}
 			knockout = knockout - 2;
-			rounds.push({ round: "Quarterfinals", matches: 4, completed: 0, groups: [], qualifyingTeams: 8, standings: [] });
+			rounds.push({ round: 'Quarterfinals', matches: 4, completed: 0, groups: [], qualifyingTeams: 8, standings: [] });
 		case 2:
 			for (var i = 0; i < 2; i++) {
 				sortedFixtures.push({
 					match_no: matchNo,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `Semifinals`,
 					next_game: i == 0 ? matchNo + 2 : matchNo + 1,
 				});
 				matchNo++;
 			}
 			knockout = knockout - 1;
-			rounds.push({ round: "Semifinals", matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
+			rounds.push({ round: 'Semifinals', matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
 		case 1:
 			sortedFixtures.push(
 				{
 					match_no: matchNo++,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `3rd Place Playoff`,
 					next_game: null,
 				},
 				{
 					match_no: matchNo,
-					team1: "TBD",
-					team2: "TBD",
-					status: "WAITING",
+					team1: 'TBD',
+					team2: 'TBD',
+					status: 'WAITING',
 					round: `Finals`,
 					next_game: null,
 				}
 			);
-			rounds.push({ round: "Finals", matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
+			rounds.push({ round: 'Finals', matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
 			break;
 
 		default:
@@ -240,23 +240,23 @@ export function formatTournamentsForBrowse(tournaments, collections, tournamentH
 	tournaments.forEach((tour) => {
 		var date = getDate(tour.date);
 		const tournament = {
-			id: "t_" + tournamentHash.encode(tour.id),
+			id: 't_' + tournamentHash.encode(tour.id),
 			name: tour.name,
 			date: date,
 			location: tour.location,
-			type: tour["state"]["type"],
+			type: tour['state']['type'],
 			format: expandFormat(tour.format),
-			classification: "tournament",
+			classification: 'tournament',
 		};
 		result.push(tournament);
 	});
 	collections.forEach((col) => {
 		result.push({
-			id: "c_" + collectionHash.encode(col.id),
+			id: 'c_' + collectionHash.encode(col.id),
 			name: col.name,
 			num_tournaments: col.tournament_count,
-			type: "collection",
-			classification: "collection",
+			type: 'collection',
+			classification: 'collection',
 		});
 	});
 	return result;
@@ -299,20 +299,20 @@ export function formatTournamentView(tournament, tournamentHash, following) {
 function expandFormat(symbol) {
 	var format;
 	switch (symbol) {
-		case "C":
-			format = "Pool Play + Knockout";
+		case 'C':
+			format = 'Pool Play + Knockout';
 			break;
-		case "SE":
-			format = "Single Elimination";
+		case 'SE':
+			format = 'Single Elimination';
 			break;
-		case "DE":
-			format = "Double Elimination";
+		case 'DE':
+			format = 'Double Elimination';
 			break;
-		case "KOTB":
-			format = "King Of The Beach";
+		case 'KOTB':
+			format = 'King Of The Beach';
 			break;
-		case "KOTC":
-			format = "King Of The Court";
+		case 'KOTC':
+			format = 'King Of The Court';
 			break;
 		default:
 			format = null;
@@ -324,7 +324,7 @@ function expandFormat(symbol) {
 function getDate(date) {
 	var start = new Date(date);
 	start.setUTCDate(start.getUTCDate() + 1);
-	start = start.toISOString().split("T")[0];
+	start = start.toISOString().split('T')[0];
 
 	return start;
 }
@@ -336,15 +336,15 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 
 	fixtures.forEach((fix) => {
 		var result = fix.result;
-		if (fix.status == "CANCELLED") {
+		if (fix.status == 'CANCELLED') {
 			fix.editable = false;
 			cancelled.push(fix);
-		} else if (!result || fix.status != "COMPLETED") {
+		} else if (!result || fix.status != 'COMPLETED') {
 			fix.editable =
-				(fix.status == "WAITING" || fix.status == "ONGOING") &&
-				fix.team1 != "TBD" &&
-				fix.team2 != "TBD" &&
-				tourStatus == "Ongoing";
+				(fix.status == 'WAITING' || fix.status == 'ONGOING') &&
+				fix.team1 != 'TBD' &&
+				fix.team2 != 'TBD' &&
+				tourStatus == 'Ongoing';
 			remainingFixtures.push(fix);
 		} else {
 			fix.editable = false;
@@ -359,7 +359,7 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 
 function determineStandings(rounds, results, format) {
 	const allStandings = [];
-	if (format == "C") {
+	if (format == 'C') {
 		rounds.forEach((round) => {
 			const teams = round.groups;
 			const standings = { round: round.round, groups: [] };
@@ -385,9 +385,9 @@ function determineStandings(rounds, results, format) {
 			// updates standings based on the results of the fixtures
 			results.forEach((result) => {
 				if (
-					(round.round == "Group Stage" && result.round.includes("Pool")) ||
+					(round.round == 'Group Stage' && result.round.includes('Pool')) ||
 					round.round == result.round ||
-					(round.round == "Finals" && result.round.includes("Playoff"))
+					(round.round == 'Finals' && result.round.includes('Playoff'))
 				) {
 					var res = determineResult(result);
 					if (res == null) return;
@@ -455,31 +455,57 @@ function determineResult(result) {
 export function determineQualifiedTeams({ rounds, teams, fixtures, currentRound, previousStandings }) {
 	// rounds[currentRound] = { ...rounds[currentRound], standings: previousStandings };
 	currentRound = parseInt(currentRound) + 1;
-	const gap = rounds[currentRound].qualifyingTeams - rounds[currentRound].matches * 2;
-	for (let i = gap; i < teams.length - rounds[currentRound].matches; i++) {
-		const team1 = teams[i];
-		const team2 = teams[teams.length - (i - gap) - 1];
-		if (team1 && team2) {
-			rounds[currentRound].groups.push([team1, team2]);
-		}
-	}
-	for (let i = 0; i < gap; i++) {
-		rounds[currentRound + 1].groups.push([teams[i], "TBD"]);
-	}
-	// update the fixtures for the next round
 	let updatedFixtures = [];
-	for (let i = currentRound; i < rounds.length; i++) {
-		if (rounds[i].groups.length > 0) {
-			fixtures.forEach((fix, index) => {
-				if (fix.round == rounds[i].round) {
-					const fixture = {
-						id: fix.id,
-						team1: rounds[i].groups[index][0] ?? "TBD",
-						team2: rounds[i].groups[index][1] ?? "TBD",
-					};
-					updatedFixtures.push(fixture);
-				}
-			});
+	if (rounds[currentRound].round === 'Finals' || currentRound === rounds.length) {
+		// if the current round is the finals or the last round, we just pair the teams in the knockout format
+		for (let i = 0; i < teams.length; i += 2) {
+			const team1 = teams[i];
+			const team2 = teams[i + 1];
+			if (team1 && team2) {
+				rounds[currentRound].groups.push([team1, team2]);
+			} else if (team1) {
+				rounds[currentRound].groups.push([team1, 'TBD']);
+			} else if (team2) {
+				rounds[currentRound].groups.push(['TBD', team2]);
+			}
+		}
+
+		for (let i = fixtures.length - 1; i >= 0; i--) {
+			const fixture = {
+				id: fixtures[fixtures.length - 1 - i].id,
+				team1: rounds[currentRound].groups[i][0] ?? 'TBD',
+				team2: rounds[currentRound].groups[i][1] ?? 'TBD',
+			};
+			updatedFixtures.push(fixture);
+		}
+	} else {
+		const gap = rounds[currentRound].qualifyingTeams - rounds[currentRound].matches * 2;
+		for (let i = gap; i < teams.length - rounds[currentRound].matches; i++) {
+			const team1 = teams[i];
+			const team2 = teams[teams.length - (i - gap) - 1];
+			if (team1 && team2) {
+				rounds[currentRound].groups.push([team1, team2]);
+			}
+		}
+		for (let i = 0; i < gap; i++) {
+			rounds[currentRound + 1].groups.push([teams[i], 'TBD']);
+		}
+
+		// update the fixtures for the next round
+
+		for (let i = currentRound; i < rounds.length; i++) {
+			if (rounds[i].groups.length > 0) {
+				fixtures.forEach((fix, index) => {
+					if (fix.round == rounds[i].round) {
+						const fixture = {
+							id: fix.id,
+							team1: rounds[i].groups[index][0] ?? 'TBD',
+							team2: rounds[i].groups[index][1] ?? 'TBD',
+						};
+						updatedFixtures.push(fixture);
+					}
+				});
+			}
 		}
 	}
 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import "../styles/NextRoundModal.css";
+import React, { useState, useEffect } from 'react';
+import '../styles/NextRoundModal.css';
 
 function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	const [qualifiedSpots, setQualifiedSpots] = useState([]);
@@ -37,6 +37,22 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	function generateFixtures(teams) {
 		const fixtures = [];
 		const gap = nextRound.qualifyingTeams - nextRound.matches * 2;
+
+		if (nextRound.round === 'Finals' || fixtures.rounds.length === fixtures.currentRound + 1) {
+			for (let i = 0; i < teams.length; i += 2) {
+				const team1 = teams[i];
+				const team2 = teams[i + 1];
+				if (team1 && team2) {
+					fixtures.push({ team1: team1, team2: team2 });
+				} else if (team1) {
+					fixtures.push({ team1: team1, team2: 'TBD' });
+				} else if (team2) {
+					fixtures.push({ team1: 'TBD', team2: team2 });
+				}
+			}
+			return fixtures;
+		}
+
 		for (let i = gap; i < teams.length - nextRound.matches; i++) {
 			const team1 = teams[i];
 			const team2 = teams[teams.length - (i - gap) - 1];
@@ -45,7 +61,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 			}
 		}
 		for (let i = 0; i < gap; i++) {
-			fixtures.push({ team1: teams[i], team2: "TBD" });
+			fixtures.push({ team1: teams[i], team2: 'TBD' });
 		}
 
 		return fixtures;
@@ -93,7 +109,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 											<div className="team-stats">
 												<span>W: {teamData.won}</span>
 												<span>L: {teamData.lost}</span>
-												<span>Ratio: {teamData.pointsRatio ? teamData.pointsRatio.toFixed(3) : "MAX"}</span>
+												<span>Ratio: {teamData.pointsRatio ? teamData.pointsRatio.toFixed(3) : 'MAX'}</span>
 											</div>
 										)}
 									</div>

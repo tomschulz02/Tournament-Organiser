@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Control Panel</title>
+		<link rel="stylesheet" href="/styles/controller.css" />
+	</head>
+	<body>
+		<div class="landscape-layout">
+			<div class="team-controls">
+				<h2>
+					<span id="teamAServeIndicator" class="serve-indicator"></span>
+					Team A
+				</h2>
+				<label>
+					Name:
+					<input type="text" id="teamAName" value="Team A" onblur="updateName('A')" />
+				</label>
+				<label>
+					Points:
+					<input type="number" id="teamAPoints" value="0" readonly />
+				</label>
+				<div class="row">
+					<button onclick="changeScore('A', 1)">+ Point</button>
+					<button onclick="changeScore('A', -1)">− Point</button>
+				</div>
+				<label>
+					Sets:
+					<input type="number" id="teamASets" value="0" readonly />
+				</label>
+				<div class="row">
+					<button onclick="changeSet('A', 1)">+ Set</button>
+					<button onclick="changeSet('A', -1)">− Set</button>
+				</div>
+			</div>
+
+			<div class="center-controls">
+				<h1>Scoreboard Controller</h1>
+
+				<div class="action-buttons">
+					<button onclick="switchServer()">Switch Server</button>
+					<button onclick="reset()">Reset Game</button>
+				</div>
+			</div>
+
+			<div class="team-controls">
+				<h2>
+					<span id="teamBServeIndicator" class="serve-indicator"></span>
+					Team B
+				</h2>
+				<label>
+					Name:
+					<input type="text" id="teamBName" value="Team B" onblur="updateName('B')" />
+				</label>
+				<label>
+					Points:
+					<input type="number" id="teamBPoints" value="0" readonly />
+				</label>
+				<div class="row">
+					<button onclick="changeScore('B', 1)">+ Point</button>
+					<button onclick="changeScore('B', -1)">− Point</button>
+				</div>
+				<label>
+					Sets:
+					<input type="number" id="teamBSets" value="0" readonly />
+				</label>
+				<div class="row">
+					<button onclick="changeSet('B', 1)">+ Set</button>
+					<button onclick="changeSet('B', -1)">− Set</button>
+				</div>
+			</div>
+		</div>
+
+		<script src="/socket.io/socket.io.js"></script>
+		<script>
+			const socket = io();
+
+			const team = {
+				A: { pointsEl: 'teamAPoints', setsEl: 'teamASets', nameEl: 'teamAName', serveIndicator: 'teamAServeIndicator' },
+				B: { pointsEl: 'teamBPoints', setsEl: 'teamBSets', nameEl: 'teamBName', serveIndicator: 'teamBServeIndicator' },
+			};
+
+			let server = 'A'; // 'A' or 'B'
+
+			function emitUpdate() {
+				const data = {
+					teamA: {
+						name: document.getElementById('teamAName').value,
+						points: parseInt(document.getElementById('teamAPoints').value),
+						sets: parseInt(document.getElementById('teamASets').value),
+					},
+					teamB: {
+						name: document.getElementById('teamBName').value,
+						points: parseInt(document.getElementById('teamBPoints').value),
+						sets: parseInt(document.getElementById('teamBSets').value),
+					},
+					server: server
+				};
+				socket.emit('updateScore', data);
+				updateServeIndicators();
+			}
+
+			function changeScore(teamId, delta) {
+				const el = document.getElementById(team[teamId].pointsEl);
+				el.value = Math.max(0, parseInt(el.value || '0') + delta);
+				server = teamId; // Last point winner serves
+				emitUpdate();
+			}
+
+			function changeSet(teamId, delta) {
+				const el = document.getElementById(team[teamId].setsEl);
+				el.value = Math.max(0, parseInt(el.value || '0') + delta);
+				emitUpdate();
+			}
+
+			function updateName(teamId) {
+				emitUpdate();
+			}
+
+			function reset() {
+				document.getElementById('teamAName').value = 'Team A';
+				document.getElementById('teamBName').value = 'Team B';
+				document.getElementById('teamAPoints').value = 0;
+				document.getElementById('teamBPoints').value = 0;
+				document.getElementById('teamASets').value = 0;
+				document.getElementById('teamBSets').value = 0;
+				server = 'A';
+				emitUpdate();
+			}
+
+			function switchServer() {
+				server = server === 'A' ? 'B' : 'A';
+				emitUpdate();
+			}
+
+			function updateServeIndicators() {
+				document.getElementById('teamAServeIndicator').classList.toggle('active', server === 'A');
+				document.getElementById('teamBServeIndicator').classList.toggle('active', server === 'B');
+			}
+
+			// Initialize indicators on load
+			document.addEventListener('DOMContentLoaded', updateServeIndicators);
+		</script>
+	</body>
+</html>

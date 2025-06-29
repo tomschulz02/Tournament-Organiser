@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Scoreboard</title>
+		<link rel="stylesheet" href="/styles/scoreboard.css" />
+	</head>
+	<body>
+		<div class="scoreboard-container">
+			<div class="team-side">
+				<span id="teamAServeIndicator" class="serve-indicator left"></span>
+				<div class="team-name" id="teamAName">Team A</div>
+				<div class="sets-container">
+					<div class="sets-label">SETS</div>
+					<div class="sets-value" id="teamASets">0</div>
+				</div>
+				<div class="divider"></div>
+			</div>
+			<div class="team-side right">
+				<span id="teamBServeIndicator" class="serve-indicator"></span>
+				<div class="team-name" id="teamBName">Team B</div>
+				<div class="sets-container right">
+					<div class="sets-label">SETS</div>
+					<div class="sets-value" id="teamBSets">0</div>
+				</div>
+				<div class="divider"></div>
+			</div>
+		</div>
+		<div class="points-banner">
+			<div class="points-container">
+				<div class="points-value" id="teamAPoints">0</div>
+			</div>
+			<div class="vs-label">VS</div>
+			<div class="points-container">
+				<div class="points-value" id="teamBPoints">0</div>
+			</div>
+		</div>
+
+		<script src="/socket.io/socket.io.js"></script>
+		<script>
+			const socket = io();
+			socket.on('scoreUpdated', (data) => {
+				document.getElementById('teamAName').textContent = data.teamA.name;
+				document.getElementById('teamBName').textContent = data.teamB.name;
+
+				document.getElementById('teamAPoints').textContent = data.teamA.points;
+				document.getElementById('teamBPoints').textContent = data.teamB.points;
+
+				document.getElementById('teamASets').textContent = data.teamA.sets;
+				document.getElementById('teamBSets').textContent = data.teamB.sets;
+
+				// Serve indicator logic
+				document.getElementById('teamAServeIndicator').classList.toggle('active', data.server === 'A');
+				document.getElementById('teamBServeIndicator').classList.toggle('active', data.server === 'B');
+			});
+		</script>
+	</body>
+</html>

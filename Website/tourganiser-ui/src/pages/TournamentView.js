@@ -217,6 +217,14 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 }
 
 function TournamentDetailsSummary({ details, creator, loggedIn }) {
+	return (
+		<div className="tournament-details-summary">
+			<h2>{details.name}</h2>
+		</div>
+	);
+}
+
+function TournamentDetails({ details, loggedIn, creator }) {
 	const [loading, setLoading] = useState(false);
 	const [following, setFollowing] = useState(creator);
 	const { showMessage } = useMessage();
@@ -304,6 +312,7 @@ function TournamentDetailsSummary({ details, creator, loggedIn }) {
 
 	return (
 		<>
+			{loading && <LoadingScreen />}
 			<div className="tournament-info">
 				<div className="tournament-info-banner" style={{ '--banner-image': `url(/assets/bg-${details.type}.webp)` }}>
 					<div className="tournament-info-heading">
@@ -360,155 +369,6 @@ function TournamentDetailsSummary({ details, creator, loggedIn }) {
 					</div>
 				</div>
 			</div>
-		</>
-	);
-}
-
-function TournamentDetails({ details, loggedIn, creator }) {
-	const [loading, setLoading] = useState(false);
-	const [following, setFollowing] = useState(creator);
-	const { showMessage } = useMessage();
-	const confirm = useConfirm();
-	const { id } = useParams();
-
-	const navigate = useNavigate();
-
-	/* const handleDeleteTournament = async () => {
-		const confirmed = await confirm('Are you sure you want to delete this tournament? This action cannot be undone.');
-
-		if (!confirmed) return;
-
-		setLoading(true);
-		const response = await deleteTournament(details.id, id);
-
-		if (response.error) {
-			showMessage('Error deleting tournament', 'error');
-			setLoading(false);
-			return;
-		}
-
-		// setLoading(false);
-
-		showMessage('Tournament deleted successfully', 'success');
-		navigate('/tournaments');
-	};
-
-	const handleTournamentStart = async () => {
-		// setLoading(true);
-		// Logic to start the tournament
-		const confirmed = await confirm('Are you sure you want to start the tournament? This action cannot be undone.');
-		if (!confirmed) {
-			// setLoading(false);
-			return;
-		}
-		setLoading(true);
-		const response = await startTournament(details.id);
-		if (!response.success) {
-			showMessage('Error starting tournament', 'error');
-			setLoading(false);
-			return;
-		}
-		details.status = 'Ongoing';
-		setLoading(false);
-		showMessage('Tournament started successfully', 'success');
-		window.location.reload();
-	};
-
-	const handleFollow = async () => {
-		if (!loggedIn) {
-			showMessage('You must be logged in to follow tournaments', 'error');
-			return;
-		}
-		setLoading(true);
-		if (following) {
-			// Logic to unfollow the tournament
-			const confirmed = await confirm('Are you sure you want to unfollow the tournament?');
-			if (!confirmed) {
-				setLoading(false);
-				return;
-			}
-			const response = await leaveTournament(details.id);
-			if (response.error) {
-				showMessage('Error unfollowing tournament', 'error');
-				setLoading(false);
-				return;
-			}
-			showMessage('Tournament unfollowed successfully', 'success');
-			setFollowing(false);
-			setLoading(false);
-			return;
-		}
-
-		const response = await joinTournament(details.id);
-		if (response.error) {
-			showMessage('Error following tournament', 'error');
-			setLoading(false);
-			return;
-		}
-		showMessage('Tournament followed successfully', 'success');
-		setFollowing(true);
-		setLoading(false);
-	}; */
-
-	return (
-		<>
-			{loading && <LoadingScreen />}
-			{/* <div className="tournament-info">
-				<div className="tournament-info-banner" style={{ '--banner-image': `url(/assets/bg-${details.type}.webp)` }}>
-					<div className="tournament-info-heading">
-						<div className="tournament-title-row">
-							<h2>{details.name}</h2>
-							<div className={`tournament-status-badge ${details.status.toLowerCase().replace(' ', '-')}`}>
-								{details.status}
-							</div>
-						</div>
-						<p>{details.description}</p>
-						{!creator && (
-							<button onClick={handleFollow} className="follow-tournament-btn" disabled={!loggedIn}>
-								{following ? 'Following' : 'Follow'}
-							</button>
-						)}
-					</div>
-
-					<div className="tournament-info-format">
-						<p>
-							<strong>Format:</strong>
-							{details.format}
-						</p>
-						<p>
-							<strong>Location:</strong>
-							{details.location}
-						</p>
-						<p>
-							<strong>Teams:</strong>
-							{details.teams}
-						</p>
-					</div>
-					<div className="tournament-admin-actions">
-						{creator && (
-							<>
-								<button className="delete-tournament-btn" onClick={handleDeleteTournament} title="Delete Tournament">
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										height="20px"
-										viewBox="0 -960 960 960"
-										width="20px"
-										fill="#FFFFFF">
-										<path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
-									</svg>
-								</button>
-								<button
-									className="start-tournament-btn"
-									disabled={details.status !== 'Not Started'}
-									style={details.status === 'Not Started' ? {} : { display: 'none' }}
-									onClick={handleTournamentStart}>
-									Start Tournament
-								</button>
-							</>
-						)}
-					</div>
-				</div>
-			</div> */}
 			<div className="tournament-info-fixtures">
 				<h3>Upcoming Fixtures</h3>
 				<div className="fixture-summary-scroll">

@@ -425,7 +425,7 @@
 }
 
 .team-card.team-name-changed::after {
-	content: "✏️";
+	content: '✏️';
 	position: absolute;
 	top: 8px;
 	left: 8px;
@@ -531,7 +531,7 @@
 }
 
 .tournament-info-banner::before {
-	content: "";
+	content: '';
 	position: absolute;
 	top: 0;
 	left: 50%;
@@ -551,7 +551,7 @@
 }
 
 .tournament-info-banner::after {
-	content: "";
+	content: '';
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -1000,8 +1000,8 @@
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	height: fit-content;
 	position: sticky;
-	top: 100px;
-	z-index: 100;
+	top: 180px;
+	z-index: 9;
 	width: 300px;
 }
 
@@ -1071,7 +1071,8 @@
 	}
 
 	.round-info-banner {
-		top: 120px;
+		position: relative;
+		top: 0;
 		width: 100%;
 	}
 }
@@ -1252,5 +1253,25 @@
 
 	.round-header h4 {
 		font-size: 1em;
+	}
+}
+
+.tournament-details-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 15px;
+	padding: 20px;
+	background: var(--main-color);
+	color: white;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	margin: 15px 15px;
+	text-align: center;
+}
+
+@media (max-width: 768px) {
+	.tournament-details-summary {
+		padding: 15px;
+		margin: 10px;
 	}
 }

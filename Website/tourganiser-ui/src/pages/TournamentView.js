@@ -1,5 +1,5 @@
-import { Link, useParams, useNavigate, useSearchParams, data } from "react-router-dom";
-import React, { useState, useEffect, useContext, useRef, use } from "react";
+import { Link, useParams, useNavigate, useSearchParams, data } from 'react-router-dom';
+import React, { useState, useEffect, useContext, useRef, use } from 'react';
 import {
 	fetchTournamentData,
 	joinTournament,
@@ -10,30 +10,30 @@ import {
 	updateTeams,
 	updateRounds,
 	endTournament,
-} from "../requests";
-import "../styles/Tournaments.css";
-import "../styles/TournamentView.css";
-import { useMessage } from "../MessageContext";
-import { useConfirm } from "../components/ConfirmDialog";
-import { AuthContext } from "../AuthContext";
-import { TeamNameChangePopup } from "./Tournaments";
-import LoadingScreen from "../components/LoadingScreen";
-import ScoreUpdateModal from "../components/ScoreUpdateModal";
-import Tooltip from "../components/Tooltip";
-import NextRoundModal from "../components/NextRoundModal";
+} from '../requests';
+import '../styles/Tournaments.css';
+import '../styles/TournamentView.css';
+import { useMessage } from '../MessageContext';
+import { useConfirm } from '../components/ConfirmDialog';
+import { AuthContext } from '../AuthContext';
+import { TeamNameChangePopup } from './Tournaments';
+import LoadingScreen from '../components/LoadingScreen';
+import ScoreUpdateModal from '../components/ScoreUpdateModal';
+import Tooltip from '../components/Tooltip';
+import NextRoundModal from '../components/NextRoundModal';
 
 export default function TournamentView() {
 	const { id } = useParams();
 	const [tournamentData, setTournamentData] = useState(null);
-	const [status, setStatus] = useState("Not Started");
+	const [status, setStatus] = useState('Not Started');
 	const [creator, setCreator] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [notFound, setNotFound] = useState(false);
-	const [currentTab, setCurrentTab] = useState("info");
+	const [currentTab, setCurrentTab] = useState('info');
 	const { showMessage } = useMessage();
 	const { isLoggedIn } = useContext(AuthContext);
 	const [collection, setCollection] = useState(false);
-	const [collectionName, setCollectionName] = useState("");
+	const [collectionName, setCollectionName] = useState('');
 	const hasFetchedDetails = useRef(false);
 	const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 	const navigate = useNavigate();
@@ -44,8 +44,8 @@ export default function TournamentView() {
 				const response = await fetchTournamentData(id);
 				if (!response.success) {
 					setNotFound(true);
-					showMessage("Tournament not found", "error");
-					navigate("/not-found", { replace: true });
+					showMessage('Tournament not found', 'error');
+					navigate('/not-found', { replace: true });
 					return;
 				}
 				setNotFound(false);
@@ -60,7 +60,7 @@ export default function TournamentView() {
 				}
 			} catch (error) {
 				setNotFound(true);
-				showMessage("Error fetching tournament data", "error");
+				showMessage('Error fetching tournament data', 'error');
 			} finally {
 				setLoading(false);
 			}
@@ -72,13 +72,13 @@ export default function TournamentView() {
 
 	const handleBackButtonClick = () => {
 		if (hasUnsavedChanges) {
-			const confirmed = window.confirm("You have unsaved changes. Are you sure you want to leave?");
+			const confirmed = window.confirm('You have unsaved changes. Are you sure you want to leave?');
 			if (!confirmed) {
 				return;
 			}
 		}
 
-		navigate("/tournaments");
+		navigate('/tournaments');
 	};
 
 	if (loading) {
@@ -87,7 +87,7 @@ export default function TournamentView() {
 
 	if (notFound) {
 		return (
-			<div style={{ textAlign: "center", marginTop: "2rem" }}>
+			<div style={{ textAlign: 'center', marginTop: '2rem' }}>
 				<h2>⛔ Tournament Not Found</h2>
 				<p>The tournament you are looking for doesn’t exist or was removed.</p>
 			</div>
@@ -118,7 +118,7 @@ export default function TournamentView() {
 
 function TournamentManager({ tournamentData, creator, backButton, unsavedChanges, setUnsavedChanges }) {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const currentTab = searchParams.get("tab") || "info";
+	const currentTab = searchParams.get('tab') || 'info';
 	const { isLoggedIn } = useContext(AuthContext);
 	const [showUpdateWarning, setShowUpdateWarning] = useState(false);
 
@@ -126,19 +126,19 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 		const handleBeforeUnload = (event) => {
 			if (unsavedChanges) {
 				event.preventDefault();
-				event.returnValue = "";
-				return "";
+				event.returnValue = '';
+				return '';
 			}
 		};
-		window.addEventListener("beforeunload", handleBeforeUnload);
+		window.addEventListener('beforeunload', handleBeforeUnload);
 		return () => {
-			window.removeEventListener("beforeunload", handleBeforeUnload);
+			window.removeEventListener('beforeunload', handleBeforeUnload);
 		};
 	}, [unsavedChanges]);
 
 	const handleTabChange = (tab) => {
 		const newParams = new URLSearchParams(searchParams.toString());
-		newParams.set("tab", tab);
+		newParams.set('tab', tab);
 		setSearchParams(newParams);
 		// setSearchParams({ tab });
 	};
@@ -159,32 +159,33 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 				</div>
 			)}
 			{backButton}
+			{<TournamentDetailsSummary details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />}
 			<div className="tab-navigation">
 				<button
-					className={`view-tab-btn ${currentTab === "info" ? "active" : ""}`}
-					onClick={() => handleTabChange("info")}>
+					className={`view-tab-btn ${currentTab === 'info' ? 'active' : ''}`}
+					onClick={() => handleTabChange('info')}>
 					Overview
 				</button>
 				<button
-					className={`view-tab-btn ${currentTab === "fixtures" ? "active" : ""}`}
-					onClick={() => handleTabChange("fixtures")}>
+					className={`view-tab-btn ${currentTab === 'fixtures' ? 'active' : ''}`}
+					onClick={() => handleTabChange('fixtures')}>
 					Fixtures
 				</button>
 				<button
-					className={`view-tab-btn ${currentTab === "standings" ? "active" : ""}`}
-					onClick={() => handleTabChange("standings")}>
+					className={`view-tab-btn ${currentTab === 'standings' ? 'active' : ''}`}
+					onClick={() => handleTabChange('standings')}>
 					Standings
 				</button>
 				<button
-					className={`view-tab-btn ${currentTab === "teams" ? "active" : ""}`}
-					onClick={() => handleTabChange("teams")}>
+					className={`view-tab-btn ${currentTab === 'teams' ? 'active' : ''}`}
+					onClick={() => handleTabChange('teams')}>
 					Teams
 				</button>
 			</div>
-			{currentTab === "info" && (
+			{currentTab === 'info' && (
 				<TournamentDetails details={tournamentData.details} creator={creator} loggedIn={isLoggedIn} />
 			)}
-			{currentTab === "fixtures" && (
+			{currentTab === 'fixtures' && (
 				<TournamentFixtures
 					fixtures={tournamentData.fixtures}
 					creator={creator}
@@ -194,14 +195,14 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 					status={tournamentData.details.status}
 				/>
 			)}
-			{currentTab === "standings" && (
+			{currentTab === 'standings' && (
 				<TournamentStandings
 					standings={tournamentData.standings}
 					format={tournamentData.details.format}
 					currentRound={tournamentData.fixtures.currentRound}
 				/>
 			)}
-			{currentTab === "teams" && (
+			{currentTab === 'teams' && (
 				<TournamentTeams
 					teams={tournamentData.teams}
 					status={tournamentData.details.status}
@@ -215,7 +216,7 @@ function TournamentManager({ tournamentData, creator, backButton, unsavedChanges
 	);
 }
 
-function TournamentDetails({ details, loggedIn, creator }) {
+function TournamentDetailsSummary({ details, creator, loggedIn }) {
 	const [loading, setLoading] = useState(false);
 	const [following, setFollowing] = useState(creator);
 	const { showMessage } = useMessage();
@@ -225,7 +226,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 	const navigate = useNavigate();
 
 	const handleDeleteTournament = async () => {
-		const confirmed = await confirm("Are you sure you want to delete this tournament? This action cannot be undone.");
+		const confirmed = await confirm('Are you sure you want to delete this tournament? This action cannot be undone.');
 
 		if (!confirmed) return;
 
@@ -233,21 +234,21 @@ function TournamentDetails({ details, loggedIn, creator }) {
 		const response = await deleteTournament(details.id, id);
 
 		if (response.error) {
-			showMessage("Error deleting tournament", "error");
+			showMessage('Error deleting tournament', 'error');
 			setLoading(false);
 			return;
 		}
 
 		// setLoading(false);
 
-		showMessage("Tournament deleted successfully", "success");
-		navigate("/tournaments");
+		showMessage('Tournament deleted successfully', 'success');
+		navigate('/tournaments');
 	};
 
 	const handleTournamentStart = async () => {
 		// setLoading(true);
 		// Logic to start the tournament
-		const confirmed = await confirm("Are you sure you want to start the tournament? This action cannot be undone.");
+		const confirmed = await confirm('Are you sure you want to start the tournament? This action cannot be undone.');
 		if (!confirmed) {
 			// setLoading(false);
 			return;
@@ -255,36 +256,36 @@ function TournamentDetails({ details, loggedIn, creator }) {
 		setLoading(true);
 		const response = await startTournament(details.id);
 		if (!response.success) {
-			showMessage("Error starting tournament", "error");
+			showMessage('Error starting tournament', 'error');
 			setLoading(false);
 			return;
 		}
-		details.status = "Ongoing";
+		details.status = 'Ongoing';
 		setLoading(false);
-		showMessage("Tournament started successfully", "success");
+		showMessage('Tournament started successfully', 'success');
 		window.location.reload();
 	};
 
 	const handleFollow = async () => {
 		if (!loggedIn) {
-			showMessage("You must be logged in to follow tournaments", "error");
+			showMessage('You must be logged in to follow tournaments', 'error');
 			return;
 		}
 		setLoading(true);
 		if (following) {
 			// Logic to unfollow the tournament
-			const confirmed = await confirm("Are you sure you want to unfollow the tournament?");
+			const confirmed = await confirm('Are you sure you want to unfollow the tournament?');
 			if (!confirmed) {
 				setLoading(false);
 				return;
 			}
 			const response = await leaveTournament(details.id);
 			if (response.error) {
-				showMessage("Error unfollowing tournament", "error");
+				showMessage('Error unfollowing tournament', 'error');
 				setLoading(false);
 				return;
 			}
-			showMessage("Tournament unfollowed successfully", "success");
+			showMessage('Tournament unfollowed successfully', 'success');
 			setFollowing(false);
 			setLoading(false);
 			return;
@@ -292,31 +293,30 @@ function TournamentDetails({ details, loggedIn, creator }) {
 
 		const response = await joinTournament(details.id);
 		if (response.error) {
-			showMessage("Error following tournament", "error");
+			showMessage('Error following tournament', 'error');
 			setLoading(false);
 			return;
 		}
-		showMessage("Tournament followed successfully", "success");
+		showMessage('Tournament followed successfully', 'success');
 		setFollowing(true);
 		setLoading(false);
 	};
 
 	return (
 		<>
-			{loading && <LoadingScreen />}
 			<div className="tournament-info">
-				<div className="tournament-info-banner" style={{ "--banner-image": `url(/assets/bg-${details.type}.webp)` }}>
+				<div className="tournament-info-banner" style={{ '--banner-image': `url(/assets/bg-${details.type}.webp)` }}>
 					<div className="tournament-info-heading">
 						<div className="tournament-title-row">
 							<h2>{details.name}</h2>
-							<div className={`tournament-status-badge ${details.status.toLowerCase().replace(" ", "-")}`}>
+							<div className={`tournament-status-badge ${details.status.toLowerCase().replace(' ', '-')}`}>
 								{details.status}
 							</div>
 						</div>
 						<p>{details.description}</p>
 						{!creator && (
 							<button onClick={handleFollow} className="follow-tournament-btn" disabled={!loggedIn}>
-								{following ? "Following" : "Follow"}
+								{following ? 'Following' : 'Follow'}
 							</button>
 						)}
 					</div>
@@ -350,8 +350,8 @@ function TournamentDetails({ details, loggedIn, creator }) {
 								</button>
 								<button
 									className="start-tournament-btn"
-									disabled={details.status !== "Not Started"}
-									style={details.status === "Not Started" ? {} : { display: "none" }}
+									disabled={details.status !== 'Not Started'}
+									style={details.status === 'Not Started' ? {} : { display: 'none' }}
 									onClick={handleTournamentStart}>
 									Start Tournament
 								</button>
@@ -360,6 +360,155 @@ function TournamentDetails({ details, loggedIn, creator }) {
 					</div>
 				</div>
 			</div>
+		</>
+	);
+}
+
+function TournamentDetails({ details, loggedIn, creator }) {
+	const [loading, setLoading] = useState(false);
+	const [following, setFollowing] = useState(creator);
+	const { showMessage } = useMessage();
+	const confirm = useConfirm();
+	const { id } = useParams();
+
+	const navigate = useNavigate();
+
+	/* const handleDeleteTournament = async () => {
+		const confirmed = await confirm('Are you sure you want to delete this tournament? This action cannot be undone.');
+
+		if (!confirmed) return;
+
+		setLoading(true);
+		const response = await deleteTournament(details.id, id);
+
+		if (response.error) {
+			showMessage('Error deleting tournament', 'error');
+			setLoading(false);
+			return;
+		}
+
+		// setLoading(false);
+
+		showMessage('Tournament deleted successfully', 'success');
+		navigate('/tournaments');
+	};
+
+	const handleTournamentStart = async () => {
+		// setLoading(true);
+		// Logic to start the tournament
+		const confirmed = await confirm('Are you sure you want to start the tournament? This action cannot be undone.');
+		if (!confirmed) {
+			// setLoading(false);
+			return;
+		}
+		setLoading(true);
+		const response = await startTournament(details.id);
+		if (!response.success) {
+			showMessage('Error starting tournament', 'error');
+			setLoading(false);
+			return;
+		}
+		details.status = 'Ongoing';
+		setLoading(false);
+		showMessage('Tournament started successfully', 'success');
+		window.location.reload();
+	};
+
+	const handleFollow = async () => {
+		if (!loggedIn) {
+			showMessage('You must be logged in to follow tournaments', 'error');
+			return;
+		}
+		setLoading(true);
+		if (following) {
+			// Logic to unfollow the tournament
+			const confirmed = await confirm('Are you sure you want to unfollow the tournament?');
+			if (!confirmed) {
+				setLoading(false);
+				return;
+			}
+			const response = await leaveTournament(details.id);
+			if (response.error) {
+				showMessage('Error unfollowing tournament', 'error');
+				setLoading(false);
+				return;
+			}
+			showMessage('Tournament unfollowed successfully', 'success');
+			setFollowing(false);
+			setLoading(false);
+			return;
+		}
+
+		const response = await joinTournament(details.id);
+		if (response.error) {
+			showMessage('Error following tournament', 'error');
+			setLoading(false);
+			return;
+		}
+		showMessage('Tournament followed successfully', 'success');
+		setFollowing(true);
+		setLoading(false);
+	}; */
+
+	return (
+		<>
+			{loading && <LoadingScreen />}
+			{/* <div className="tournament-info">
+				<div className="tournament-info-banner" style={{ '--banner-image': `url(/assets/bg-${details.type}.webp)` }}>
+					<div className="tournament-info-heading">
+						<div className="tournament-title-row">
+							<h2>{details.name}</h2>
+							<div className={`tournament-status-badge ${details.status.toLowerCase().replace(' ', '-')}`}>
+								{details.status}
+							</div>
+						</div>
+						<p>{details.description}</p>
+						{!creator && (
+							<button onClick={handleFollow} className="follow-tournament-btn" disabled={!loggedIn}>
+								{following ? 'Following' : 'Follow'}
+							</button>
+						)}
+					</div>
+
+					<div className="tournament-info-format">
+						<p>
+							<strong>Format:</strong>
+							{details.format}
+						</p>
+						<p>
+							<strong>Location:</strong>
+							{details.location}
+						</p>
+						<p>
+							<strong>Teams:</strong>
+							{details.teams}
+						</p>
+					</div>
+					<div className="tournament-admin-actions">
+						{creator && (
+							<>
+								<button className="delete-tournament-btn" onClick={handleDeleteTournament} title="Delete Tournament">
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										height="20px"
+										viewBox="0 -960 960 960"
+										width="20px"
+										fill="#FFFFFF">
+										<path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+									</svg>
+								</button>
+								<button
+									className="start-tournament-btn"
+									disabled={details.status !== 'Not Started'}
+									style={details.status === 'Not Started' ? {} : { display: 'none' }}
+									onClick={handleTournamentStart}>
+									Start Tournament
+								</button>
+							</>
+						)}
+					</div>
+				</div>
+			</div> */}
 			<div className="tournament-info-fixtures">
 				<h3>Upcoming Fixtures</h3>
 				<div className="fixture-summary-scroll">
@@ -425,7 +574,7 @@ function TournamentDetails({ details, loggedIn, creator }) {
 }
 
 function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournamentId, status }) {
-	const [filter, setFilter] = useState("all");
+	const [filter, setFilter] = useState('all');
 	const [selectedFixture, setSelectedFixture] = useState(null);
 	const { showMessage } = useMessage();
 	const hashId = useParams().id;
@@ -440,12 +589,12 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 
 	const filteredFixtures = allFixtures.filter((fixture) => {
 		switch (filter) {
-			case "upcoming":
-				return fixture.status === "WAITING";
-			case "live":
-				return fixture.status === "ONGOING";
-			case "completed":
-				return fixture.status === "COMPLETED";
+			case 'upcoming':
+				return fixture.status === 'WAITING';
+			case 'live':
+				return fixture.status === 'ONGOING';
+			case 'completed':
+				return fixture.status === 'COMPLETED';
 			default:
 				return true;
 		}
@@ -484,18 +633,18 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		const id = selectedFixture.id;
 		score = formatScore(score);
 		setLoading(true);
-		const response = await updateScore(id, score, "ONGOING", tournamentId, null);
+		const response = await updateScore(id, score, 'ONGOING', tournamentId, null);
 		if (!response.success) {
-			showMessage("Error updating score. Please try again later", "error");
+			showMessage('Error updating score. Please try again later', 'error');
 			handleCloseScoreModal();
 			setLoading(false);
 			return;
 		} else {
-			selectedFixture.status = "ONGOING";
+			selectedFixture.status = 'ONGOING';
 			selectedFixture.result = score;
 			setLoading(false);
 			handleCloseScoreModal();
-			showMessage("Score updated successfully", "success");
+			showMessage('Score updated successfully', 'success');
 			onUpdate();
 		}
 	};
@@ -513,21 +662,21 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		}
 		setLoading(true);
 		fixtures.rounds[fixtures.currentRound].completed += 1;
-		const response = await updateScore(id, score, "COMPLETED", tournamentId, fixtures.rounds);
+		const response = await updateScore(id, score, 'COMPLETED', tournamentId, fixtures.rounds);
 		if (!response.success) {
-			showMessage("Error updating score. Please try again later", "error");
+			showMessage('Error updating score. Please try again later', 'error');
 			fixtures.rounds[fixtures.currentRound].completed -= 1;
 			handleCloseScoreModal();
 			setLoading(false);
 			return;
 		} else {
-			selectedFixture.status = "COMPLETED";
+			selectedFixture.status = 'COMPLETED';
 			selectedFixture.result = score;
 
 			if (fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches) {
 				setRoundComplete(true);
 			}
-			showMessage("Score updated successfully", "success");
+			showMessage('Score updated successfully', 'success');
 			setLoading(false);
 			handleCloseScoreModal();
 
@@ -540,7 +689,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 	};
 
 	const handleNextRoundConfirm = async (qualifiedTeams) => {
-		const confirmed = await confirm("Are you sure you want to start the next round? This action cannot be undone.");
+		const confirmed = await confirm('Are you sure you want to start the next round? This action cannot be undone.');
 		if (!confirmed) {
 			setShowNextRoundModal(false);
 			return;
@@ -558,15 +707,15 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		);
 		setLoading(false);
 		if (!response.success) {
-			showMessage("Error starting next round. Please try again later", "error");
+			showMessage('Error starting next round. Please try again later', 'error');
 			return;
 		}
 		setShowNextRoundModal(false);
-		showMessage("Started next round. Please refresh to see changes", "success");
+		showMessage('Started next round. Please refresh to see changes', 'success');
 	};
 
 	const handleEndTournament = async () => {
-		const confirmed = await confirm("Are you sure you want to end the tournament? This action cannot be undone.");
+		const confirmed = await confirm('Are you sure you want to end the tournament? This action cannot be undone.');
 
 		if (!confirmed) return;
 
@@ -574,12 +723,12 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		const response = await endTournament(tournamentId);
 
 		if (!response.success) {
-			showMessage("Error ending tournament", "error");
+			showMessage('Error ending tournament', 'error');
 			setLoading(false);
 			return;
 		}
 
-		showMessage("Tournament completed successfully", "success");
+		showMessage('Tournament completed successfully', 'success');
 		window.location.reload();
 	};
 
@@ -620,7 +769,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 						</div>
 						{creator &&
 							roundComplete &&
-							status !== "Finished" &&
+							status !== 'Finished' &&
 							(isLastRound ? (
 								<button className="end-tournament-btn" onClick={handleEndTournament}>
 									End Tournament
@@ -635,20 +784,20 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 						<div className="fixtures-header">
 							<h3>Fixtures</h3>
 							<div className="fixtures-filter">
-								<button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
+								<button className={`filter-btn ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
 									All
 								</button>
 								<button
-									className={`filter-btn ${filter === "upcoming" ? "active" : ""}`}
-									onClick={() => setFilter("upcoming")}>
+									className={`filter-btn ${filter === 'upcoming' ? 'active' : ''}`}
+									onClick={() => setFilter('upcoming')}>
 									Upcoming
 								</button>
-								<button className={`filter-btn ${filter === "live" ? "active" : ""}`} onClick={() => setFilter("live")}>
+								<button className={`filter-btn ${filter === 'live' ? 'active' : ''}`} onClick={() => setFilter('live')}>
 									Live
 								</button>
 								<button
-									className={`filter-btn ${filter === "completed" ? "active" : ""}`}
-									onClick={() => setFilter("completed")}>
+									className={`filter-btn ${filter === 'completed' ? 'active' : ''}`}
+									onClick={() => setFilter('completed')}>
 									Completed
 								</button>
 							</div>
@@ -676,8 +825,8 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 													className="update-score-btn"
 													title="Update Score"
 													onClick={() => handleUpdateScore(fixture)}
-													disabled={fixture.status === "COMPLETED"}
-													style={fixture.editable ? {} : { display: "none" }}>
+													disabled={fixture.status === 'COMPLETED'}
+													style={fixture.editable ? {} : { display: 'none' }}>
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
 														height="24px"
@@ -693,7 +842,7 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 								))
 							) : (
 								<div className="no-tournaments-message">
-									<p>No {filter !== "all" ? filter : ""} fixtures found</p>
+									<p>No {filter !== 'all' ? filter : ''} fixtures found</p>
 								</div>
 							)}
 						</div>
@@ -720,7 +869,7 @@ function TournamentStandings({ standings, format, currentRound }) {
 	};
 
 	const standingsMessage =
-		"Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, then points ratio (in that order)";
+		'Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, then points ratio (in that order)';
 
 	const renderStandingsTable = (data, poolIndex = null) =>
 		data.length > 0 ? (
@@ -744,7 +893,7 @@ function TournamentStandings({ standings, format, currentRound }) {
 					{data.map((team, index) => (
 						<tr key={`${poolIndex}-${index}`}>
 							<td>{index + 1}</td>
-							<td className="sticky-column" style={{ backgroundColor: "white" }}>
+							<td className="sticky-column" style={{ backgroundColor: 'white' }}>
 								{team.name}
 							</td>
 							<td>{team.played}</td>
@@ -752,10 +901,10 @@ function TournamentStandings({ standings, format, currentRound }) {
 							<td>{team.lost}</td>
 							<td>{team.setsWon}</td>
 							<td>{team.setsLost}</td>
-							<td>{team.setsRatio !== null ? team.setsRatio.toFixed(3) : "MAX"}</td>
+							<td>{team.setsRatio !== null ? team.setsRatio.toFixed(3) : 'MAX'}</td>
 							<td>{team.pointsFor}</td>
 							<td>{team.pointsAgainst}</td>
-							<td>{team.pointsRatio !== null ? team.pointsRatio.toFixed(3) : "MAX"}</td>
+							<td>{team.pointsRatio !== null ? team.pointsRatio.toFixed(3) : 'MAX'}</td>
 						</tr>
 					))}
 				</tbody>
@@ -787,7 +936,7 @@ function TournamentStandings({ standings, format, currentRound }) {
 			{standings.map((round, roundIndex) => (
 				<div key={roundIndex} className="round-standings">
 					<div
-						className={`round-header ${expandedRounds.has(roundIndex) ? "expanded" : ""}`}
+						className={`round-header ${expandedRounds.has(roundIndex) ? 'expanded' : ''}`}
 						onClick={() => toggleRound(roundIndex)}>
 						<h4>{round.round}</h4>
 						<svg
@@ -799,7 +948,7 @@ function TournamentStandings({ standings, format, currentRound }) {
 							<path d="M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z" />
 						</svg>
 					</div>
-					<div className={`round-content ${expandedRounds.has(roundIndex) ? "expanded" : ""}`}>
+					<div className={`round-content ${expandedRounds.has(roundIndex) ? 'expanded' : ''}`}>
 						{round.groups && round.groups.length > 0 ? (
 							<div className="pools-standings">
 								{round.groups.map((pool, index) => (
@@ -819,7 +968,7 @@ function TournamentStandings({ standings, format, currentRound }) {
 }
 
 function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, creator, onUpdate }) {
-	const editTeams = status === "Not Started" && creator;
+	const editTeams = status === 'Not Started' && creator;
 	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
 	const [currentTeam, setCurrentTeam] = useState(null);
 	const [selectedTeamIndex, setSelectedTeamIndex] = useState(null);
@@ -853,7 +1002,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 		const updated = [...stagedTeams];
 		updated[selectedTeamIndex] = newName;
 		setStagedTeams(updated);
-		currentTeam.element.parentElement.classList.add("team-name-changed");
+		currentTeam.element.parentElement.classList.add('team-name-changed');
 		setUnsavedChanges(true);
 		setPageUnsavedChanges(true);
 		setCurrentTeam(null);
@@ -862,40 +1011,40 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 
 	const handleDiscardChanges = () => {
 		setStagedTeams(JSON.parse(JSON.stringify(originalTeams)));
-		document.querySelectorAll(".team-name-changed").forEach((element) => {
-			element.classList.remove("team-name-changed");
+		document.querySelectorAll('.team-name-changed').forEach((element) => {
+			element.classList.remove('team-name-changed');
 		});
 		setUnsavedChanges(false);
 		setPageUnsavedChanges(false);
-		showMessage("Changes discarded", "success");
+		showMessage('Changes discarded', 'success');
 	};
 
 	const handleSaveChanges = async () => {
 		setLoading(true);
 		if (JSON.stringify(originalTeams) === JSON.stringify(stagedTeams)) {
 			setLoading(false);
-			showMessage("No changes to save", "info");
+			showMessage('No changes to save', 'info');
 			return;
 		}
-		if (stagedTeams.includes("")) {
+		if (stagedTeams.includes('')) {
 			setLoading(false);
-			showMessage("Team names cannot be empty", "error");
+			showMessage('Team names cannot be empty', 'error');
 			return;
 		}
 		const response = await updateTeams(tournamentId, stagedTeams);
 		if (!response.success) {
 			setLoading(false);
-			showMessage("Error saving changes. Please try again later", "error");
+			showMessage('Error saving changes. Please try again later', 'error');
 			return;
 		} else {
 			setLoading(false);
 			setOriginalTeams(JSON.parse(JSON.stringify(stagedTeams)));
-			document.querySelectorAll(".team-name-changed").forEach((element) => {
-				element.classList.remove("team-name-changed");
+			document.querySelectorAll('.team-name-changed').forEach((element) => {
+				element.classList.remove('team-name-changed');
 			});
 			setUnsavedChanges(false);
 			setPageUnsavedChanges(false);
-			showMessage("Changes saved successfully", "success");
+			showMessage('Changes saved successfully', 'success');
 			onUpdate();
 		}
 	};
@@ -906,7 +1055,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 				<TeamNameChangePopup
 					onClose={() => setOpenTeamNameChangePopup(false)}
 					onSubmit={changeTeamName}
-					currName={currentTeam.element.parentElement.innerText ? currentTeam.element.parentElement.innerText : ""}
+					currName={currentTeam.element.parentElement.innerText ? currentTeam.element.parentElement.innerText : ''}
 					rank={selectedTeamIndex + 1}
 				/>
 			)}
@@ -940,7 +1089,7 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 							</div>
 						))}
 					</div>
-					<div>{"Feature coming soon..."}</div>
+					<div>{'Feature coming soon...'}</div>
 				</div>
 			</div>
 		</>
@@ -949,14 +1098,14 @@ function TournamentTeams({ teams, status, setPageUnsavedChanges, tournamentId, c
 
 function CollectionView({ collection, collectionName, unsavedChanges, setUnsavedChanges }) {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const selectedTournament = collection[searchParams.get("selected")] || null;
+	const selectedTournament = collection[searchParams.get('selected')] || null;
 
 	const handleTournamentSelect = (tournament) => {
 		if (tournament !== null) {
 			setSearchParams({ selected: tournament });
 		} else {
 			if (unsavedChanges) {
-				const confirmed = window.confirm("You have unsaved changes. Are you sure you want to leave?");
+				const confirmed = window.confirm('You have unsaved changes. Are you sure you want to leave?');
 				if (!confirmed) {
 					return;
 				}
@@ -984,7 +1133,7 @@ function CollectionView({ collection, collectionName, unsavedChanges, setUnsaved
 									<div
 										className={`tournament-status ${tournament.message.details.status
 											.toLowerCase()
-											.replace(" ", "-")}`}>
+											.replace(' ', '-')}`}>
 										{tournament.message.details.status}
 									</div>
 									<button onClick={() => handleTournamentSelect(index)} className="view-tournament-btn">

@@ -1,42 +1,42 @@
-import React, { useEffect, useState, useContext, useRef } from "react";
-import { Link } from "react-router-dom";
-import { AuthContext } from "../AuthContext";
-import { useMessage } from "../MessageContext";
-import { getTournaments, createCollection, createTournament, fetchUserCollections } from "../requests";
-import Tooltip from "../components/Tooltip";
-import { useConfirm } from "../components/ConfirmDialog";
-import LoadingScreen from "../components/LoadingScreen";
-import "../styles/Tournaments.css";
+import React, { useEffect, useState, useContext, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { AuthContext } from '../AuthContext';
+import { useMessage } from '../MessageContext';
+import { getTournaments, createCollection, createTournament, fetchUserCollections } from '../requests';
+import Tooltip from '../components/Tooltip';
+import { useConfirm } from '../components/ConfirmDialog';
+import LoadingScreen from '../components/LoadingScreen';
+import '../styles/Tournaments.css';
 
 const tooltips = {
 	collections:
-		"You can group tournaments in collections so that they can be viewed together. Tournaments that are part of a collection will not be displayed on the browse page, but rather in the view page of the collection it belongs to.",
+		'You can group tournaments in collections so that they can be viewed together. Tournaments that are part of a collection will not be displayed on the browse page, but rather in the view page of the collection it belongs to.',
 };
 
 export default function Tournaments() {
-	const [currentPage, setCurrentPage] = useState("browse");
+	const [currentPage, setCurrentPage] = useState('browse');
 
 	return (
 		<div className="tabs-container">
 			<div className="tab-buttons">
 				<button
-					className={`tab-btn ${currentPage === "browse" ? "active" : ""}`}
+					className={`tab-btn ${currentPage === 'browse' ? 'active' : ''}`}
 					data-tab="browse"
-					onClick={() => setCurrentPage("browse")}>
+					onClick={() => setCurrentPage('browse')}>
 					Browse Tournaments
 				</button>
 				<button
-					className={`tab-btn ${currentPage === "create" ? "active" : ""}`}
+					className={`tab-btn ${currentPage === 'create' ? 'active' : ''}`}
 					data-tab="create"
-					onClick={() => setCurrentPage("create")}>
+					onClick={() => setCurrentPage('create')}>
 					Create Tournament
 				</button>
 			</div>
 			<div className="tab-content active">
-				{currentPage === "browse" ? (
+				{currentPage === 'browse' ? (
 					<BrowseTournaments />
 				) : (
-					<CreateTournament goBack={() => setCurrentPage("browse")} />
+					<CreateTournament goBack={() => setCurrentPage('browse')} />
 				)}
 			</div>
 		</div>
@@ -49,12 +49,12 @@ function BrowseTournaments() {
 	const { showMessage } = useMessage();
 	const hasFetchedTournaments = useRef(false);
 	const [filter, setFilter] = useState({
-		format: "all",
-		search: "",
+		format: 'all',
+		search: '',
 	});
 
 	const filteredTournaments = tournaments.filter((tournament) => {
-		if (filter.format !== "all" && tournament.type !== filter.format) {
+		if (filter.format !== 'all' && tournament.type !== filter.format) {
 			return false;
 		}
 		if (filter.search && !tournament.name.toLowerCase().includes(filter.search.toLowerCase())) {
@@ -74,7 +74,7 @@ function BrowseTournaments() {
 					setTournaments([]);
 				}
 			} catch (error) {
-				showMessage("Error fetching tournaments", "error");
+				showMessage('Error fetching tournaments', 'error');
 			} finally {
 				setIsLoading(false);
 			}
@@ -86,9 +86,9 @@ function BrowseTournaments() {
 	}, []);
 
 	const handlefilterChange = (e) => {
-		if (e.target.id === "searchTournaments") {
+		if (e.target.id === 'searchTournaments') {
 			setFilter((prev) => ({ ...prev, search: e.target.value }));
-		} else if (e.target.id === "filterFormat") {
+		} else if (e.target.id === 'filterFormat') {
 			setFilter((prev) => ({ ...prev, format: e.target.value }));
 		}
 	};
@@ -114,7 +114,7 @@ function BrowseTournaments() {
 			<div className="tournaments-grid" id="tournamentsGrid">
 				{filteredTournaments.length > 0 ? (
 					filteredTournaments.map((tournament) => {
-						if (tournament.classification === "tournament") {
+						if (tournament.classification === 'tournament') {
 							return (
 								<div className="tournament-card" key={tournament.id}>
 									<div className={`type-indicator ${tournament.type}`}>{tournament.type}</div>
@@ -127,7 +127,7 @@ function BrowseTournaments() {
 									</Link>
 								</div>
 							);
-						} else if (tournament.classification === "collection") {
+						} else if (tournament.classification === 'collection') {
 							return (
 								<div className="tournament-card" key={tournament.id}>
 									<div className="type-indicator collection">Collection</div>
@@ -151,32 +151,32 @@ function BrowseTournaments() {
 function CreateTournament({ goBack }) {
 	const [currentSlide, setCurrentSlide] = useState(1);
 	const [tournamentData, setTournamentData] = useState({
-		tournamentName: "",
-		startDate: "",
-		location: "",
-		description: "",
-		tournamentCollection: "",
-		format: "combi",
-		type: "indoor",
-		teamCount: "",
-		numGroups: "",
+		tournamentName: '',
+		startDate: '',
+		location: '',
+		description: '',
+		tournamentCollection: '',
+		format: 'combi',
+		type: 'indoor',
+		teamCount: '',
+		numGroups: '',
 		knockoutRound: 0,
 		teams: [],
 	});
 	const { isLoggedIn } = useContext(AuthContext);
-	const [expandOptions, setExpandOptions] = useState(tournamentData.format === "combi");
+	const [expandOptions, setExpandOptions] = useState(true);
 	const [teamList, setTeamList] = useState([]);
-	const [tempTeamCount, setTempTeamCount] = useState("");
+	const [tempTeamCount, setTempTeamCount] = useState('');
 	const [openCollectionPopup, setOpenCollectionPopup] = useState(false);
 	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
 	const [teamNameChange, setTeamNameChange] = useState({
-		name: "",
+		name: '',
 		rank: 0,
 	});
 	const { showMessage } = useMessage();
 	const [collectionOptions, setCollectionOptions] = useState([
-		{ name: "--", id: "" },
-		{ name: "Create new collection", id: "new" },
+		{ name: '--', id: '' },
+		{ name: 'Create new collection', id: 'new' },
 	]);
 	const hasFetchedCollections = useRef(false);
 	const confirm = useConfirm();
@@ -211,7 +211,7 @@ function CreateTournament({ goBack }) {
 					setCollectionOptions((prevOptions) => [...prevOptions, ...response.message]);
 				}
 			} catch (error) {
-				showMessage("Error fetching collections", "error");
+				showMessage('Error fetching collections', 'error');
 			}
 		};
 		if (hasFetchedCollections.current) return;
@@ -227,13 +227,13 @@ function CreateTournament({ goBack }) {
 		// Check if required fields are filled
 		if (!tournamentName || !startDate || !location) {
 			// Add error class to empty required fields
-			if (!tournamentName) document.getElementById("tournamentName").classList.add("error");
-			if (!startDate) document.getElementById("startDate").classList.add("error");
-			if (!location) document.getElementById("location").classList.add("error");
+			if (!tournamentName) document.getElementById('tournamentName').classList.add('error');
+			if (!startDate) document.getElementById('startDate').classList.add('error');
+			if (!location) document.getElementById('location').classList.add('error');
 			return false;
 		}
 
-		if (tournamentData.tournamentCollection === "new") {
+		if (tournamentData.tournamentCollection === 'new') {
 			// Open collection popup
 			setOpenCollectionPopup(true);
 			return false;
@@ -247,15 +247,15 @@ function CreateTournament({ goBack }) {
 		const teams = tournamentData.teamCount;
 		const groups = tournamentData.numGroups;
 
-		if (format === "combi") {
+		if (format === 'combi') {
 			if (!teams || !groups) {
-				if (!teams) document.getElementById("teamCount").classList.add("error");
-				if (!groups) document.getElementById("numGroups").classList.add("error");
+				if (!teams) document.getElementById('teamCount').classList.add('error');
+				if (!groups) document.getElementById('numGroups').classList.add('error');
 				return false;
 			}
 		} else {
 			if (!teams) {
-				document.getElementById("teamCount").classList.add("error");
+				document.getElementById('teamCount').classList.add('error');
 				return false;
 			}
 		}
@@ -280,13 +280,13 @@ function CreateTournament({ goBack }) {
 	};
 
 	const handleChange = (e) => {
-		if (e.target.type === "radio") {
+		if (e.target.type === 'radio') {
 			setTournamentData({
 				...tournamentData,
 				type: e.target.value,
 			});
 		} else {
-			if ((e.target.id === "teamCount" || e.target.id === "numGroups") && e.target.value !== "") {
+			if ((e.target.id === 'teamCount' || e.target.id === 'numGroups') && e.target.value !== '') {
 				setTournamentData({
 					...tournamentData,
 					[e.target.id]: parseInt(e.target.value),
@@ -299,8 +299,8 @@ function CreateTournament({ goBack }) {
 			}
 		}
 
-		if (e.target.id === "format") {
-			setExpandOptions(e.target.value === "combi");
+		if (e.target.id === 'format') {
+			setExpandOptions(e.target.value === 'combi');
 		}
 	};
 
@@ -317,16 +317,16 @@ function CreateTournament({ goBack }) {
 	const handleSubmit = async (e) => {
 		e.preventDefault();
 
-		const confirmResult = await confirm("Are you sure you want to create this tournament?");
+		const confirmResult = await confirm('Are you sure you want to create this tournament?');
 		setLoading(true);
 		if (confirmResult) {
 			const response = await createTournament(tournamentData);
 			if (response.success) {
-				showMessage("Tournament created successfully!", "success");
+				showMessage('Tournament created successfully!', 'success');
 				setLoading(false);
 				goBack();
 			} else {
-				showMessage("Failed to create tournament. Please try again later", "error");
+				showMessage('Failed to create tournament. Please try again later', 'error');
 				setLoading(false);
 			}
 		}
@@ -335,7 +335,7 @@ function CreateTournament({ goBack }) {
 
 	const handleTeamNameChangePopup = (action, name, rank) => {
 		setTeamNameChange({ name: name, rank: rank });
-		setOpenTeamNameChangePopup(action === "open");
+		setOpenTeamNameChangePopup(action === 'open');
 	};
 
 	const handleTeamNameChangeSubmit = (e, rank, newName) => {
@@ -361,14 +361,14 @@ function CreateTournament({ goBack }) {
 	};
 
 	const handleCollectionPopup = (action) => {
-		setOpenCollectionPopup(action === "open");
+		setOpenCollectionPopup(action === 'open');
 	};
 
 	const handleCollectionSubmit = (collectionName, collectionId) => {
-		let newCollection = document.createElement("option");
+		let newCollection = document.createElement('option');
 		newCollection.value = collectionId;
 		newCollection.innerHTML = collectionName;
-		document.getElementById("tournamentCollection").appendChild(newCollection);
+		document.getElementById('tournamentCollection').appendChild(newCollection);
 		setTournamentData({
 			...tournamentData,
 			tournamentCollection: collectionName,
@@ -376,25 +376,27 @@ function CreateTournament({ goBack }) {
 	};
 
 	const handleTeamCountChange = (e) => {
-		const newValue = e.target.value;
-		setTempTeamCount(newValue);
+		if (expandOptions) {
+			const newValue = e.target.value;
+			setTempTeamCount(newValue);
 
-		const select = document.getElementById("knockoutRound");
-		const options = select.options;
+			const select = document.getElementById('knockoutRound');
+			const options = select.options;
 
-		for (let i = 0; i < options.length; i++) {
-			const requiredTeams = parseInt(options[i].dataset.requiredTeams, 10);
-			if (requiredTeams > newValue) {
-				options[i].disabled = true;
-			} else {
-				options[i].disabled = false;
+			for (let i = 0; i < options.length; i++) {
+				const requiredTeams = parseInt(options[i].dataset.requiredTeams, 10);
+				if (requiredTeams > newValue) {
+					options[i].disabled = true;
+				} else {
+					options[i].disabled = false;
+				}
 			}
-		}
 
-		for (let i = 0; i < options.length; i++) {
-			if (!options[i].disabled) {
-				setTournamentData({ ...tournamentData, knockoutRound: parseInt(options[i].value, 10) });
-				break;
+			for (let i = 0; i < options.length; i++) {
+				if (!options[i].disabled) {
+					setTournamentData({ ...tournamentData, knockoutRound: parseInt(options[i].value, 10) });
+					break;
+				}
 			}
 		}
 	};
@@ -405,26 +407,26 @@ function CreateTournament({ goBack }) {
 			{openCollectionPopup && <CollectionPopup onClose={handleCollectionPopup} onSubmit={handleCollectionSubmit} />}
 			{openTeamNameChangePopup && (
 				<TeamNameChangePopup
-					onClose={() => handleTeamNameChangePopup("close")}
+					onClose={() => handleTeamNameChangePopup('close')}
 					onSubmit={handleTeamNameChangeSubmit}
 					currName={teamNameChange.name}
 					rank={teamNameChange.rank}
 				/>
 			)}
-			<div id="signinRequest" className="signin-request" style={{ display: isLoggedIn ? "none" : "block" }}>
+			<div id="signinRequest" className="signin-request" style={{ display: isLoggedIn ? 'none' : 'block' }}>
 				<h3>You must be logged in to be able to create tournaments</h3>
 			</div>
-			<div id="createFormContainer" className="form-container" style={{ display: isLoggedIn ? "block" : "none" }}>
+			<div id="createFormContainer" className="form-container" style={{ display: isLoggedIn ? 'block' : 'none' }}>
 				<form id="tournament-form" className="multi-step-form" onSubmit={handleSubmit}>
 					{/* <!-- Progress Bar --> */}
 					<div className="progress-bar">
-						<div className={`step ${currentSlide === 1 ? "active" : ""}`}>Details</div>
-						<div className={`step ${currentSlide === 2 ? "active" : ""}`}>Format</div>
-						<div className={`step ${currentSlide === 3 ? "active" : ""}`}>Teams</div>
+						<div className={`step ${currentSlide === 1 ? 'active' : ''}`}>Details</div>
+						<div className={`step ${currentSlide === 2 ? 'active' : ''}`}>Format</div>
+						<div className={`step ${currentSlide === 3 ? 'active' : ''}`}>Teams</div>
 					</div>
 
 					{/* <!-- Slide 1: Tournament Details --> */}
-					<div className={`form-slide ${currentSlide === 1 ? "active" : ""}`} id="slide-1">
+					<div className={`form-slide ${currentSlide === 1 ? 'active' : ''}`} id="slide-1">
 						<h2>Tournament Details</h2>
 						<br />
 						<div className="form-group">
@@ -451,7 +453,7 @@ function CreateTournament({ goBack }) {
 								</div>
 							</div>
 						</div>
-						<div className="form-group" style={{ marginBottom: "30px" }}>
+						<div className="form-group" style={{ marginBottom: '30px' }}>
 							<label htmlFor="description">Description (optional)</label>
 							<textarea id="description" onChange={handleChange} value={tournamentData.description} rows="4"></textarea>
 						</div>
@@ -474,7 +476,7 @@ function CreateTournament({ goBack }) {
 					</div>
 
 					{/* <!-- Slide 2: Tournament Structure --> */}
-					<div className={`form-slide ${currentSlide === 2 ? "active" : ""}`} id="slide-2">
+					<div className={`form-slide ${currentSlide === 2 ? 'active' : ''}`} id="slide-2">
 						<h2>Tournament Format</h2>
 						<br />
 						<div className="two-column-layout">
@@ -483,7 +485,7 @@ function CreateTournament({ goBack }) {
 									<label htmlFor="format">Tournament Format*</label>
 									<select id="format" onChange={handleChange} value={tournamentData.format} required>
 										{/* <!-- All options are disabled for now. Only combi is available for MVP --> */}
-										<option value="single" disabled={true}>
+										<option value="single" disabled={false}>
 											Single Elimination - Coming Soon
 										</option>
 										<option value="double" disabled={true}>
@@ -541,51 +543,59 @@ function CreateTournament({ goBack }) {
 										</div>
 									</div>
 								</div>
-								<div className={`form-group ${expandOptions ? "" : "hidden"}`} id="groupCount">
-									<label htmlFor="numGroups">Number of groups*</label>
-									<input
-										type="number"
-										id="numGroups"
-										min="1"
-										onChange={handleChange}
-										value={tournamentData.numGroups}
-									/>
-								</div>
-								<div className={`form-group ${expandOptions ? "" : "hidden"}`} id="knockout">
-									<label htmlFor="knockoutRound">First Knockout Round*</label>
-									<select type="number" id="knockoutRound" onChange={handleChange} value={tournamentData.knockoutRound}>
-										<option value={12} data-required-teams={24}>
-											Round of 24
-										</option>
-										<option value={8} data-required-teams={16}>
-											Round of 16
-										</option>
-										<option value={6} data-required-teams={12}>
-											Round of 12
-										</option>
-										<option value={4} data-required-teams={8}>
-											Quarterfinals
-										</option>
-										<option value={2} data-required-teams={4}>
-											Semifinals
-										</option>
-										<option value={1} data-required-teams={2}>
-											Finals
-										</option>
-									</select>
-								</div>
+								{expandOptions && (
+									<div className="form-group" id="groupCount">
+										<label htmlFor="numGroups">Number of groups*</label>
+										<input
+											type="number"
+											id="numGroups"
+											min="1"
+											onChange={handleChange}
+											value={tournamentData.numGroups}
+										/>
+									</div>
+								)}
+								{expandOptions && (
+									<div className="form-group" id="knockout">
+										<label htmlFor="knockoutRound">First Knockout Round*</label>
+										<select
+											type="number"
+											id="knockoutRound"
+											onChange={handleChange}
+											value={tournamentData.knockoutRound}>
+											<option value={12} data-required-teams={24}>
+												Round of 24
+											</option>
+											<option value={8} data-required-teams={16}>
+												Round of 16
+											</option>
+											<option value={6} data-required-teams={12}>
+												Round of 12
+											</option>
+											<option value={4} data-required-teams={8}>
+												Quarterfinals
+											</option>
+											<option value={2} data-required-teams={4}>
+												Semifinals
+											</option>
+											<option value={1} data-required-teams={2}>
+												Finals
+											</option>
+										</select>
+									</div>
+								)}
 								<p>*required</p>
 							</div>
 							<div className="divider"></div>
 							<div className="column">
 								<h2>Description</h2>
-								<div className={`description ${tournamentData.format === "single" ? "" : "hidden"}`} id="single">
+								<div className={`description ${tournamentData.format === 'single' ? '' : 'hidden'}`} id="single">
 									<h3>Single Elimination</h3>
 									<p>
 										Teams are eliminated after losing a match. The tournament continues until only one team remains.
 									</p>
 								</div>
-								<div className={`description ${tournamentData.format === "double" ? "" : "hidden"}`} id="double">
+								<div className={`description ${tournamentData.format === 'double' ? '' : 'hidden'}`} id="double">
 									<h3>Double Elimination</h3>
 									<p>
 										Teams have two chances to stay in the tournament. A team must lose twice to be eliminated. <br />
@@ -595,14 +605,14 @@ function CreateTournament({ goBack }) {
 										the semifinals.
 									</p>
 								</div>
-								<div className={`description ${tournamentData.format === "round" ? "" : "hidden"}`} id="round">
+								<div className={`description ${tournamentData.format === 'round' ? '' : 'hidden'}`} id="round">
 									<h3>Round Robin</h3>
 									<p>
 										Teams play against every other team in the tournament. Points are awarded for wins and ties. <br />
 										The team with the most points at the end of the round wins.
 									</p>
 								</div>
-								<div className={`description ${tournamentData.format === "combi" ? "" : "hidden"}`} id="combi">
+								<div className={`description ${tournamentData.format === 'combi' ? '' : 'hidden'}`} id="combi">
 									<h3>Round Robin + Knockout</h3>
 									<p>
 										Teams are divided equally (as possible) into groups. <br />
@@ -617,13 +627,13 @@ function CreateTournament({ goBack }) {
 					</div>
 
 					{/* <!-- Slide 3: Team list --> */}
-					<div className={`form-slide ${currentSlide === 3 ? "active" : ""}`} id="slide-3">
+					<div className={`form-slide ${currentSlide === 3 ? 'active' : ''}`} id="slide-3">
 						<h2>Teams</h2>
 						<div className="two-column-layout">
 							<div className="column">
 								<div className="team-list-headings">
 									<h4>Rank</h4>
-									<h4 style={{ width: "60%" }}>Team name</h4>
+									<h4 style={{ width: '60%' }}>Team name</h4>
 									<h4>Edit</h4>
 								</div>
 								<div id="teamList" className="team-list">
@@ -634,7 +644,7 @@ function CreateTournament({ goBack }) {
 												<p className="team-name">{team}</p>
 												<div
 													className="edit-team-name"
-													onClick={() => handleTeamNameChangePopup("open", team, index + 1)}>
+													onClick={() => handleTeamNameChangePopup('open', team, index + 1)}>
 													<i className="fas fa-pen"></i>
 												</div>
 											</div>
@@ -666,14 +676,14 @@ function CreateTournament({ goBack }) {
 							id="nextBtn"
 							className="nav-btn"
 							onClick={nextSlide}
-							style={{ display: `${currentSlide === 3 ? "none" : "block"}` }}>
+							style={{ display: `${currentSlide === 3 ? 'none' : 'block'}` }}>
 							Next
 						</button>
 						<button
 							type="submit"
 							id="submitBtn"
 							className="nav-btn"
-							style={{ display: `${currentSlide === 3 ? "block" : "none"}` }}>
+							style={{ display: `${currentSlide === 3 ? 'block' : 'none'}` }}>
 							Create Tournament
 						</button>
 						<button
@@ -681,7 +691,7 @@ function CreateTournament({ goBack }) {
 							id="prevBtn"
 							className="nav-btn"
 							onClick={prevSlide}
-							style={{ display: `${currentSlide === 1 ? "none" : "block"}` }}>
+							style={{ display: `${currentSlide === 1 ? 'none' : 'block'}` }}>
 							Previous
 						</button>
 					</div>
@@ -692,7 +702,7 @@ function CreateTournament({ goBack }) {
 }
 
 function CollectionPopup({ onClose, onSubmit }) {
-	const [collection, setCollection] = useState("");
+	const [collection, setCollection] = useState('');
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
 
@@ -702,12 +712,12 @@ function CollectionPopup({ onClose, onSubmit }) {
 		const response = await createCollection(collection);
 		if (!response.success) {
 			setIsLoading(false);
-			showMessage("Failed to create collection", "error");
+			showMessage('Failed to create collection', 'error');
 			return;
 		}
 		onSubmit(collection, response.message);
 		setIsLoading(false);
-		onClose("close");
+		onClose('close');
 	};
 
 	const handleChange = (e) => {
@@ -717,7 +727,7 @@ function CollectionPopup({ onClose, onSubmit }) {
 	return (
 		<div className="collection-popup">
 			<div className="collection-popup-content">
-				<div className="close-btn" id="closeCollectionPopup" onClick={() => onClose("close")}>
+				<div className="close-btn" id="closeCollectionPopup" onClick={() => onClose('close')}>
 					&times;
 				</div>
 				<h2>Collection</h2>
@@ -733,7 +743,7 @@ function CollectionPopup({ onClose, onSubmit }) {
 								<div className="spinner"></div>
 							</div>
 						) : (
-							"Create Collection"
+							'Create Collection'
 						)}
 					</button>
 				</form>
@@ -746,19 +756,19 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 	const { showMessage } = useMessage();
 	const handleSubmit = (e) => {
 		e.preventDefault();
-		const newName = document.getElementById("newTeamName").value;
-		if (newName === "") {
-			document.getElementById("newTeamName").classList.add("error");
+		const newName = document.getElementById('newTeamName').value;
+		if (newName === '') {
+			document.getElementById('newTeamName').classList.add('error');
 			return;
 		}
-		if (newName === "TBD") {
-			showMessage("Team name cannot be 'TBD'", "error");
+		if (newName === 'TBD') {
+			showMessage("Team name cannot be 'TBD'", 'error');
 			return;
 		}
-		document.getElementById("newTeamName").classList.remove("error");
+		document.getElementById('newTeamName').classList.remove('error');
 
 		if (!onSubmit(e, rank, newName)) {
-			showMessage("Team name already exists", "error");
+			showMessage('Team name already exists', 'error');
 			return;
 		}
 		onClose();

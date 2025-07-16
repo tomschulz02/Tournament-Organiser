@@ -1,10 +1,57 @@
+const formatOptions = {
+	combi: 'C',
+	single: 'SE',
+	double: 'DE',
+	round: 'CP',
+};
+
+const testingTournament = {
+	tournamentName: 'Test',
+	startDate: '2025-07-17',
+	location: 'Pretoria',
+	description: '',
+	tournamentCollection: '',
+	format: 'single',
+	type: 'indoor',
+	teamCount: 18,
+	numGroups: 4,
+	knockoutRound: 8,
+	teams: [
+		'Team 1',
+		'Team 2',
+		'Team 3',
+		'Team 4',
+		'Team 5',
+		'Team 6',
+		'Team 7',
+		'Team 8',
+		'Team 9',
+		'Team 10',
+		'Team 11',
+		'Team 12',
+		'Team 13',
+		'Team 14',
+		'Team 15',
+		'Team 16',
+		'Team 17',
+		'Team 18',
+	],
+};
+
+// formatCombiTournamentForStorage(testingTournament);
+
 export function formatCombiTournamentForStorage(data) {
+	if (data['format'] === 'single') {
+		data['numGroups'] = Math.pow(2, Math.floor(Math.log2(data['teamCount'])));
+		data['knockoutRound'] = data['numGroups'] / 2;
+	}
+
 	var format = {
 		name: data['tournamentName'],
 		date: data['startDate'],
 		location: data['location'],
 		description: data['description'] == '' ? 'Default description' : data['description'],
-		format: 'C',
+		format: formatOptions[data['format']] || 'C',
 		num_teams: data['teamCount'],
 		num_groups: data['numGroups'] || 0,
 		knockout: parseInt(data['knockoutRound']) == 0 ? false : true,
@@ -25,6 +72,8 @@ export function formatCombiTournamentForStorage(data) {
 		parseInt(data['knockoutRound']),
 		format.state.rounds
 	);
+
+	// console.log(format);
 
 	return format;
 }
@@ -74,6 +123,8 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 		}
 		fixtures.push(groupFixtures);
 	});
+	// console.log('Fixtures generated for groups', fixtures);
+
 	var matchNo = 1;
 	var sortedFixtures = [];
 
@@ -89,7 +140,7 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 	while (matchNo <= totalMatches) {
 		fixtures.forEach((group, index) => {
 			const mpr = Math.floor(groups[index].length / 2);
-			for (var i = round * mpr; i < (round + 1) * mpr; i++) {
+			for (var i = round * mpr; i < (round + 1) * mpr && i < group.length; i++) {
 				const fix = {
 					match_no: matchNo,
 					team1: group[i][0],
@@ -104,108 +155,125 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 		});
 		round++;
 	}
+	// console.log('Fixtures sorted for groups');
 
 	//generate knockout fixtures
-	switch (knockout) {
-		case 12:
-			for (var i = 0; i < 8; i++) {
-				sortedFixtures.push({
-					match_no: matchNo,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `Round of 24`,
-					next_game: matchNo + 8,
-				});
-				matchNo++;
-			}
-			knockout = knockout - 4;
-			rounds.push({ round: 'Round of 24', matches: 8, completed: 0, groups: [], qualifyingTeams: 24, standings: [] });
-		case 8:
-			var dec = 1;
-			for (var i = 0; i < 8; i++) {
-				sortedFixtures.push({
-					match_no: matchNo,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `Round of 16`,
-					next_game: i < 4 ? matchNo + 8 : matchNo + 8 - dec,
-				});
-				matchNo++;
-				if (i >= 4) dec += 2;
-			}
-			knockout = knockout - 4;
-			rounds.push({ round: 'Round of 16', matches: 8, completed: 0, groups: [], qualifyingTeams: 16, standings: [] });
-		case 6:
-			for (var i = 0; i < 4; i++) {
-				sortedFixtures.push({
-					match_no: matchNo,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `Round of 12`,
-					next_game: matchNo + 4,
-				});
-				matchNo++;
-			}
-			knockout = knockout - 2;
-			rounds.push({ round: 'Round of 12', matches: 4, completed: 0, groups: [], qualifyingTeams: 12, standings: [] });
-		case 4:
-			var dec = 1;
-			for (var i = 0; i < 4; i++) {
-				sortedFixtures.push({
-					match_no: matchNo,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `Quarterfinals`,
-					next_game: i < 2 ? matchNo + 4 : matchNo + 4 - dec,
-				});
-				matchNo++;
-				if (i >= 2) dec += 2;
-			}
-			knockout = knockout - 2;
-			rounds.push({ round: 'Quarterfinals', matches: 4, completed: 0, groups: [], qualifyingTeams: 8, standings: [] });
-		case 2:
-			for (var i = 0; i < 2; i++) {
-				sortedFixtures.push({
-					match_no: matchNo,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `Semifinals`,
-					next_game: i == 0 ? matchNo + 2 : matchNo + 1,
-				});
-				matchNo++;
-			}
-			knockout = knockout - 1;
-			rounds.push({ round: 'Semifinals', matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
-		case 1:
-			sortedFixtures.push(
-				{
-					match_no: matchNo++,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `3rd Place Playoff`,
-					next_game: null,
-				},
-				{
-					match_no: matchNo,
-					team1: 'TBD',
-					team2: 'TBD',
-					status: 'WAITING',
-					round: `Finals`,
-					next_game: null,
+	for (; knockout > 0; ) {
+		switch (knockout) {
+			case 12:
+				for (var i = 0; i < 8; i++) {
+					sortedFixtures.push({
+						match_no: matchNo,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `Round of 24`,
+						next_game: matchNo + 8,
+					});
+					matchNo++;
 				}
-			);
-			rounds.push({ round: 'Finals', matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
-			break;
+				knockout = knockout - 4;
+				rounds.push({ round: 'Round of 24', matches: 8, completed: 0, groups: [], qualifyingTeams: 24, standings: [] });
+				break;
+			case 8:
+				var dec = 1;
+				for (var i = 0; i < 8; i++) {
+					sortedFixtures.push({
+						match_no: matchNo,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `Round of 16`,
+						next_game: i < 4 ? matchNo + 8 : matchNo + 8 - dec,
+					});
+					matchNo++;
+					if (i >= 4) dec += 2;
+				}
+				knockout = knockout - 4;
+				rounds.push({ round: 'Round of 16', matches: 8, completed: 0, groups: [], qualifyingTeams: 16, standings: [] });
+				break;
+			case 6:
+				for (var i = 0; i < 4; i++) {
+					sortedFixtures.push({
+						match_no: matchNo,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `Round of 12`,
+						next_game: matchNo + 4,
+					});
+					matchNo++;
+				}
+				knockout = knockout - 2;
+				rounds.push({ round: 'Round of 12', matches: 4, completed: 0, groups: [], qualifyingTeams: 12, standings: [] });
+				break;
+			case 4:
+				var dec = 1;
+				for (var i = 0; i < 4; i++) {
+					sortedFixtures.push({
+						match_no: matchNo,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `Quarterfinals`,
+						next_game: i < 2 ? matchNo + 4 : matchNo + 4 - dec,
+					});
+					matchNo++;
+					if (i >= 2) dec += 2;
+				}
+				knockout = knockout - 2;
+				rounds.push({
+					round: 'Quarterfinals',
+					matches: 4,
+					completed: 0,
+					groups: [],
+					qualifyingTeams: 8,
+					standings: [],
+				});
+				break;
+			case 2:
+				for (var i = 0; i < 2; i++) {
+					sortedFixtures.push({
+						match_no: matchNo,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `Semifinals`,
+						next_game: i == 0 ? matchNo + 2 : matchNo + 1,
+					});
+					matchNo++;
+				}
+				knockout = knockout - 1;
+				rounds.push({ round: 'Semifinals', matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
+				break;
+			case 1:
+				sortedFixtures.push(
+					{
+						match_no: matchNo++,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `3rd Place Playoff`,
+						next_game: null,
+					},
+					{
+						match_no: matchNo,
+						team1: 'TBD',
+						team2: 'TBD',
+						status: 'WAITING',
+						round: `Finals`,
+						next_game: null,
+					}
+				);
+				knockout = knockout - 1;
+				rounds.push({ round: 'Finals', matches: 2, completed: 0, groups: [], qualifyingTeams: 4, standings: [] });
+				break;
 
-		default:
-			break;
+			default:
+				break;
+		}
 	}
+	// console.log('Fixtures generated for knockout rounds');
 
 	return sortedFixtures;
 }
@@ -232,6 +300,7 @@ export function populateGroups(numGroups, teamList) {
 		}
 		groups.push(group);
 	}
+	// console.log('Groups populated', groups);
 	return groups;
 }
 
@@ -359,7 +428,7 @@ function separateFixturesAndResults(fixtures, tourStatus) {
 
 function determineStandings(rounds, results, format) {
 	const allStandings = [];
-	if (format == 'C') {
+	if (format == 'C' || format == 'SE') {
 		rounds.forEach((round) => {
 			const teams = round.groups;
 			const standings = { round: round.round, groups: [] };

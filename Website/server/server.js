@@ -631,9 +631,12 @@ app.post('/api/tournament/create', verifyToken, (req, res) => {
 	try {
 		var data = JSON.parse(JSON.stringify(req.body));
 		data['user'] = req.user.id;
+		// console.log(data);
 		const { fixtures, ...details } = formatCombiTournamentForStorage(data);
 		const collection = collectionHash.decode(details.collection)[0];
 		details['collection'] = collection;
+
+		// console.log(details);
 
 		db.createTournament(details, fixtures, (result) => {
 			cacheManager.invalidate('all');

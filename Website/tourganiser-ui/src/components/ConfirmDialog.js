@@ -1,7 +1,6 @@
-import React, { useState, useRef, useEffect, createContext, useContext } from "react";
-import "../styles/ConfirmDialog.css"; // Import your CSS file for styling
+import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+import '../App.css';
 
-// Context to access confirm function globally
 const ConfirmContext = createContext();
 
 export const useConfirm = () => useContext(ConfirmContext);

@@ -1,18 +1,20 @@
-import React from "react";
-import "../styles/About.css";
+import React from 'react';
+import '../App.css';
 
 export default function About() {
 	React.useEffect(() => {
-		if (window.location.hash === "#support") {
-			const element = document.getElementById("support");
+		if (window.location.hash === '#support') {
+			const element = document.getElementById('support');
 			if (element) {
-				element.scrollIntoView({ behavior: "smooth" });
+				element.scrollIntoView({ behavior: 'smooth' });
 			}
 		}
 	}, []);
 
 	return (
 		<>
+			<div className="about-banner-image"></div>
+
 			<section className="about-section">
 				<h1>About Us</h1>
 				<div className="description">
@@ -61,7 +63,7 @@ export default function About() {
 						<img
 							src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
 							alt="Buy Me A Coffee"
-							style={{ height: "60px", width: "217px" }}
+							style={{ height: '60px', width: '217px' }}
 						/>
 					</a>
 				</div>
@@ -79,7 +81,9 @@ export default function About() {
 					<div className="contact-item">
 						<h3>Discord</h3>
 						<p>
-							<a href="https://discord.gg/jwq963ugYR" target="_blank" rel="noreferror">Tourganiser Discord</a>
+							<a href="https://discord.gg/jwq963ugYR" target="_blank" rel="noreferror">
+								Tourganiser Discord
+							</a>
 						</p>
 					</div>
 				</div>

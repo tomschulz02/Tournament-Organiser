@@ -6,7 +6,7 @@ import { getTournaments, createCollection, createTournament, fetchUserCollection
 import Tooltip from '../components/Tooltip';
 import { useConfirm } from '../components/ConfirmDialog';
 import LoadingScreen from '../components/LoadingScreen';
-import '../styles/Tournaments.css';
+import '../App.css';
 import TournamentCreation from '../components/TournamentCreation';
 
 const tooltips = {
@@ -17,23 +17,32 @@ const tooltips = {
 export default function Tournaments() {
 	const [currentPage, setCurrentPage] = useState('browse');
 
+	useEffect(() => {
+		const section = window.location.hash.replace('#', '');
+		if (section) {
+			setCurrentPage(section);
+
+			window.history.replaceState(null, '', window.location.pathname + window.location.search);
+		}
+	}, []);
+
 	return (
-		<div className="tabs-container">
-			<div className="tab-buttons">
-				<button
-					className={`tab-btn ${currentPage === 'browse' ? 'active' : ''}`}
+		<div className="tournament-tabs-container">
+			<div className="tournament-tab-buttons">
+				<div
+					className={`tournament-tab-btn ${currentPage === 'browse' ? 'active' : ''}`}
 					data-tab="browse"
 					onClick={() => setCurrentPage('browse')}>
 					Browse Tournaments
-				</button>
-				<button
-					className={`tab-btn ${currentPage === 'create' ? 'active' : ''}`}
+				</div>
+				<div
+					className={`tournament-tab-btn ${currentPage === 'create' ? 'active' : ''}`}
 					data-tab="create"
 					onClick={() => setCurrentPage('create')}>
 					Create Tournament
-				</button>
+				</div>
 			</div>
-			<div className="tab-content active">
+			<div className="tournament-tab-content active">
 				{currentPage === 'browse' ? (
 					<BrowseTournaments />
 				) : (

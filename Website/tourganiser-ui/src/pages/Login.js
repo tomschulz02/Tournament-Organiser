@@ -1,18 +1,20 @@
-import React, { useState, useContext, useEffect } from "react";
-import { AuthContext } from "../AuthContext";
-import "../styles/Login.css";
-import { useNavigate } from "react-router-dom";
-import { loginUser, registerUser, checkLoginStatus } from "../requests";
-import { MessagePopup, useMessage } from "../MessageContext";
+import React, { useState, useContext, useEffect } from 'react';
+import { AuthContext } from '../AuthContext';
+import '../App.css';
+import { useNavigate } from 'react-router-dom';
+import { loginUser, registerUser, checkLoginStatus } from '../requests';
+import { MessagePopup, useMessage } from '../MessageContext';
+import { useTheme } from '../ThemeContext';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 export default function Login() {
-	const [currentForm, setCurrentForm] = useState("login");
+	const [currentForm, setCurrentForm] = useState('login');
 	const { setIsLoggedIn, setUsername } = useContext(AuthContext);
 	const navigate = useNavigate();
 	const { showMessage } = useMessage();
+	const { theme, toggleTheme } = useTheme();
 
 	// TODO: Add logic to check if user is already logged in and redirect to home page
 	useEffect(() => {
@@ -21,9 +23,9 @@ export default function Login() {
 				const response = await checkLoginStatus();
 				if (response.loggedIn) {
 					setIsLoggedIn(true);
-					showMessage("Successfully logged in!", "success");
+					showMessage('Successfully logged in!', 'success');
 					setUsername(response.user);
-					navigate("/home"); // Redirect to home page if already logged in
+					navigate('/home'); // Redirect to home page if already logged in
 				}
 			} catch (error) {
 				// do nothing
@@ -44,10 +46,21 @@ export default function Login() {
 		<>
 			<MessagePopup />
 			<div className="login-popup">
-				{currentForm === "login" ? (
-					<LoginForm onFormSwitch={() => toggleForm("register")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+				{currentForm === 'login' ? (
+					<LoginForm onFormSwitch={() => toggleForm('register')} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
 				) : (
-					<RegisterForm onFormSwitch={() => toggleForm("login")} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+					<RegisterForm onFormSwitch={() => toggleForm('login')} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+				)}
+			</div>
+			<div className="theme-toggle-login">
+				{theme === 'light' ? (
+					<i className="fas fa-sun" onClick={toggleTheme} title="Switch to Dark Mode" style={{ color: '#FFD700' }}></i>
+				) : (
+					<i
+						className="fas fa-moon"
+						onClick={toggleTheme}
+						title="Switch to Light Mode"
+						style={{ color: '#FFD700' }}></i>
 				)}
 			</div>
 		</>
@@ -55,7 +68,7 @@ export default function Login() {
 }
 
 function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
-	const [loginDetails, setLoginDetails] = useState({ email: "", password: "" });
+	const [loginDetails, setLoginDetails] = useState({ email: '', password: '' });
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
 	const { setUsername } = useContext(AuthContext);
@@ -72,7 +85,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 		const validation = validateLoginDetails(email, password);
 		if (!validation.success) {
 			// show error message to user
-			showMessage(validation.message, "error");
+			showMessage(validation.message, 'error');
 			return;
 		}
 		setIsLoading(true);
@@ -81,14 +94,14 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 			const response = await loginUser(email, password);
 			if (response.success) {
 				setLoggedIn(true);
-				showMessage(`Welcome, ${response.user}`, "success");
+				showMessage(`Welcome, ${response.user}`, 'success');
 				setUsername(response.user);
 				onClose();
 			} else {
-				showMessage("Username or password is incorrect", "error");
+				showMessage('Username or password is incorrect', 'error');
 			}
 		} catch (error) {
-			showMessage(error.message, "error"); // Show error message to user
+			showMessage(error.message, 'error'); // Show error message to user
 		} finally {
 			setIsLoading(false);
 		}
@@ -131,12 +144,12 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 							<div className="spinner"></div>
 						</div>
 					) : (
-						"Login"
+						'Login'
 					)}
 				</button>
 			</form>
 			<div className="login-form-link">
-				Don't have an account yet? Create one{" "}
+				Don't have an account yet? Create one{' '}
 				<span className="toggle-form" onClick={onFormSwitch}>
 					here
 				</span>
@@ -147,10 +160,10 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 
 function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 	const [registerDetails, setRegisterDetails] = useState({
-		newUsername: "",
-		newEmail: "",
-		newPassword: "",
-		confirmPassword: "",
+		newUsername: '',
+		newEmail: '',
+		newPassword: '',
+		confirmPassword: '',
 	});
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
@@ -167,7 +180,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 		const { newUsername, newEmail, newPassword, confirmPassword } = registerDetails;
 		const validation = validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword);
 		if (!validation.success) {
-			showMessage(validation.message, "error");
+			showMessage(validation.message, 'error');
 			return;
 		}
 		setIsLoading(true);
@@ -176,12 +189,12 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			const response = await registerUser(newUsername, newEmail, newPassword, confirmPassword);
 			if (response.success) {
 				setLoggedIn(true);
-				showMessage("Account created successfully!", "success");
+				showMessage('Account created successfully!', 'success');
 				setUsername(response.user);
 				onClose();
 			}
 		} catch (error) {
-			showMessage(error.message, "error");
+			showMessage(error.message, 'error');
 		} finally {
 			setIsLoading(false);
 		}
@@ -192,7 +205,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			<button className="close-login" onClick={onClose}>
 				&times;
 			</button>
-			<div className="login">
+			<div className="login-header">
 				<h2>Create Account</h2>
 			</div>
 			<form className="login-form" id="signupForm" onSubmit={handleRegister}>
@@ -246,12 +259,12 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 							<div className="spinner"></div>
 						</div>
 					) : (
-						"Create Account"
+						'Create Account'
 					)}
 				</button>
 			</form>
 			<div className="login-form-link">
-				Already have an account? Login{" "}
+				Already have an account? Login{' '}
 				<span className="toggle-form" onClick={onFormSwitch}>
 					here
 				</span>
@@ -262,31 +275,31 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 
 function validateLoginDetails(email, password) {
 	if (!email || !password) {
-		return { message: "Please fill in all fields", success: false };
+		return { message: 'Please fill in all fields', success: false };
 	}
 
-	return { message: "Input valid", success: true };
+	return { message: 'Input valid', success: true };
 }
 
 function validateRegisterDetails(newUsername, newEmail, newPassword, confirmPassword) {
 	if (!newUsername || !newEmail || !newPassword || !confirmPassword) {
-		return { message: "Please fill in all fields", success: false };
+		return { message: 'Please fill in all fields', success: false };
 	}
 	if (!emailRegex.test(newEmail)) {
-		return { message: "Please enter a valid email", success: false };
+		return { message: 'Please enter a valid email', success: false };
 	}
 	if (newPassword.length < 8) {
-		return { message: "Password must be at least 8 characters long", success: false };
+		return { message: 'Password must be at least 8 characters long', success: false };
 	}
 	if (!strongPasswordRegex.test(newPassword)) {
 		return {
 			message:
-				"Password must contain at least one of each of the following: lowercase and uppercase letter, number, symbol",
+				'Password must contain at least one of each of the following: lowercase and uppercase letter, number, symbol',
 			success: false,
 		};
 	}
 	if (newPassword !== confirmPassword) {
-		return { message: "Passwords do not match", success: false };
+		return { message: 'Passwords do not match', success: false };
 	}
-	return { message: "Input valid", success: true };
+	return { message: 'Input valid', success: true };
 }

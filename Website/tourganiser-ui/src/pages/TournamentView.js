@@ -11,7 +11,7 @@ import {
 	updateRounds,
 	endTournament,
 } from '../requests';
-import '../styles/Tournaments.css';
+import '../App.css';
 import '../styles/TournamentView.css';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from '../components/ConfirmDialog';

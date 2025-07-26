@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import "../styles/ScoreUpdateModal.css";
+import React, { useState, useEffect } from 'react';
+import '../App.css';
 
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
@@ -35,9 +35,9 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 				<h3>Update Score - Match #{fixture.match_no}</h3>
 				<sub>Any match ending with a score of 0-0 (1st set only) will be considered cancelled</sub>
 				<div className="teams-header">
-					<span className="team-name">{fixture.team1}</span>
+					<span className="team-name left">{fixture.team1}</span>
 					<span className="vs">vs</span>
-					<span className="team-name">{fixture.team2}</span>
+					<span className="team-name right">{fixture.team2}</span>
 				</div>
 				<form onSubmit={handleSubmit}>
 					<div className="sets-container">
@@ -49,14 +49,14 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 										type="number"
 										min="0"
 										value={set.team1}
-										onChange={(e) => handleScoreChange(index, "team1", e.target.value)}
+										onChange={(e) => handleScoreChange(index, 'team1', e.target.value)}
 									/>
 									<span className="score-separator">-</span>
 									<input
 										type="number"
 										min="0"
 										value={set.team2}
-										onChange={(e) => handleScoreChange(index, "team2", e.target.value)}
+										onChange={(e) => handleScoreChange(index, 'team2', e.target.value)}
 									/>
 								</div>
 							</div>
@@ -68,7 +68,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 						</button>
 						<div className="action-buttons">
 							<button type="button" className="cancel-btn" onClick={onClose}>
-								Cancel
+								Back
 							</button>
 							<button type="submit" className="save-btn">
 								Save

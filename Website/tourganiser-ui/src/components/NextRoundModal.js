@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import '../styles/NextRoundModal.css';
+import '../App.css';
 
 function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	const [qualifiedSpots, setQualifiedSpots] = useState([]);
@@ -91,8 +91,9 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 								const teamData = availableTeams.find((t) => t.name === selectedTeam);
 								return (
 									<div key={index} className="team-selection">
-										<label>{index + 1}.</label>
+										<label htmlFor={`team-${index}`}>{index + 1}.</label>
 										<select
+											id={`team-${index}`}
 											value={selectedTeam}
 											onChange={(e) => handleTeamSelect(index, e.target.value)}
 											className="team-dropdown">

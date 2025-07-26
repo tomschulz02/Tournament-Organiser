@@ -1,6 +1,6 @@
 // Tooltip.jsx
-import React, { useState, useRef } from "react";
-import "../styles/Tooltip.css";
+import React, { useState, useRef } from 'react';
+import '../App.css';
 
 export default function Tooltip({ message, delay = 300 }) {
 	const [tooltipStyle, setTooltipStyle] = useState({ top: 0, left: 0 });
@@ -20,8 +20,8 @@ export default function Tooltip({ message, delay = 300 }) {
 
 	const handleMouseMove = (e) => {
 		setTooltipStyle({
-			top: e.clientY + 10 + "px",
-			left: e.clientX + 10 + "px",
+			top: e.clientY + 10 + 'px',
+			left: e.clientX + 10 + 'px',
 		});
 	};
 

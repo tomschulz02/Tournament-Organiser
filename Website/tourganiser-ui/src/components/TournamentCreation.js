@@ -1,12 +1,32 @@
-import React, { useState } from 'react';
-import '../styles/TournamentCreation.css';
+import React, { useContext, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AuthContext } from '../AuthContext';
+import '../App.css';
 
 export default function TournamentCreation() {
 	const [selectedOption, setSelectedOption] = useState('select');
+	const { isLoggedIn } = useContext(AuthContext);
 
 	const handleOptionSelect = (type) => {
 		setSelectedOption(type);
 	};
+
+	if (!isLoggedIn) {
+		return (
+			<div className="signin-warning">
+				<h2 className="signin-warning-heading">Sign In required</h2>
+				<p className="signin-warning-info">You need to be signed in to an account to be able to create a tournament.</p>
+				<p className="signin-warning-info">
+					Please log into your account, or if you are new here you can create an account - it's completely free.
+				</p>
+				<div className="signin-warning-button">
+					<Link to="/login" className="cta-button">
+						Sign In
+					</Link>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<>
@@ -39,186 +59,26 @@ export default function TournamentCreation() {
 }
 
 function CreateFromTemplate({ goBack }) {
-	const [expandedSections, setExpandedSections] = useState({
-		details: true,
-		format: false,
-		teams: false,
-	});
-	const [formData, setFormData] = useState({
-		name: '',
-		date: '',
-		location: '',
-		description: '',
-		format: '',
-		groupCount: 2,
-		firstKnockoutRound: '16',
-		teams: [],
-	});
-
-	const toggleSection = (section) => {
-		setExpandedSections((prev) => ({
-			...prev,
-			[section]: !prev[section],
-		}));
-	};
-
-	const handleInputChange = (e) => {
-		const { name, value } = e.target;
-		setFormData((prev) => ({
-			...prev,
-			[name]: value,
-		}));
-	};
-
-	const handleAddTeam = () => {
-		setFormData((prev) => ({
-			...prev,
-			teams: [...prev.teams, { name: '', seed: prev.teams.length + 1 }],
-		}));
-	};
-
-	const handleTeamChange = (index, value) => {
-		const updatedTeams = [...formData.teams];
-		updatedTeams[index].name = value;
-		setFormData((prev) => ({
-			...prev,
-			teams: updatedTeams,
-		}));
-	};
-
-	const handleRemoveTeam = (index) => {
-		setFormData((prev) => ({
-			...prev,
-			teams: prev.teams.filter((_, i) => i !== index),
-		}));
-	};
-
 	return (
-		<div className="template-form">
-			<div className="form-section">
-				<div
-					className={`section-header ${expandedSections.details ? 'active' : ''}`}
-					onClick={() => toggleSection('details')}>
-					<h3>Tournament Details</h3>
-					<span className="toggle-icon">▼</span>
-				</div>
-				<div className={`section-content ${expandedSections.details ? 'expanded' : ''}`}>
-					<div className="form-group">
-						<label htmlFor="name">Tournament Name *</label>
-						<input type="text" id="name" name="name" value={formData.name} onChange={handleInputChange} required />
-					</div>
-					<div className="form-group">
-						<label htmlFor="date">Date *</label>
-						<input type="date" id="date" name="date" value={formData.date} onChange={handleInputChange} required />
-					</div>
-					<div className="form-group">
-						<label htmlFor="location">Location *</label>
-						<input
-							type="text"
-							id="location"
-							name="location"
-							value={formData.location}
-							onChange={handleInputChange}
-							required
-						/>
-					</div>
-					<div className="form-group">
-						<label htmlFor="description">Description</label>
-						<textarea
-							id="description"
-							name="description"
-							value={formData.description}
-							onChange={handleInputChange}
-							rows="4"
-						/>
-					</div>
-				</div>
+		<>
+			<h2 className="create-form-heading">Create Tournament from Template</h2>
+			<div className="create-form-container">
+				<div className="create-form-inputs"></div>
+				<div className="create-form-progress"></div>
 			</div>
-
-			<div className="form-section">
-				<div
-					className={`section-header ${expandedSections.format ? 'active' : ''}`}
-					onClick={() => toggleSection('format')}>
-					<h3>Tournament Format</h3>
-					<span className="toggle-icon">▼</span>
-				</div>
-				<div className={`section-content ${expandedSections.format ? 'expanded' : ''}`}>
-					<div className="form-group">
-						<label htmlFor="format">Format Template *</label>
-						<select id="format" name="format" value={formData.format} onChange={handleInputChange} required>
-							<option value="">Select a format</option>
-							<option value="groups">Groups + Knockout</option>
-							<option value="knockout">Single Elimination</option>
-							<option value="swiss">Swiss System</option>
-						</select>
-					</div>
-					<div className="form-group">
-						<label htmlFor="groupCount">Number of Groups</label>
-						<select id="groupCount" name="groupCount" value={formData.groupCount} onChange={handleInputChange}>
-							{[2, 4, 8].map((num) => (
-								<option key={num} value={num}>
-									{num}
-								</option>
-							))}
-						</select>
-					</div>
-					<div className="form-group">
-						<label htmlFor="firstKnockoutRound">First Knockout Round</label>
-						<select
-							id="firstKnockoutRound"
-							name="firstKnockoutRound"
-							value={formData.firstKnockoutRound}
-							onChange={handleInputChange}>
-							<option value="16">Round of 16</option>
-							<option value="8">Quarter Finals</option>
-							<option value="4">Semi Finals</option>
-						</select>
-					</div>
-				</div>
-			</div>
-
-			<div className="form-section">
-				<div
-					className={`section-header ${expandedSections.teams ? 'active' : ''}`}
-					onClick={() => toggleSection('teams')}>
-					<h3>Teams</h3>
-					<span className="toggle-icon">▼</span>
-				</div>
-				<div className={`section-content ${expandedSections.teams ? 'expanded' : ''}`}>
-					<div className="teams-list">
-						{formData.teams.map((team, index) => (
-							<div className="team-entry" key={index}>
-								<span className="team-number">{index + 1}</span>
-								<input
-									type="text"
-									value={team.name}
-									onChange={(e) => handleTeamChange(index, e.target.value)}
-									placeholder="Enter team name"
-								/>
-								<button
-									type="button"
-									className="remove-team-btn"
-									onClick={() => handleRemoveTeam(index)}
-									title="Remove team">
-									x
-								</button>
-							</div>
-						))}
-					</div>
-					<button type="button" className="add-team-btn" onClick={handleAddTeam}>
-						Add Team
-					</button>
-				</div>
-			</div>
-
-			<div className="form-actions">
-				<button type="button" className="back-btn" onClick={goBack}>
+			<div className="create-form-floating-actions">
+				<div className="create-form-floating-action secondary" onClick={goBack}>
 					Back
-				</button>
-				<button type="submit" className="create-btn">
-					Create Tournament
-				</button>
+				</div>
+				<div className="create-form-floating-action-group">
+					<div className="create-form-floating-action tertiary">Reset</div>
+					<div className="create-form-floating-action">Submit</div>
+				</div>
 			</div>
-		</div>
+		</>
 	);
+}
+
+function InputSection({ title, fields }) {
+	return <div className="create-form-input-section"></div>;
 }

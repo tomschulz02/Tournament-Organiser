@@ -32,7 +32,7 @@ body {
 
 body.light {
 	--background-colour: rgb(245, 245, 245);
-	--text-color: rgb(245, 245, 245);
+	--text-color: rgb(255, 255, 255);
 	--secondary-text-color: rgb(37, 37, 37);
 	--card-border-color: rgba(37, 37, 37, 0.15);
 	--card-shadow-color: rgba(37, 37, 37, 0.2);
@@ -40,7 +40,7 @@ body.light {
 
 body.dark {
 	--background-colour: rgb(54, 54, 54);
-	--text-color: rgb(245, 245, 245);
+	--text-color: rgb(255, 255, 255);
 	--secondary-text-color: rgb(245, 245, 245);
 	--card-border-color: rgba(245, 245, 245, 0.15);
 	--card-shadow-color: rgba(245, 245, 245, 0.2);
@@ -143,13 +143,13 @@ Styles for the footer, which will be persistent on all pages
 	margin: 0 auto;
 	display: flex;
 	justify-content: space-between;
-	gap: 40px;
-	flex-wrap: wrap;
+	gap: 20px;
+	/* flex-wrap: wrap; */
 }
 
 .footer-section {
 	flex: 1;
-	min-width: 250px;
+	min-width: 200px;
 }
 
 .footer-section h4 {
@@ -237,7 +237,7 @@ Styles for the footer, which will be persistent on all pages
 
 	main {
 		padding-top: 80px;
-		padding-bottom: 300px;
+		padding-bottom: 250px;
 		/* Space for bottom navigation */
 	}
 
@@ -685,6 +685,7 @@ Styles for the welcome message section to new users
 	margin-bottom: 20px;
 	font-weight: 600;
 	font-family: var(--main-font-family);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
 }
 
 #home p {
@@ -825,6 +826,7 @@ might show for users who are already signed in, or that could be in a separate "
 	margin-bottom: 20px;
 	font-weight: 600;
 	font-family: var(--main-font-family);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
 }
 
 .cta-button {
@@ -834,12 +836,14 @@ might show for users who are already signed in, or that could be in a separate "
 	color: var(--text-color);
 	text-decoration: none;
 	border-radius: 8px;
-	font-size: clamp(1rem, 1.5vw, 1.2rem);
+	/* font-size: clamp(1rem, 1.5vw, 1.2rem); */
 	font-weight: 600;
 	margin: 10px 20px;
 	transition: all 0.3s ease;
 	box-shadow: 0 4px 6px rgba(41, 98, 255, 0.2);
 	width: 150px;
+	text-align: center;
+	font-size: 1.2em;
 }
 
 .cta-button:hover {
@@ -861,8 +865,8 @@ might show for users who are already signed in, or that could be in a separate "
 	color: var(--main-color);
 	border: none;
 	border-radius: 4px;
-	font-size: 1rem;
-	font-weight: 500;
+	font-size: 1.1rem;
+	font-weight: 600;
 	text-decoration: none;
 	cursor: pointer;
 	transition: all 0.2s ease;
@@ -1830,4 +1834,235 @@ Tournaments page styles
 	color: #2e7d32;
 	border-color: #2e7d32;
 	/* box-shadow: 0 0 8px rgba(46, 125, 50, 0.2); */
+}
+
+/* 
+Tournament Creation styles
+*/
+
+.creation-container {
+	max-width: 1200px;
+	margin: 40px auto;
+	padding: 0 20px;
+}
+
+.creation-container h2 {
+	text-align: center;
+	margin-bottom: 40px;
+	color: var(--secondary-text-color);
+}
+
+.creation-options {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 40px;
+	margin: 0 auto;
+}
+
+.creation-option {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 40px;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0px 4px 8px var(--card-shadow-color);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	background: var(--background-colour);
+}
+
+.creation-option:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	border-color: var(--main-color);
+}
+
+.creation-option.disabled {
+	opacity: 0.7;
+	cursor: not-allowed;
+	position: relative;
+	overflow: hidden;
+}
+
+.coming-soon-badge {
+	position: absolute;
+	top: 20px;
+	right: -60px;
+	background: var(--secondary-color);
+	color: var(--text-color);
+	padding: 8px 30px;
+	transform: rotate(45deg);
+	font-size: 0.8em;
+	font-weight: 500;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	width: 200px;
+	text-align: center;
+}
+
+.creation-option.disabled:hover {
+	transform: none;
+	border-color: var(--text-color);
+	box-shadow: none;
+}
+
+.option-icon {
+	width: 64px;
+	height: 64px;
+	margin-bottom: 20px;
+	fill: var(--main-color);
+}
+
+.creation-option h3 {
+	margin: 0 0 16px 0;
+	color: var(--secondary-text-color);
+	font-size: 1.5em;
+}
+
+.creation-option p {
+	margin: 0;
+	text-align: center;
+	color: var(--secondary-text-color);
+	line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+	.creation-options {
+		grid-template-columns: 1fr;
+	}
+
+	.creation-option {
+		padding: 30px;
+	}
+}
+
+.signin-warning {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 20px;
+	color: var(--secondary-text-color);
+}
+
+.signin-warning-heading {
+	text-align: center;
+	position: relative;
+	padding-top: 70px;
+	padding-bottom: 15px;
+}
+
+.signin-warning-heading::before {
+	content: '⚠️';
+	font-size: 2em;
+	position: absolute;
+	top: 0;
+	left: calc(50% - 0.7em);
+}
+
+.signin-warning-info {
+	text-align: center;
+}
+
+.signin-warning-button {
+	display: flex;
+	justify-content: center;
+	margin-top: 80px;
+}
+
+.create-form-heading {
+	color: var(--main-color);
+	text-align: center;
+	margin: 0 20px 20px;
+}
+
+.create-form-container {
+	display: grid;
+	grid-template-columns: 2fr 1fr;
+	min-height: 600px;
+	border-radius: 10px;
+	border: 2px solid var(--card-border-color);
+	padding: 10px;
+	margin: 0 10px;
+}
+
+.create-form-inputs {
+	/* background-color: #04aa6d; */
+	display: flex;
+}
+
+.create-form-progress {
+	/* background-color: #1565c0; */
+	border-left: 2px solid var(--card-border-color);
+}
+
+@media (max-width: 768px) {
+	.create-form-container {
+		grid-template-columns: 1fr;
+		grid-template-rows: 2fr 1fr;
+	}
+
+	.create-form-progress {
+		border-left: none;
+		border-top: 2px solid var(--card-border-color);
+	}
+}
+
+.create-form-floating-actions {
+	position: sticky;
+	bottom: 100px;
+	width: 90%;
+	height: 60px;
+	border-radius: 60px;
+	/* background-color: rgb(from var(--text-color) r g b / 0.8); */
+	background-color: var(--text-color);
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0px 4px 8px var(--card-shadow-color);
+	margin: 20px auto;
+	padding: 10px 15px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.create-form-floating-action {
+	height: 40px;
+	min-width: 80px;
+	background-color: var(--main-color);
+	border-radius: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.create-form-floating-action:hover {
+	background-color: var(--secondary-color);
+}
+
+.create-form-floating-action.secondary {
+	background-color: rgb(from var(--text-color) r g b / 0.5);
+	border: 2px solid var(--main-color);
+	color: var(--main-color);
+}
+
+.create-form-floating-action.secondary:hover {
+	border-color: var(--secondary-color);
+	color: var(--secondary-color);
+}
+
+.create-form-floating-action.tertiary {
+	background-color: rgba(0, 0, 0, 0);
+	color: var(--main-color);
+}
+
+.create-form-floating-action.tertiary:hover {
+	color: var(--secondary-color);
+}
+
+.create-form-floating-action-group {
+	display: flex;
+	gap: 10px;
 }

@@ -45,7 +45,7 @@ export default function Home() {
 				<div className="features-grid">
 					<div className="feature-card">
 						<div className="feature-image">
-							<img src="/assets/creation.png" alt="tournament creation example image"></img>
+							<img src="/assets/creation.webp" alt="tournament creation example"></img>
 						</div>
 						<div className="feature-content">
 							<h3 className="feature-title">Tournament Creation</h3>
@@ -57,7 +57,7 @@ export default function Home() {
 					</div>
 					<div className="feature-card">
 						<div className="feature-image">
-							<img src="/assets/fixtures.png" alt="fixture generation example image"></img>
+							<img src="/assets/fixtures.webp" alt="fixture generation example"></img>
 						</div>
 						<div className="feature-content">
 							<h3 className="feature-title">Fixture Generation</h3>
@@ -68,7 +68,7 @@ export default function Home() {
 					</div>
 					<div className="feature-card">
 						<div className="feature-image">
-							<img src="/assets/teams.png" alt="team management example image"></img>
+							<img src="/assets/teams.webp" alt="team management example"></img>
 						</div>
 						<div className="feature-content">
 							<h3 className="feature-title">Team Management</h3>
@@ -77,7 +77,7 @@ export default function Home() {
 					</div>
 					<div className="feature-card">
 						<div className="feature-image">
-							<img src="/assets/format.png" alt="format customisation example image"></img>
+							<img src="/assets/format.webp" alt="format customisation example"></img>
 						</div>
 						<div className="feature-content">
 							<h3 className="feature-title">Custom Rules</h3>
@@ -89,7 +89,7 @@ export default function Home() {
 					</div>
 					<div className="feature-card">
 						<div className="feature-image">
-							<img src="/assets/results.png" alt="result analytics example image"></img>
+							<img src="/assets/results.webp" alt="result analytics example"></img>
 						</div>
 						<div className="feature-content">
 							<h3 className="feature-title">Analytics</h3>

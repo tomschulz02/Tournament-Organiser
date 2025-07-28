@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
+import Icon from './Icons';
 import '../App.css';
 
 export default function TournamentCreation() {
@@ -59,11 +60,59 @@ export default function TournamentCreation() {
 }
 
 function CreateFromTemplate({ goBack }) {
+	const [show, setShow] = useState(false);
+	const [expandedSections, setExpandedSections] = useState(new Set([]));
+
+	const toggleContent = (index) => {
+		setExpandedSections((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(index)) {
+				newSet.delete(index);
+			} else {
+				newSet.add(index);
+			}
+			return newSet;
+		});
+	};
+
 	return (
 		<>
 			<h2 className="create-form-heading">Create Tournament from Template</h2>
 			<div className="create-form-container">
-				<div className="create-form-inputs"></div>
+				<div className="create-form-inputs">
+					<div className="create-form-input-section">
+						{expandedSections.has(0) ? (
+							<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={() => toggleContent(0)} />
+						) : (
+							<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={() => toggleContent(0)} />
+						)}
+						<div
+							className={`input-section-expandable ${expandedSections.has(0) ? 'active' : ''}`}
+							onClick={() => toggleContent(0)}>
+							Choose Template
+						</div>
+						<div className={`input-section-expandable-content ${expandedSections.has(0) ? 'expand' : ''}`}>
+							<div className="create-form-template-cards">
+								<div className="create-form-template-card">Single Elimination</div>
+								<div className="create-form-template-card">League</div>
+								<div className="create-form-template-card">Classic</div>
+							</div>
+						</div>
+					</div>
+					<div className="create-form-input-section">
+						{expandedSections.has(1) ? (
+							<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={() => toggleContent(1)} />
+						) : (
+							<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={() => toggleContent(1)} />
+						)}
+						<div
+							className={`input-section-expandable ${expandedSections.has(1) ? 'active' : ''}`}
+							onClick={() => toggleContent(1)}>
+							Tournament Details
+						</div>
+						<div className={`input-section-expandable-content ${expandedSections.has(1) ? 'expand' : ''}`}></div>
+					</div>
+				</div>
 				<div className="create-form-progress"></div>
 			</div>
 			<div className="create-form-floating-actions">
@@ -80,5 +129,43 @@ function CreateFromTemplate({ goBack }) {
 }
 
 function InputSection({ title, fields }) {
-	return <div className="create-form-input-section"></div>;
+	const [show, setShow] = useState(false);
+
+	const toggleContent = () => {
+		setShow(!show);
+	};
+
+	const generateFields = () => {
+		return fields.map((field, index) => {
+			if (field.type == 'template-card') {
+				return <div key={index}>{generateTemplateCards()}</div>;
+			}
+		});
+	};
+
+	const generateTemplateCards = () => {
+		return (
+			<div className="create-form-template-cards">
+				<div className="create-form-template-card">Single Elimination</div>
+				<div className="create-form-template-card">League</div>
+				<div className="create-form-template-card">Classic</div>
+			</div>
+		);
+	};
+
+	// console.log(generateFields());
+
+	return (
+		<div className="create-form-input-section">
+			{show ? (
+				<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={toggleContent} />
+			) : (
+				<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={toggleContent} />
+			)}
+			<div className="input-section-expandable" onClick={toggleContent}>
+				{title}
+			</div>
+			<div className={`input-section-expandable-content ${show ? 'expand' : ''}`}>{generateFields()}</div>
+		</div>
+	);
 }

@@ -1050,6 +1050,9 @@ Login form styles
 
 .login-form-link span {
 	color: var(--main-color);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
+	font-weight: 600;
+	font-size: 1.1em;
 	cursor: pointer;
 	text-decoration: underline;
 }
@@ -1658,6 +1661,7 @@ Tooltip styles
 	position: fixed; /* fixed positioning to follow mouse */
 	background-color: var(--secondary-text-color);
 	color: var(--main-color);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
 	padding: 0.5em 0.75em;
 	border-radius: 4px;
 	font-size: 0.9em;
@@ -1971,6 +1975,7 @@ Tournament Creation styles
 
 .create-form-heading {
 	color: var(--main-color);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
 	text-align: center;
 	margin: 0 20px 20px;
 }
@@ -1988,6 +1993,10 @@ Tournament Creation styles
 .create-form-inputs {
 	/* background-color: #04aa6d; */
 	display: flex;
+	padding: 10px;
+	flex-direction: column;
+	gap: 15px;
+	position: relative;
 }
 
 .create-form-progress {
@@ -2065,4 +2074,74 @@ Tournament Creation styles
 .create-form-floating-action-group {
 	display: flex;
 	gap: 10px;
+}
+
+.create-form-input-section {
+	position: relative;
+	color: var(--secondary-text-color);
+}
+
+.input-section-expandable {
+	background-color: var(--quarternary-color);
+	color: var(--text-color);
+	border-radius: 10px;
+	height: 50px;
+	display: flex;
+	align-items: center;
+	padding: 0 30px;
+	cursor: pointer;
+	position: relative;
+	font-weight: 600;
+	transition: all 0.3s ease;
+}
+
+.input-section-expandable.active,
+.input-section-expandable:hover {
+	background-color: var(--main-color);
+}
+
+.create-form-input-expand {
+	position: absolute;
+	top: 15px;
+	right: 30px;
+	fill: var(--text-color);
+	z-index: 2;
+	cursor: pointer;
+}
+
+.input-section-expandable-content {
+	max-height: 0;
+	overflow: hidden;
+	color: var(--secondary-text-color);
+	/* border: 1px solid var(--card-border-color); */
+	/* border-radius: 0 0 5px 5px; */
+	transition: max-height 0.5s ease;
+}
+
+.input-section-expandable-content.expand {
+	max-height: 500px;
+	margin-bottom: 20px;
+}
+
+.create-form-template-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+	padding: 10px;
+	gap: 10px;
+}
+
+.create-form-template-card {
+	height: 125px;
+	border: 1px solid var(--card-border-color);
+	border-radius: 5px;
+	box-shadow: 0px 2px 4px var(--card-shadow-color);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	cursor: pointer;
+	transition: transform 0.3s ease;
+}
+
+.create-form-template-card:hover {
+	transform: translateY(-2px);
 }

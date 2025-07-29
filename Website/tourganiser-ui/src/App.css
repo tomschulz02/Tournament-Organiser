@@ -26,12 +26,12 @@ body {
 	display: flex;
 	flex-direction: column;
 	margin: 0;
-	background-color: var(--background-colour);
+	background-color: var(--background-color);
 	color: var(--text-color);
 }
 
 body.light {
-	--background-colour: rgb(245, 245, 245);
+	--background-color: rgb(245, 245, 245);
 	--text-color: rgb(255, 255, 255);
 	--secondary-text-color: rgb(37, 37, 37);
 	--card-border-color: rgba(37, 37, 37, 0.15);
@@ -39,7 +39,7 @@ body.light {
 }
 
 body.dark {
-	--background-colour: rgb(54, 54, 54);
+	--background-color: rgb(54, 54, 54);
 	--text-color: rgb(255, 255, 255);
 	--secondary-text-color: rgb(245, 245, 245);
 	--card-border-color: rgba(245, 245, 245, 0.15);
@@ -258,7 +258,7 @@ img {
 	top: 20px;
 	right: calc(50% - 150px);
 	width: 300px;
-	background: var(--background-colour);
+	background: var(--background-color);
 	color: var(--text-color);
 	padding: 12px 20px;
 	border-radius: 8px;
@@ -335,7 +335,7 @@ img {
 }
 
 .help-menu {
-	background-color: var(--background-colour);
+	background-color: var(--background-color);
 	padding: 20px;
 	border-radius: 10px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -378,7 +378,7 @@ img {
 	height: 100%;
 	margin: 0 0 auto 0;
 	transform: translate(-100%);
-	background-color: var(--background-colour);
+	background-color: var(--background-color);
 	color: var(--secondary-color);
 	border-radius: 0 10px 10px 0;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -504,7 +504,7 @@ About page styles
 	max-width: 900px;
 	margin: 40px auto;
 	padding: 30px;
-	background: var(--background-colour);
+	background: var(--background-color);
 	border-radius: 12px;
 	box-shadow: 0 2px 8px var(--card-shadow-color);
 	border: 1px solid var(--card-border-color);
@@ -547,7 +547,7 @@ About page styles
 	max-width: 900px;
 	margin: 40px auto;
 	padding: 30px;
-	background: var(--background-colour);
+	background: var(--background-color);
 	border-radius: 12px;
 	box-shadow: 0 2px 8px var(--card-shadow-color);
 	border: 1px solid var(--card-border-color);
@@ -976,7 +976,7 @@ Login form styles
 }
 
 .login-container {
-	background: var(--background-colour);
+	background: var(--background-color);
 	padding: 30px;
 	border-radius: 10px;
 	border: 1px solid var(--card-border-color);
@@ -1160,7 +1160,7 @@ Loading Screen styles
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	background-color: rgb(from var(--background-colour) r g b / 0.5);
+	background-color: rgb(from var(--background-color) r g b / 0.5);
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	backdrop-filter: blur(8px);
 	z-index: 1000000000000000;
@@ -1225,7 +1225,7 @@ Confirmation Dialog styles
 }
 
 .confirm-modal {
-	background: var(--background-colour);
+	background: var(--background-color);
 	padding: 25px;
 	border-radius: 8px;
 	border: 1px solid var(--card-border-color);
@@ -1268,7 +1268,7 @@ Confirmation Dialog styles
 
 .confirm-buttons button:last-child {
 	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
-	background-color: var(--background-colour);
+	background-color: var(--background-color);
 	color: var(--secondary-text-color);
 }
 
@@ -1311,7 +1311,7 @@ Score Update Modal styles
 }
 
 .score-modal {
-	background: var(--background-colour);
+	background: var(--background-color);
 	padding: 30px;
 	border-radius: 8px;
 	width: 90%;
@@ -1446,7 +1446,7 @@ Score Update Modal styles
 }
 
 .cancel-btn {
-	background: var(--background-colour);
+	background: var(--background-color);
 	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
 	color: var(--secondary-text-color);
 	margin-right: auto;
@@ -1492,7 +1492,7 @@ Next Round Modal styles
 }
 
 .next-round-modal {
-	background: var(--background-colour);
+	background: var(--background-color);
 	border-radius: 8px;
 	padding: 24px;
 	width: 90%;
@@ -1546,7 +1546,7 @@ Next Round Modal styles
 	align-items: center;
 	text-align: center;
 	padding: 10px;
-	background: var(--background-colour);
+	background: var(--background-color);
 	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
 	border-radius: 4px;
 	margin-bottom: 10px;
@@ -1564,7 +1564,7 @@ Next Round Modal styles
 
 .cancel-btn {
 	padding: 8px 16px;
-	background: var(--background-colour);
+	background: var(--background-color);
 	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
 	color: var(--secondary-text-color);
 	border-radius: 4px;
@@ -1595,7 +1595,7 @@ Next Round Modal styles
 	padding: 8px;
 	border: 1px solid var(--card-border-color);
 	border-radius: 4px;
-	background: var(--background-colour);
+	background: var(--background-color);
 	min-width: 200px;
 	font-size: 0.95em;
 	color: var(--secondary-text-color);
@@ -1609,7 +1609,7 @@ Next Round Modal styles
 
 .team-dropdown option {
 	color: var(--secondary-text-color);
-	background: var(--background-colour);
+	background: var(--background-color);
 }
 
 .team-dropdown option:hover {
@@ -1693,7 +1693,7 @@ Tournaments page styles
 	width: 50%;
 	cursor: pointer;
 	font-size: 1.1em;
-	background-color: rgb(from var(--background-colour) r g b / 0.1);
+	background-color: rgb(from var(--background-color) r g b / 0.1);
 	border: none;
 	height: 50px;
 	text-align: center;
@@ -1873,7 +1873,7 @@ Tournament Creation styles
 	border-radius: 8px;
 	cursor: pointer;
 	transition: all 0.2s ease;
-	background: var(--background-colour);
+	background: var(--background-color);
 }
 
 .creation-option:hover {
@@ -1974,15 +1974,13 @@ Tournament Creation styles
 }
 
 .create-form-heading {
-	color: var(--main-color);
-	text-shadow: 0 1px 2px rgb(0, 0, 0);
+	color: var(--secondary-text-color);
 	text-align: center;
 	margin: 0 20px 20px;
 }
 
 .create-form-container {
-	display: grid;
-	grid-template-columns: 2fr 1fr;
+	display: block;
 	min-height: 600px;
 	border-radius: 10px;
 	border: 2px solid var(--card-border-color);
@@ -1999,26 +1997,50 @@ Tournament Creation styles
 	position: relative;
 }
 
-.create-form-progress {
-	/* background-color: #1565c0; */
-	border-left: 2px solid var(--card-border-color);
+.create-form-floating-actions-bar {
+	position: fixed;
+	bottom: 100px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	flex-direction: column;
+	z-index: 3;
+	width: 90%;
+	left: 5%;
 }
 
-@media (max-width: 768px) {
-	.create-form-container {
-		grid-template-columns: 1fr;
-		grid-template-rows: 2fr 1fr;
-	}
+.create-form-progress {
+	width: 75%;
+	position: relative;
+	max-height: 40px;
+	background-color: var(--main-color);
+	border: 2px solid var(--main-color);
+	color: var(--text-color);
+	border-bottom: none;
+	border-radius: 15px 15px 0 0;
+	overflow: hidden;
+	transition: max-height 0.5s ease-in-out;
+}
 
-	.create-form-progress {
-		border-left: none;
-		border-top: 2px solid var(--card-border-color);
-	}
+.create-form-progress-expandable {
+	display: flex;
+	justify-content: space-between;
+	height: 100%;
+	align-items: center;
+	padding: 7px 10px;
+	cursor: pointer;
+}
+
+.create-form-progress-expand {
+	fill: var(--text-color);
+}
+
+.create-form-progress-summary {
+	background-color: var(--background-color);
+	color: var(--secondary-text-color);
 }
 
 .create-form-floating-actions {
-	position: sticky;
-	bottom: 100px;
 	width: 90%;
 	height: 60px;
 	border-radius: 60px;
@@ -2026,7 +2048,6 @@ Tournament Creation styles
 	background-color: var(--text-color);
 	border: 1px solid var(--card-border-color);
 	box-shadow: 0px 4px 8px var(--card-shadow-color);
-	margin: 20px auto;
 	padding: 10px 15px;
 	display: flex;
 	justify-content: space-between;
@@ -2082,7 +2103,8 @@ Tournament Creation styles
 }
 
 .input-section-expandable {
-	background-color: var(--quarternary-color);
+	background-color: var(--secondary-color);
+	text-shadow: 1px 1px 0px black;
 	color: var(--text-color);
 	border-radius: 10px;
 	height: 50px;
@@ -2144,4 +2166,9 @@ Tournament Creation styles
 
 .create-form-template-card:hover {
 	transform: translateY(-2px);
+}
+
+.create-form-template-card.active {
+	border-color: var(--tertiary-color);
+	border-width: 3px;
 }

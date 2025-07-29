@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import Icon from './Icons';
@@ -60,8 +60,25 @@ export default function TournamentCreation() {
 }
 
 function CreateFromTemplate({ goBack }) {
-	const [show, setShow] = useState(false);
+	const [tournamentData, setTournamentData] = useState({
+		template: '',
+		details: {
+			name: '',
+			date: '',
+			location: '',
+			description: '',
+			collection: '',
+		},
+		structure: {
+			numTeams: 0,
+			numGroups: 0,
+			knockoutRound: 0,
+		},
+		teams: [],
+	});
+	const [showSummary, setShowSummary] = useState(false);
 	const [expandedSections, setExpandedSections] = useState(new Set([]));
+	const summaryRef = useRef(null);
 
 	const toggleContent = (index) => {
 		setExpandedSections((prev) => {
@@ -72,6 +89,29 @@ function CreateFromTemplate({ goBack }) {
 				newSet.add(index);
 			}
 			return newSet;
+		});
+	};
+
+	const toggleSummary = () => {
+		const content = summaryRef.current;
+
+		if (!content) return;
+
+		if (showSummary) {
+			content.style.maxHeight = content.scrollHeight + 'px';
+			requestAnimationFrame(() => {
+				content.style.maxHeight = '40px';
+			});
+		} else {
+			content.style.maxHeight = content.scrollHeight + 'px';
+		}
+
+		setShowSummary(!showSummary);
+	};
+
+	const selectTemplate = (template) => {
+		setTournamentData((prev) => {
+			return { ...prev, template: template };
 		});
 	};
 
@@ -93,9 +133,23 @@ function CreateFromTemplate({ goBack }) {
 						</div>
 						<div className={`input-section-expandable-content ${expandedSections.has(0) ? 'expand' : ''}`}>
 							<div className="create-form-template-cards">
-								<div className="create-form-template-card">Single Elimination</div>
-								<div className="create-form-template-card">League</div>
-								<div className="create-form-template-card">Classic</div>
+								<div
+									className={`create-form-template-card ${
+										tournamentData['template'] === 'Single Elimination' ? 'active' : ''
+									}`}
+									onClick={() => selectTemplate('Single Elimination')}>
+									Single Elimination
+								</div>
+								<div
+									className={`create-form-template-card ${tournamentData['template'] === 'League' ? 'active' : ''}`}
+									onClick={() => selectTemplate('League')}>
+									League
+								</div>
+								<div
+									className={`create-form-template-card ${tournamentData['template'] === 'Classic' ? 'active' : ''}`}
+									onClick={() => selectTemplate('Classic')}>
+									Classic
+								</div>
 							</div>
 						</div>
 					</div>
@@ -112,33 +166,53 @@ function CreateFromTemplate({ goBack }) {
 						</div>
 						<div className={`input-section-expandable-content ${expandedSections.has(1) ? 'expand' : ''}`}></div>
 					</div>
+					<InputSection
+						title={'Test'}
+						fields={[{ type: 'template-card', name: 'template' }]}
+						index={2}
+						toggleContent={toggleContent}
+						expandedSections={expandedSections}
+						updateAction={() => {}}
+						tournamentData={tournamentData}
+					/>
 				</div>
-				<div className="create-form-progress"></div>
 			</div>
-			<div className="create-form-floating-actions">
-				<div className="create-form-floating-action secondary" onClick={goBack}>
-					Back
+			<div className="create-form-floating-actions-bar">
+				<div className={`create-form-progress`} ref={summaryRef}>
+					<div className="create-form-progress-expandable" onClick={toggleSummary}>
+						<Icon name={showSummary ? 'doubleArrowDown' : 'doubleArrowUp'} className="create-form-progress-expand" />
+						<h3>Summary</h3>
+						<Icon name={showSummary ? 'doubleArrowDown' : 'doubleArrowUp'} className="create-form-progress-expand" />
+					</div>
+					<div className={`create-form-progress-summary`}>
+						<SummaryPage fields={tournamentData} />
+					</div>
 				</div>
-				<div className="create-form-floating-action-group">
-					<div className="create-form-floating-action tertiary">Reset</div>
-					<div className="create-form-floating-action">Submit</div>
+				<div className="create-form-floating-actions">
+					<div className="create-form-floating-action secondary" onClick={goBack}>
+						Back
+					</div>
+					<div className="create-form-floating-action-group">
+						<div className="create-form-floating-action tertiary">Reset</div>
+						<div className="create-form-floating-action">Submit</div>
+					</div>
 				</div>
 			</div>
 		</>
 	);
 }
 
-function InputSection({ title, fields }) {
-	const [show, setShow] = useState(false);
-
-	const toggleContent = () => {
-		setShow(!show);
-	};
-
+function InputSection({ title, fields, index, toggleContent, expandedSections, updateAction, tournamentData }) {
 	const generateFields = () => {
-		return fields.map((field, index) => {
+		return fields.map((field, i) => {
 			if (field.type == 'template-card') {
-				return <div key={index}>{generateTemplateCards()}</div>;
+				return (
+					<div
+						key={`${index}${i}`}
+						className={`input-section-expandable-content ${expandedSections.has(index) ? 'expand' : ''}`}>
+						{generateTemplateCards()}
+					</div>
+				);
 			}
 		});
 	};
@@ -146,26 +220,81 @@ function InputSection({ title, fields }) {
 	const generateTemplateCards = () => {
 		return (
 			<div className="create-form-template-cards">
-				<div className="create-form-template-card">Single Elimination</div>
-				<div className="create-form-template-card">League</div>
-				<div className="create-form-template-card">Classic</div>
+				<div
+					className={`create-form-template-card ${tournamentData['template'] === 'Single Elimination' ? 'active' : ''}`}
+					onClick={() => updateAction('Single Elimination')}>
+					Single Elimination
+				</div>
+				<div
+					className={`create-form-template-card ${tournamentData['template'] === 'League' ? 'active' : ''}`}
+					onClick={() => updateAction('League')}>
+					League
+				</div>
+				<div
+					className={`create-form-template-card ${tournamentData['template'] === 'Classic' ? 'active' : ''}`}
+					onClick={() => updateAction('Classic')}>
+					Classic
+				</div>
 			</div>
 		);
 	};
+
+	const generateTextInput = (field) => {};
+
+	const generateNumericInput = (field) => {};
+
+	const generateSelectionInput = (field) => {};
+
+	const generateDateInput = (field) => {};
 
 	// console.log(generateFields());
 
 	return (
 		<div className="create-form-input-section">
-			{show ? (
-				<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={toggleContent} />
+			{expandedSections.has(index) ? (
+				<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={() => toggleContent(index)} />
 			) : (
-				<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={toggleContent} />
+				<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={() => toggleContent(index)} />
 			)}
-			<div className="input-section-expandable" onClick={toggleContent}>
+			<div
+				className={`input-section-expandable ${expandedSections.has(index) ? 'active' : ''}`}
+				onClick={() => toggleContent(index)}>
 				{title}
 			</div>
-			<div className={`input-section-expandable-content ${show ? 'expand' : ''}`}>{generateFields()}</div>
+			{generateFields()}
+		</div>
+	);
+}
+
+function SummaryPage({ fields }) {
+	return (
+		<div className="new-tournament-summary">
+			{fields['template'] && (
+				<div className="new-tournament-summary-section">
+					<h3>Chosen Template</h3>
+					<p>{fields['template']}</p>
+				</div>
+			)}
+			{fields['details'] && (
+				<div className="new-tournament-summary-section">
+					<h3>Tournament Details</h3>
+					<p>Name: {fields['details']['name']}</p>
+					<p>Date: {fields['details']['date']}</p>
+					<p>Location: {fields['details']['location']}</p>
+					{fields['details']['description'] && <p>Description: {fields['details']['description']}</p>}
+					<p>Collection: {fields['details']['collection'] || 'None'}</p>
+				</div>
+			)}
+			{fields['structure'] && (
+				<div className="new-tournament-summary-section">
+					<h3>Tournament Structure</h3>
+					<p>Number of teams: {fields['structure']['numTeams']}</p>
+					{fields['structure']['numGroups'] > 0 && <p>Number of groups: {fields['structure']['numGroups']}</p>}
+					{fields['structure']['knockoutRound'] > 0 && (
+						<p>First knockout round: {fields['structure']['knockoutRound']}</p>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

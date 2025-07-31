@@ -1980,6 +1980,8 @@ Tournament Creation styles
 }
 
 .create-form-container {
+	position: relative;
+	z-index: 1;
 	display: block;
 	min-height: 600px;
 	border-radius: 10px;
@@ -1988,8 +1990,20 @@ Tournament Creation styles
 	margin: 0 10px;
 }
 
+.create-form-container::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-image: url('../public/assets/17.webp');
+	z-index: -1;
+	background-size: cover;
+	background-position: center;
+	background-repeat: no-repeat;
+	filter: blur(2px) opacity(0.1);
+	border-radius: 10px;
+}
+
 .create-form-inputs {
-	/* background-color: #04aa6d; */
 	display: flex;
 	padding: 10px;
 	flex-direction: column;
@@ -2020,6 +2034,8 @@ Tournament Creation styles
 	border-radius: 15px 15px 0 0;
 	overflow: hidden;
 	transition: max-height 0.5s ease-in-out;
+	display: flex;
+	flex-direction: column;
 }
 
 .create-form-progress-expandable {
@@ -2038,6 +2054,10 @@ Tournament Creation styles
 .create-form-progress-summary {
 	background-color: var(--background-color);
 	color: var(--secondary-text-color);
+	overflow-y: auto;
+	padding-right: 5px;
+	flex: 1;
+	min-height: 0;
 }
 
 .create-form-floating-actions {
@@ -2110,6 +2130,7 @@ Tournament Creation styles
 	height: 50px;
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	padding: 0 30px;
 	cursor: pointer;
 	position: relative;
@@ -2122,12 +2143,16 @@ Tournament Creation styles
 	background-color: var(--main-color);
 }
 
+.input-section-expandable.active {
+	border-radius: 10px 10px 0 0;
+}
+
 .create-form-input-expand {
-	position: absolute;
+	/* position: absolute;
 	top: 15px;
-	right: 30px;
+	right: 30px; */
 	fill: var(--text-color);
-	z-index: 2;
+	/* z-index: 2; */
 	cursor: pointer;
 }
 
@@ -2135,9 +2160,9 @@ Tournament Creation styles
 	max-height: 0;
 	overflow: hidden;
 	color: var(--secondary-text-color);
-	/* border: 1px solid var(--card-border-color); */
-	/* border-radius: 0 0 5px 5px; */
+	background-color: rgb(from var(--background-color) r g b / 0.75);
 	transition: max-height 0.5s ease;
+	border-radius: 0 0 10px 10px;
 }
 
 .input-section-expandable-content.expand {
@@ -2162,6 +2187,7 @@ Tournament Creation styles
 	align-items: center;
 	cursor: pointer;
 	transition: transform 0.3s ease;
+	background-color: var(--background-color);
 }
 
 .create-form-template-card:hover {
@@ -2171,4 +2197,105 @@ Tournament Creation styles
 .create-form-template-card.active {
 	border-color: var(--tertiary-color);
 	border-width: 3px;
+}
+
+.create-form-input-element {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding: 10px 20px;
+	gap: 5px;
+}
+
+.create-form-input-element label {
+	display: block;
+	margin: 0.5rem 0 0.25rem;
+	font-weight: 500;
+	color: var(--secondary-text-color);
+}
+
+.create-form-input-element-type {
+	width: 100%;
+	padding: 0.75rem 1rem;
+	margin: 0.5rem 0;
+	font-size: 1rem;
+	border: 1px solid var(--secondary-text-color);
+	border-radius: 10px;
+	background-color: var(--text-color);
+	transition: border-color 0.2s;
+	&:focus {
+		border-color: var(--secondary-color);
+		outline: none;
+	}
+}
+
+.create-form-input-element-type.date {
+	cursor: pointer;
+	&::before {
+		content: '';
+	}
+}
+
+.create-form-progress-summary-filter {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	z-index: 2;
+	backdrop-filter: blur(8px);
+}
+
+.create-form-progress-summary-filter.active {
+	display: block;
+}
+
+.new-tournament-summary {
+	padding: 10px;
+}
+
+.new-tournament-summary-section {
+	display: flex;
+	flex-direction: column;
+	border-bottom: double var(--card-border-color);
+	padding: 5px 15px 10px;
+	text-align: center;
+	gap: 5px;
+}
+
+.tournament-summary-section-fields {
+	display: flex;
+	flex-direction: column;
+}
+
+.tournament-summary-section-fields-row {
+	display: grid;
+	grid-template-columns: 1fr 3fr;
+	gap: 5px;
+	padding: 5px;
+	text-align: left;
+}
+
+.tournament-summary-section-fields .tournament-summary-section-fields-row:nth-child(even) {
+	background-color: var(--card-border-color);
+}
+
+.tournament-summary-section-fields-row p {
+	text-align: right;
+}
+
+@media (max-width: 768px) {
+	.tournament-summary-section-fields-row {
+		grid-template-columns: 1fr;
+		grid-template-rows: 21px minmax(42px, auto);
+	}
+
+	.create-form-input-element-combo {
+		grid-template-columns: 1fr !important;
+	}
+}
+
+.create-form-input-element-combo {
+	display: grid;
 }

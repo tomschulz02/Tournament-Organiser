@@ -1,8 +1,10 @@
+import DatePicker from 'react-datepicker';
 import React, { useContext, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import Icon from './Icons';
 import '../App.css';
+import 'react-datepicker/dist/react-datepicker.css';
 
 export default function TournamentCreation() {
 	const [selectedOption, setSelectedOption] = useState('select');
@@ -70,15 +72,23 @@ function CreateFromTemplate({ goBack }) {
 			collection: '',
 		},
 		structure: {
-			numTeams: 0,
-			numGroups: 0,
-			knockoutRound: 0,
+			numTeams: '0',
+			numGroups: '0',
+			knockoutRound: '0',
 		},
 		teams: [],
 	});
 	const [showSummary, setShowSummary] = useState(false);
-	const [expandedSections, setExpandedSections] = useState(new Set([]));
+	const [expandedSections, setExpandedSections] = useState(new Set([0]));
 	const summaryRef = useRef(null);
+	const [structureFields, setStructureFields] = useState([
+		{
+			type: 'int',
+			name: 'Number of Teams',
+			required: true,
+			id: 'numTeams',
+		},
+	]);
 
 	const toggleContent = (index) => {
 		setExpandedSections((prev) => {
@@ -98,21 +108,99 @@ function CreateFromTemplate({ goBack }) {
 		if (!content) return;
 
 		if (showSummary) {
-			content.style.maxHeight = content.scrollHeight + 'px';
+			content.style.maxHeight = '600px';
 			requestAnimationFrame(() => {
 				content.style.maxHeight = '40px';
 			});
 		} else {
-			content.style.maxHeight = content.scrollHeight + 'px';
+			content.style.maxHeight = '600px';
 		}
 
 		setShowSummary(!showSummary);
 	};
 
+	const handleReset = () => {
+		setTournamentData({
+			template: '',
+			details: {
+				name: '',
+				date: '',
+				location: '',
+				description: '',
+				collection: '',
+			},
+			structure: {
+				numTeams: 0,
+				numGroups: 0,
+				knockoutRound: 0,
+			},
+			teams: [],
+		});
+	};
+
 	const selectTemplate = (template) => {
+		if (template === 'Classic') {
+			setStructureFields((prev) => [
+				...prev,
+				{
+					type: 'int',
+					name: 'Number of Groups',
+					required: false,
+					id: 'numGroups',
+				},
+				{
+					type: 'selection',
+					name: 'First Knockout Round',
+					required: true,
+					id: 'knockoutRound',
+					options: [
+						{ name: 'Round of 24', value: 24 },
+						{ name: 'Round of 16', value: 16 },
+						{ name: 'Round of 12', value: 12 },
+						{ name: 'Quarterfinal', value: 8 },
+						{ name: 'Semifinal', value: 4 },
+						{ name: 'Final', value: 2 },
+					],
+				},
+			]);
+		} else {
+			setStructureFields([
+				{
+					type: 'int',
+					name: 'Number of Teams',
+					required: true,
+					id: 'numTeams',
+					value: tournamentData.structure.numTeams,
+				},
+			]);
+		}
+
 		setTournamentData((prev) => {
 			return { ...prev, template: template };
 		});
+	};
+
+	const updateDetails = (e) => {
+		const { id, value } = e.target;
+		setTournamentData((prev) => ({
+			...prev,
+			details: {
+				...prev.details,
+				[id]: value,
+			},
+		}));
+	};
+
+	const updateStructure = (e) => {
+		const { id, value } = e.target;
+		// console.log({ id, value });
+		setTournamentData((prev) => ({
+			...prev,
+			structure: {
+				...prev.structure,
+				[id]: value,
+			},
+		}));
 	};
 
 	return (
@@ -120,68 +208,83 @@ function CreateFromTemplate({ goBack }) {
 			<h2 className="create-form-heading">Create Tournament from Template</h2>
 			<div className="create-form-container">
 				<div className="create-form-inputs">
-					<div className="create-form-input-section">
-						{expandedSections.has(0) ? (
-							<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={() => toggleContent(0)} />
-						) : (
-							<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={() => toggleContent(0)} />
-						)}
-						<div
-							className={`input-section-expandable ${expandedSections.has(0) ? 'active' : ''}`}
-							onClick={() => toggleContent(0)}>
-							Choose Template
-						</div>
-						<div className={`input-section-expandable-content ${expandedSections.has(0) ? 'expand' : ''}`}>
-							<div className="create-form-template-cards">
-								<div
-									className={`create-form-template-card ${
-										tournamentData['template'] === 'Single Elimination' ? 'active' : ''
-									}`}
-									onClick={() => selectTemplate('Single Elimination')}>
-									Single Elimination
-								</div>
-								<div
-									className={`create-form-template-card ${tournamentData['template'] === 'League' ? 'active' : ''}`}
-									onClick={() => selectTemplate('League')}>
-									League
-								</div>
-								<div
-									className={`create-form-template-card ${tournamentData['template'] === 'Classic' ? 'active' : ''}`}
-									onClick={() => selectTemplate('Classic')}>
-									Classic
-								</div>
-							</div>
-						</div>
-					</div>
-					<div className="create-form-input-section">
-						{expandedSections.has(1) ? (
-							<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={() => toggleContent(1)} />
-						) : (
-							<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={() => toggleContent(1)} />
-						)}
-						<div
-							className={`input-section-expandable ${expandedSections.has(1) ? 'active' : ''}`}
-							onClick={() => toggleContent(1)}>
-							Tournament Details
-						</div>
-						<div className={`input-section-expandable-content ${expandedSections.has(1) ? 'expand' : ''}`}></div>
-					</div>
 					<InputSection
-						title={'Test'}
+						title={'Choose Template'}
 						fields={[{ type: 'template-card', name: 'template' }]}
+						index={0}
+						toggleContent={toggleContent}
+						expandedSections={expandedSections}
+						updateAction={selectTemplate}
+						tournamentData={tournamentData}
+					/>
+					<InputSection
+						title={'Tournament Details'}
+						fields={[
+							{
+								type: 'string',
+								name: 'Tournament Name',
+								required: true,
+								id: 'name',
+								value: tournamentData.details.name,
+							},
+							{
+								type: 'combo',
+								name: 'Location and Date combination',
+								options: [
+									{
+										type: 'string',
+										name: 'Tournament Location',
+										required: true,
+										id: 'location',
+										value: tournamentData.details.location,
+										weight: 3,
+									},
+									{
+										type: 'date',
+										name: 'Starting Date',
+										required: true,
+										id: 'date',
+										value: tournamentData.details.date,
+										weight: 1,
+									},
+								],
+							},
+							{
+								type: 'string',
+								name: 'Description',
+								required: false,
+								id: 'description',
+								value: tournamentData.details.description,
+							},
+						]}
+						index={1}
+						toggleContent={toggleContent}
+						expandedSections={expandedSections}
+						updateAction={updateDetails}
+						tournamentData={tournamentData}
+					/>
+					<InputSection
+						title={'Tournament Structure'}
+						fields={structureFields.map((field) => {
+							const value = tournamentData.structure[field.id] ?? '';
+							return { ...field, value };
+						})}
 						index={2}
 						toggleContent={toggleContent}
 						expandedSections={expandedSections}
-						updateAction={() => {}}
+						updateAction={updateStructure}
 						tournamentData={tournamentData}
 					/>
 				</div>
 			</div>
 			<div className="create-form-floating-actions-bar">
 				<div className={`create-form-progress`} ref={summaryRef}>
-					<div className="create-form-progress-expandable" onClick={toggleSummary}>
+					<div
+						className="create-form-progress-expandable"
+						onClick={toggleSummary}
+						title={showSummary ? 'Close Summary' : 'Show Summary'}>
 						<Icon name={showSummary ? 'doubleArrowDown' : 'doubleArrowUp'} className="create-form-progress-expand" />
-						<h3>Summary</h3>
+						<h3>{showSummary ? 'Summary' : 'View Summary'}</h3>
 						<Icon name={showSummary ? 'doubleArrowDown' : 'doubleArrowUp'} className="create-form-progress-expand" />
 					</div>
 					<div className={`create-form-progress-summary`}>
@@ -193,26 +296,49 @@ function CreateFromTemplate({ goBack }) {
 						Back
 					</div>
 					<div className="create-form-floating-action-group">
-						<div className="create-form-floating-action tertiary">Reset</div>
+						<div className="create-form-floating-action tertiary" onClick={handleReset}>
+							Reset
+						</div>
 						<div className="create-form-floating-action">Submit</div>
 					</div>
 				</div>
 			</div>
+			<div
+				className={`create-form-progress-summary-filter ${showSummary ? 'active' : ''}`}
+				onClick={toggleSummary}></div>
 		</>
 	);
 }
 
 function InputSection({ title, fields, index, toggleContent, expandedSections, updateAction, tournamentData }) {
-	const generateFields = () => {
-		return fields.map((field, i) => {
-			if (field.type == 'template-card') {
-				return (
-					<div
-						key={`${index}${i}`}
-						className={`input-section-expandable-content ${expandedSections.has(index) ? 'expand' : ''}`}>
-						{generateTemplateCards()}
-					</div>
-				);
+	const formatDate = (date) => {
+		if (!date) return ''; // handle null or undefined
+		const year = date.getFullYear();
+		const month = (date.getMonth() + 1).toString().padStart(2, '0'); // months are zero-indexed
+		const day = date.getDate().toString().padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	};
+
+	const generateFields = (fieldList) => {
+		return fieldList.map((field, i) => {
+			// console.log(field);
+			if (field.type === 'template-card') {
+				return <React.Fragment key={`${index}${i}`}>{generateTemplateCards()}</React.Fragment>;
+			}
+			if (field.type === 'string') {
+				return <React.Fragment key={`${index}${i}`}>{generateTextInput(field)}</React.Fragment>;
+			}
+			if (field.type === 'date') {
+				return <React.Fragment key={`${index}${i}`}>{generateDateInput(field)}</React.Fragment>;
+			}
+			if (field.type === 'int') {
+				return <React.Fragment key={`${index}${i}`}>{generateNumericInput(field)}</React.Fragment>;
+			}
+			if (field.type === 'selection') {
+				return <React.Fragment key={`${index}${i}`}>{generateSelectionInput(field)}</React.Fragment>;
+			}
+			if (field.type === 'combo') {
+				return <React.Fragment key={`${index}${i}`}>{generateComboInput(field)}</React.Fragment>;
 			}
 		});
 	};
@@ -239,29 +365,107 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 		);
 	};
 
-	const generateTextInput = (field) => {};
+	const generateComboInput = (details) => {
+		const columnRatios = details.options.map((field) => `${field.weight}fr`).join(' ');
 
-	const generateNumericInput = (field) => {};
+		return (
+			<div className="create-form-input-element-combo" style={{ gridTemplateColumns: columnRatios }}>
+				{generateFields(details.options)}
+			</div>
+		);
+	};
 
-	const generateSelectionInput = (field) => {};
+	const generateTextInput = (details) => {
+		return (
+			<div className="create-form-input-element">
+				<label htmlFor={details.id}>{details.name}</label>
+				<input
+					type="text"
+					id={details.id}
+					value={details.value}
+					onChange={updateAction}
+					className="create-form-input-element-type text"></input>
+			</div>
+		);
+	};
 
-	const generateDateInput = (field) => {};
+	const generateNumericInput = (details) => {
+		return (
+			<div className="create-form-input-element">
+				<label htmlFor={details.id}>{details.name}</label>
+				<input
+					type="number"
+					min={1}
+					id={details.id}
+					value={details.value ?? ''}
+					onChange={updateAction}
+					className="create-form-input-element-type numeric"></input>
+			</div>
+		);
+	};
+
+	const generateSelectionInput = (details) => {
+		return (
+			<div className="create-form-input-element">
+				<label htmlFor={details.id}>{details.name}</label>
+				<select
+					id={details.id}
+					value={details.value}
+					onChange={updateAction}
+					className="create-form-input-element-type select">
+					{details.options.map((opt, i) => {
+						return (
+							<option value={opt.value} key={i}>
+								{opt.name}
+							</option>
+						);
+					})}
+				</select>
+			</div>
+		);
+	};
+
+	const generateDateInput = (details) => {
+		return (
+			<div className="create-form-input-element">
+				<label htmlFor={details.id}>{details.name}</label>
+				<DatePicker
+					type="date"
+					id={details.id}
+					selected={details.value}
+					onChange={(date) => {
+						updateAction({
+							target: {
+								id: details.id,
+								value: formatDate(date),
+							},
+						});
+					}}
+					className="create-form-input-element-type date"
+					dateFormat="yyyy-MM-dd"
+					placeholderText="Select a date"
+					showPopperArrow={false}></DatePicker>
+			</div>
+		);
+	};
 
 	// console.log(generateFields());
 
 	return (
 		<div className="create-form-input-section">
-			{expandedSections.has(index) ? (
-				<Icon name={'doubleArrowUp'} className="create-form-input-expand" onClick={() => toggleContent(index)} />
-			) : (
-				<Icon name={'doubleArrowDown'} className="create-form-input-expand" onClick={() => toggleContent(index)} />
-			)}
 			<div
 				className={`input-section-expandable ${expandedSections.has(index) ? 'active' : ''}`}
 				onClick={() => toggleContent(index)}>
 				{title}
+				{expandedSections.has(index) ? (
+					<Icon name={'doubleArrowUp'} className="create-form-input-expand" />
+				) : (
+					<Icon name={'doubleArrowDown'} className="create-form-input-expand" />
+				)}
 			</div>
-			{generateFields()}
+			<div className={`input-section-expandable-content ${expandedSections.has(index) ? 'expand' : ''}`}>
+				{generateFields(fields)}
+			</div>
 		</div>
 	);
 }
@@ -278,11 +482,29 @@ function SummaryPage({ fields }) {
 			{fields['details'] && (
 				<div className="new-tournament-summary-section">
 					<h3>Tournament Details</h3>
-					<p>Name: {fields['details']['name']}</p>
-					<p>Date: {fields['details']['date']}</p>
-					<p>Location: {fields['details']['location']}</p>
-					{fields['details']['description'] && <p>Description: {fields['details']['description']}</p>}
-					<p>Collection: {fields['details']['collection'] || 'None'}</p>
+					<sub>* required</sub>
+					<div className="tournament-summary-section-fields">
+						<div className="tournament-summary-section-fields-row">
+							<h4>Name*</h4>
+							<p>{fields.details.name || '-'}</p>
+						</div>
+						<div className="tournament-summary-section-fields-row">
+							<h4>Date*</h4>
+							<p>{fields.details.date || '-'}</p>
+						</div>
+						<div className="tournament-summary-section-fields-row">
+							<h4>Location*</h4>
+							<p>{fields.details.location || '-'}</p>
+						</div>
+						<div className="tournament-summary-section-fields-row">
+							<h4>Description</h4>
+							<p>{fields.details.description || '-'}</p>
+						</div>
+						<div className="tournament-summary-section-fields-row">
+							<h4>Collection</h4>
+							<p>{fields.details.collection || 'None'}</p>
+						</div>
+					</div>
 				</div>
 			)}
 			{fields['structure'] && (

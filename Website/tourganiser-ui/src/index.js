@@ -9,6 +9,7 @@ import TournamentView from './pages/TournamentView';
 import About from './pages/About';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
+import LegalPage from './pages/Legal';
 import { AuthProvider } from './AuthContext';
 import { MessageProvider } from './MessageContext';
 import { ConfirmProvider } from './components/ConfirmDialog';
@@ -27,6 +28,7 @@ function RoutesComponent() {
 					<Route path="/tournaments" element={<Tournaments />} />
 					<Route path="/tournaments/view/:id" element={<TournamentView />} />
 					<Route path="/about" element={<About />} />
+					<Route path="/terms" element={<LegalPage />} />
 					<Route path="*" element={<NotFound />} />
 				</Route>
 				<Route path="/login" element={<Login />} />

@@ -1,10 +1,8 @@
-import DatePicker from 'react-datepicker';
 import React, { useContext, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import Icon from './Icons';
 import '../App.css';
-import 'react-datepicker/dist/react-datepicker.css';
 
 export default function TournamentCreation() {
 	const [selectedOption, setSelectedOption] = useState('select');
@@ -130,9 +128,9 @@ function CreateFromTemplate({ goBack }) {
 				collection: '',
 			},
 			structure: {
-				numTeams: 0,
-				numGroups: 0,
-				knockoutRound: 0,
+				numTeams: '0',
+				numGroups: '0',
+				knockoutRound: '0',
 			},
 			teams: [],
 		});
@@ -143,23 +141,30 @@ function CreateFromTemplate({ goBack }) {
 			setStructureFields((prev) => [
 				...prev,
 				{
-					type: 'int',
-					name: 'Number of Groups',
-					required: false,
-					id: 'numGroups',
-				},
-				{
-					type: 'selection',
-					name: 'First Knockout Round',
-					required: true,
-					id: 'knockoutRound',
+					type: 'combo',
 					options: [
-						{ name: 'Round of 24', value: 24 },
-						{ name: 'Round of 16', value: 16 },
-						{ name: 'Round of 12', value: 12 },
-						{ name: 'Quarterfinal', value: 8 },
-						{ name: 'Semifinal', value: 4 },
-						{ name: 'Final', value: 2 },
+						{
+							type: 'int',
+							name: 'Number of Groups',
+							required: false,
+							id: 'numGroups',
+							weight: 1,
+						},
+						{
+							type: 'selection',
+							name: 'First Knockout Round',
+							required: true,
+							id: 'knockoutRound',
+							options: [
+								{ name: 'Round of 24', value: 24 },
+								{ name: 'Round of 16', value: 16 },
+								{ name: 'Round of 12', value: 12 },
+								{ name: 'Quarterfinal', value: 8 },
+								{ name: 'Semifinal', value: 4 },
+								{ name: 'Final', value: 2 },
+							],
+							weight: 1,
+						},
 					],
 				},
 			]);
@@ -201,6 +206,21 @@ function CreateFromTemplate({ goBack }) {
 				[id]: value,
 			},
 		}));
+	};
+
+	const mapStructureValues = () => {
+		const mappedFields = structureFields.map((field) => {
+			if (field.type === 'combo') {
+				const options = field.options.map((option) => {
+					const value = tournamentData.structure[option.id] ?? '';
+					return { ...option, value };
+				});
+				return { ...field, options };
+			}
+			const value = tournamentData.structure[field.id] ?? '';
+			return { ...field, value };
+		});
+		return mappedFields;
 	};
 
 	return (
@@ -265,10 +285,7 @@ function CreateFromTemplate({ goBack }) {
 					/>
 					<InputSection
 						title={'Tournament Structure'}
-						fields={structureFields.map((field) => {
-							const value = tournamentData.structure[field.id] ?? '';
-							return { ...field, value };
-						})}
+						fields={mapStructureValues()}
 						index={2}
 						toggleContent={toggleContent}
 						expandedSections={expandedSections}
@@ -311,14 +328,6 @@ function CreateFromTemplate({ goBack }) {
 }
 
 function InputSection({ title, fields, index, toggleContent, expandedSections, updateAction, tournamentData }) {
-	const formatDate = (date) => {
-		if (!date) return ''; // handle null or undefined
-		const year = date.getFullYear();
-		const month = (date.getMonth() + 1).toString().padStart(2, '0'); // months are zero-indexed
-		const day = date.getDate().toString().padStart(2, '0');
-		return `${year}-${month}-${day}`;
-	};
-
 	const generateFields = (fieldList) => {
 		return fieldList.map((field, i) => {
 			// console.log(field);
@@ -382,6 +391,7 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 				<input
 					type="text"
 					id={details.id}
+					required={details.required}
 					value={details.value}
 					onChange={updateAction}
 					className="create-form-input-element-type text"></input>
@@ -395,6 +405,7 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 				<label htmlFor={details.id}>{details.name}</label>
 				<input
 					type="number"
+					required={details.required}
 					min={1}
 					id={details.id}
 					value={details.value ?? ''}
@@ -410,6 +421,7 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 				<label htmlFor={details.id}>{details.name}</label>
 				<select
 					id={details.id}
+					required={details.required}
 					value={details.value}
 					onChange={updateAction}
 					className="create-form-input-element-type select">
@@ -429,22 +441,13 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 		return (
 			<div className="create-form-input-element">
 				<label htmlFor={details.id}>{details.name}</label>
-				<DatePicker
+				<input
 					type="date"
+					required={details.required}
 					id={details.id}
-					selected={details.value}
-					onChange={(date) => {
-						updateAction({
-							target: {
-								id: details.id,
-								value: formatDate(date),
-							},
-						});
-					}}
-					className="create-form-input-element-type date"
-					dateFormat="yyyy-MM-dd"
-					placeholderText="Select a date"
-					showPopperArrow={false}></DatePicker>
+					value={details.value}
+					onChange={updateAction}
+					className="create-form-input-element-type date"></input>
 			</div>
 		);
 	};
@@ -471,6 +474,15 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 }
 
 function SummaryPage({ fields }) {
+	const knockoutRoundMap = {
+		24: 'Round of 24',
+		16: 'Round of 16',
+		12: 'Round of 12',
+		8: 'Quarterfinal',
+		4: 'Semifinal',
+		2: 'Final',
+	};
+
 	return (
 		<div className="new-tournament-summary">
 			{fields['template'] && (
@@ -510,11 +522,25 @@ function SummaryPage({ fields }) {
 			{fields['structure'] && (
 				<div className="new-tournament-summary-section">
 					<h3>Tournament Structure</h3>
-					<p>Number of teams: {fields['structure']['numTeams']}</p>
-					{fields['structure']['numGroups'] > 0 && <p>Number of groups: {fields['structure']['numGroups']}</p>}
-					{fields['structure']['knockoutRound'] > 0 && (
-						<p>First knockout round: {fields['structure']['knockoutRound']}</p>
-					)}
+					<sub>*required</sub>
+					<div className="tournament-summary-section-fields">
+						<div className="tournament-summary-section-fields-row">
+							<h4>Number of Teams*</h4>
+							<p>{parseInt(fields.structure.numTeams) || '-'}</p>
+						</div>
+						{fields.template === 'Classic' && (
+							<>
+								<div className="tournament-summary-section-fields-row">
+									<h4>Number of Groups*</h4>
+									<p>{parseInt(fields.structure.numGroups) || '-'}</p>
+								</div>
+								<div className="tournament-summary-section-fields-row">
+									<h4>First Knockout Phase*</h4>
+									<p>{knockoutRoundMap[parseInt(fields.structure.knockoutRound)] || '-'}</p>
+								</div>
+							</>
+						)}
+					</div>
 				</div>
 			)}
 		</div>

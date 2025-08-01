@@ -101,10 +101,10 @@ function Footer() {
 				</div>
 			</div>
 			<div className="footer-bottom">
-				<p>&copy; 2024 Tourganiser. All rights reserved.</p>
+				<Link to="/terms">&copy; 2025 Tourganiser. All rights reserved.</Link>
 				<div className="legal-links">
-					<a href="/">Privacy Policy</a>
-					<a href="/">Terms of Service</a>
+					<Link to="/terms">Privacy Policy</Link>
+					<Link to="/terms">Terms of Service</Link>
 				</div>
 			</div>
 		</footer>

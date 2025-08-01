@@ -82,6 +82,18 @@ main {
 	margin-top: 40px;
 }
 
+.legal-page-banner-image {
+	display: flex;
+	width: 100%;
+	height: 300px;
+	background-color: var(--secondary-color);
+	background-image: url('../public/assets/13.webp');
+	background-origin: content-box;
+	background-position: center 63%;
+	background-size: 400px 400px;
+	background-repeat: no-repeat;
+}
+
 /* 
 Styles for the header i.e. navigation bar
 It will be persistent on all pages 
@@ -196,6 +208,11 @@ Styles for the footer, which will be persistent on all pages
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 20px;
+}
+
+.footer-bottom a {
+	text-decoration: none;
+	color: var(--text-color);
 }
 
 .legal-links {
@@ -516,6 +533,7 @@ About page styles
 	font-size: 2.2em;
 	position: relative;
 	padding-bottom: 12px;
+	text-shadow: 1px 2px 1px black;
 }
 
 .about-section h1::after {
@@ -588,6 +606,7 @@ About page styles
 	text-decoration: none;
 	font-size: 1.1em;
 	transition: color 0.2s ease;
+	text-shadow: 1px 1px 0px black;
 }
 
 .contact-item a:hover {
@@ -665,6 +684,87 @@ About page styles
 	.contact-details {
 		flex-direction: column;
 		gap: 20px;
+	}
+}
+
+/* 
+Legal page styles
+*/
+
+.legal-page {
+	color: var(--secondary-text-color);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	justify-content: center;
+	padding-top: 20px;
+}
+
+.legal-page-heading {
+	color: var(--main-color);
+	text-shadow: 0 1px 2px black;
+	text-align: center;
+}
+
+.legal-page-nav {
+	display: flex;
+	justify-content: center;
+	padding: 0 20px 20px;
+}
+
+.legal-page-nav-links {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	width: 100%;
+}
+
+.legal-page-nav-link {
+	text-decoration: underline;
+	color: var(--secondary-color);
+	text-shadow: 0px 1px 0px black;
+	text-align: center;
+}
+
+.legal-page-section {
+	max-width: 1200px;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0 4px 8px var(--card-shadow-color);
+	border-radius: 10px;
+	margin: 20px auto;
+	padding: 30px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.legal-page-section-heading {
+	color: var(--secondary-color);
+	text-shadow: 1px 2px 1px black;
+	font-size: 2.2em;
+	&::after {
+		display: block;
+		margin: 10px 0 20px;
+		content: '';
+		width: 60px;
+		height: 5px;
+		background-color: var(--secondary-color);
+	}
+}
+
+.legal-page-section p {
+	padding: 0 15px;
+	font-size: 1.1em;
+	margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+	.legal-page-nav-links {
+		flex-direction: column;
+	}
+
+	.legal-page-section {
+		margin: 20px;
 	}
 }
 
@@ -2231,9 +2331,6 @@ Tournament Creation styles
 
 .create-form-input-element-type.date {
 	cursor: pointer;
-	&::before {
-		content: '';
-	}
 }
 
 .create-form-progress-summary-filter {

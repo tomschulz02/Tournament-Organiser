@@ -9,7 +9,6 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "react": "^19.1.1",
-    "react-datepicker": "^8.4.0",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.7.1",
     "react-scripts": "^5.0.1",
@@ -18,7 +17,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "generate-icons": "node scripts/generate-icons.js"

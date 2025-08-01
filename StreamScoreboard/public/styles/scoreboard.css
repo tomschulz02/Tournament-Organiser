@@ -7,8 +7,8 @@ body {
 }
 
 .scoreboard-container {
-	width: 1000px;
-	height: 60px;
+	width: 80%;
+	height: 5%;
 	display: flex;
 	background: linear-gradient(90deg, #162447 0%, #1f4068 100%);
 	position: fixed;
@@ -96,8 +96,8 @@ body {
 	margin-top: 20px;
 	background: linear-gradient(130deg, #8e3c3c 0%, #2f3871 100%);
 	z-index: 5;
-	width: 300px;
-	height: 70px;
+	width: 16%;
+	height: 6%;
 	position: fixed;
 	bottom: 5px;
 	left: 50%;

@@ -2329,7 +2329,8 @@ Tournament Creation styles
 	}
 }
 
-.create-form-input-element-type.date {
+.create-form-input-element-type.date,
+.create-form-input-element-type.select {
 	cursor: pointer;
 }
 
@@ -2395,4 +2396,105 @@ Tournament Creation styles
 
 .create-form-input-element-combo {
 	display: grid;
+}
+
+.new-collection-popup-container {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgb(from var(--background-color) r g b / 0.3);
+	backdrop-filter: blur(10px);
+	z-index: 10;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.new-collection-popup {
+	background-color: var(--background-color);
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0 2px 4px var(--card-shadow-color);
+	border-radius: 10px;
+	padding: 10px;
+	color: var(--secondary-text-color);
+	min-width: 300px;
+	width: 30%;
+}
+
+.new-collection-popup-content {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.new-collection-popup-heading {
+	text-align: center;
+	color: var(--secondary-color);
+	text-shadow: 0px 1px 1px black;
+}
+
+.new-collection-popup-form {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding: 10px;
+	gap: 5px;
+}
+
+.new-collection-popup-form label {
+	display: block;
+	margin: 0.5rem 0 0.25rem;
+	font-weight: 500;
+	color: var(--secondary-text-color);
+}
+
+.new-collection-popup-form input {
+	width: 100%;
+	padding: 0.75rem 1rem;
+	margin: 0.5rem 0;
+	font-size: 1rem;
+	border: 1px solid var(--secondary-text-color);
+	border-radius: 10px;
+	background-color: var(--text-color);
+	transition: border-color 0.2s;
+	&:focus {
+		border-color: var(--secondary-color);
+		outline: none;
+	}
+}
+
+.new-collection-popup-actions {
+	display: flex;
+	height: 40px;
+	justify-content: space-between;
+	margin-top: 20px;
+}
+
+.new-collection-popup-action {
+	border-radius: 5px;
+	border: 1px solid var(--card-border-color);
+	padding: 5px;
+	min-width: 60px;
+	text-align: center;
+	background-color: white;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	color: #000000;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+	&:hover {
+		background-color: var(--card-shadow-color);
+	}
+}
+
+.new-collection-popup-action.submit {
+	background-color: var(--main-color);
+	color: var(--text-color);
+	&:hover {
+		background-color: var(--secondary-color);
+	}
 }

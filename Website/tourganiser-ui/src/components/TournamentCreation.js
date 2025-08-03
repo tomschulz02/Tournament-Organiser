@@ -1,7 +1,10 @@
-import React, { useContext, useState, useRef } from 'react';
+import React, { useContext, useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
+import { useMessage } from '../MessageContext';
 import Icon from './Icons';
+import LoadingScreen from './LoadingScreen';
+import { fetchUserCollections, createCollection } from '../requests';
 import '../App.css';
 
 export default function TournamentCreation() {
@@ -79,6 +82,8 @@ function CreateFromTemplate({ goBack }) {
 	const [showSummary, setShowSummary] = useState(false);
 	const [expandedSections, setExpandedSections] = useState(new Set([0]));
 	const summaryRef = useRef(null);
+	const hasFetchedCollections = useRef(false);
+	const { showMessage } = useMessage();
 	const [structureFields, setStructureFields] = useState([
 		{
 			type: 'int',
@@ -87,6 +92,34 @@ function CreateFromTemplate({ goBack }) {
 			id: 'numTeams',
 		},
 	]);
+	const [collectionOptions, setCollectionOptions] = useState([
+		{ name: 'None', value: '' },
+		{ name: 'Add to new collection', value: 'new' },
+	]);
+	const [showCollectionPopup, setShowCollectionPopup] = useState(false);
+	const [loading, setLoading] = useState(false);
+
+	useEffect(() => {
+		const fetchCollections = async () => {
+			try {
+				const response = await fetchUserCollections();
+				if (response.success) {
+					setCollectionOptions((prev) => {
+						const newList = [...prev];
+						response.message.forEach((collection) => {
+							newList.push({ name: collection.name, value: collection.id });
+						});
+						return newList;
+					});
+				}
+			} catch (error) {
+				showMessage('Error fetching collections. Please try again later', 'error');
+			}
+		};
+		if (hasFetchedCollections.current) return;
+		hasFetchedCollections.current = true;
+		fetchCollections();
+	}, []);
 
 	const toggleContent = (index) => {
 		setExpandedSections((prev) => {
@@ -187,6 +220,13 @@ function CreateFromTemplate({ goBack }) {
 
 	const updateDetails = (e) => {
 		const { id, value } = e.target;
+		if (id === 'collection') {
+			if (value === 'new') {
+				//open collection popup
+				setShowCollectionPopup(true);
+			}
+		}
+
 		setTournamentData((prev) => ({
 			...prev,
 			details: {
@@ -223,8 +263,54 @@ function CreateFromTemplate({ goBack }) {
 		return mappedFields;
 	};
 
+	useEffect(() => {
+		document.body.style.overflow = showCollectionPopup ? 'hidden' : 'auto';
+	}, [showCollectionPopup]);
+
+	const addNewCollection = async (collection) => {
+		try {
+			setLoading(true);
+			const response = await createCollection(collection);
+			if (response.success) {
+				const id = response.message;
+				setCollectionOptions((prev) => [...prev, { name: collection, value: id }]);
+				setTournamentData((prev) => ({
+					...prev,
+					details: {
+						...prev.details,
+						collection: id,
+					},
+				}));
+			}
+		} catch (error) {
+			showMessage('Failed to add a new collection. Please try again later', 'error');
+		} finally {
+			setLoading(false);
+			setShowCollectionPopup(false);
+		}
+	};
+
 	return (
 		<>
+			{showCollectionPopup && (
+				<NewCollectionPopup
+					onClose={() => {
+						setShowCollectionPopup(false);
+						setTournamentData((prev) => ({
+							...prev,
+							details: {
+								...prev.details,
+								collection: '',
+							},
+						}));
+					}}
+					onSubmit={(name) => {
+						addNewCollection(name);
+					}}
+					collectionList={collectionOptions}
+				/>
+			)}
+			{loading && <LoadingScreen />}
 			<h2 className="create-form-heading">Create Tournament from Template</h2>
 			<div className="create-form-container">
 				<div className="create-form-inputs">
@@ -241,11 +327,27 @@ function CreateFromTemplate({ goBack }) {
 						title={'Tournament Details'}
 						fields={[
 							{
-								type: 'string',
-								name: 'Tournament Name',
-								required: true,
-								id: 'name',
-								value: tournamentData.details.name,
+								type: 'combo',
+								name: 'Tournament Name and Collection',
+								options: [
+									{
+										type: 'string',
+										name: 'Tournament Name',
+										required: true,
+										id: 'name',
+										value: tournamentData.details.name,
+										weight: 3,
+									},
+									{
+										type: 'selection',
+										name: 'Collection',
+										id: 'collection',
+										required: false,
+										value: tournamentData.details.collection,
+										options: collectionOptions,
+										weight: 2,
+									},
+								],
 							},
 							{
 								type: 'combo',
@@ -305,7 +407,7 @@ function CreateFromTemplate({ goBack }) {
 						<Icon name={showSummary ? 'doubleArrowDown' : 'doubleArrowUp'} className="create-form-progress-expand" />
 					</div>
 					<div className={`create-form-progress-summary`}>
-						<SummaryPage fields={tournamentData} />
+						<SummaryPage fields={tournamentData} collections={collectionOptions} />
 					</div>
 				</div>
 				<div className="create-form-floating-actions">
@@ -473,7 +575,7 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 	);
 }
 
-function SummaryPage({ fields }) {
+function SummaryPage({ fields, collections }) {
 	const knockoutRoundMap = {
 		24: 'Round of 24',
 		16: 'Round of 16',
@@ -482,6 +584,11 @@ function SummaryPage({ fields }) {
 		4: 'Semifinal',
 		2: 'Final',
 	};
+
+	const collectionMap = {};
+	collections.forEach((collection) => {
+		collectionMap[collection.value] = collection.name;
+	});
 
 	return (
 		<div className="new-tournament-summary">
@@ -514,7 +621,7 @@ function SummaryPage({ fields }) {
 						</div>
 						<div className="tournament-summary-section-fields-row">
 							<h4>Collection</h4>
-							<p>{fields.details.collection || 'None'}</p>
+							<p>{collectionMap[fields.details.collection] || 'None'}</p>
 						</div>
 					</div>
 				</div>
@@ -543,6 +650,51 @@ function SummaryPage({ fields }) {
 					</div>
 				</div>
 			)}
+		</div>
+	);
+}
+
+function NewCollectionPopup({ onClose, onSubmit, collectionList }) {
+	const [newCollectionName, setNewCollectionName] = useState('');
+	const { showMessage } = useMessage();
+
+	const handleClickOutside = (e) => {
+		if (e.target.className === 'new-collection-popup-container') {
+			onClose();
+		}
+	};
+
+	const handleChange = (e) => {
+		setNewCollectionName(e.target.value);
+	};
+
+	const handleSubmit = () => {
+		if (!collectionList.some((collection) => collection.name.toLowerCase() === newCollectionName.toLowerCase())) {
+			onSubmit(newCollectionName);
+		} else {
+			showMessage('Collection with that name already exists', 'error');
+		}
+	};
+
+	return (
+		<div className="new-collection-popup-container" onClick={handleClickOutside}>
+			<div className="new-collection-popup">
+				<div className="new-collection-popup-content">
+					<h2 className="new-collection-popup-heading">Create new Collection</h2>
+					<div className="new-collection-popup-form">
+						<label htmlFor="newCollection">Collection Name</label>
+						<input type="text" id="newCollection" value={newCollectionName} onChange={handleChange}></input>
+					</div>
+					<div className="new-collection-popup-actions">
+						<div className="new-collection-popup-action close" onClick={onClose}>
+							Close
+						</div>
+						<div className="new-collection-popup-action submit" onClick={handleSubmit}>
+							Submit
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }

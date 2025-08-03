@@ -1,6 +1,6 @@
 const API_URL = process.env.REACT_APP_API_BASE;
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 5;
 const RETRY_DELAY = 500;
 
 export async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
@@ -14,26 +14,27 @@ export async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
 
 		return data;
 	} catch (error) {
-		if (retries > 0 && (error.message.includes("reset") || error.message.includes("network"))) {
+		console.info(error.message);
+		if (retries > 0 && (error.message.includes('reset') || error.message.includes('network'))) {
 			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
 			return fetchWithRetry(url, options, retries - 1);
 		}
 
 		throw {
-			error: error.message || "Network error occurred",
+			error: error.message || 'Network error occurred',
 			isConnectionError: true,
 		};
 	}
 }
 export async function loginUser(email, password) {
 	try {
-		return await fetchWithRetry("signin", {
-			method: "POST",
+		return await fetchWithRetry('signin', {
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({ email, password }),
-			credentials: "include", // needed for cookies
+			credentials: 'include', // needed for cookies
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -46,13 +47,13 @@ export async function loginUser(email, password) {
 
 export async function registerUser(username, email, password, confirmPassword) {
 	try {
-		return await fetchWithRetry("signup", {
-			method: "POST",
+		return await fetchWithRetry('signup', {
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({ username, email, password, confirmPassword }),
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -65,9 +66,9 @@ export async function registerUser(username, email, password, confirmPassword) {
 
 export async function checkLoginStatus() {
 	try {
-		return await fetchWithRetry("check-login", {
-			method: "GET",
-			credentials: "include",
+		return await fetchWithRetry('check-login', {
+			method: 'GET',
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -80,12 +81,12 @@ export async function checkLoginStatus() {
 
 export async function logoutUser() {
 	try {
-		return await fetchWithRetry("signout", {
-			method: "POST",
+		return await fetchWithRetry('signout', {
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -98,9 +99,9 @@ export async function logoutUser() {
 
 export async function getTournaments() {
 	try {
-		return await fetchWithRetry("tournaments", {
-			method: "GET",
-			credentials: "include",
+		return await fetchWithRetry('tournaments', {
+			method: 'GET',
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -114,8 +115,8 @@ export async function getTournaments() {
 export async function fetchTournamentData(tournamentId) {
 	try {
 		return await fetchWithRetry(`tournament/${tournamentId}`, {
-			method: "GET",
-			credentials: "include",
+			method: 'GET',
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -128,13 +129,13 @@ export async function fetchTournamentData(tournamentId) {
 
 export async function createCollection(name) {
 	try {
-		return await fetchWithRetry("collection/create", {
-			method: "POST",
+		return await fetchWithRetry('collection/create', {
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({ name }),
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -147,9 +148,9 @@ export async function createCollection(name) {
 
 export async function fetchUserCollections() {
 	try {
-		return await fetchWithRetry("collections", {
-			method: "GET",
-			credentials: "include",
+		return await fetchWithRetry('collections', {
+			method: 'GET',
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -162,13 +163,13 @@ export async function fetchUserCollections() {
 
 export async function createTournament(tournamentData) {
 	try {
-		return await fetchWithRetry("tournament/create", {
-			method: "POST",
+		return await fetchWithRetry('tournament/create', {
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify(tournamentData),
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -182,11 +183,11 @@ export async function createTournament(tournamentData) {
 export async function joinTournament(tournamentId) {
 	try {
 		return await fetchWithRetry(`tournaments/${tournamentId}/join`, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -200,11 +201,11 @@ export async function joinTournament(tournamentId) {
 export async function leaveTournament(tournamentId) {
 	try {
 		return await fetchWithRetry(`tournaments/${tournamentId}/leave`, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -218,11 +219,11 @@ export async function leaveTournament(tournamentId) {
 export async function updateScore(fixtureId, scores, status, hashId, rounds) {
 	try {
 		return await fetchWithRetry(`tournament/${fixtureId}/results`, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 			body: JSON.stringify({ scores, status, hashId, rounds }),
 		});
 	} catch (error) {
@@ -237,11 +238,11 @@ export async function updateScore(fixtureId, scores, status, hashId, rounds) {
 export async function startTournament(tournamentId) {
 	try {
 		return await fetchWithRetry(`tournament/${tournamentId}/start`, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		if (error.isConnectionError) {
@@ -255,10 +256,10 @@ export async function startTournament(tournamentId) {
 export async function deleteTournament(id, cacheId) {
 	try {
 		return await fetchWithRetry(`tournament/${id}`, {
-			method: "DELETE",
-			credentials: "include",
+			method: 'DELETE',
+			credentials: 'include',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({ cacheId }),
 		});
@@ -267,18 +268,18 @@ export async function deleteTournament(id, cacheId) {
 			// showMessage("Unable to connect to server. Please try again later.", "error");
 			return { error: error.message };
 		}
-		return { error: "Failed to delete tournament" };
+		return { error: 'Failed to delete tournament' };
 	}
 }
 
 export async function updateTeams(tournamentId, teams) {
 	try {
 		return await fetchWithRetry(`tournament/${tournamentId}/updateTeams`, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 			body: JSON.stringify({ teams }),
 		});
 	} catch (error) {
@@ -293,11 +294,11 @@ export async function updateTeams(tournamentId, teams) {
 export async function updateRounds(tournamentId, rounds, qualifiedTeams, standings, fixtures, currentRound) {
 	try {
 		return await fetchWithRetry(`tournament/${tournamentId}/updateRounds`, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 			body: JSON.stringify({ rounds, qualifiedTeams, standings, fixtures, currentRound }),
 		});
 	} catch (error) {
@@ -312,11 +313,11 @@ export async function updateRounds(tournamentId, rounds, qualifiedTeams, standin
 export async function endTournament(tournamentId) {
 	try {
 		return await fetchWithRetry(`tournament/${tournamentId}/end`, {
-			method: "PUT",
+			method: 'PUT',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json',
 			},
-			credentials: "include",
+			credentials: 'include',
 		});
 	} catch (error) {
 		return { error: error.message };

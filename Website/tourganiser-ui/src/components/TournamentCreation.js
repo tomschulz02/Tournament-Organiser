@@ -81,6 +81,8 @@ function CreateFromTemplate({ goBack }) {
 	});
 	const [showSummary, setShowSummary] = useState(false);
 	const [expandedSections, setExpandedSections] = useState(new Set([0]));
+	const sectionRefs = useRef({});
+	const [sectionHeights, setSectionHeights] = useState({});
 	const summaryRef = useRef(null);
 	const hasFetchedCollections = useRef(false);
 	const { showMessage } = useMessage();
@@ -171,8 +173,14 @@ function CreateFromTemplate({ goBack }) {
 
 	const selectTemplate = (template) => {
 		if (template === 'Classic') {
-			setStructureFields((prev) => [
-				...prev,
+			setStructureFields([
+				{
+					type: 'int',
+					name: 'Number of Teams',
+					required: true,
+					id: 'numTeams',
+					value: tournamentData.structure.numTeams,
+				},
 				{
 					type: 'combo',
 					options: [
@@ -320,6 +328,9 @@ function CreateFromTemplate({ goBack }) {
 						index={0}
 						toggleContent={toggleContent}
 						expandedSections={expandedSections}
+						sectionRefs={sectionRefs}
+						sectionHeights={sectionHeights}
+						setSectionHeights={setSectionHeights}
 						updateAction={selectTemplate}
 						tournamentData={tournamentData}
 					/>
@@ -375,6 +386,7 @@ function CreateFromTemplate({ goBack }) {
 								type: 'string',
 								name: 'Description',
 								required: false,
+								multiline: true,
 								id: 'description',
 								value: tournamentData.details.description,
 							},
@@ -382,6 +394,9 @@ function CreateFromTemplate({ goBack }) {
 						index={1}
 						toggleContent={toggleContent}
 						expandedSections={expandedSections}
+						sectionRefs={sectionRefs}
+						sectionHeights={sectionHeights}
+						setSectionHeights={setSectionHeights}
 						updateAction={updateDetails}
 						tournamentData={tournamentData}
 					/>
@@ -391,8 +406,23 @@ function CreateFromTemplate({ goBack }) {
 						index={2}
 						toggleContent={toggleContent}
 						expandedSections={expandedSections}
+						sectionRefs={sectionRefs}
+						sectionHeights={sectionHeights}
+						setSectionHeights={setSectionHeights}
 						updateAction={updateStructure}
 						tournamentData={tournamentData}
+					/>
+					<InputSection
+						title={'Teams List'}
+						fields={[{ type: 'teams' }]}
+						index={3}
+						toggleContent={toggleContent}
+						expandedSections={expandedSections}
+						sectionRefs={sectionRefs}
+						sectionHeights={sectionHeights}
+						setSectionHeights={setSectionHeights}
+						tournamentData={tournamentData}
+						updateAction={() => {}}
 					/>
 				</div>
 			</div>
@@ -429,7 +459,28 @@ function CreateFromTemplate({ goBack }) {
 	);
 }
 
-function InputSection({ title, fields, index, toggleContent, expandedSections, updateAction, tournamentData }) {
+function InputSection({
+	title,
+	fields,
+	index,
+	toggleContent,
+	expandedSections,
+	sectionRefs,
+	sectionHeights,
+	setSectionHeights,
+	updateAction,
+	tournamentData,
+}) {
+	useEffect(() => {
+		const node = sectionRefs.current[index];
+		if (node) {
+			setSectionHeights((prev) => ({
+				...prev,
+				[index]: node.scrollHeight,
+			}));
+		}
+	}, [tournamentData]);
+
 	const generateFields = (fieldList) => {
 		return fieldList.map((field, i) => {
 			// console.log(field);
@@ -450,6 +501,9 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 			}
 			if (field.type === 'combo') {
 				return <React.Fragment key={`${index}${i}`}>{generateComboInput(field)}</React.Fragment>;
+			}
+			if (field.type === 'teams') {
+				return <React.Fragment key={`${index}${i}`}>{generateTeamsList(field)}</React.Fragment>;
 			}
 		});
 	};
@@ -494,6 +548,7 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 					type="text"
 					id={details.id}
 					required={details.required}
+					aria-multiline={details.multiline}
 					value={details.value}
 					onChange={updateAction}
 					className="create-form-input-element-type text"></input>
@@ -554,6 +609,27 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 		);
 	};
 
+	const generateTeamsList = (details) => {
+		return (
+			<div className="create-form-teams-section">
+				<div className="create-form-teams-list">{generateTeams(tournamentData.structure.numTeams)}</div>
+				<div className="create-form-teams-bracket"></div>
+			</div>
+		);
+	};
+
+	const generateTeams = (numTeams) => {
+		const list = [];
+		for (let i = 1; i <= numTeams; i++) {
+			list.push(
+				<div className="create-form-teams-list-item" key={i}>
+					Team {i}
+				</div>
+			);
+		}
+		return list;
+	};
+
 	// console.log(generateFields());
 
 	return (
@@ -568,7 +644,12 @@ function InputSection({ title, fields, index, toggleContent, expandedSections, u
 					<Icon name={'doubleArrowDown'} className="create-form-input-expand" />
 				)}
 			</div>
-			<div className={`input-section-expandable-content ${expandedSections.has(index) ? 'expand' : ''}`}>
+			<div
+				className={`input-section-expandable-content ${expandedSections.has(index) ? 'expand' : ''}`}
+				ref={(el) => {
+					sectionRefs.current[index] = el;
+				}}
+				style={{ maxHeight: expandedSections.has(index) ? `${sectionHeights[index] || 0}px` : `0px` }}>
 				{generateFields(fields)}
 			</div>
 		</div>

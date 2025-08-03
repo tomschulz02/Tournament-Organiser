@@ -2263,11 +2263,13 @@ Tournament Creation styles
 	background-color: rgb(from var(--background-color) r g b / 0.75);
 	transition: max-height 0.5s ease;
 	border-radius: 0 0 10px 10px;
+	will-change: max-height;
 }
 
 .input-section-expandable-content.expand {
-	max-height: 500px;
+	max-height: 800px;
 	margin-bottom: 20px;
+	/* overflow: auto; */
 }
 
 .create-form-template-cards {
@@ -2497,4 +2499,46 @@ Tournament Creation styles
 	&:hover {
 		background-color: var(--secondary-color);
 	}
+}
+
+.create-form-teams-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	justify-content: center;
+}
+
+.create-form-teams-list {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	padding: 20px 10px;
+	max-height: 300px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.create-form-teams-list-item {
+	display: flex;
+	justify-content: space-between;
+	min-height: 50px;
+	height: 50px;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0px 2px 4px var(--card-shadow-color);
+	background-color: var(--background-color);
+	border-radius: 5px;
+	align-items: center;
+	padding: 0 20px;
+	color: var(--quarternary-color);
+	/* text-shadow: 0px 1px 1px black; */
+	font-size: 1.1em;
+	font-weight: 600;
+}
+
+.create-form-teams-bracket {
+	margin-top: 10px;
+	padding: 20px 10px;
+	height: 400px;
+	background-color: red;
+	border-top: 2px solid var(--secondary-text-color);
 }

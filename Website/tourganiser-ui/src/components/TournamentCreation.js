@@ -259,10 +259,15 @@ function CreateFromTemplate({ goBack }) {
 		}));
 
 		if (id === 'numTeams') {
-			const teamsList = [];
-			for (let i = 1; i <= parseInt(value); i++) {
-				teamsList.push(`Team ${i}`);
+			let teamsList = [...tournamentData.teams];
+			if (value <= teamsList.length) {
+				teamsList = teamsList.slice(0, value);
+			} else {
+				for (let i = teamsList.length + 1; i <= parseInt(value); i++) {
+					teamsList.push(`Team ${i}`);
+				}
 			}
+
 			setTournamentData((prev) => ({
 				...prev,
 				teams: teamsList,
@@ -312,10 +317,10 @@ function CreateFromTemplate({ goBack }) {
 		}
 	};
 
-	const updateTeamName = (index, newName) => {
+	const updateTeamName = (e, index, newName) => {
 		if (tournamentData.teams.includes(newName)) return false;
 		const oldTeamList = [...tournamentData.teams];
-		oldTeamList[index] = newName;
+		oldTeamList[index - 1] = newName;
 		setTournamentData((prev) => ({
 			...prev,
 			teams: oldTeamList,
@@ -331,6 +336,8 @@ function CreateFromTemplate({ goBack }) {
 		});
 		setShowTeamNameChange(true);
 	};
+
+	const validateTournamentData = () => {};
 
 	return (
 		<>
@@ -356,6 +363,7 @@ function CreateFromTemplate({ goBack }) {
 			{showTeamNameChange && (
 				<TeamNameChangePopup
 					onClose={() => setShowTeamNameChange(false)}
+					onSubmit={updateTeamName}
 					currName={teamNameChangeFields.currName}
 					rank={teamNameChangeFields.rank}
 				/>
@@ -654,6 +662,7 @@ function InputSection({
 	const generateTeamsList = (details) => {
 		return (
 			<div className="create-form-teams-section">
+				<sub>ℹ️ Team names and order can be changed after tournament has been created</sub>
 				<div className="create-form-teams-list">
 					{details.value.map((team, i) => {
 						return (
@@ -668,20 +677,6 @@ function InputSection({
 			</div>
 		);
 	};
-
-	const generateTeams = (numTeams) => {
-		const list = [];
-		for (let i = 1; i <= numTeams; i++) {
-			list.push(
-				<div className="create-form-teams-list-item" key={i}>
-					<div>Team {i}</div>
-				</div>
-			);
-		}
-		return list;
-	};
-
-	// console.log(generateFields());
 
 	return (
 		<div className="create-form-input-section">

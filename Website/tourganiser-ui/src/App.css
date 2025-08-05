@@ -2509,6 +2509,11 @@ Tournament Creation styles
 	justify-content: center;
 }
 
+.create-form-teams-section sub {
+	padding-top: 15px;
+	text-align: center;
+}
+
 .create-form-teams-list {
 	display: flex;
 	flex-direction: column;
@@ -2540,6 +2545,7 @@ Tournament Creation styles
 .create-form-teams-list-tooltip {
 	color: rgb(from var(--secondary-text-color) r g b / 0.8);
 	text-shadow: none;
+	padding-top: 0px !important;
 }
 
 .create-form-teams-bracket {
@@ -2573,13 +2579,13 @@ Styles for the name change popup
 	width: 80%;
 	height: 80%;
 	max-width: 600px;
-	max-height: 400px;
+	max-height: 350px;
 	border-radius: 10px;
 	background: var(--background-color);
 	border: 1px solid var(--card-border-color);
 	color: var(--secondary-text-color);
 	justify-items: center;
-	padding: 60px 25px;
+	padding: 30px 25px;
 	gap: 10px;
 	display: flex;
 	flex-direction: column;
@@ -2635,17 +2641,17 @@ Styles for the name change popup
 	width: 80%;
 	height: 50px;
 	margin: 40px auto 10px;
-	background: #04aa6d;
+	background: var(--main-color);
 	border: none;
 	border-radius: 5px;
-	color: white;
+	color: var(--text-color);
 	font-size: 1.2em;
 	font-weight: 600;
 	cursor: pointer;
 }
 
 .name-change-button:hover {
-	background: #14be39;
+	background: var(--secondary-color);
 }
 
 .name-change-input {
@@ -2659,7 +2665,31 @@ Styles for the name change popup
 .name-change-input input {
 	width: 100%;
 	padding: 10px;
-	border: 1px solid #ddd;
+	border: 1px solid var(--card-border-color);
 	border-radius: 4px;
 	font-size: 16px;
+}
+
+@media (max-width: 768px) {
+	.team-name-change-content {
+		max-height: 450px;
+	}
+
+	.name-change-form {
+		margin: 0px;
+	}
+
+	.name-change-form-inputs {
+		flex-direction: column;
+		gap: 0px;
+	}
+
+	.name-change-input {
+		width: 100%;
+	}
+
+	.exchange-icon {
+		transform: rotate(90deg);
+		margin: 5px auto 0px !important;
+	}
 }

@@ -187,16 +187,18 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 					Change the name of the team at rank: <span id="nameChangeTeamRank">{rank}</span>
 				</sub>
 				<form id="nameChangeForm" className="name-change-form" onSubmit={handleSubmit}>
-					<div className="name-change-input">
-						<label htmlFor="currentTeamName">Current:</label>
-						<input id="currentTeamName" type="text" value={currName} disabled />
-					</div>
-					<div className="exchange-icon">
-						<i className="fas fa-exchange-alt"></i>
-					</div>
-					<div className="name-change-input">
-						<label htmlFor="newTeamName">New:</label>
-						<input type="text" id="newTeamName" />
+					<div className="name-change-form-inputs">
+						<div className="name-change-input">
+							<label htmlFor="currentTeamName">Current:</label>
+							<input id="currentTeamName" type="text" value={currName} disabled />
+						</div>
+						<div className="exchange-icon">
+							<i className="fas fa-exchange-alt"></i>
+						</div>
+						<div className="name-change-input">
+							<label htmlFor="newTeamName">New:</label>
+							<input type="text" id="newTeamName" />
+						</div>
 					</div>
 					<button type="submit" className="name-change-button">
 						Save Changes

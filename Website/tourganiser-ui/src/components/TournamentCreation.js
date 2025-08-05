@@ -4,6 +4,7 @@ import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
+import { TeamNameChangePopup } from '../pages/Tournaments';
 import { fetchUserCollections, createCollection } from '../requests';
 import '../App.css';
 
@@ -100,6 +101,8 @@ function CreateFromTemplate({ goBack }) {
 	]);
 	const [showCollectionPopup, setShowCollectionPopup] = useState(false);
 	const [loading, setLoading] = useState(false);
+	const [showTeamNameChange, setShowTeamNameChange] = useState(false);
+	const [teamNameChangeFields, setTeamNameChangeFields] = useState({ rank: 0, currName: '' });
 
 	useEffect(() => {
 		const fetchCollections = async () => {
@@ -254,6 +257,17 @@ function CreateFromTemplate({ goBack }) {
 				[id]: value,
 			},
 		}));
+
+		if (id === 'numTeams') {
+			const teamsList = [];
+			for (let i = 1; i <= parseInt(value); i++) {
+				teamsList.push(`Team ${i}`);
+			}
+			setTournamentData((prev) => ({
+				...prev,
+				teams: teamsList,
+			}));
+		}
 	};
 
 	const mapStructureValues = () => {
@@ -298,6 +312,26 @@ function CreateFromTemplate({ goBack }) {
 		}
 	};
 
+	const updateTeamName = (index, newName) => {
+		if (tournamentData.teams.includes(newName)) return false;
+		const oldTeamList = [...tournamentData.teams];
+		oldTeamList[index] = newName;
+		setTournamentData((prev) => ({
+			...prev,
+			teams: oldTeamList,
+		}));
+
+		return true;
+	};
+
+	const openNameChangePopup = (index) => {
+		setTeamNameChangeFields({
+			rank: index + 1,
+			currName: tournamentData.teams[index],
+		});
+		setShowTeamNameChange(true);
+	};
+
 	return (
 		<>
 			{showCollectionPopup && (
@@ -319,6 +353,13 @@ function CreateFromTemplate({ goBack }) {
 				/>
 			)}
 			{loading && <LoadingScreen />}
+			{showTeamNameChange && (
+				<TeamNameChangePopup
+					onClose={() => setShowTeamNameChange(false)}
+					currName={teamNameChangeFields.currName}
+					rank={teamNameChangeFields.rank}
+				/>
+			)}
 			<h2 className="create-form-heading">Create Tournament from Template</h2>
 			<div className="create-form-container">
 				<div className="create-form-inputs">
@@ -414,7 +455,7 @@ function CreateFromTemplate({ goBack }) {
 					/>
 					<InputSection
 						title={'Teams List'}
-						fields={[{ type: 'teams' }]}
+						fields={[{ type: 'teams', value: tournamentData.teams }]}
 						index={3}
 						toggleContent={toggleContent}
 						expandedSections={expandedSections}
@@ -422,7 +463,7 @@ function CreateFromTemplate({ goBack }) {
 						sectionHeights={sectionHeights}
 						setSectionHeights={setSectionHeights}
 						tournamentData={tournamentData}
-						updateAction={() => {}}
+						updateAction={openNameChangePopup}
 					/>
 				</div>
 			</div>
@@ -505,6 +546,7 @@ function InputSection({
 			if (field.type === 'teams') {
 				return <React.Fragment key={`${index}${i}`}>{generateTeamsList(field)}</React.Fragment>;
 			}
+			return 0;
 		});
 	};
 
@@ -612,8 +654,17 @@ function InputSection({
 	const generateTeamsList = (details) => {
 		return (
 			<div className="create-form-teams-section">
-				<div className="create-form-teams-list">{generateTeams(tournamentData.structure.numTeams)}</div>
-				<div className="create-form-teams-bracket"></div>
+				<div className="create-form-teams-list">
+					{details.value.map((team, i) => {
+						return (
+							<div className="create-form-teams-list-item" key={i} onClick={() => updateAction(i)}>
+								{team}
+								<sub className="create-form-teams-list-tooltip">Click to edit</sub>
+							</div>
+						);
+					})}
+				</div>
+				{/* <div className="create-form-teams-bracket"></div> */}
 			</div>
 		);
 	};
@@ -623,7 +674,7 @@ function InputSection({
 		for (let i = 1; i <= numTeams; i++) {
 			list.push(
 				<div className="create-form-teams-list-item" key={i}>
-					Team {i}
+					<div>Team {i}</div>
 				</div>
 			);
 		}

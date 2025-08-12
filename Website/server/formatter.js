@@ -90,16 +90,18 @@ export function generateFixturesCombi(groups, knockout, rounds) {
 		fixtures.forEach((group, index) => {
 			const mpr = Math.floor(groups[index].length / 2);
 			for (var i = round * mpr; i < (round + 1) * mpr; i++) {
-				const fix = {
-					match_no: matchNo,
-					team1: group[i][0],
-					team2: group[i][1],
-					status: 'WAITING',
-					round: `Pool ${String.fromCharCode(65 + index)}`,
-					next_game: null,
-				};
-				matchNo++;
-				sortedFixtures.push(fix);
+				if (i < group.length) {
+					const fix = {
+						match_no: matchNo,
+						team1: group[i][0],
+						team2: group[i][1],
+						status: 'WAITING',
+						round: `Pool ${String.fromCharCode(65 + index)}`,
+						next_game: null,
+					};
+					matchNo++;
+					sortedFixtures.push(fix);
+				}
 			}
 		});
 		round++;

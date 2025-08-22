@@ -46,6 +46,12 @@ body.dark {
 	--card-shadow-color: rgba(245, 245, 245, 0.2);
 }
 
+body.noscroll {
+	position: fixed;
+	width: 100%;
+	overflow-y: scroll !important;
+}
+
 main {
 	padding-top: 80px;
 	flex: 1;
@@ -2302,18 +2308,21 @@ Tournament Creation styles
 }
 
 .create-form-input-element {
-	display: flex;
-	flex-direction: column;
+	position: relative;
 	width: 100%;
 	padding: 10px 20px;
-	gap: 5px;
 }
 
 .create-form-input-element label {
-	display: block;
-	margin: 0.5rem 0 0.25rem;
+	padding: 0 0.25rem;
 	font-weight: 500;
-	color: var(--secondary-text-color);
+	font-size: 1rem;
+	color: #9ca3af;
+	position: absolute;
+	top: calc(18px + 00.75rem);
+	left: calc(20px + 1rem);
+	transition: all 0.2s ease;
+	pointer-events: none;
 }
 
 .create-form-input-element-type {
@@ -2332,9 +2341,46 @@ Tournament Creation styles
 	}
 }
 
+.create-form-input-element.error .create-form-input-element-type {
+	border-color: red;
+	border-width: 2px;
+}
+
+.create-form-input-element.error .create-form-input-element-type:not(:placeholder-shown) ~ label {
+	color: red !important;
+}
+
+.create-form-input-element-type.date ~ label,
+.create-form-input-element-type.select ~ label {
+	transform: translateY(-1.4rem) translateX(-0.25rem) scale(0.85);
+	color: var(--quarternary-color);
+	background-color: white;
+	border-radius: 5px 5px 0 0;
+}
+
+.create-form-input-element .create-form-input-element-type:focus ~ label,
+.create-form-input-element .create-form-input-element-type:not(:placeholder-shown) ~ label {
+	transform: translateY(-1.4rem) translateX(-0.25rem) scale(0.85);
+	color: var(--quarternary-color);
+	background-color: white;
+	border-radius: 5px 5px 0 0;
+}
+
 .create-form-input-element-type.date,
 .create-form-input-element-type.select {
 	cursor: pointer;
+}
+
+.create-form-input-element-error {
+	color: red;
+	line-height: 0.85rem;
+	margin: -5px 0 10px;
+	font-size: 0.85rem;
+}
+
+.create-form-input-element-error.template {
+	margin: 10px 0;
+	padding: 10px 20px 0;
 }
 
 .create-form-progress-summary-filter {
@@ -2346,6 +2392,7 @@ Tournament Creation styles
 	height: 100vh;
 	z-index: 2;
 	backdrop-filter: blur(8px);
+	background-color: rgba(0, 0, 0, 0.3);
 }
 
 .create-form-progress-summary-filter.active {
@@ -2548,6 +2595,11 @@ Tournament Creation styles
 	padding-top: 0px !important;
 }
 
+.create-form-teams-info {
+	text-align: center;
+	margin: 20px 10px 40px;
+}
+
 .create-form-teams-bracket {
 	margin-top: 10px;
 	padding: 20px 10px;
@@ -2668,6 +2720,7 @@ Styles for the name change popup
 	border: 1px solid var(--card-border-color);
 	border-radius: 4px;
 	font-size: 16px;
+	color: var(--secondary-text-color);
 }
 
 @media (max-width: 768px) {

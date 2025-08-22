@@ -5,7 +5,8 @@ import { useMessage } from '../MessageContext';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import { TeamNameChangePopup } from '../pages/Tournaments';
-import { fetchUserCollections, createCollection } from '../requests';
+import SummaryPage from './SummaryPage';
+import { fetchUserCollections, createCollection, createTournament } from '../requests';
 import '../App.css';
 
 export default function TournamentCreation() {
@@ -80,6 +81,23 @@ function CreateFromTemplate({ goBack }) {
 		},
 		teams: [],
 	});
+	const [inputErrors, setInputErrors] = useState({
+		template: '',
+		details: {
+			name: '',
+			date: '',
+			location: '',
+			description: '',
+			collection: '',
+		},
+		structure: {
+			numTeams: '',
+			numGroups: '',
+			knockoutRound: '',
+		},
+		teams: '',
+	});
+	const [showInputErrors, setShowInputErrors] = useState(false);
 	const [showSummary, setShowSummary] = useState(false);
 	const [expandedSections, setExpandedSections] = useState(new Set([0]));
 	const sectionRefs = useRef({});
@@ -148,7 +166,9 @@ function CreateFromTemplate({ goBack }) {
 			requestAnimationFrame(() => {
 				content.style.maxHeight = '40px';
 			});
+			document.body.classList.remove('noscroll');
 		} else {
+			document.body.classList.add('noscroll');
 			content.style.maxHeight = '600px';
 		}
 
@@ -172,9 +192,40 @@ function CreateFromTemplate({ goBack }) {
 			},
 			teams: [],
 		});
+
+		setInputErrors({
+			template: '',
+			details: {
+				name: '',
+				date: '',
+				location: '',
+				description: '',
+				collection: '',
+			},
+			structure: {
+				numTeams: '',
+				numGroups: '',
+				knockoutRound: '',
+			},
+			teams: '',
+		});
+
+		setStructureFields([
+			{
+				type: 'int',
+				name: 'Number of Teams',
+				required: true,
+				id: 'numTeams',
+				value: tournamentData.structure.numTeams,
+			},
+		]);
 	};
 
 	const selectTemplate = (template) => {
+		if (template === tournamentData.template) {
+			template = '';
+		}
+
 		if (template === 'Classic') {
 			setStructureFields([
 				{
@@ -227,6 +278,11 @@ function CreateFromTemplate({ goBack }) {
 		setTournamentData((prev) => {
 			return { ...prev, template: template };
 		});
+
+		setInputErrors((prev) => ({
+			...prev,
+			template: template ? '' : 'Please choose a template',
+		}));
 	};
 
 	const updateDetails = (e) => {
@@ -245,6 +301,37 @@ function CreateFromTemplate({ goBack }) {
 				[id]: value,
 			},
 		}));
+
+		if (id === 'name') {
+			setInputErrors((prev) => ({
+				...prev,
+				details: {
+					...prev.details,
+					name: value.length < 6 ? 'Tournament name must be at least 6 characters long' : '',
+				},
+			}));
+		}
+
+		if (id === 'location') {
+			setInputErrors((prev) => ({
+				...prev,
+				details: {
+					...prev.details,
+					location: value ? '' : 'Location cannot be empty',
+				},
+			}));
+		}
+
+		if (id === 'date') {
+			console.log(value);
+			setInputErrors((prev) => ({
+				...prev,
+				details: {
+					...prev.details,
+					date: value ? '' : 'Please enter a valid date',
+				},
+			}));
+		}
 	};
 
 	const updateStructure = (e) => {
@@ -271,6 +358,39 @@ function CreateFromTemplate({ goBack }) {
 			setTournamentData((prev) => ({
 				...prev,
 				teams: teamsList,
+			}));
+		}
+
+		if (id === 'numTeams') {
+			setInputErrors((prev) => ({
+				...prev,
+				structure: {
+					...prev.structure,
+					numTeams: value > 0 ? '' : 'Number of teams must be more than 0',
+				},
+			}));
+		}
+
+		if (id === 'numGroups') {
+			setInputErrors((prev) => ({
+				...prev,
+				structure: {
+					...prev.structure,
+					numGroups: value > 0 ? '' : 'Number of groups must be more than 0',
+				},
+			}));
+		}
+
+		if (id === 'knockoutRound') {
+			setInputErrors((prev) => ({
+				...prev,
+				structure: {
+					...prev.structure,
+					knockoutRound:
+						parseInt(value) <= parseInt(tournamentData.structure.numTeams)
+							? ''
+							: 'The number of qualifying teams cannot be greater than the number of participating teams',
+				},
 			}));
 		}
 	};
@@ -337,7 +457,105 @@ function CreateFromTemplate({ goBack }) {
 		setShowTeamNameChange(true);
 	};
 
-	const validateTournamentData = () => {};
+	const validateTournamentData = () => {
+		let valid = true;
+
+		//template validation
+		if (tournamentData.template === '') {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				template: 'Please select a template',
+			}));
+		}
+
+		//tournament details validation
+		if (tournamentData.details.name === '') {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				details: {
+					...prev.details,
+					name: 'Please enter a valid tournament name',
+				},
+			}));
+		}
+		if (tournamentData.details.location === '') {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				details: {
+					...prev.details,
+					location: 'Please enter a valid tournament location',
+				},
+			}));
+		}
+		if (tournamentData.details.date === '' || tournamentData.details.date < new Date().toISOString().split('T')[0]) {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				details: {
+					...prev.details,
+					date: 'Please enter a valid starting date',
+				},
+			}));
+		}
+
+		//tournament structure validation
+		if (tournamentData.structure.numTeams <= 0 || isNaN(tournamentData.structure.numTeams)) {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				structure: {
+					...prev.structure,
+					numTeams: 'Please enter a valid value (> 0)',
+				},
+			}));
+		}
+		if (
+			tournamentData.template === 'Classic' &&
+			(tournamentData.structure.numGroups <= 0 || isNaN(tournamentData.structure.numGroups))
+		) {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				structure: {
+					...prev.structure,
+					numGroups: 'Please enter a valid value (> 0)',
+				},
+			}));
+		}
+		if (
+			tournamentData.template === 'Classic' &&
+			(tournamentData.structure.knockoutRound === '' ||
+				parseInt(tournamentData.structure.knockoutRound) > parseInt(tournamentData.structure.numTeams))
+		) {
+			valid = false;
+			setInputErrors((prev) => ({
+				...prev,
+				structure: {
+					...prev.structure,
+					knockoutRound: 'Please select a valid option',
+				},
+			}));
+		}
+
+		return valid;
+	};
+
+	const submitTournamentData = async () => {
+		if (validateTournamentData()) {
+			setLoading(true);
+			try {
+				const result = await createTournament(tournamentData);
+				console.log(result);
+			} catch (error) {
+				console.error(error);
+			} finally {
+				setLoading(false);
+			}
+		}
+	};
 
 	return (
 		<>
@@ -382,6 +600,7 @@ function CreateFromTemplate({ goBack }) {
 						setSectionHeights={setSectionHeights}
 						updateAction={selectTemplate}
 						tournamentData={tournamentData}
+						inputError={inputErrors.template}
 					/>
 					<InputSection
 						title={'Tournament Details'}
@@ -400,7 +619,7 @@ function CreateFromTemplate({ goBack }) {
 									},
 									{
 										type: 'selection',
-										name: 'Collection',
+										name: 'Collection (optional)',
 										id: 'collection',
 										required: false,
 										value: tournamentData.details.collection,
@@ -433,7 +652,7 @@ function CreateFromTemplate({ goBack }) {
 							},
 							{
 								type: 'string',
-								name: 'Description',
+								name: 'Description (optional)',
 								required: false,
 								multiline: true,
 								id: 'description',
@@ -448,6 +667,7 @@ function CreateFromTemplate({ goBack }) {
 						setSectionHeights={setSectionHeights}
 						updateAction={updateDetails}
 						tournamentData={tournamentData}
+						inputError={inputErrors.details}
 					/>
 					<InputSection
 						title={'Tournament Structure'}
@@ -460,6 +680,7 @@ function CreateFromTemplate({ goBack }) {
 						setSectionHeights={setSectionHeights}
 						updateAction={updateStructure}
 						tournamentData={tournamentData}
+						inputError={inputErrors.structure}
 					/>
 					<InputSection
 						title={'Teams List'}
@@ -486,7 +707,12 @@ function CreateFromTemplate({ goBack }) {
 						<Icon name={showSummary ? 'doubleArrowDown' : 'doubleArrowUp'} className="create-form-progress-expand" />
 					</div>
 					<div className={`create-form-progress-summary`}>
-						<SummaryPage fields={tournamentData} collections={collectionOptions} />
+						<SummaryPage
+							fields={tournamentData}
+							collections={collectionOptions}
+							errors={inputErrors}
+							showErrors={showInputErrors}
+						/>
 					</div>
 				</div>
 				<div className="create-form-floating-actions">
@@ -497,7 +723,9 @@ function CreateFromTemplate({ goBack }) {
 						<div className="create-form-floating-action tertiary" onClick={handleReset}>
 							Reset
 						</div>
-						<div className="create-form-floating-action">Submit</div>
+						<div className="create-form-floating-action" onClick={submitTournamentData}>
+							Submit
+						</div>
 					</div>
 				</div>
 			</div>
@@ -519,6 +747,7 @@ function InputSection({
 	setSectionHeights,
 	updateAction,
 	tournamentData,
+	inputError,
 }) {
 	useEffect(() => {
 		const node = sectionRefs.current[index];
@@ -528,7 +757,7 @@ function InputSection({
 				[index]: node.scrollHeight,
 			}));
 		}
-	}, [tournamentData]);
+	}, [tournamentData, inputError]);
 
 	const generateFields = (fieldList) => {
 		return fieldList.map((field, i) => {
@@ -560,23 +789,28 @@ function InputSection({
 
 	const generateTemplateCards = () => {
 		return (
-			<div className="create-form-template-cards">
-				<div
-					className={`create-form-template-card ${tournamentData['template'] === 'Single Elimination' ? 'active' : ''}`}
-					onClick={() => updateAction('Single Elimination')}>
-					Single Elimination
+			<>
+				{inputError && <div className="create-form-input-element-error template">{inputError}</div>}
+				<div className="create-form-template-cards">
+					<div
+						className={`create-form-template-card ${
+							tournamentData['template'] === 'Single Elimination' ? 'active' : ''
+						}`}
+						onClick={() => updateAction('Single Elimination')}>
+						Single Elimination
+					</div>
+					<div
+						className={`create-form-template-card ${tournamentData['template'] === 'League' ? 'active' : ''}`}
+						onClick={() => updateAction('League')}>
+						League
+					</div>
+					<div
+						className={`create-form-template-card ${tournamentData['template'] === 'Classic' ? 'active' : ''}`}
+						onClick={() => updateAction('Classic')}>
+						Classic
+					</div>
 				</div>
-				<div
-					className={`create-form-template-card ${tournamentData['template'] === 'League' ? 'active' : ''}`}
-					onClick={() => updateAction('League')}>
-					League
-				</div>
-				<div
-					className={`create-form-template-card ${tournamentData['template'] === 'Classic' ? 'active' : ''}`}
-					onClick={() => updateAction('Classic')}>
-					Classic
-				</div>
-			</div>
+			</>
 		);
 	};
 
@@ -592,24 +826,25 @@ function InputSection({
 
 	const generateTextInput = (details) => {
 		return (
-			<div className="create-form-input-element">
-				<label htmlFor={details.id}>{details.name}</label>
+			<div className={`create-form-input-element ${inputError[details.id] ? 'error' : ''}`}>
 				<input
 					type="text"
 					id={details.id}
 					required={details.required}
 					aria-multiline={details.multiline}
-					value={details.value}
+					value={details.value || ''}
 					onChange={updateAction}
-					className="create-form-input-element-type text"></input>
+					className="create-form-input-element-type text"
+					placeholder=" "></input>
+				<label htmlFor={details.id}>{details.name}</label>
+				{inputError[details.id] && <div className="create-form-input-element-error">{inputError[details.id]}</div>}
 			</div>
 		);
 	};
 
 	const generateNumericInput = (details) => {
 		return (
-			<div className="create-form-input-element">
-				<label htmlFor={details.id}>{details.name}</label>
+			<div className={`create-form-input-element ${inputError[details.id] ? 'error' : ''}`}>
 				<input
 					type="number"
 					required={details.required}
@@ -617,21 +852,24 @@ function InputSection({
 					id={details.id}
 					value={details.value ?? ''}
 					onChange={updateAction}
-					className="create-form-input-element-type numeric"></input>
+					className="create-form-input-element-type numeric"
+					placeholder=" "></input>
+				<label htmlFor={details.id}>{details.name}</label>
+				{inputError[details.id] && <div className="create-form-input-element-error">{inputError[details.id]}</div>}
 			</div>
 		);
 	};
 
 	const generateSelectionInput = (details) => {
 		return (
-			<div className="create-form-input-element">
-				<label htmlFor={details.id}>{details.name}</label>
+			<div className={`create-form-input-element ${inputError[details.id] ? 'error' : ''}`}>
 				<select
 					id={details.id}
 					required={details.required}
 					value={details.value}
 					onChange={updateAction}
-					className="create-form-input-element-type select">
+					className="create-form-input-element-type select"
+					placeholder=" ">
 					{details.options.map((opt, i) => {
 						return (
 							<option value={opt.value} key={i}>
@@ -640,21 +878,25 @@ function InputSection({
 						);
 					})}
 				</select>
+				<label htmlFor={details.id}>{details.name}</label>
+				{inputError[details.id] && <div className="create-form-input-element-error">{inputError[details.id]}</div>}
 			</div>
 		);
 	};
 
 	const generateDateInput = (details) => {
 		return (
-			<div className="create-form-input-element">
-				<label htmlFor={details.id}>{details.name}</label>
+			<div className={`create-form-input-element ${inputError[details.id] ? 'error' : ''}`}>
 				<input
 					type="date"
 					required={details.required}
 					id={details.id}
 					value={details.value}
 					onChange={updateAction}
-					className="create-form-input-element-type date"></input>
+					className="create-form-input-element-type date"
+					min={new Date().toISOString().split('T')[0]}></input>
+				<label htmlFor={details.id}>{details.name}</label>
+				{inputError[details.id] && <div className="create-form-input-element-error">{inputError[details.id]}</div>}
 			</div>
 		);
 	};
@@ -663,16 +905,22 @@ function InputSection({
 		return (
 			<div className="create-form-teams-section">
 				<sub>ℹ️ Team names and order can be changed after tournament has been created</sub>
-				<div className="create-form-teams-list">
-					{details.value.map((team, i) => {
-						return (
-							<div className="create-form-teams-list-item" key={i} onClick={() => updateAction(i)}>
-								{team}
-								<sub className="create-form-teams-list-tooltip">Click to edit</sub>
-							</div>
-						);
-					})}
-				</div>
+				{details.value.length === 0 ? (
+					<p className="create-form-teams-info">
+						A list of teams will be generated once the number of teams selected is greater than 0
+					</p>
+				) : (
+					<div className="create-form-teams-list">
+						{details.value.map((team, i) => {
+							return (
+								<div className="create-form-teams-list-item" key={i} onClick={() => updateAction(i)}>
+									{team}
+									<sub className="create-form-teams-list-tooltip">Click to edit</sub>
+								</div>
+							);
+						})}
+					</div>
+				)}
 				{/* <div className="create-form-teams-bracket"></div> */}
 			</div>
 		);
@@ -698,85 +946,6 @@ function InputSection({
 				style={{ maxHeight: expandedSections.has(index) ? `${sectionHeights[index] || 0}px` : `0px` }}>
 				{generateFields(fields)}
 			</div>
-		</div>
-	);
-}
-
-function SummaryPage({ fields, collections }) {
-	const knockoutRoundMap = {
-		24: 'Round of 24',
-		16: 'Round of 16',
-		12: 'Round of 12',
-		8: 'Quarterfinal',
-		4: 'Semifinal',
-		2: 'Final',
-	};
-
-	const collectionMap = {};
-	collections.forEach((collection) => {
-		collectionMap[collection.value] = collection.name;
-	});
-
-	return (
-		<div className="new-tournament-summary">
-			{fields['template'] && (
-				<div className="new-tournament-summary-section">
-					<h3>Chosen Template</h3>
-					<p>{fields['template']}</p>
-				</div>
-			)}
-			{fields['details'] && (
-				<div className="new-tournament-summary-section">
-					<h3>Tournament Details</h3>
-					<sub>* required</sub>
-					<div className="tournament-summary-section-fields">
-						<div className="tournament-summary-section-fields-row">
-							<h4>Name*</h4>
-							<p>{fields.details.name || '-'}</p>
-						</div>
-						<div className="tournament-summary-section-fields-row">
-							<h4>Date*</h4>
-							<p>{fields.details.date || '-'}</p>
-						</div>
-						<div className="tournament-summary-section-fields-row">
-							<h4>Location*</h4>
-							<p>{fields.details.location || '-'}</p>
-						</div>
-						<div className="tournament-summary-section-fields-row">
-							<h4>Description</h4>
-							<p>{fields.details.description || '-'}</p>
-						</div>
-						<div className="tournament-summary-section-fields-row">
-							<h4>Collection</h4>
-							<p>{collectionMap[fields.details.collection] || 'None'}</p>
-						</div>
-					</div>
-				</div>
-			)}
-			{fields['structure'] && (
-				<div className="new-tournament-summary-section">
-					<h3>Tournament Structure</h3>
-					<sub>*required</sub>
-					<div className="tournament-summary-section-fields">
-						<div className="tournament-summary-section-fields-row">
-							<h4>Number of Teams*</h4>
-							<p>{parseInt(fields.structure.numTeams) || '-'}</p>
-						</div>
-						{fields.template === 'Classic' && (
-							<>
-								<div className="tournament-summary-section-fields-row">
-									<h4>Number of Groups*</h4>
-									<p>{parseInt(fields.structure.numGroups) || '-'}</p>
-								</div>
-								<div className="tournament-summary-section-fields-row">
-									<h4>First Knockout Phase*</h4>
-									<p>{knockoutRoundMap[parseInt(fields.structure.knockoutRound)] || '-'}</p>
-								</div>
-							</>
-						)}
-					</div>
-				</div>
-			)}
 		</div>
 	);
 }

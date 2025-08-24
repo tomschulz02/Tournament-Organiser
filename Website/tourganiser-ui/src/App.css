@@ -2746,3 +2746,396 @@ Styles for the name change popup
 		margin: 5px auto 0px !important;
 	}
 }
+
+.tournament-view-section {
+	position: relative;
+}
+
+.tournament-view-header {
+	position: fixed;
+	top: 80px;
+	left: 0;
+	width: 100%;
+	height: 60px;
+	background-color: var(--quarternary-color);
+	text-align: center;
+	padding: 0 80px;
+	overflow-wrap: normal;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 600;
+	font-size: 1.1em;
+	transition: transform 0.5s ease;
+	z-index: 2;
+	backdrop-filter: blur(4px);
+}
+
+.tournament-view-header.hidden {
+	transform: translateY(-160px);
+}
+
+.tournament-view-header.visible {
+	transform: translateY(0);
+}
+
+.tournament-view-header-actions {
+	position: fixed;
+	top: 80px;
+	left: 0;
+	width: 100%;
+	height: 60px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0 10px;
+	transition: transform 0.5s ease;
+	z-index: 3;
+}
+
+.tournament-view-header-actions.hidden {
+	transform: translateY(-160px);
+}
+
+.tournament-view-header-actions.visible {
+	transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+	.tournament-view-header {
+		padding: 0 20px 40px;
+		height: 100px;
+	}
+
+	.tournament-view-header-actions {
+		top: 140px;
+		height: 40px;
+	}
+
+	.tournament-view-nav-border {
+		top: 180px !important;
+	}
+
+	.tournament-view-nav-border.up {
+		transform: translateY(-100px) !important;
+	}
+
+	.tournament-view-content {
+		margin-top: 160px !important;
+	}
+}
+
+.tournament-view-nav {
+	/* position: fixed;
+	top: 150px;
+	left: 0; */
+	width: calc(100% - 20px);
+	margin: 10px;
+	height: 40px;
+	border-radius: 10px;
+	background-color: var(--tertiary-color);
+	display: flex;
+	justify-content: start;
+	align-items: center;
+	background-color: rgb(64, 64, 64);
+	border: 1px solid var(--card-border-color);
+	/* box-shadow: 0px 2px 4px var(--card-shadow-color); */
+	padding: 0 10px;
+	transition: transform 0.5s ease;
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	white-space: nowrap;
+}
+
+.tournament-view-nav::-webkit-scrollbar {
+	display: none;
+}
+
+.tournament-view-nav-border {
+	position: fixed;
+	top: 140px;
+	left: 0;
+	width: 100%;
+	/* backdrop-filter: blur(4px); */
+	transition: transform 0.5s ease;
+	background: rgb(from var(--background-color) r g b / 0.75); /* translucent bg */
+	backdrop-filter: blur(8px); /* optional glass effect */
+	border-radius: 1rem;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	z-index: 2;
+}
+
+.tournament-view-nav-border.down {
+	transform: translateY(0);
+}
+
+.tournament-view-nav-border.up {
+	transform: translateY(-60px);
+}
+
+.tournament-view-nav-item {
+	display: flex;
+	align-items: center;
+	padding: 0 15px;
+	cursor: pointer;
+	height: 100%;
+	flex: 0 0 auto;
+	&:hover {
+		background-color: gray;
+	}
+}
+
+.tournament-view-content {
+	height: 1800px;
+	margin-top: 120px;
+}
+
+.overview-tab-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
+	padding: 20px;
+}
+
+.overview-tab-details {
+	position: relative;
+	padding: 20px;
+	background-color: var(--main-color);
+	width: 100%;
+}
+
+.overview-tab-details-title {
+	font-size: 1.5rem;
+	font-weight: 700;
+	max-width: 1000px;
+}
+
+.overview-tab-details-description {
+	max-width: 1000px;
+	padding: 25px;
+}
+
+.overview-tab-details-tags {
+	padding: 10px;
+	display: flex;
+	gap: 10px;
+	overflow-x: auto;
+}
+
+.overview-tab-details-tag {
+	display: flex;
+	gap: 5px;
+	border-radius: 2rem;
+	background-color: var(--background-color);
+	color: var(--secondary-text-color);
+	align-items: center;
+	justify-content: center;
+	padding: 10px 20px;
+	line-height: 1;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+	.overview-tab-details-tag {
+		padding: 5px 20px;
+	}
+
+	.overview-tab-details-tags {
+		border-bottom: 2px solid var(--text-color);
+		margin-bottom: 40px;
+	}
+
+	.overview-tab-details-actions {
+		top: auto !important;
+		right: auto !important;
+		bottom: 10px;
+		flex-direction: row !important;
+		padding: 10px;
+		gap: 20px;
+	}
+}
+
+.overview-tab-details-tag-icon {
+	fill: var(--secondary-text-color);
+}
+
+.overview-tab-details-actions {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: flex;
+	flex-direction: column;
+}
+
+.overview-tab-links {
+	background-color: blue;
+	height: 100px;
+	width: 100%;
+}
+
+.overview-tab-fixtures {
+	width: 100%;
+	padding: 10px;
+	color: var(--secondary-text-color);
+}
+
+.overview-tab-fixtures-scroll {
+	display: flex;
+	gap: 10px;
+	overflow-x: auto;
+	padding: 10px;
+	width: 100%;
+}
+
+.fixture-card {
+	flex: 0 0 auto;
+	padding: 5px;
+	border: 1px solid var(--secondary-color);
+	border-radius: 5px;
+	box-shadow: 0px 2px 4px var(--card-shadow-color);
+	width: 100%;
+	height: fit-content;
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	gap: 5px;
+	background-color: rgb(from var(--secondary-color) r g b / 0.3);
+}
+
+.fixture-card-header {
+	display: flex;
+	flex-direction: column;
+	font-size: 0.8rem;
+}
+
+.fixture-card-header-round {
+	font-weight: 700;
+}
+
+.fixture-card-header-match {
+	color: rgb(from var(--secondary-text-color) r g b / 0.8);
+}
+
+.fixture-card-content {
+	height: 100%;
+	padding: 5px;
+}
+
+.fixture-card-content-team {
+	height: 50%;
+	display: grid;
+	align-items: center;
+	font-size: 0.95rem;
+	text-align: center;
+	/* grid-template-columns: 1fr 25px 25px; */
+}
+
+.fixture-card-content-team div:first-child {
+	text-align: start;
+	display: -webkit-box;
+	line-clamp: 2;
+	-webkit-line-clamp: 2; /* Limit to 2 lines */
+	-webkit-box-orient: vertical;
+	text-overflow: ellipsis;
+	overflow: hidden;
+	white-space: normal;
+	max-width: 100%;
+}
+
+.fixture-card-actions {
+	width: 30px;
+}
+
+.overview-tab-fixtures .fixture-card {
+	width: 250px;
+	height: 150px;
+	grid-template-columns: none;
+	grid-template-rows: 20px auto 25px;
+}
+
+.overview-tab-fixtures .fixture-card-header {
+	flex-direction: row;
+	justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+	.fixture-card {
+		width: 250px;
+		height: 150px;
+		grid-template-columns: none;
+		grid-template-rows: 20px auto 25px;
+	}
+
+	.fixture-card-header {
+		flex-direction: row;
+		justify-content: space-between;
+	}
+}
+
+.schedule-tab {
+	color: var(--secondary-text-color);
+	padding: 20px;
+}
+
+.schedule-tab-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: start;
+	position: relative;
+}
+
+.schedule-tab-header h2 {
+	color: var(--main-color);
+	font-size: 2rem;
+	padding: 5px 10px;
+	border-bottom: 4px solid var(--card-border-color);
+}
+
+.schedule-tab-content-filters {
+	padding: 4px;
+	display: flex;
+	gap: 5px;
+	border-radius: 10px;
+	background-color: var(--text-color);
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0px 2px 4px var(--card-shadow-color);
+	margin-top: 60px;
+}
+
+.schedule-tab-content-filter {
+	cursor: pointer;
+	padding: 8px 16px;
+	height: 100%;
+	font-size: 0.9rem;
+	border-radius: 8px;
+	transition: all 0.3s ease;
+	color: var(--main-color);
+	font-weight: 500;
+	&:hover {
+		background-color: var(--card-shadow-color);
+	}
+}
+
+.schedule-tab-content-filter.active {
+	background-color: var(--main-color);
+	color: var(--text-color);
+}
+
+@media (max-width: 768px) {
+	.schedule-tab-header {
+		flex-direction: column;
+		align-items: center;
+	}
+}
+
+.schedule-tab-content {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 10px;
+	justify-content: start;
+	align-items: center;
+}

@@ -149,7 +149,7 @@ app.get('/api/tournament/:id', verifyToken, (req, res) => {
 			if (cacheManager.get(hashId + '_' + (req.user ? req.user.id : 'null'))) {
 				return res
 					.status(200)
-					.json({ success: true, ...cacheManager.get(id + '_' + (req.user ? req.user.id : 'null')) });
+					.json({ success: true, ...cacheManager.get(hashId + '_' + (req.user ? req.user.id : 'null')) });
 			}
 			const decodedId = tournamentHash.decode(hashId);
 			if (decodedId.length === 0) {

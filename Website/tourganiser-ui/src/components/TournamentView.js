@@ -11,7 +11,7 @@ export default function TournamentView({ tournament }) {
 	useEffect(() => {
 		const handleScroll = () => {
 			const scrollY = window.scrollY;
-			if (scrollY > lastScrollY && scrollY > 100) {
+			if (scrollY > lastScrollY && scrollY > 60) {
 				setShowHeader(false);
 			} else {
 				setShowHeader(true);
@@ -26,8 +26,6 @@ export default function TournamentView({ tournament }) {
 	const handleTabChange = (tab) => {
 		setSearchParams({ tab });
 	};
-
-	console.log(tournament);
 
 	return (
 		<div className="tournament-view-section">

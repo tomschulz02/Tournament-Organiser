@@ -41,16 +41,16 @@ export function OverviewTab({ details, loggedIn, creator }) {
 				<div className="overview-tab-fixtures">
 					<h2>Upcoming Fixtures</h2>
 					<div className="overview-tab-fixtures-scroll">
-						{details.upcomingFixtures.map((fixture) => {
-							return <FixtureCard fixture={fixture} />;
+						{details.upcomingFixtures.map((fixture, index) => {
+							return <FixtureCard key={index} fixture={fixture} />;
 						})}
 					</div>
 				</div>
 				<div className="overview-tab-fixtures">
 					<h2>Recent Results</h2>
 					<div className="overview-tab-fixtures-scroll">
-						{details.results.map((fixture) => {
-							return <FixtureCard fixture={fixture} />;
+						{details.results.map((fixture, index) => {
+							return <FixtureCard key={index} fixture={fixture} />;
 						})}
 					</div>
 				</div>
@@ -61,17 +61,20 @@ export function OverviewTab({ details, loggedIn, creator }) {
 
 export function ScheduleTab({ fixtures, creator }) {
 	const [filter, setFilter] = useState('all');
-	const allFixtures = [];
-	let filteredFixtures;
-	allFixtures.push(...fixtures.remainingFixtures, ...fixtures.results);
+	const allFixtures = [...fixtures.remainingFixtures, ...fixtures.results];
 
-	useEffect(() => {
-		if (filter === 'all') {
-			filteredFixtures = allFixtures;
-		} else if (filter === 'upcoming') {
-			filteredFixtures = allFixtures.filter();
+	const filteredFixtures = allFixtures.filter((fixture) => {
+		switch (filter) {
+			case 'upcoming':
+				return fixture.status === 'WAITING';
+			case 'live':
+				return fixture.status === 'ONGOING';
+			case 'done':
+				return fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED';
+			default:
+				return true;
 		}
-	}, [filter]);
+	});
 
 	return (
 		<>
@@ -110,8 +113,8 @@ export function ScheduleTab({ fixtures, creator }) {
 					</div>
 				</div>
 				<div className="schedule-tab-content">
-					{filteredFixtures.map((fixture) => {
-						return <FixtureCard fixture={fixture} />;
+					{filteredFixtures.map((fixture, index) => {
+						return <FixtureCard key={index} fixture={fixture} />;
 					})}
 				</div>
 			</div>
@@ -125,14 +128,26 @@ function FixtureCard({ fixture, actions = [] }) {
 	if (fixture.result) {
 		for (let set of fixture.result) {
 			cols += ' 25px';
-			sets[1].push(<div>{set[0]}</div>);
-			sets[2].push(<div>{set[1]}</div>);
+			sets[1].push(<div key={1}>{set[0]}</div>);
+			sets[2].push(<div key={2}>{set[1]}</div>);
 		}
+	} else {
+		cols += ' 25px';
+		sets[1].push(<div key={1}>0</div>);
+		sets[2].push(<div key={2}>0</div>);
 	}
+
+	const statusMap = {
+		ONGOING: 'LIVE',
+		WAITING: 'UPCOMING',
+		COMPLETED: 'COMPLETED',
+		CANCELLED: 'CANCELLED',
+	};
 
 	return (
 		<div className="fixture-card" key={fixture.id}>
 			<div className="fixture-card-header">
+				<div className={`fixture-card-header-status ${fixture.status.toLowerCase()}`}>{statusMap[fixture.status]}</div>
 				<div className="fixture-card-header-round">{fixture.round}</div>
 				<div className="fixture-card-header-match">Match #{fixture.match_no}</div>
 			</div>

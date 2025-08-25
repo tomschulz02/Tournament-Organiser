@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { OverviewTab, ScheduleTab } from './ViewTabs';
+import { OverviewTab, ScheduleTab, StandingsTab } from './ViewTabs';
 
 export default function TournamentView({ tournament }) {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -66,7 +66,13 @@ export default function TournamentView({ tournament }) {
 				{currentTab === 'schedule' && (
 					<ScheduleTab fixtures={tournament.message.fixtures} creator={tournament.creator} />
 				)}
-				{currentTab === 'standings' && <h2>Standings</h2>}
+				{currentTab === 'standings' && (
+					<StandingsTab
+						standings={tournament.message.standings}
+						currentRound={tournament.message.fixtures.currentRound}
+						format={tournament.message.details.format}
+					/>
+				)}
 				{currentTab === 'teams' && <h2>Teams</h2>}
 				{currentTab === 'settings' && <h2>Settings</h2>}
 			</div>

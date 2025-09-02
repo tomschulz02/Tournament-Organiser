@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import Icon from './Icons';
 import Tooltip from './Tooltip';
+import { TeamNameChangePopup } from '../pages/Tournaments';
+import LoadingScreen from './LoadingScreen';
+import { updateTeams } from '../requests';
+import { useMessage } from '../MessageContext';
+import NextRoundModal from './NextRoundModal';
 
 export function OverviewTab({ details, loggedIn, creator }) {
 	let actions = [];
 	if (creator) {
-		actions.push(<div>Start</div>, <div>Delete</div>);
+		actions.push(<div key={1}>Start</div>, <div key={2}>Delete</div>);
 	} else {
 		if (loggedIn) {
-			actions.push(<div>Save</div>);
+			actions.push(<div key={1}>Save</div>);
 		}
 	}
 
@@ -60,9 +65,10 @@ export function OverviewTab({ details, loggedIn, creator }) {
 	);
 }
 
-export function ScheduleTab({ fixtures, creator }) {
+export function ScheduleTab({ fixtures, creator, standings }) {
 	const [filter, setFilter] = useState('all');
 	const allFixtures = [...fixtures.remainingFixtures, ...fixtures.results];
+	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
 
 	const filteredFixtures = allFixtures.filter((fixture) => {
 		switch (filter) {
@@ -79,6 +85,14 @@ export function ScheduleTab({ fixtures, creator }) {
 
 	return (
 		<>
+			{showNextRoundModal && (
+				<NextRoundModal
+					fixtures={fixtures}
+					standings={standings}
+					onCancel={() => setShowNextRoundModal(false)}
+					onConfirm={() => setShowNextRoundModal(false)}
+				/>
+			)}
 			<div className="schedule-tab">
 				<div className="schedule-tab-header">
 					<h2>Schedule</h2>
@@ -117,6 +131,31 @@ export function ScheduleTab({ fixtures, creator }) {
 					{filteredFixtures.map((fixture, index) => {
 						return <FixtureCard key={index} fixture={fixture} />;
 					})}
+				</div>
+				<div className="schedule-tab-progress">
+					<div className="schedule-tab-progress-content">
+						<h3>{fixtures.rounds[fixtures.currentRound].round}</h3>
+						<div className="schedule-tab-progress-bar">
+							<div
+								className="schedule-tab-progress-bar fill"
+								style={{
+									width: `${
+										(fixtures.rounds[fixtures.currentRound].completed /
+											fixtures.rounds[fixtures.currentRound].matches) *
+										100
+									}%`,
+								}}></div>
+						</div>
+						{creator &&
+							fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches &&
+							(fixtures.currentRound === fixtures.rounds.length ? (
+								<div className="schedule-tab-progress-button">End Tournament</div>
+							) : (
+								<div className="schedule-tab-progress-button" onClick={() => setShowNextRoundModal(true)}>
+									Next Round
+								</div>
+							))}
+					</div>
 				</div>
 			</div>
 		</>
@@ -163,9 +202,7 @@ export function StandingsTab({ standings, format, currentRound }) {
 					{data.map((team, index) => (
 						<tr key={`${poolIndex}-${index}`}>
 							<td>{index + 1}</td>
-							<td className="sticky-column" style={{ backgroundColor: 'white' }}>
-								{team.name}
-							</td>
+							<td className="sticky-column">{team.name}</td>
 							<td>{team.played}</td>
 							<td>{team.won}</td>
 							<td>{team.lost}</td>
@@ -200,9 +237,10 @@ export function StandingsTab({ standings, format, currentRound }) {
 
 	return (
 		<div className="tournament-standings">
-			<h3>
-				Standings <Tooltip message={standingsMessage} />
-			</h3>
+			<h2>
+				Standings
+				{/* <Tooltip message={standingsMessage} /> */}
+			</h2>
 			{standings.map((round, roundIndex) => (
 				<div key={roundIndex} className="round-standings">
 					<div
@@ -234,6 +272,128 @@ export function StandingsTab({ standings, format, currentRound }) {
 				</div>
 			))}
 		</div>
+	);
+}
+
+export function TeamsTab({ teams, status, setPageUnsavedChanges, tournamentId, creator, onUpdate }) {
+	const editTeams = status === 'Not Started' && creator;
+	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
+	const [currentTeam, setCurrentTeam] = useState(null);
+	const [selectedTeamIndex, setSelectedTeamIndex] = useState(null);
+	const { showMessage } = useMessage();
+	const [unsavedChanges, setUnsavedChanges] = useState(false);
+	const [originalTeams, setOriginalTeams] = useState(teams);
+	const [stagedTeams, setStagedTeams] = useState(JSON.parse(JSON.stringify(teams)));
+	const [loading, setLoading] = useState(false);
+
+	if (!Array.isArray(teams) || teams.length === 0) {
+		return (
+			<div className="tournament-teams">
+				<h3>Teams</h3>
+				<div className="team-card">
+					<p>No teams available</p>
+				</div>
+			</div>
+		);
+	}
+
+	const handleTeamNameChange = async (event, teamIndex) => {
+		setCurrentTeam({ element: event.currentTarget });
+		setSelectedTeamIndex(teamIndex);
+		setOpenTeamNameChangePopup(true);
+	};
+
+	const changeTeamName = (e, rank, newName) => {
+		if (stagedTeams.includes(newName)) {
+			return false;
+		}
+		const updated = [...stagedTeams];
+		updated[selectedTeamIndex] = newName;
+		setStagedTeams(updated);
+		currentTeam.element.parentElement.classList.add('team-name-changed');
+		setUnsavedChanges(true);
+		setPageUnsavedChanges(true);
+		setCurrentTeam(null);
+		return true;
+	};
+
+	const handleDiscardChanges = () => {
+		setStagedTeams(JSON.parse(JSON.stringify(originalTeams)));
+		document.querySelectorAll('.team-name-changed').forEach((element) => {
+			element.classList.remove('team-name-changed');
+		});
+		setUnsavedChanges(false);
+		setPageUnsavedChanges(false);
+		showMessage('Changes discarded', 'success');
+	};
+
+	const handleSaveChanges = async () => {
+		setLoading(true);
+		if (JSON.stringify(originalTeams) === JSON.stringify(stagedTeams)) {
+			setLoading(false);
+			showMessage('No changes to save', 'info');
+			return;
+		}
+		if (stagedTeams.includes('')) {
+			setLoading(false);
+			showMessage('Team names cannot be empty', 'error');
+			return;
+		}
+		const response = await updateTeams(tournamentId, stagedTeams);
+		if (!response.success) {
+			setLoading(false);
+			showMessage('Error saving changes. Please try again later', 'error');
+			return;
+		} else {
+			setLoading(false);
+			setOriginalTeams(JSON.parse(JSON.stringify(stagedTeams)));
+			document.querySelectorAll('.team-name-changed').forEach((element) => {
+				element.classList.remove('team-name-changed');
+			});
+			setUnsavedChanges(false);
+			setPageUnsavedChanges(false);
+			showMessage('Changes saved successfully', 'success');
+			onUpdate();
+		}
+	};
+
+	return (
+		<>
+			{openTeamNameChangePopup && (
+				<TeamNameChangePopup
+					onClose={() => setOpenTeamNameChangePopup(false)}
+					onSubmit={changeTeamName}
+					currName={currentTeam.element.parentElement.innerText ? currentTeam.element.parentElement.innerText : ''}
+					rank={selectedTeamIndex + 1}
+				/>
+			)}
+			{loading && <LoadingScreen />}
+			<div className="tournament-teams">
+				<div className="tournament-teams-header">
+					<h3>Teams</h3>
+					{unsavedChanges && (
+						<div className="button-group">
+							<button onClick={handleSaveChanges}>Save Changes</button>
+							<button onClick={handleDiscardChanges}>Discard Changes</button>
+						</div>
+					)}
+				</div>
+				<div className="teams-grid">
+					{stagedTeams.map((team, index) => (
+						<div key={index} className="team-card">
+							{team}
+							{true && (
+								<Icon
+									className="teams-tab-edit-team-icon"
+									name={'edit'}
+									onClick={(e) => handleTeamNameChange(e, index)}
+								/>
+							)}
+						</div>
+					))}
+				</div>
+			</div>
+		</>
 	);
 }
 

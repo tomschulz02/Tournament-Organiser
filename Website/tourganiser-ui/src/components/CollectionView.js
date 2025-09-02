@@ -1,6 +1,8 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function CollectionView({ collection }) {
+	const location = useLocation();
+
 	return (
 		<>
 			<Link to="/tournaments" className="back-to-browse">
@@ -18,7 +20,10 @@ export default function CollectionView({ collection }) {
 							<div className={`tournament-status ${tournament.message.details.status.toLowerCase().replace(' ', '-')}`}>
 								{tournament.message.details.status}
 							</div>
-							<Link to={`/tournaments/view/t_${tournament.message.details.id}`} className="view-tournament-btn">
+							<Link
+								to={`/tournaments/view/t_${tournament.message.details.id}`}
+								state={{ from: location.pathname }}
+								className="view-tournament-btn">
 								View
 							</Link>
 						</div>

@@ -55,6 +55,8 @@ export default function TournamentView({ tournament }) {
 					fixtures={tournament.message.fixtures}
 					creator={tournament.creator}
 					standings={tournament.message.standings}
+					id={tournament.message.details.id}
+					tournamentName={tournament.message.details.name}
 				/>
 			),
 		},

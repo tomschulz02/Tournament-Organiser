@@ -3013,7 +3013,7 @@ Styles for the name change popup
 	width: 100%;
 	height: fit-content;
 	display: grid;
-	grid-template-columns: 150px 1fr 100px 50px;
+	grid-template-columns: 200px 1fr 100px;
 	gap: 5px;
 }
 
@@ -3057,7 +3057,8 @@ Styles for the name change popup
 }
 
 .fixture-card-header-match {
-	color: rgb(from var(--secondary-text-color) r g b / 0.8);
+	color: var(--secondary-text-color);
+	opacity: 0.8;
 }
 
 .fixture-card-content {
@@ -3093,7 +3094,19 @@ Styles for the name change popup
 }
 
 .fixture-card-actions {
-	width: 30px;
+	width: 100%;
+	display: flex;
+	flex-direction: row-reverse;
+	align-items: center;
+}
+
+.fixture-card-actions-button {
+	fill: var(--secondary-text-color);
+	cursor: pointer;
+	transition: all 0.3s ease;
+	&:hover {
+		fill: var(--secondary-color);
+	}
 }
 
 .overview-tab-fixtures .fixture-card {
@@ -3144,6 +3157,7 @@ Styles for the name change popup
 	font-size: 2rem;
 	padding: 5px 10px;
 	border-bottom: 4px solid var(--card-border-color);
+	text-shadow: 1px 1px 0px black;
 }
 
 .schedule-tab-content-filters {
@@ -3174,6 +3188,24 @@ Styles for the name change popup
 .schedule-tab-content-filter.active {
 	background-color: var(--main-color);
 	color: var(--text-color);
+}
+
+.schedule-tab-download-button {
+	position: absolute;
+	top: 70px;
+	left: 20px;
+	fill: var(--text-color);
+	background-color: var(--main-color);
+	padding: 5px 10px;
+	height: 35px;
+	width: 44px;
+	border-radius: 5px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	&:hover {
+		transform: translateY(-5px);
+		box-shadow: 2px 5px 4px var(--card-shadow-color);
+	}
 }
 
 .schedule-tab-content {
@@ -3214,6 +3246,12 @@ Styles for the name change popup
 	max-height: 2rem;
 	border-radius: 5px;
 	background-color: var(--main-color);
+	color: var(--text-color);
+	cursor: pointer;
+	transition: all 0.3s ease;
+	&:hover {
+		background-color: var(--secondary-color);
+	}
 }
 
 .schedule-tab-progress-bar {
@@ -3238,6 +3276,10 @@ Styles for the name change popup
 		flex-direction: column;
 		align-items: center;
 	}
+
+	.schedule-tab-download-button {
+		left: calc(50% - 22px);
+	}
 }
 
 /* 
@@ -3257,6 +3299,7 @@ Standings Tab styles - temporary from old UI
 	color: var(--main-color);
 	font-size: 2rem;
 	width: fit-content;
+	text-shadow: 1px 1px 0px black;
 }
 
 .pools-standings {
@@ -3301,13 +3344,6 @@ Standings Tab styles - temporary from old UI
 	z-index: 1;
 	overflow-x: hidden;
 }
-
-/* .standings-table .sticky-column {
-	position: sticky;
-	left: 0;
-	background-color: white;
-	z-index: 2;
-} */
 
 .no-standings-message {
 	text-align: center;
@@ -3483,7 +3519,7 @@ Temporary styles for teams page - taken from old version
 
 .tournament-teams-header h3 {
 	color: var(--main-color);
-	text-shadow: 0px 2px 0px black;
+	text-shadow: 1px 1px 0px black;
 	font-size: 2rem;
 	padding: 5px 10px;
 	border-bottom: 4px solid var(--card-border-color);
@@ -3584,4 +3620,30 @@ Temporary styles for teams page - taken from old version
 
 .teams-tab-edit-team-icon {
 	fill: var(--secondary-text-color);
+}
+
+/* 
+Styles for the template for downloading fixtures
+*/
+#fixturesDownloadTemplate {
+	position: fixed;
+	top: 0px;
+	left: -9999px;
+	box-sizing: border-box;
+	width: 210mm;
+	min-height: 297mm;
+	background-color: white;
+	padding: 10mm;
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+.fixtures-doc {
+	color: black;
+	width: 100%;
+	height: 100%;
+}
+
+.fixtures-doc-title {
+	font-size: 2rem;
+	color: var(--main-color);
 }

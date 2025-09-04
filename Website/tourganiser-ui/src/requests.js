@@ -14,7 +14,7 @@ export async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
 
 		return data;
 	} catch (error) {
-		console.info(error);
+		console.info(error.message === 'Failed to fetch');
 		if (retries > 0 && (error.message.includes('reset') || error.message.includes('network'))) {
 			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
 			return fetchWithRetry(url, options, retries - 1);

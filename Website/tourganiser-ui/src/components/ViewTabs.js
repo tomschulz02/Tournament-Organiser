@@ -3,9 +3,12 @@ import Icon from './Icons';
 import Tooltip from './Tooltip';
 import { TeamNameChangePopup } from '../pages/Tournaments';
 import LoadingScreen from './LoadingScreen';
-import { updateTeams } from '../requests';
+import { updateTeams, updateRounds, updateScore } from '../requests';
 import { useMessage } from '../MessageContext';
+import { useConfirm } from './ConfirmDialog';
+import ScoreUpdateModal from './ScoreUpdateModal';
 import NextRoundModal from './NextRoundModal';
+import FixturesDoc, { downloadPDF, testHtml2Canvas } from './FixturesDoc';
 
 export function OverviewTab({ details, loggedIn, creator }) {
 	let actions = [];
@@ -65,10 +68,15 @@ export function OverviewTab({ details, loggedIn, creator }) {
 	);
 }
 
-export function ScheduleTab({ fixtures, creator, standings }) {
+export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }) {
 	const [filter, setFilter] = useState('all');
 	const allFixtures = [...fixtures.remainingFixtures, ...fixtures.results];
 	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
+	const [showScoreModal, setShowScoreModal] = useState(false);
+	const [loading, setLoading] = useState(false);
+	const confirm = useConfirm();
+	const { showMessage } = useMessage();
+	const [selectedFixture, setSelectedFixture] = useState(null);
 
 	const filteredFixtures = allFixtures.filter((fixture) => {
 		switch (filter) {
@@ -83,18 +91,134 @@ export function ScheduleTab({ fixtures, creator, standings }) {
 		}
 	});
 
+	const formatScore = (score) => {
+		const updatedScores = score.map((s) => {
+			return [s.team1, s.team2];
+		});
+		return updatedScores;
+	};
+
+	const startNextRound = async (qualifiedTeams) => {
+		const confirmed = await confirm("Are you sure you want to start the next round? This action can't be undone.");
+
+		if (!confirmed) {
+			setShowNextRoundModal(false);
+			return;
+		}
+
+		setLoading(true);
+
+		try {
+			const response = await updateRounds(
+				id,
+				fixtures.rounds,
+				qualifiedTeams,
+				null,
+				fixtures.remainingFixtures,
+				fixtures.currentRound
+			);
+
+			setLoading(false);
+
+			if (!response.success) {
+				showMessage("Couldn't start next round. Please try again later.", 'error');
+				return;
+			}
+
+			setShowNextRoundModal(false);
+			showMessage('Successfully started next round. Refreshing to reflect changes...', 'success');
+
+			setTimeout(() => {
+				window.location.reload();
+			}, 2000);
+		} catch (error) {
+			showMessage('An error occurred. Please try again later.', 'error');
+		}
+	};
+
+	const handleOpenScoreUpdate = (fixture) => {
+		setSelectedFixture(fixture);
+		setShowScoreModal(true);
+	};
+
+	const handleSaveScore = async (score) => {
+		setLoading(true);
+		try {
+			const response = await updateScore(selectedFixture.id, formatScore(score), 'ONGOING', id, null);
+			setLoading(false);
+			if (!response.success) {
+				showMessage("Couldn't save score. Please try again later", 'error');
+				return;
+			}
+			selectedFixture.status = 'ONGOING';
+			selectedFixture.result = formatScore(score);
+			showMessage('Successfully updated score', 'success');
+			setShowScoreModal(false);
+		} catch (error) {
+			setLoading(false);
+			showMessage('An error occurred. Please try again later', 'error');
+		}
+		setShowScoreModal(false);
+	};
+
+	const handleEndMatch = async (score) => {
+		const confirmed = await confirm('Are you sure you want to end this match? This action cannot be undone');
+		if (!confirmed) return;
+
+		setLoading(true);
+		fixtures.rounds[fixtures.currentRound].completed += 1;
+		try {
+			const response = await updateScore(selectedFixture.id, formatScore(score), 'COMPLETED', id, fixtures.rounds);
+			setLoading(false);
+
+			if (!response.success) {
+				showMessage("Couldn't end match. Please try again later", 'error');
+				return;
+			}
+
+			setShowScoreModal(false);
+			showMessage('Successfully ended the match. Refreshing to reflect changes...', 'success');
+			setTimeout(() => {
+				window.location.reload();
+			}, 2000);
+		} catch (error) {
+			setLoading(false);
+			showMessage('An error occurred. Please try again later', 'error');
+		}
+	};
+
 	return (
 		<>
+			{loading && <LoadingScreen />}
 			{showNextRoundModal && (
 				<NextRoundModal
 					fixtures={fixtures}
 					standings={standings}
 					onCancel={() => setShowNextRoundModal(false)}
-					onConfirm={() => setShowNextRoundModal(false)}
+					onConfirm={startNextRound}
 				/>
 			)}
+			{showScoreModal && (
+				<ScoreUpdateModal
+					fixture={selectedFixture}
+					onClose={() => setShowScoreModal(false)}
+					onEndMatch={handleEndMatch}
+					onSave={handleSaveScore}
+				/>
+			)}
+			<div id="fixturesDownloadTemplate">
+				<FixturesDoc tournament={tournamentName} fixtures={allFixtures} />
+			</div>
 			<div className="schedule-tab">
 				<div className="schedule-tab-header">
+					<Icon
+						className="schedule-tab-download-button"
+						name={'download'}
+						label="Download as PDF"
+						onClick={() =>
+							downloadPDF({ elementId: 'fixturesDownloadTemplate', filename: 'schedule.pdf', preview: true })
+						}
+					/>
 					<h2>Schedule</h2>
 					<div className="schedule-tab-content-filters">
 						<div
@@ -128,35 +252,57 @@ export function ScheduleTab({ fixtures, creator, standings }) {
 					</div>
 				</div>
 				<div className="schedule-tab-content">
-					{filteredFixtures.map((fixture, index) => {
-						return <FixtureCard key={index} fixture={fixture} />;
-					})}
+					{filteredFixtures.length > 0 ? (
+						filteredFixtures.map((fixture, index) => {
+							return (
+								<FixtureCard
+									key={index}
+									fixture={fixture}
+									actions={[
+										fixture.editable && creator && (
+											<Icon
+												key={1}
+												name={'edit'}
+												className="fixture-card-actions-button"
+												label="Update Result"
+												onClick={() => handleOpenScoreUpdate(fixture)}
+											/>
+										),
+									]}
+								/>
+							);
+						})
+					) : (
+						<p>No {filter !== 'all' ? filter : ''} fixtures found</p>
+					)}
 				</div>
-				<div className="schedule-tab-progress">
-					<div className="schedule-tab-progress-content">
-						<h3>{fixtures.rounds[fixtures.currentRound].round}</h3>
-						<div className="schedule-tab-progress-bar">
-							<div
-								className="schedule-tab-progress-bar fill"
-								style={{
-									width: `${
-										(fixtures.rounds[fixtures.currentRound].completed /
-											fixtures.rounds[fixtures.currentRound].matches) *
-										100
-									}%`,
-								}}></div>
+				{filteredFixtures.length > 0 && (
+					<div className="schedule-tab-progress">
+						<div className="schedule-tab-progress-content">
+							<h3>{fixtures.rounds[fixtures.currentRound].round}</h3>
+							<div className="schedule-tab-progress-bar">
+								<div
+									className="schedule-tab-progress-bar fill"
+									style={{
+										width: `${
+											(fixtures.rounds[fixtures.currentRound].completed /
+												fixtures.rounds[fixtures.currentRound].matches) *
+											100
+										}%`,
+									}}></div>
+							</div>
+							{creator &&
+								fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches &&
+								(fixtures.currentRound === fixtures.rounds.length ? (
+									<div className="schedule-tab-progress-button">End Tournament</div>
+								) : (
+									<div className="schedule-tab-progress-button" onClick={() => setShowNextRoundModal(true)}>
+										Next Round
+									</div>
+								))}
 						</div>
-						{creator &&
-							fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches &&
-							(fixtures.currentRound === fixtures.rounds.length ? (
-								<div className="schedule-tab-progress-button">End Tournament</div>
-							) : (
-								<div className="schedule-tab-progress-button" onClick={() => setShowNextRoundModal(true)}>
-									Next Round
-								</div>
-							))}
 					</div>
-				</div>
+				)}
 			</div>
 		</>
 	);
@@ -397,7 +543,7 @@ export function TeamsTab({ teams, status, setPageUnsavedChanges, tournamentId, c
 	);
 }
 
-function FixtureCard({ fixture, actions = [] }) {
+export function FixtureCard({ fixture, actions = [] }) {
 	let cols = '1fr';
 	let sets = { 1: [], 2: [] };
 	if (fixture.result) {
@@ -436,7 +582,7 @@ function FixtureCard({ fixture, actions = [] }) {
 					{sets[2]}
 				</div>
 			</div>
-			{actions.length > 0 && <div className="fixture-card-actions">&#8942;</div>}
+			{actions.length > 0 && <div className="fixture-card-actions">{actions}</div>}
 		</div>
 	);
 }

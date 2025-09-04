@@ -25,6 +25,9 @@ export default function Icon({ name, label = '', size = 24, className = '', onCl
 		edit: (
 			<path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h357l-80 80H200v560h560v-278l80-80v358q0 33-23.5 56.5T760-120H200Zm280-360ZM360-360v-170l367-367q12-12 27-18t30-6q16 0 30.5 6t26.5 18l56 57q11 12 17 26.5t6 29.5q0 15-5.5 29.5T897-728L530-360H360Zm481-424-56-56 56 56ZM440-440h56l232-232-28-28-29-28-231 231v57Zm260-260-29-28 29 28 28 28-28-28Z" />
 		),
+		download: (
+			<path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z" />
+		),
 	};
 
 	return (
@@ -36,6 +39,7 @@ export default function Icon({ name, label = '', size = 24, className = '', onCl
 			className={className}
 			role={label ? 'img' : 'presentation'}
 			aria-label={label || undefined}
+			title={label || null}
 			aria-hidden={!label}
 			onClick={onClick}>
 			{icons[name]}

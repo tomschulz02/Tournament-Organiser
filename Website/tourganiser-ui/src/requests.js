@@ -253,7 +253,7 @@ export async function startTournament(tournamentId) {
 	}
 }
 
-export async function deleteTournament(id, cacheId) {
+export async function deleteTournament(id) {
 	try {
 		return await fetchWithRetry(`tournament/${id}`, {
 			method: 'DELETE',
@@ -261,7 +261,6 @@ export async function deleteTournament(id, cacheId) {
 			headers: {
 				'Content-Type': 'application/json',
 			},
-			body: JSON.stringify({ cacheId }),
 		});
 	} catch (error) {
 		if (error.isConnectionError) {

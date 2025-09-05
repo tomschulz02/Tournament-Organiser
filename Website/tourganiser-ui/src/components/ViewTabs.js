@@ -3,7 +3,7 @@ import Icon from './Icons';
 import Tooltip from './Tooltip';
 import { TeamNameChangePopup } from '../pages/Tournaments';
 import LoadingScreen from './LoadingScreen';
-import { updateTeams, updateRounds, updateScore } from '../requests';
+import { updateTeams, updateRounds, updateScore, startTournament, deleteTournament } from '../requests';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
 import ScoreUpdateModal from './ScoreUpdateModal';
@@ -11,12 +11,74 @@ import NextRoundModal from './NextRoundModal';
 import FixturesDoc, { downloadPDF, testHtml2Canvas } from './FixturesDoc';
 
 export function OverviewTab({ details, loggedIn, creator }) {
+	const [loading, setLoading] = useState(false);
+	const confirm = useConfirm();
+	const { showMessage } = useMessage();
+
 	let actions = [];
+
+	const handleStartTournament = async () => {
+		const confirmed = await confirm(
+			"Are you sure you want to start the tournament? Once you do you won't be able to change anything"
+		);
+		if (!confirmed) return;
+
+		setLoading(true);
+		try {
+			const response = await startTournament(details.id);
+			setLoading(false);
+
+			if (!response.success) {
+				showMessage('Failed to start tournament. Please try again later', 'error');
+				return;
+			}
+
+			showMessage('Successfully started tournament. Refreshing page...', 'success');
+			setTimeout(() => {
+				window.location.reload();
+			}, 2000);
+		} catch (error) {
+			showMessage('An error occurred. Please try again later', 'error');
+		}
+	};
+
+	const handleDeleteTournament = async () => {
+		const confirmed = await confirm('Are you sure you want to delete this tournament? This action cannot be undone');
+		if (!confirmed) return;
+
+		setLoading(true);
+		try {
+			const response = await deleteTournament(details.id);
+			setLoading(false);
+
+			if (!response.success) {
+				showMessage('Failed to delete tournament. Please try again later', 'error');
+				return;
+			}
+
+			showMessage('Successfully deleted tournament. Redirecting...', 'success');
+			setTimeout(() => {
+				window.location.pathname = '/tournaments';
+			}, 2000);
+		} catch (error) {}
+	};
+
 	if (creator) {
-		actions.push(<div key={1}>Start</div>, <div key={2}>Delete</div>);
+		actions.push(
+			<div key={1} className="overview-tab-details-actions-button" onClick={handleStartTournament}>
+				Start
+			</div>,
+			<div key={2} className="overview-tab-details-actions-button" onClick={handleDeleteTournament}>
+				Delete
+			</div>
+		);
 	} else {
 		if (loggedIn) {
-			actions.push(<div key={1}>Save</div>);
+			actions.push(
+				<div key={1} className="overview-tab-details-actions-button">
+					Save
+				</div>
+			);
 		}
 	}
 

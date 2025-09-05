@@ -6,16 +6,20 @@ const formatOptions = {
 };
 
 const testingTournament = {
-	tournamentName: 'Test',
-	startDate: '2025-07-17',
-	location: 'Pretoria',
-	description: '',
-	tournamentCollection: '',
-	format: 'single',
-	type: 'indoor',
-	teamCount: 18,
-	numGroups: 4,
-	knockoutRound: 8,
+	template: 'Single Elimination',
+	details: {
+		name: 'Tourganiser',
+		date: '2025-09-04',
+		location: 'here',
+		description:
+			"This is a very long description to see how the summary page handles such big values. I need even more characters but I don't know what else to write about so here is a random sentence: The quick brown fox jumps over the lazy dog.",
+		collection: '',
+	},
+	structure: {
+		numTeams: '18',
+		numGroups: '0',
+		knockoutRound: '0',
+	},
 	teams: [
 		'Team 1',
 		'Team 2',
@@ -38,12 +42,69 @@ const testingTournament = {
 	],
 };
 
+const otherTournament = {
+	template: 'Classic',
+	details: {
+		name: 'Test Tournament',
+		date: '2025-09-04',
+		location: 'here',
+		description:
+			"This is a very long description to see how the summary page handles such big values. I need even more characters but I don't know what else to write about so here is a random sentence: The quick brown fox jumps over the lazy dog.",
+		collection: '',
+	},
+	structure: { numTeams: '16', numGroups: '4', knockoutRound: '8' },
+	teams: [
+		'Team 1',
+		'Team 2',
+		'Team 3',
+		'Team 4',
+		'Team 5',
+		'Team 6',
+		'Team 7',
+		'Team 8',
+		'Team 9',
+		'Team 10',
+		'Team 11',
+		'Team 12',
+		'Team 13',
+		'Team 14',
+		'Team 15',
+		'Team 16',
+	],
+};
+
 // formatCombiTournamentForStorage(testingTournament);
 
-export function formatCombiTournamentForStorage(data) {
-	if (data['format'] === 'single') {
-		data['numGroups'] = Math.pow(2, Math.floor(Math.log2(data['teamCount'])));
-		data['knockoutRound'] = data['numGroups'] / 2;
+export function formatCombiTournamentForStorage(rawData) {
+	const data = {
+		tournamentName: rawData.details.name,
+		startDate: rawData.details.date,
+		location: rawData.details.location,
+		description: rawData.details.description || '',
+		tournamentCollection: rawData.details.collection || '',
+		format: rawData.template,
+		teamCount: parseInt(rawData.structure.numTeams),
+		numGroups: parseInt(rawData.structure.numGroups),
+		knockoutRound: parseInt(rawData.structure.knockoutRound) / 2,
+		teams: rawData.teams,
+		user: rawData.user,
+	};
+
+	switch (data.format) {
+		case 'Classic':
+			data.format = 'C';
+			break;
+		case 'League':
+			data.format = 'CP';
+			data.numGroups = 1;
+			break;
+		case 'Single Elimination':
+			data.format = 'SE';
+			data.numGroups = Math.pow(2, Math.floor(Math.log2(data.teamCount)));
+			data.knockoutRound = data.numGroups / 2;
+			break;
+		default:
+			data.format = 'C';
 	}
 
 	var format = {
@@ -57,7 +118,6 @@ export function formatCombiTournamentForStorage(data) {
 		knockout: parseInt(data['knockoutRound']) == 0 ? false : true,
 		state: {
 			// groups: populateGroups(data["numGroups"], data["teams"]),
-			type: data['type'],
 			teams: data['teams'],
 			rounds: [],
 			currentRound: 0,

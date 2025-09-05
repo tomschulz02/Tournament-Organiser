@@ -1,5 +1,5 @@
 import React, { useContext, useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import Icon from './Icons';
@@ -121,6 +121,7 @@ function CreateFromTemplate({ goBack }) {
 	const [loading, setLoading] = useState(false);
 	const [showTeamNameChange, setShowTeamNameChange] = useState(false);
 	const [teamNameChangeFields, setTeamNameChangeFields] = useState({ rank: 0, currName: '' });
+	const navigate = useNavigate();
 
 	useEffect(() => {
 		const fetchCollections = async () => {
@@ -545,14 +546,28 @@ function CreateFromTemplate({ goBack }) {
 
 	const submitTournamentData = async () => {
 		if (validateTournamentData()) {
+			let message;
+			let redirect = false;
 			setLoading(true);
 			try {
 				const result = await createTournament(tournamentData);
-				console.log(result);
+
+				if (!result.success) {
+					message = { content: 'Failed to create tournament. Please try again later', type: 'error' };
+				} else {
+					message = { content: 'Successfully created tournament.', type: 'success' };
+					redirect = true;
+				}
 			} catch (error) {
-				console.error(error);
+				message = { content: 'An error occurred. Please try again later', type: 'error' };
 			} finally {
 				setLoading(false);
+				showMessage(message.content, message.type);
+				if (redirect) {
+					setTimeout(() => {
+						navigate('/tournaments', { replace: true });
+					}, 2000);
+				}
 			}
 		}
 	};

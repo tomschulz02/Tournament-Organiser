@@ -3647,3 +3647,10 @@ Styles for the template for downloading fixtures
 	font-size: 2rem;
 	color: var(--main-color);
 }
+
+.tournament-not-found {
+	color: var(--secondary-text-color);
+	text-align: center;
+	margin-top: 50px;
+	font-size: 1.5rem;
+}

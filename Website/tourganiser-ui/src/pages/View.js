@@ -25,11 +25,16 @@ export default function ViewPage() {
 					response = await fetchTournamentData(id);
 				}
 
-				console.log(response);
+				if (!response.success) {
+					setType(null);
+					return;
+				}
+
 				setTournamentData(await response);
 				setType([...id][0]);
 			} catch (error) {
 				console.error(error);
+				setType(null);
 			} finally {
 				setLoading(false);
 			}
@@ -42,9 +47,9 @@ export default function ViewPage() {
 
 	if (!type) {
 		return (
-			<div style={{ textAlign: 'center', marginTop: '2rem' }}>
+			<div className="tournament-not-found">
 				<h2>⛔ Tournament Not Found</h2>
-				<p>The tournament you are looking for doesn’t exist or was removed.</p>
+				<p>The tournament you are looking for doesn't exist or was removed.</p>
 			</div>
 		);
 	}

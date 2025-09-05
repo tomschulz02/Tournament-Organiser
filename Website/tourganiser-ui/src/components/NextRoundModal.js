@@ -6,6 +6,11 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	const [availableTeams, setAvailableTeams] = useState([]);
 	const nextRound = fixtures.rounds[fixtures.currentRound + 1];
 	const currentRoundStandings = standings[fixtures.currentRound].groups;
+	let generatedFixtures = [];
+
+	if (qualifiedSpots.length > 0) {
+		generatedFixtures = generateFixtures(qualifiedSpots);
+	}
 
 	useEffect(() => {
 		// Initialize qualified spots with calculated teams
@@ -35,7 +40,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	}
 
 	function generateFixtures(teams) {
-		const fixtures = [];
+		const _fixtures = [];
 		const gap = nextRound.qualifyingTeams - nextRound.matches * 2;
 
 		if (nextRound.round === 'Finals' || fixtures.rounds.length === fixtures.currentRound + 1) {
@@ -43,28 +48,28 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 				const team1 = teams[i];
 				const team2 = teams[i + 1];
 				if (team1 && team2) {
-					fixtures.push({ team1: team1, team2: team2 });
+					_fixtures.push({ team1: team1, team2: team2 });
 				} else if (team1) {
-					fixtures.push({ team1: team1, team2: 'TBD' });
+					_fixtures.push({ team1: team1, team2: 'TBD' });
 				} else if (team2) {
-					fixtures.push({ team1: 'TBD', team2: team2 });
+					_fixtures.push({ team1: 'TBD', team2: team2 });
 				}
 			}
-			return fixtures;
+			return _fixtures;
 		}
 
 		for (let i = gap; i < teams.length - nextRound.matches; i++) {
 			const team1 = teams[i];
 			const team2 = teams[teams.length - (i - gap) - 1];
 			if (team1 && team2) {
-				fixtures.push({ team1: team1, team2: team2 });
+				_fixtures.push({ team1: team1, team2: team2 });
 			}
 		}
 		for (let i = 0; i < gap; i++) {
-			fixtures.push({ team1: teams[i], team2: 'TBD' });
+			_fixtures.push({ team1: teams[i], team2: 'TBD' });
 		}
 
-		return fixtures;
+		return _fixtures;
 	}
 
 	const handleTeamSelect = (index, teamName) => {
@@ -120,7 +125,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 					<div className="fixture-preview">
 						<h3>Next Round Fixtures</h3>
 						<div className="fixtures-list">
-							{generateFixtures(qualifiedSpots).map((fixture, index) => (
+							{generatedFixtures.map((fixture, index) => (
 								<div key={index} className="preview-fixture">
 									<span>{fixture.team1}</span>
 									<span>vs</span>

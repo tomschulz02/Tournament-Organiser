@@ -1859,91 +1859,55 @@ Tournaments page styles
 
 .tournaments-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	grid-template-columns: 1fr;
 	gap: 20px;
 }
 
 .tournament-card {
-	/* background-color: rgb(from var(--text-color) r g b / 0.05); */
 	border: 1px solid var(--card-border-color);
 	padding: 20px;
 	border-radius: 8px;
-	box-shadow: 0 2px 8px var(--card-shadow-color);
-	transition: transform 0.5s ease;
+	box-shadow: 0 2px 4px var(--card-shadow-color);
 	position: relative;
-	height: 200px;
 	overflow: hidden;
-}
-
-.tournament-card:hover {
-	/* background-color: rgb(from var(--secondary-text-color) r g b / 0.1); */
-	transform: scale(0.99);
-}
-
-.tournament-card h3 {
-	color: var(--secondary-color);
-	margin-bottom: 15px;
-}
-
-.tournament-card p {
+	display: grid;
+	grid-template-columns: 4fr 1fr 1fr 30px;
+	gap: 10px;
+	align-items: center;
 	color: var(--secondary-text-color);
 }
 
-.view-btn {
-	display: inline-block;
-	box-sizing: border-box;
-	vertical-align: middle;
+.tournament-card-name {
+	font-size: 1.2rem;
+}
+
+.tournament-card-date,
+.tournament-card-location {
+	font-size: 0.8rem;
 	text-align: center;
-	width: calc(100% - 30px);
-	padding: 10px;
-	background: var(--quarternary-color);
-	color: var(--text-color);
-	border: none;
-	border-radius: 4px;
+	padding: 5px 10px;
+	border: 1px solid transparent;
+}
+
+.tournament-card-action {
+	fill: var(--secondary-text-color);
 	cursor: pointer;
-	margin-top: 15px;
-	transition: background 0.3s ease;
-	text-decoration: none;
-	position: absolute;
-	bottom: 15px;
-	left: 15px;
+	transition: all 0.3s ease;
+	&:hover {
+		fill: var(--secondary-color);
+	}
 }
 
-.view-btn:hover {
-	background: var(--main-color);
-}
-
-.type-indicator {
-	position: absolute;
-	top: 10px;
-	right: 10px;
-	padding: 6px 12px;
-	border-radius: 15px;
-	font-size: 0.8em;
-	font-weight: 500;
-	text-transform: capitalize;
-	border: 1px solid;
-}
-
-.type-indicator.beach {
-	background-color: #fff3e0;
-	color: #e65100;
-	border-color: #e65100;
-	/* box-shadow: 0 0 8px rgba(230, 81, 0, 0.2); */
-}
-
-.type-indicator.indoor {
-	background-color: #e3f2fd;
-	color: #1565c0;
-	border-color: #1565c0;
-	/* box-shadow: 0 0 8px rgba(21, 101, 192, 0.2); */
-}
-
-.type-indicator.collection {
+.tournament-card-collection-badge {
 	background-color: #e8f5e9;
 	color: #2e7d32;
-	border-color: #2e7d32;
-	/* box-shadow: 0 0 8px rgba(46, 125, 50, 0.2); */
+	border: 1px solid #2e7d32;
+	padding: 5px 10px;
+	width: fit-content;
+	text-align: center;
+	font-size: 0.8rem;
+	margin: 0px auto;
+	border-radius: 10px;
 }
 
 /* 
@@ -3283,6 +3247,85 @@ Styles for the name change popup
 }
 
 /* 
+Styles for the template for downloading fixtures
+*/
+#fixturesDownloadTemplate {
+	position: fixed;
+	top: 0px;
+	left: -9999px;
+	box-sizing: border-box;
+	width: 210mm;
+	min-height: 297mm;
+	background-color: white;
+	padding: 10mm;
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+.fixtures-doc {
+	color: black;
+	width: 100%;
+	height: 100%;
+}
+
+.fixtures-doc-title {
+	font-size: 2rem;
+	color: var(--main-color);
+}
+
+.tournament-not-found {
+	color: var(--secondary-text-color);
+	text-align: center;
+	margin-top: 50px;
+	font-size: 1.5rem;
+}
+
+.collection-view-modal {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.2);
+	backdrop-filter: blur(2px);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 3;
+}
+
+.collection-view-modal-content {
+	background-color: var(--background-color);
+	border: 1px solid var(--card-border-color);
+	border-radius: 10px;
+	padding: 20px;
+	position: relative;
+	max-width: 1000px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.collection-view-modal-close {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 25px;
+	height: 25px;
+	fill: var(--secondary-text-color);
+	cursor: pointer;
+	transition: all 0.3s ease;
+	border-radius: 5px;
+	&:hover {
+		background-color: rgba(0, 0, 0, 0.1);
+	}
+}
+
+.collection-view-modal-header {
+	text-align: center;
+	margin: 20px 10px;
+}
+
+/* 
 Standings Tab styles - temporary from old UI
 */
 .tournament-standings {
@@ -3620,37 +3663,4 @@ Temporary styles for teams page - taken from old version
 
 .teams-tab-edit-team-icon {
 	fill: var(--secondary-text-color);
-}
-
-/* 
-Styles for the template for downloading fixtures
-*/
-#fixturesDownloadTemplate {
-	position: fixed;
-	top: 0px;
-	left: -9999px;
-	box-sizing: border-box;
-	width: 210mm;
-	min-height: 297mm;
-	background-color: white;
-	padding: 10mm;
-	font-family: Arial, Helvetica, sans-serif;
-}
-
-.fixtures-doc {
-	color: black;
-	width: 100%;
-	height: 100%;
-}
-
-.fixtures-doc-title {
-	font-size: 2rem;
-	color: var(--main-color);
-}
-
-.tournament-not-found {
-	color: var(--secondary-text-color);
-	text-align: center;
-	margin-top: 50px;
-	font-size: 1.5rem;
 }

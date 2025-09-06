@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { OverviewTab, ScheduleTab, StandingsTab, TeamsTab } from './ViewTabs';
+import Icon from './Icons';
 
 export default function TournamentView({ tournament }) {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -129,7 +130,7 @@ export default function TournamentView({ tournament }) {
 			</div>
 			<div className={`tournament-view-header-actions ${showHeader ? 'visible' : 'hidden'}`}>
 				<div onClick={handleGoBack} className="tournament-view-header-action">
-					Back
+					<Icon name={'leftChevron'} />
 				</div>
 				<div>Follow</div>
 			</div>

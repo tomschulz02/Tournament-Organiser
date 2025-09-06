@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Icon from './Icons';
 import Tooltip from './Tooltip';
-import { TeamNameChangePopup } from '../pages/Tournaments';
+import { TeamNameChangePopup } from '../pages/Browse';
 import LoadingScreen from './LoadingScreen';
 import { updateTeams, updateRounds, updateScore, startTournament, deleteTournament } from '../requests';
 import { useMessage } from '../MessageContext';
@@ -609,10 +609,11 @@ export function FixtureCard({ fixture, actions = [] }) {
 	let cols = '1fr';
 	let sets = { 1: [], 2: [] };
 	if (fixture.result) {
+		let index = 0;
 		for (let set of fixture.result) {
 			cols += ' 25px';
-			sets[1].push(<div key={1}>{set[0]}</div>);
-			sets[2].push(<div key={2}>{set[1]}</div>);
+			sets[1].push(<div key={index++}>{set[0]}</div>);
+			sets[2].push(<div key={index++}>{set[1]}</div>);
 		}
 	} else {
 		cols += ' 25px';

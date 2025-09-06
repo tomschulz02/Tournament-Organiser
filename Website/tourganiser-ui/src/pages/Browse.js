@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Outlet, useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import { getTournaments, createCollection, createTournament, fetchUserCollections } from '../requests';
@@ -8,14 +8,16 @@ import { useConfirm } from '../components/ConfirmDialog';
 import LoadingScreen from '../components/LoadingScreen';
 import '../App.css';
 import TournamentCreation from '../components/TournamentCreation';
+import Icon from '../components/Icons';
 
 const tooltips = {
 	collections:
 		'You can group tournaments in collections so that they can be viewed together. Tournaments that are part of a collection will not be displayed on the browse page, but rather in the view page of the collection it belongs to.',
 };
 
-export default function Tournaments() {
+export default function Browse() {
 	const [currentPage, setCurrentPage] = useState('browse');
+	const { id } = useParams();
 
 	useEffect(() => {
 		const section = window.location.hash.replace('#', '');
@@ -28,20 +30,22 @@ export default function Tournaments() {
 
 	return (
 		<div className="tournament-tabs-container">
-			<div className="tournament-tab-buttons">
-				<div
-					className={`tournament-tab-btn ${currentPage === 'browse' ? 'active' : ''}`}
-					data-tab="browse"
-					onClick={() => setCurrentPage('browse')}>
-					Browse Tournaments
+			{(!id || id.startsWith('c')) && (
+				<div className="tournament-tab-buttons">
+					<div
+						className={`tournament-tab-btn ${currentPage === 'browse' ? 'active' : ''}`}
+						data-tab="browse"
+						onClick={() => setCurrentPage('browse')}>
+						Browse Tournaments
+					</div>
+					<div
+						className={`tournament-tab-btn ${currentPage === 'create' ? 'active' : ''}`}
+						data-tab="create"
+						onClick={() => setCurrentPage('create')}>
+						Create Tournament
+					</div>
 				</div>
-				<div
-					className={`tournament-tab-btn ${currentPage === 'create' ? 'active' : ''}`}
-					data-tab="create"
-					onClick={() => setCurrentPage('create')}>
-					Create Tournament
-				</div>
-			</div>
+			)}
 			<div className="tournament-tab-content active">
 				{currentPage === 'browse' ? <BrowseTournaments /> : <TournamentCreation />}
 			</div>
@@ -58,6 +62,8 @@ function BrowseTournaments() {
 		format: 'all',
 		search: '',
 	});
+	const { id } = useParams();
+	const navigate = useNavigate();
 
 	const filteredTournaments = tournaments.filter((tournament) => {
 		if (filter.format !== 'all' && tournament.type !== filter.format) {
@@ -68,6 +74,8 @@ function BrowseTournaments() {
 		}
 		return true;
 	});
+
+	console.log(filteredTournaments);
 
 	useEffect(() => {
 		setIsLoading(true);
@@ -100,57 +108,46 @@ function BrowseTournaments() {
 	};
 
 	return (
-		<div className="browse-tournaments">
+		<>
 			{isLoading && <LoadingScreen />}
-			<div className="search-section">
-				<input
-					type="text"
-					id="searchTournaments"
-					value={filter.search}
-					onChange={handlefilterChange}
-					placeholder="Search tournaments..."
-				/>
-				<select id="filterFormat" value={filter.format} onChange={handlefilterChange}>
-					<option value="all">All</option>
-					<option value="beach">Beach Tournaments</option>
-					<option value="indoor">Indoor Tournaments</option>
-					<option value="collection">Collections</option>
-				</select>
-			</div>
-			<div className="tournaments-grid" id="tournamentsGrid">
-				{filteredTournaments.length > 0 ? (
-					filteredTournaments.map((tournament) => {
-						if (tournament.classification === 'tournament') {
-							return (
-								<div className="tournament-card" key={tournament.id}>
-									<div className={`type-indicator ${tournament.type}`}>{tournament.type}</div>
-									<h3>{tournament.name}</h3>
-									<p className="tournament-date">Starting: {tournament.date}</p>
-									<p className="tournament-format">Format: {tournament.format}</p>
-									<p className="tournament-location">Location: {tournament.location}</p>
-									<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
-										View Tournament
-									</Link>
-								</div>
-							);
-						} else if (tournament.classification === 'collection') {
-							return (
-								<div className="tournament-card" key={tournament.id}>
-									<div className="type-indicator collection">Collection</div>
-									<h3>{tournament.name}</h3>
-									<p className="tournament-date">Tournaments: {tournament.num_tournaments}</p>
-									<Link to={`/tournaments/view/${tournament.id}`} className="view-btn" name={tournament.id}>
-										View Collection
-									</Link>
-								</div>
-							);
-						}
-					})
-				) : (
-					<div className="no-tournaments-message">No tournaments available</div>
-				)}
-			</div>
-		</div>
+			{id && id.startsWith('t') ? (
+				<Outlet />
+			) : (
+				<div className="browse-tournaments">
+					<Outlet />
+					<div className="search-section">
+						<input
+							type="text"
+							id="searchTournaments"
+							value={filter.search}
+							onChange={handlefilterChange}
+							placeholder="Search tournaments..."
+						/>
+						<select id="filterFormat" value={filter.format} onChange={handlefilterChange}>
+							<option value="all">All</option>
+							<option value="beach">Beach Tournaments</option>
+							<option value="indoor">Indoor Tournaments</option>
+							<option value="collection">Collections</option>
+						</select>
+					</div>
+					<div className="tournaments-grid" id="tournamentsGrid">
+						{filteredTournaments.length > 0 ? (
+							filteredTournaments.map((tournament, index) => {
+								return (
+									<TournamentCard
+										key={index}
+										details={tournament}
+										action={() => navigate(`/tournaments/view/${tournament.id}`)}
+									/>
+								);
+							})
+						) : (
+							<div className="no-tournaments-message">No tournaments available</div>
+						)}
+					</div>
+				</div>
+			)}
+		</>
 	);
 }
 
@@ -205,6 +202,19 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 					</button>
 				</form>
 			</div>
+		</div>
+	);
+}
+
+export function TournamentCard({ details, action }) {
+	return (
+		<div className="tournament-card">
+			<div className="tournament-card-name">{details.name}</div>
+			<div className="tournament-card-date">{details.date || details.startDate || ''}</div>
+			<div className={`${details.location ? 'tournament-card-location' : 'tournament-card-collection-badge'}`}>
+				{details.location || (details.classification === 'collection' ? 'Collection' : '')}
+			</div>
+			<Icon name={'arrowRight'} className="tournament-card-action" onClick={action} />
 		</div>
 	);
 }

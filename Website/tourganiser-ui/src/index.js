@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import Home from './pages/Home';
-import Tournaments from './pages/Tournaments';
+import Browse from './pages/Browse';
 import ViewPage from './pages/View';
 import About from './pages/About';
 import Login from './pages/Login';
@@ -27,8 +27,9 @@ function RoutesComponent() {
 				<Route path="/" element={<App />}>
 					<Route path="/" element={<Home />} />
 					<Route path="/home" element={<Home />} />
-					<Route path="/tournaments" element={<Tournaments />} />
-					<Route path="/tournaments/view/:id" element={<ViewPage />} />
+					<Route path="/tournaments" element={<Browse />}>
+						<Route path="/tournaments/view/:id" element={<ViewPage />} />
+					</Route>
 					<Route path="/about" element={<About />} />
 					<Route path="/terms" element={<LegalPage />} />
 					<Route path="*" element={<NotFound />} />

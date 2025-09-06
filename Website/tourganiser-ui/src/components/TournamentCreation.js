@@ -4,7 +4,7 @@ import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
-import { TeamNameChangePopup } from '../pages/Tournaments';
+import { TeamNameChangePopup } from '../pages/Browse';
 import SummaryPage from './SummaryPage';
 import { fetchUserCollections, createCollection, createTournament } from '../requests';
 import '../App.css';
@@ -324,7 +324,6 @@ function CreateFromTemplate({ goBack }) {
 		}
 
 		if (id === 'date') {
-			console.log(value);
 			setInputErrors((prev) => ({
 				...prev,
 				details: {

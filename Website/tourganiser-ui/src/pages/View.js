@@ -26,9 +26,11 @@ export default function ViewPage() {
 				}
 
 				if (!response.success) {
-					setType(null);
+					setType(404);
 					return;
 				}
+
+				console.log(response);
 
 				setTournamentData(await response);
 				setType([...id][0]);
@@ -45,13 +47,17 @@ export default function ViewPage() {
 
 	if (loading) return <LoadingScreen />;
 
-	if (!type) {
+	if (type === 404) {
 		return (
 			<div className="tournament-not-found">
 				<h2>⛔ Tournament Not Found</h2>
 				<p>The tournament you are looking for doesn't exist or was removed.</p>
 			</div>
 		);
+	}
+
+	if (!type) {
+		return <div></div>;
 	}
 
 	return (

@@ -115,7 +115,7 @@ function BrowseTournaments() {
 			) : (
 				<div className="browse-tournaments">
 					<Outlet />
-					<div className="search-section">
+					<div className="search-section" id="tournamentsSearch">
 						<input
 							type="text"
 							id="searchTournaments"

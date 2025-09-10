@@ -8,16 +8,21 @@ export default function TournamentView({ tournament }) {
 	const currentTab = searchParams.get('tab') || 'overview';
 	const [showHeader, setShowHeader] = useState(true);
 	const [lastScrollY, setLastScrollY] = useState(0);
+	const [lastScrollUp, setLastScrollUp] = useState(0);
 	const navigate = useNavigate();
 	const location = useLocation();
 
 	useEffect(() => {
 		const handleScroll = () => {
 			const scrollY = window.scrollY;
-			if (scrollY > lastScrollY && scrollY > 60) {
+			if (scrollY > lastScrollY && scrollY > lastScrollUp + 60) {
 				setShowHeader(false);
 			} else {
 				setShowHeader(true);
+			}
+
+			if (scrollY < lastScrollY) {
+				setLastScrollUp(scrollY);
 			}
 
 			setLastScrollY(scrollY);

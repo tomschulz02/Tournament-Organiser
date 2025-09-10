@@ -11,6 +11,7 @@ export default function ViewPage() {
 	const [tournamentData, setTournamentData] = useState({});
 	const [type, setType] = useState(null);
 	const [loading, setLoading] = useState(false);
+	const [openPreview, setOpenPreview] = useState(false);
 
 	useEffect(() => {
 		const fetchDetails = async () => {
@@ -19,7 +20,9 @@ export default function ViewPage() {
 				let response;
 				if ([...id][0] === 'c') {
 					// fetch collection data
+					setLoading(false);
 					response = await fetchTournamentData(id);
+					setOpenPreview(true);
 				} else {
 					// fetch tournament data
 					response = await fetchTournamentData(id);
@@ -62,7 +65,7 @@ export default function ViewPage() {
 
 	return (
 		<>
-			{type === 'c' && <CollectionView collection={tournamentData} />}
+			<CollectionView collection={tournamentData} status={openPreview} setStatus={setOpenPreview} />
 			{type === 't' && <TournamentView tournament={tournamentData} />}
 		</>
 	);

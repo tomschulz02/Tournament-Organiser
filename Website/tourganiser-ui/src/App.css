@@ -154,6 +154,7 @@ Styles for the footer, which will be persistent on all pages
 	position: absolute;
 	bottom: 0;
 	border-top: 2px solid rgb(from var(--text-color) r g b / 0.4);
+	z-index: 10;
 }
 
 .footer-content {
@@ -1413,7 +1414,7 @@ Score Update Modal styles
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	z-index: 1000;
+	z-index: 5;
 }
 
 .score-modal {
@@ -1594,7 +1595,7 @@ Next Round Modal styles
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	z-index: 1000;
+	z-index: 5;
 }
 
 .next-round-modal {
@@ -1605,6 +1606,7 @@ Next Round Modal styles
 	max-width: 800px;
 	max-height: 90vh;
 	overflow-y: auto;
+	color: var(--secondary-text-color);
 }
 
 .next-round-modal h2 {
@@ -1844,6 +1846,7 @@ Tournaments page styles
 	display: flex;
 	gap: 20px;
 	margin-bottom: 30px;
+	transition: all 0.5s ease;
 }
 
 .search-section input,
@@ -1858,9 +1861,16 @@ Tournaments page styles
 }
 
 .tournaments-grid {
-	display: grid;
-	grid-template-columns: 1fr;
+	display: flex;
+	flex-direction: column;
 	gap: 20px;
+	transition: all 5s ease;
+	min-height: 600px;
+	color: var(--secondary-text-color);
+}
+
+.tournaments-grid.shrink .tournament-card {
+	width: calc(100vw - 450px);
 }
 
 .tournament-card {
@@ -1874,7 +1884,10 @@ Tournaments page styles
 	grid-template-columns: 4fr 1fr 1fr 30px;
 	gap: 10px;
 	align-items: center;
-	color: var(--secondary-text-color);
+
+	height: 100px;
+	width: 100%;
+	transition: width 0.5s ease;
 }
 
 .tournament-card-name {
@@ -1883,7 +1896,7 @@ Tournaments page styles
 
 .tournament-card-date,
 .tournament-card-location {
-	font-size: 0.8rem;
+	font-size: 0.9rem;
 	text-align: center;
 	padding: 5px 10px;
 	border: 1px solid transparent;
@@ -3279,36 +3292,51 @@ Styles for the template for downloading fixtures
 	font-size: 1.5rem;
 }
 
-.collection-view-modal {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	background-color: rgba(0, 0, 0, 0.2);
-	backdrop-filter: blur(2px);
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	z-index: 3;
-}
-
 .collection-view-modal-content {
-	background-color: var(--background-color);
+	background-color: var(--secondary-color);
 	border: 1px solid var(--card-border-color);
-	border-radius: 10px;
+	border-right: 0px;
+	border-radius: 10px 0 0 10px;
 	padding: 20px;
-	position: relative;
-	max-width: 1000px;
+	width: 400px;
+	height: calc(100vh - 210px);
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+	position: fixed;
+	top: 155px;
+	right: 0;
+	z-index: 2;
+	transition: all 0.5s ease;
+	color: var(--text-color);
+	text-shadow: 1px 1px 0px black;
+}
+
+.collection-view-modal-content.closed {
+	right: -400px;
+}
+
+@media (max-width: 768px) {
+	.collection-view-modal-content {
+		border-radius: 10px 10px 0 0;
+		border: 1px solid var(--card-border-color);
+		border-bottom: 0px;
+		width: calc(100vw - 20px);
+		bottom: 0;
+		right: 10px;
+		top: auto;
+	}
+
+	.collection-view-modal-content.closed {
+		bottom: -600px;
+		right: 10px;
+	}
 }
 
 .collection-view-modal-close {
 	position: absolute;
 	top: 10px;
-	right: 10px;
+	left: 10px;
 	width: 25px;
 	height: 25px;
 	fill: var(--secondary-text-color);

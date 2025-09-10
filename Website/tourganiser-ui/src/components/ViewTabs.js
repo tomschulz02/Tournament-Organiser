@@ -84,6 +84,7 @@ export function OverviewTab({ details, loggedIn, creator }) {
 
 	return (
 		<>
+			{loading && <LoadingScreen />}
 			<div className="overview-tab-content">
 				<div className="overview-tab-details">
 					<div className="overview-tab-details-title">{details.name}</div>
@@ -590,7 +591,7 @@ export function TeamsTab({ teams, status, setPageUnsavedChanges, tournamentId, c
 					{stagedTeams.map((team, index) => (
 						<div key={index} className="team-card">
 							{team}
-							{true && (
+							{editTeams && (
 								<Icon
 									className="teams-tab-edit-team-icon"
 									name={'edit'}

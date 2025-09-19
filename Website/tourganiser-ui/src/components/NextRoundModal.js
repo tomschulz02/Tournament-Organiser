@@ -5,6 +5,9 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	const [qualifiedSpots, setQualifiedSpots] = useState([]);
 	const [availableTeams, setAvailableTeams] = useState([]);
 	const nextRound = fixtures.rounds[fixtures.currentRound + 1];
+	console.log(fixtures);
+	const existingTeams = nextRound.groups.flat();
+	// nextRound.groups = [];
 	const currentRoundStandings = standings[fixtures.currentRound].groups;
 	let generatedFixtures = [];
 
@@ -15,19 +18,29 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	useEffect(() => {
 		// Initialize qualified spots with calculated teams
 		const initialQualified = getQualifiedTeams(currentRoundStandings);
-		const allTeams = Array.isArray(currentRoundStandings[0]) ? currentRoundStandings.flat() : currentRoundStandings;
-
+		const allTeams = [];
+		console.log(existingTeams);
+		existingTeams.forEach((team) => {
+			allTeams.push({ name: team });
+		});
+		const newTeams = Array.isArray(currentRoundStandings[0]) ? currentRoundStandings.flat() : currentRoundStandings;
+		allTeams.push(...newTeams);
+		console.log(initialQualified);
 		setAvailableTeams(allTeams);
 		setQualifiedSpots(initialQualified.map((team) => team.name));
 	}, [currentRoundStandings]);
 
 	function getQualifiedTeams(standings) {
 		let qualifiedTeams = [];
+		existingTeams.forEach((team) => {
+			qualifiedTeams.push({ name: team });
+		});
 		let currentStandings = [...standings];
 		for (let i = 0; i < Math.floor(nextRound.qualifyingTeams / currentStandings.length); i++) {
-			currentStandings.forEach((group) => {
-				qualifiedTeams.push(group[i]);
-			});
+			if (qualifiedTeams.length < nextRound.qualifyingTeams)
+				currentStandings.forEach((group) => {
+					qualifiedTeams.push(group[i]);
+				});
 		}
 		currentStandings = currentStandings.slice(
 			Math.floor(nextRound.qualifyingTeams / currentStandings.length) * currentStandings.length
@@ -42,6 +55,7 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 	function generateFixtures(teams) {
 		const _fixtures = [];
 		const gap = nextRound.qualifyingTeams - nextRound.matches * 2;
+		console.log(teams);
 
 		if (nextRound.round === 'Finals' || fixtures.rounds.length === fixtures.currentRound + 1) {
 			for (let i = 0; i < teams.length; i += 2) {

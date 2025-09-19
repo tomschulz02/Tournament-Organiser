@@ -696,6 +696,9 @@ function TournamentFixtures({ fixtures, creator, onUpdate, standings, tournament
 		}
 		setLoading(true);
 
+		//reset next rounds group in case of prequalified teams, e.g. going from R12 to QF
+		fixtures.rounds[fixtures.currentRound + 1].groups = [];
+
 		// send qualified teams, standings, remaining fixtures, currentRound, and rounds to server
 		const response = await updateRounds(
 			tournamentId,

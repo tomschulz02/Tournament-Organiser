@@ -490,19 +490,33 @@ export function determineQualifiedTeams({ rounds, teams, fixtures, currentRound,
 			}
 		}
 		for (let i = 0; i < gap; i++) {
-			rounds[currentRound + 1].groups.push([teams[i], 'TBD']);
+			rounds[currentRound + 1].groups.push([teams[i]]);
 		}
 
 		// update the fixtures for the next round
-
+		const firstRound = rounds[currentRound].round;
+		let swap = 0,
+			swapped = false;
 		for (let i = currentRound; i < rounds.length; i++) {
 			if (rounds[i].groups.length > 0) {
 				fixtures.forEach((fix, index) => {
 					if (fix.round == rounds[i].round) {
+						console.log('\n' + fix.round + ' = ' + firstRound + '\n');
+						if (fix.round != firstRound) {
+							console.log('Changed round');
+							if (!swapped) {
+								swap = index;
+							}
+							swapped = true;
+						}
+						console.log('\n');
+						console.log(swap);
+						console.dir(rounds[i], { depth: null });
+						console.log('\n');
 						const fixture = {
 							id: fix.id,
-							team1: rounds[i].groups[index][0] ?? 'TBD',
-							team2: rounds[i].groups[index][1] ?? 'TBD',
+							team1: rounds[i].groups[index - swap][0] ?? 'TBD',
+							team2: rounds[i].groups[index - swap][1] ?? 'TBD',
 						};
 						updatedFixtures.push(fixture);
 					}

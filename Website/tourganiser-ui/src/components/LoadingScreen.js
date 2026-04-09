@@ -1,5 +1,5 @@
-import React from "react";
-import "../styles/LoadingScreen.css";
+import React from 'react';
+import '../App.css';
 
 function LoadingScreen() {
 	return (

@@ -149,7 +149,7 @@ app.get('/api/tournament/:id', verifyToken, (req, res) => {
 			if (cacheManager.get(hashId + '_' + (req.user ? req.user.id : 'null'))) {
 				return res
 					.status(200)
-					.json({ success: true, ...cacheManager.get(id + '_' + (req.user ? req.user.id : 'null')) });
+					.json({ success: true, ...cacheManager.get(hashId + '_' + (req.user ? req.user.id : 'null')) });
 			}
 			const decodedId = tournamentHash.decode(hashId);
 			if (decodedId.length === 0) {
@@ -823,7 +823,6 @@ app.delete('/api/tournament/:id', verifyToken, async (req, res) => {
 	try {
 		const { id } = req.params;
 		const userId = req.user.id;
-		const { cacheId } = req.body;
 		const decodedId = tournamentHash.decode(id);
 		if (decodedId.length === 0) {
 			return res.status(400).json({ error: 'Invalid tournament ID' });
@@ -834,7 +833,6 @@ app.delete('/api/tournament/:id', verifyToken, async (req, res) => {
 				return res.status(400).json({ error: result.message });
 			}
 			cacheManager.invalidate(id);
-			cacheManager.invalidate(cacheId.substring(2));
 			cacheManager.invalidate('all');
 			res.status(200).json({ success: true, message: 'Tournament deleted successfully' });
 		});

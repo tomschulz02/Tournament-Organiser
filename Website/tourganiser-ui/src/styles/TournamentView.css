@@ -153,10 +153,10 @@
 }
 
 .tournament-fixtures h3 {
-	color: #333;
+	color: var(--secondary-text-color);
 	margin-bottom: 20px;
 	padding-bottom: 10px;
-	border-bottom: 2px solid #e0e0e0;
+	border-bottom: 2px solid rgb(from var(--secondary-text-color) r g b / 0.1);
 }
 
 .tournament-fixture-card {

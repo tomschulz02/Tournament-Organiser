@@ -3,7 +3,8 @@ import { AuthContext } from '../AuthContext';
 import '../App.css';
 import { useNavigate } from 'react-router-dom';
 import { loginUser, registerUser, checkLoginStatus } from '../requests';
-import { MessagePopup, useMessage } from '../MessageContext';
+import { useMessage } from '../MessageContext';
+import { MessagePopup } from '../MessageProvider';
 import { useTheme } from '../ThemeContext';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

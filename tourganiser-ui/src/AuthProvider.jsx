@@ -2,7 +2,7 @@ import { checkLoginStatus } from "./requests";
 import { AuthContext } from "./AuthContext";
 import { useEffect, useState, useRef } from "react";
 
-export default function AuthProvider({ children }) {
+export function AuthProvider({ children }) {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [username, setUsername] = useState("Guest");
     const hasCheckedLogin = useRef(false);

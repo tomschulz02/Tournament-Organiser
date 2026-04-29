@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_BASE;
+const API_URL = import.meta.env.VITE_API_URL;
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 500;

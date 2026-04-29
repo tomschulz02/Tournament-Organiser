@@ -1,3 +1,4 @@
+import './App.css';
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -11,13 +12,11 @@ import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 import LegalPage from './pages/Legal';
 import ScrollToTop from './components/ScrollToTop';
-import { AuthProvider } from './AuthContext';
-import { MessageProvider } from './MessageContext';
+import { AuthProvider } from './AuthProvider';
+import { MessageProvider } from './MessageProvider';
 import { ConfirmProvider } from './components/ConfirmDialog';
 import { ThemeProvider } from './ThemeContext';
 import '@fortawesome/fontawesome-free/css/all.min.css';
-
-import reportWebVitals from './reportWebVitals';
 
 function RoutesComponent() {
 	return (
@@ -54,8 +53,3 @@ root.render(
 		</ThemeProvider>
 	</React.StrictMode>
 );
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-// reportWebVitals(console.log);

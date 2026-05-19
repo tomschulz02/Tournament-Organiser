@@ -24,11 +24,14 @@ class DBConnection {
 		DBConnection.instance = this;
     }
 
-    query(sql, params, callback) {
+    async query(sql, params) {
 		const values = params || [];
-		this.pool.query(sql, values, (err, result) => {
-			if (err) return callback({ success: false, object: true, message: err });
-			return callback({ success: true, object: true, message: result.rows });
-		});
+		
+		try {
+			const res = await this.pool.query(sql, values);
+			return { success: true, message: res.rows };
+		} catch (err) {
+			return { success: false, error: "DATABASE_ERROR", message: err };
+		}
 	}
 }

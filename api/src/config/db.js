@@ -1,4 +1,4 @@
-import pkg from pg;
+import pkg from "pg";
 const { Pool } = pkg;
 
 class DBConnection {
@@ -35,3 +35,5 @@ class DBConnection {
 		}
 	}
 }
+
+export default () => new DBConnection();

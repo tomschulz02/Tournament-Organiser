@@ -47,7 +47,7 @@ export async function loginUser(email, password) {
 
 export async function registerUser(username, email, password, confirmPassword) {
 	try {
-		return await fetchWithRetry('signup', {
+		return await fetchWithRetry('users/signup', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',

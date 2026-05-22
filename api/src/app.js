@@ -16,9 +16,11 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
 // token check
-publicRoutes = ["/api/users/login", "/api/users/register"];
+const publicRoutes = ["/api/users/login", "/api/users/signup"];
 app.use((req, res, next) => {
+    console.log("Incoming request:", req.method, req.path);
     if (publicRoutes.includes(req.path)) {
+        console.log("Public route accessed:", req.path);
         return next();
     }
 

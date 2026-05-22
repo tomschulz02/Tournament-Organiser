@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
-import DatabaseConnection from "../config/db";
+import DatabaseConnection from "../config/db.js";
 
 const db = DatabaseConnection();
 const saltRounds = 10;
@@ -11,14 +11,15 @@ async function createUser(username, email, password) {
 	try {
 		await client.query("BEGIN");
 
-		const sql = "INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id, username, email";
+		const sql = "INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id, username, email, admin";
 		const result = await client.query(sql, [username, password, email]);
 		
 		await client.query("COMMIT");
-		return result.message[0];
+		return result.rows[0];
 	} catch (err) {
 		await client.query("ROLLBACK");
-		return (err.message || "USER_CREATION_ERROR");
+		console.error(err);
+		throw new Error(err.message || "USER_CREATION_ERROR");
 	} finally {
 		client.release();
 	}
@@ -31,19 +32,19 @@ async function loginUser(username, password) {
 		const result = await db.query(sql, [username]);
 		
 		if (!result.success || result.message.length === 0) {
-			return ("USER_NOT_FOUND");
+			throw new Error("USER_NOT_FOUND");
 		}
 
 		const user = result.message[0];
 		const isMatch = await bcrypt.compare(password, user.password);
 		
 		if (!isMatch) {
-			return ("INCORRECT_PASSWORD");
+			throw new Error("INCORRECT_PASSWORD");
 		}
 
 		return user;
 	} catch (err) {
-		return (err.message || "LOGIN_ERROR");
+		throw new Error(err.message || "LOGIN_ERROR");
 	}
 }
 
@@ -53,10 +54,10 @@ async function addFriend(userId, friendId) {
 		const sql = "INSERT INTO friends (user_id, friend_id) VALUES ($1, $2)";
 		const result = await db.query(sql, [userId, friendId]);
 		
-		if (!result.success) return ("ADD_FRIEND_ERROR");
+		if (!result.success) throw new Error("ADD_FRIEND_ERROR");
 		return result.message;
 	} catch (err) {
-		return (err.message || "ADD_FRIEND_ERROR");
+		throw new Error(err.message || "ADD_FRIEND_ERROR");
 	}
 }
 
@@ -66,10 +67,10 @@ async function getFriends(userId) {
 		const sql = "SELECT * FROM friends WHERE user_id = $1";
 		const result = await db.query(sql, [userId]);
 		
-		if (!result.success) return ("GET_FRIENDS_ERROR");
+		if (!result.success) throw new Error("GET_FRIENDS_ERROR");
 		return result.message;
 	} catch (err) {
-		return (err.message || "GET_FRIENDS_ERROR");
+		throw new Error(err.message || "GET_FRIENDS_ERROR");
 	}
 }
 
@@ -79,10 +80,10 @@ async function joinTournament(userId, tournamentId) {
 		const sql = "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES ($1, $2)";
 		const result = await db.query(sql, [userId, tournamentId]);
 		
-		if (!result.success) return ("JOIN_TOURNAMENT_ERROR");
+		if (!result.success) throw new Error("JOIN_TOURNAMENT_ERROR");
 		return result.message;
 	} catch (err) {
-		return (err.message || "JOIN_TOURNAMENT_ERROR");
+		throw new Error(err.message || "JOIN_TOURNAMENT_ERROR");
 	}
 }
 
@@ -92,10 +93,10 @@ async function getSavedTournaments(userId) {
 		const sql = "SELECT tournament_id FROM saved_tournaments WHERE user_id = $1";
 		const result = await db.query(sql, [userId]);
 		
-		if (!result.success) return ("GET_SAVED_TOURNAMENTS_ERROR");
+		if (!result.success) throw new Error("GET_SAVED_TOURNAMENTS_ERROR");
 		return result.message;
 	} catch (err) {
-		return (err.message || "GET_SAVED_TOURNAMENTS_ERROR");
+		throw new Error(err.message || "GET_SAVED_TOURNAMENTS_ERROR");
 	}
 }
 
@@ -105,10 +106,10 @@ async function unfollowTournament(userId, tournamentId) {
 		const sql = "DELETE FROM saved_tournaments WHERE user_id = $1 AND tournament_id = $2";
 		const result = await db.query(sql, [userId, tournamentId]);
 		
-		if (!result.success) return ("UNFOLLOW_TOURNAMENT_ERROR");
+		if (!result.success) throw new Error("UNFOLLOW_TOURNAMENT_ERROR");
 		return result.message;
 	} catch (err) {
-		return (err.message || "UNFOLLOW_TOURNAMENT_ERROR");
+		throw new Error(err.message || "UNFOLLOW_TOURNAMENT_ERROR");
 	}
 }
 

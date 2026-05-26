@@ -30,6 +30,34 @@ async function createUser(username, email, password, confirmPassword) {
     }
 }
 
+async function loginUser(email, password) {
+    if (!email || !password) {
+        throw new Error("MISSING_FIELDS");
+    }
+
+    try {
+        const user = await userRepository.loginUser(email, password);
+
+        const isMatch = await bcrypt.compare(password, user.password);
+		
+		if (!isMatch) {
+			throw new Error("INCORRECT_PASSWORD");
+		}
+
+        const token = jwt.sign(
+            {id: user.id, username: user.username, email: user.email, admin: user.admin},
+            jwtSecret,
+            { expiresIn: "7d" }
+        );
+
+        return token;
+    } catch (err) {
+        console.error(err);
+        throw new Error("LOGIN_ERROR");
+    }
+}
+
 export const userService = {
-    createUser
+    createUser,
+    loginUser
 }

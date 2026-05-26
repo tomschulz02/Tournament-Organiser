@@ -36,12 +36,7 @@ async function loginUser(username, password) {
 		}
 
 		const user = result.message[0];
-		const isMatch = await bcrypt.compare(password, user.password);
 		
-		if (!isMatch) {
-			throw new Error("INCORRECT_PASSWORD");
-		}
-
 		return user;
 	} catch (err) {
 		throw new Error(err.message || "LOGIN_ERROR");

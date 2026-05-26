@@ -28,7 +28,7 @@ export async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
 }
 export async function loginUser(email, password) {
 	try {
-		return await fetchWithRetry('signin', {
+		return await fetchWithRetry('users/login', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -66,7 +66,7 @@ export async function registerUser(username, email, password, confirmPassword) {
 
 export async function checkLoginStatus() {
 	try {
-		return await fetchWithRetry('check-login', {
+		return await fetchWithRetry('users/check-login', {
 			method: 'GET',
 			credentials: 'include',
 		});
@@ -81,7 +81,7 @@ export async function checkLoginStatus() {
 
 export async function logoutUser() {
 	try {
-		return await fetchWithRetry('signout', {
+		return await fetchWithRetry('users/logout', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -99,7 +99,7 @@ export async function logoutUser() {
 
 export async function getTournaments() {
 	try {
-		return await fetchWithRetry('tournaments', {
+		return await fetchWithRetry('tournaments/tournaments', {
 			method: 'GET',
 			credentials: 'include',
 		});
@@ -163,7 +163,7 @@ export async function fetchUserCollections() {
 
 export async function createTournament(tournamentData) {
 	try {
-		return await fetchWithRetry('tournament/create', {
+		return await fetchWithRetry('tournaments/create', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -182,7 +182,7 @@ export async function createTournament(tournamentData) {
 
 export async function joinTournament(tournamentId) {
 	try {
-		return await fetchWithRetry(`tournaments/${tournamentId}/join`, {
+		return await fetchWithRetry(`tournaments/join/${tournamentId}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -200,7 +200,7 @@ export async function joinTournament(tournamentId) {
 
 export async function leaveTournament(tournamentId) {
 	try {
-		return await fetchWithRetry(`tournaments/${tournamentId}/leave`, {
+		return await fetchWithRetry(`tournaments/leave/${tournamentId}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -218,7 +218,7 @@ export async function leaveTournament(tournamentId) {
 
 export async function updateScore(fixtureId, scores, status, hashId, rounds) {
 	try {
-		return await fetchWithRetry(`tournament/${fixtureId}/results`, {
+		return await fetchWithRetry(`fixtures/result/${fixtureId}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -237,7 +237,7 @@ export async function updateScore(fixtureId, scores, status, hashId, rounds) {
 
 export async function startTournament(tournamentId) {
 	try {
-		return await fetchWithRetry(`tournament/${tournamentId}/start`, {
+		return await fetchWithRetry(`tournaments/start/${tournamentId}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -255,7 +255,7 @@ export async function startTournament(tournamentId) {
 
 export async function deleteTournament(id) {
 	try {
-		return await fetchWithRetry(`tournament/${id}`, {
+		return await fetchWithRetry(`tournaments/delete/${id}`, {
 			method: 'DELETE',
 			credentials: 'include',
 			headers: {
@@ -271,9 +271,9 @@ export async function deleteTournament(id) {
 	}
 }
 
-export async function updateTeams(tournamentId, teams) {
+export async function updateTeams(divisionId, teams) {
 	try {
-		return await fetchWithRetry(`tournament/${tournamentId}/updateTeams`, {
+		return await fetchWithRetry(`divisions/updateTeams/${divisionId}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -290,9 +290,9 @@ export async function updateTeams(tournamentId, teams) {
 	}
 }
 
-export async function updateRounds(tournamentId, rounds, qualifiedTeams, standings, fixtures, currentRound) {
+export async function updateRounds(divisionId, rounds, qualifiedTeams, standings, fixtures, currentRound) {
 	try {
-		return await fetchWithRetry(`tournament/${tournamentId}/updateRounds`, {
+		return await fetchWithRetry(`divisions/updateRounds/${divisionId}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -311,7 +311,7 @@ export async function updateRounds(tournamentId, rounds, qualifiedTeams, standin
 
 export async function endTournament(tournamentId) {
 	try {
-		return await fetchWithRetry(`tournament/${tournamentId}/end`, {
+		return await fetchWithRetry(`tournaments/end/${tournamentId}`, {
 			method: 'PUT',
 			headers: {
 				'Content-Type': 'application/json',

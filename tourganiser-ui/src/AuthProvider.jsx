@@ -14,6 +14,9 @@ export function AuthProvider({ children }) {
                 setIsLoggedIn(response.loggedIn);
                 if (response.loggedIn) {
                     setUsername(response.user);
+                } else {
+                    setUsername("Guest");
+                    setIsLoggedIn(false);
                 }
             } catch (error) {
                 setIsLoggedIn(false);

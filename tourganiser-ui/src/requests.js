@@ -99,7 +99,7 @@ export async function logoutUser() {
 
 export async function getTournaments() {
 	try {
-		return await fetchWithRetry('tournaments/tournaments', {
+		return await fetchWithRetry('tournaments/', {
 			method: 'GET',
 			credentials: 'include',
 		});
@@ -114,7 +114,7 @@ export async function getTournaments() {
 
 export async function fetchTournamentData(tournamentId) {
 	try {
-		return await fetchWithRetry(`tournament/${tournamentId}`, {
+		return await fetchWithRetry(`tournaments/${tournamentId}`, {
 			method: 'GET',
 			credentials: 'include',
 		});

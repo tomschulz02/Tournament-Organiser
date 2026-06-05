@@ -5,23 +5,16 @@ const db = DatabaseConnection();
 
 // function used to create the division for a tournament based on user input
 // returns the id of the created division, which is used to link fixtures to the division and for future updates to the division
-async function createDivision(tournamentId, details, userId) {
-    const client = await db.pool.connect();
+async function createDivision(tournamentId, details, userId, client = db) {
     try {
-        await client.query("BEGIN");
 
         const divisionSql = "INSERT INTO divisions (id, tournament_id, name, num_teams, type, state) VALUES ($1, $2, $3, $4, $5, $6)";
         const divisionId = uuidv4();
         await client.query(divisionSql, [divisionId, tournamentId, details.name, details.num_teams, details.type, details.state || JSON.stringify({})]);
         
-        await client.query("COMMIT");
-
         return divisionId;
     } catch (err) {
-        await client.query("ROLLBACK");
-        return (err.message ||"DATABASE_ERROR");
-    } finally {
-        client.release();
+        throw new Error(err.message ||"DATABASE_ERROR");
     }
 }
 

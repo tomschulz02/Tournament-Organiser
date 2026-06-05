@@ -1,5 +1,6 @@
 import DatabaseConnection from "../config/db.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
+import { generateFixtures, fixtureService } from "./fixtures.service.js";
 
 const db = DatabaseConnection();
 
@@ -9,16 +10,26 @@ async function createDivision(details, tournamentId, userId){
     try {
         await client.query("BEGIN");
 
+        //generate division details
         const division = generateDivisionDetails(details.format, details.teams, details.num_teams, details.num_groups, details.qualifyingTeams)
         division.name = details.name;
         division.num_teams = details.num_teams;
 
-        const divisionId = await divisionsRepository.createDivision(tournamentId, division, userId);
+        // generate fixture details
+        const generatedFixtures = generateFixtures(division.state.rounds);
+        division.state.rounds = generatedFixtures.rounds;
 
-        //create fixtures
+        //store division in database
+        const divisionId = await divisionsRepository.createDivision(tournamentId, division, userId, client);
+
+        //store fixtures in database
+        generatedFixtures.fixtures.forEach(fixture => {
+            fixtureService.createFixture(divisionId, fixture, client);
+        })
+
+        return divisionId;
     } catch (error) {
         await client.query("ROLLBACK");
-
         throw new Error(error);
     } finally {
         client.release();
@@ -37,15 +48,16 @@ function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualify
     let division = {};
     if (format === 'classic'){
         division.type = "Classic";
-        division.state = createClassicState();
+        division.state = createClassicState(teams, num_teams, num_groups, qualifyingTeams);
     } else if (format === 'league'){
         division.type = "League";
         division.state = createLeagueState(teams, num_teams);
     } else if (format === 'single_elim'){
+        throw new Error("FORMAT_NOT_IMPLEMENTED");
         division.type = "Single Elimination";
-        numGroups = Math.ceil(num_teams/2)
-
+        numGroups = Math.ceil(num_teams/2);
     } else if (format === 'double_elim'){
+        throw new Error("FORMAT_NOT_IMPLEMENTED");
         division.type = "Double Elimination";
     } else {
         throw new Error("UNSUPPORTED_FORMAT");
@@ -60,6 +72,7 @@ function createLeagueState(teams, num_teams){
         rounds: [
             {
                 name: "Round robin",
+                type: "roundRobin",
                 groups: [
                     [teams]
                 ],
@@ -82,6 +95,7 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
 
     state.rounds.push({
         name: "Pool Play",
+        type: "roundRobin",
         groups: populateGroups(num_groups, teams),
         results: [],
         totalGames: 0,
@@ -95,6 +109,7 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
         // populate teams array with indices that link to rankings from previous rounds
         teams = Array.from({length: num_teams}, (_, i) => i);
         const round = {
+            type: "knockout",
             results: [],
             totalGames: 0,
             completedGames: 0,
@@ -122,7 +137,7 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
 
             // add teams for 3rd Place Playoffs
             if (round.name === "Finals"){
-                round.groups.push([2,3]);
+                round.groups.unshift([2,3]);
             }
 
             num_teams = num_teams/2;
@@ -137,12 +152,11 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
             const straight = 2*qual - num_teams;
 
             // add one team groups for the teams going straight to next round
-            round.groups = populateGroups(straight, Array.from({length:straight}, (_, i) => i));
+            round.groups = populateGroups(straight, teams.slice(0,straight));
             
             // add groups for teams playing in current round
-            const remGroups = populateGroups(num_teams-qual, Array.from({length: num_teams - straight}, (_, i) => (i+straight)));
-            console.log(remGroups)
-            remGroups.forEach(group => {
+            const remainingGroups = populateGroups(num_teams-qual, teams.slice(straight, num_teams));
+            remainingGroups.forEach(group => {
                 round.groups.push(group);
             });
 
@@ -175,4 +189,5 @@ function populateGroups(numGroups, teamList) {
 	return groups;
 }
 
-console.dir(createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8", "team9","team10","team11","team12"], 12, 3, 6), {depth: null});
+const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8"], 8, 1, 6);
+console.dir(generateFixtures(division.rounds), {depth: null});

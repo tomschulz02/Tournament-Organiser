@@ -48,56 +48,21 @@ function generateRoundRobinFixtures(matchNo, round){
 
     round.groups.forEach((group, index) => {
         const numTeams = group.length;
-        const numRounds = numTeams % 2 === 0 ? numTeams - 1 : numTeams;
+        if (numTeams%2 !== 0){
+            group.push("BYE");
+        }
+        const numRounds = group.length - 1;
 
         for (let currentRound = 1; currentRound <= numRounds; currentRound++){
-            let remainingTeams = [...group];
+            let remainingTeams = rotateGroupTeams(group, currentRound);
             let matchCount = 0;
             
             while (remainingTeams.length>1){
-                let currentFixture = [];
-                
-                if (matchCount === 0 && remainingTeams.length>2){ // first fixture of round
-                    if (remainingTeams.length-currentRound === 0){
-                        remainingTeams.splice(0,1);
-                        continue;
-                    }
+                const currentFixture = [remainingTeams[0], remainingTeams.at(-1)];
+                remainingTeams = remainingTeams.filter(team => !currentFixture.includes(team));
 
-                    currentFixture = [
-                        remainingTeams[0],
-                        remainingTeams[remainingTeams.length-currentRound]
-                    ];
-                } else if (matchCount < Math.floor(numTeams/2)-1) { // rest of the fixtures for this round minus the last one
-                    let index = currentRound % (remainingTeams.length);
-                    if (index === 0){
-                        index = 1;
-                    }
-                    if (currentRound>remainingTeams.length && currentRound !== numTeams){
-                        if (index === 1){
-                            index = 2;
-                        } else {
-                            index--;
-                        }
-                    }
-                    
-                    if (remainingTeams[0] === remainingTeams.at(-index)){
-                        remainingTeams.splice(0,1);
-                        continue;
-                    }
-
-                    currentFixture = [
-                        remainingTeams[0],
-                        remainingTeams.at(-index)
-                    ];
-                    // currentFixture = [
-                    //     remainingTeams[0],
-                    //     remainingTeams[remainingTeams.length-currentRound+1]
-                    // ];
-                } else { // last fixture of the round
-                    currentFixture = [
-                        remainingTeams[0],
-                        remainingTeams.at(-1)
-                    ];
+                if (currentFixture[0] === "BYE" || currentFixture[1] === "BYE"){
+                    continue;
                 }
 
                 matchCount++;
@@ -112,8 +77,7 @@ function generateRoundRobinFixtures(matchNo, round){
                     placeholder1: false,
                     placeholder2: false
                 });
-
-                remainingTeams = remainingTeams.filter(team => !currentFixture.includes(team));
+                
                 matchNo = currentMatchNo+1;
             }
         }
@@ -140,4 +104,15 @@ function generateKnockoutFixtures(matchNo, round){
     })
 
     return {fixtures, matchNo};
+}
+
+function rotateGroupTeams(group, rounds){
+    const fixedTeam = group[0];
+    const rotatingTeams = group.slice(1);
+
+    for (let i = 1; i < rounds; i++){
+        rotatingTeams.unshift(rotatingTeams.pop());
+    }
+
+    return [fixedTeam, ...rotatingTeams];
 }

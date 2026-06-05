@@ -68,11 +68,18 @@ function generateRoundRobinFixtures(matchNo, round){
                         remainingTeams[remainingTeams.length-currentRound]
                     ];
                 } else if (matchCount < Math.floor(numTeams/2)-1) { // rest of the fixtures for this round minus the last one
-                    let index = currentRound % 4;
-                    if (currentRound >= 4) {
-                        index = numTeams % 2 === 0 ? index + 1 : 1;
+                    let index = currentRound % (remainingTeams.length);
+                    if (index === 0){
+                        index = 1;
                     }
-
+                    if (currentRound>remainingTeams.length && currentRound !== numTeams){
+                        if (index === 1){
+                            index = 2;
+                        } else {
+                            index--;
+                        }
+                    }
+                    
                     if (remainingTeams[0] === remainingTeams.at(-index)){
                         remainingTeams.splice(0,1);
                         continue;
@@ -89,7 +96,7 @@ function generateRoundRobinFixtures(matchNo, round){
                 } else { // last fixture of the round
                     currentFixture = [
                         remainingTeams[0],
-                        remainingTeams[1]
+                        remainingTeams.at(-1)
                     ];
                 }
 

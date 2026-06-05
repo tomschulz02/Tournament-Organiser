@@ -189,5 +189,5 @@ function populateGroups(numGroups, teamList) {
 	return groups;
 }
 
-const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8"], 8, 1, 6);
+const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8","team9"], 9, 1, 6);
 console.dir(generateFixtures(division.rounds), {depth: null});

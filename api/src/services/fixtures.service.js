@@ -5,7 +5,24 @@ import { fixturesRepository } from "../repositories/fixtures.repository.js";
 const db = DatabaseConnection();
 
 async function createFixture(divisionId, details, client = db){
+    try {
+        let team1, team2, placeholder1, placeholder2 = null;
+        if (details.placeholder1){
+            placeholder1 = "Rank " + details.team1;
+        } else {
+            team1 = details.team1;
+        }
 
+        if (details.placeholder2){
+            placeholder2 = "Rank " + details.team2;
+        } else {
+            team2 = details.team2;
+        }
+
+        await fixturesRepository.createFixture(details.id, divisionId, details.matchNo, team1, team2, placeholder1, placeholder2, details.round);
+    } catch (error) {
+        throw new Error(error);
+    }
 }
 
 export const fixtureService = {
@@ -15,7 +32,7 @@ export const fixtureService = {
 // helper functions
 
 export function generateFixtures(rounds){
-    let matchNo = 0;
+    let matchNo = 1;
     let fixtures = [];
     rounds.forEach(round => {
         let result;
@@ -39,50 +56,33 @@ export function generateFixtures(rounds){
 
 function generateRoundRobinFixtures(matchNo, round){
     const fixtures = [];
-    const numGroups = round.groups.length;
-    let previousGroupMatchesPerRound = 0;
-    let matchesPerRound = 0;
-    round.groups.forEach(group => {
-        matchesPerRound += Math.floor(group.length/2);
-    })
+    const maxRounds = Math.max(...round.groups.map(group => 
+        group.length % 2 === 0
+            ? group.length - 1
+            : group.length
+    ));
 
-    round.groups.forEach((group, index) => {
-        const numTeams = group.length;
-        if (numTeams%2 !== 0){
-            group.push("BYE");
-        }
-        const numRounds = group.length - 1;
+    for (let currentRound = 1; currentRound <= maxRounds; currentRound++){
+        for (const group of round.groups){
+            const currentFixtures = getFixturesForRound(group, currentRound);
 
-        for (let currentRound = 1; currentRound <= numRounds; currentRound++){
-            let remainingTeams = rotateGroupTeams(group, currentRound);
-            let matchCount = 0;
-            
-            while (remainingTeams.length>1){
-                const currentFixture = [remainingTeams[0], remainingTeams.at(-1)];
-                remainingTeams = remainingTeams.filter(team => !currentFixture.includes(team));
-
-                if (currentFixture[0] === "BYE" || currentFixture[1] === "BYE"){
+            for (const [team1, team2] of currentFixtures){
+                if (team1 === "BYE" || team2 === "BYE"){
                     continue;
                 }
 
-                matchCount++;
-                const currentMatchNo = matchCount + (currentRound-1) * matchesPerRound + index * previousGroupMatchesPerRound;
-
                 fixtures.push({
                     id: uuidv4(),
-                    matchNo: currentMatchNo,
-                    team1: currentFixture[0],
-                    team2: currentFixture[1],
+                    matchNo: matchNo++,
+                    team1: team1,
+                    team2: team2,
                     round: round.name,
                     placeholder1: false,
                     placeholder2: false
                 });
-                
-                matchNo = currentMatchNo+1;
             }
         }
-        previousGroupMatchesPerRound = Math.floor(numTeams/2);
-    })
+    }
 
     return {fixtures, matchNo};
 }
@@ -115,4 +115,24 @@ function rotateGroupTeams(group, rounds){
     }
 
     return [fixedTeam, ...rotatingTeams];
+}
+
+function getFixturesForRound(group, round){
+    let currentGroup = [...group];
+    if (currentGroup.length%2 !== 0){
+        currentGroup.push("BYE");
+    }
+
+    currentGroup = rotateGroupTeams(currentGroup, round);
+
+    const fixtures = [];
+
+    while (currentGroup.length>=2){
+        const currentFixture = [currentGroup[0], currentGroup.at(-1)];
+        currentGroup = currentGroup.filter(team => !currentFixture.includes(team));
+
+        fixtures.push(currentFixture);
+    }
+
+    return fixtures;
 }

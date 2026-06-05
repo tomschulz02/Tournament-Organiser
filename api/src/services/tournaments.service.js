@@ -20,3 +20,7 @@ async function createTournament(tournamentData, userId) {
         throw new Error("DATABASE_ERROR");
     }
 }
+
+export const tournamentService = {
+    createTournament
+}

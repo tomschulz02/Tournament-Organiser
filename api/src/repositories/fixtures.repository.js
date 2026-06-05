@@ -55,17 +55,15 @@ async function updateResult(fixtureId, score, status, rounds) {
 }
 
 // used to create the initial fixtures of the division
-async function createFixture(divisionId, matchNo, team1, team2, status, team1Score, team2Score){
+async function createFixture(fixtureId, divisionId, matchNo, team1, team2, team1Placeholder, team2Placeholder, round){
     const client = await db.pool.connect();
     try{
         await client.query("BEGIN");
 
-        const sql = "INSERT INTO fixtures (id, division_id, match_no, team_1, team_2, status, team_1_result, team_2_result) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id";
-        const fixtureId = uuidv4();
-        const result = await client.query(sql, [fixtureId, divisionId, matchNo, team1, team2, status, team1Score, team2Score]);
+        const sql = "INSERT INTO fixtures (id, division_id, match_no, team_1, team_2, team_1_placeholder, team_2_placeholder, round) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
+        const result = await client.query(sql, [fixtureId, divisionId, matchNo, team1, team2, team1Placeholder, team2Placeholder, round]);
 
         await client.query("COMMIT");
-        return result.rows[0].id;
     } catch (error) {
         await client.query("ROLLBACK");
         return (error.message || "CREATE_FIXTURE_ERROR");

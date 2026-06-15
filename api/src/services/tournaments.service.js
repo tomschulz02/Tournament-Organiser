@@ -1,5 +1,5 @@
-import { tournamentRepository } from "../repositories/tournament.repository";
-import { divisionService } from "./divisions.service";
+import { tournamentRepository } from "../repositories/tournament.repository.js";
+import { divisionService } from "./divisions.service.js";
 
 async function createTournament(tournamentData, userId) {
     let tournamentId = 0;

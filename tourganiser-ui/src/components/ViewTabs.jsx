@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Icon from './Icons';
-import Tooltip from './Tooltip';
 import { TeamNameChangePopup } from '../pages/Browse';
 import LoadingScreen from './LoadingScreen';
-import { updateTeams, updateRounds, updateScore, startTournament, deleteTournament } from '../requests';
+import ScheduleMakerModal from './ScheduleMakerModal';
+import { updateTeams, updateRounds, updateScore, startTournament, deleteTournament, updateDivisionSchedule } from '../requests';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
 import ScoreUpdateModal from './ScoreUpdateModal';
 import NextRoundModal from './NextRoundModal';
-import FixturesDoc, { downloadPDF, testHtml2Canvas } from './FixturesDoc';
+import { calculateScheduledStats, getScheduleForDivision, normaliseDivisionFixtures } from '../utils/scheduleUtils';
 
 export function OverviewTab({ details, loggedIn, creator }) {
 	const [loading, setLoading] = useState(false);
@@ -37,7 +37,7 @@ export function OverviewTab({ details, loggedIn, creator }) {
 			setTimeout(() => {
 				window.location.reload();
 			}, 2000);
-		} catch (error) {
+		} catch {
 			showMessage('An error occurred. Please try again later', 'error');
 		}
 	};
@@ -60,7 +60,9 @@ export function OverviewTab({ details, loggedIn, creator }) {
 			setTimeout(() => {
 				window.location.pathname = '/tournaments';
 			}, 2000);
-		} catch (error) {}
+		} catch {
+			showMessage('An error occurred. Please try again later', 'error');
+		}
 	};
 
 	if (creator) {
@@ -131,15 +133,58 @@ export function OverviewTab({ details, loggedIn, creator }) {
 	);
 }
 
-export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }) {
+function buildScheduleDivisions({ divisions, fixtures, tournamentDetails, id }) {
+	if (Array.isArray(divisions) && divisions.length > 0) {
+		return divisions.map((division, index) => ({
+			...division,
+			name: division.name || `Division ${index + 1}`,
+			fixtures: normaliseDivisionFixtures(division.fixtures || []),
+		}));
+	}
+
+	const legacyFixtures = [...(fixtures?.remainingFixtures || []), ...(fixtures?.results || [])];
+	if (legacyFixtures.length === 0) {
+		return [];
+	}
+
+	return [
+		{
+			id: `division-${id}`,
+			name: tournamentDetails?.format || 'Division Schedule',
+			schedule: tournamentDetails?.schedule || null,
+			fixtures: normaliseDivisionFixtures(legacyFixtures),
+		},
+	];
+}
+
+export function ScheduleTab({ fixtures, creator, standings, id, tournamentName, tournamentDetails, divisions = [] }) {
 	const [filter, setFilter] = useState('all');
-	const allFixtures = [...fixtures.remainingFixtures, ...fixtures.results];
+	const allFixtures = [...(fixtures?.remainingFixtures || []), ...(fixtures?.results || [])];
 	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
 	const [showScoreModal, setShowScoreModal] = useState(false);
+	const [showScheduleModal, setShowScheduleModal] = useState(false);
 	const [loading, setLoading] = useState(false);
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const [selectedFixture, setSelectedFixture] = useState(null);
+	const [selectedDivisionId, setSelectedDivisionId] = useState(null);
+	const [scheduleOverrides, setScheduleOverrides] = useState({});
+	const divisionRecords = useMemo(() => {
+		return buildScheduleDivisions({ divisions, fixtures, tournamentDetails, id }).map((division) => {
+			const savedSchedule = scheduleOverrides[division.id];
+
+			return savedSchedule
+				? {
+						...division,
+						schedule: savedSchedule,
+						state: {
+							...(division.state || {}),
+							schedule: savedSchedule,
+						},
+				  }
+				: division;
+		});
+	}, [divisions, fixtures, tournamentDetails, id, scheduleOverrides]);
 
 	const filteredFixtures = allFixtures.filter((fixture) => {
 		switch (filter) {
@@ -194,7 +239,7 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 			setTimeout(() => {
 				window.location.reload();
 			}, 2000);
-		} catch (error) {
+		} catch {
 			showMessage('An error occurred. Please try again later.', 'error');
 		}
 	};
@@ -213,11 +258,9 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 				showMessage("Couldn't save score. Please try again later", 'error');
 				return;
 			}
-			selectedFixture.status = 'ONGOING';
-			selectedFixture.result = formatScore(score);
 			showMessage('Successfully updated score', 'success');
 			setShowScoreModal(false);
-		} catch (error) {
+		} catch {
 			setLoading(false);
 			showMessage('An error occurred. Please try again later', 'error');
 		}
@@ -229,9 +272,11 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 		if (!confirmed) return;
 
 		setLoading(true);
-		fixtures.rounds[fixtures.currentRound].completed += 1;
+		const updatedRounds = fixtures.rounds.map((round, index) =>
+			index === fixtures.currentRound ? { ...round, completed: round.completed + 1 } : round
+		);
 		try {
-			const response = await updateScore(selectedFixture.id, formatScore(score), 'COMPLETED', id, fixtures.rounds);
+			const response = await updateScore(selectedFixture.id, formatScore(score), 'COMPLETED', id, updatedRounds);
 			setLoading(false);
 
 			if (!response.success) {
@@ -244,15 +289,53 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 			setTimeout(() => {
 				window.location.reload();
 			}, 2000);
-		} catch (error) {
+		} catch {
 			setLoading(false);
 			showMessage('An error occurred. Please try again later', 'error');
 		}
 	};
 
+	const selectedDivision =
+		divisionRecords.find((division) => division.id === selectedDivisionId) || divisionRecords[0] || null;
+
+	const handleOpenSchedule = (divisionId) => {
+		setSelectedDivisionId(divisionId);
+		setShowScheduleModal(true);
+	};
+
+	const handleSaveDivision = async (schedulePayload) => {
+		if (!selectedDivision) {
+			return { success: false, error: 'No division selected.' };
+		}
+
+		const response = await updateDivisionSchedule(selectedDivision.id, schedulePayload);
+		if (response?.success === false) {
+			return response;
+		}
+
+		setScheduleOverrides((previous) => ({
+			...previous,
+			[selectedDivision.id]: schedulePayload,
+		}));
+
+		return response;
+	};
+
 	return (
 		<>
 			{loading && <LoadingScreen />}
+			{showScheduleModal && selectedDivision && (
+				<ScheduleMakerModal
+					key={selectedDivision.id}
+					isOpen={showScheduleModal}
+					division={selectedDivision}
+					tournamentName={tournamentName}
+					tournamentDetails={tournamentDetails}
+					canEdit={creator}
+					onClose={() => setShowScheduleModal(false)}
+					onSave={handleSaveDivision}
+				/>
+			)}
 			{showNextRoundModal && (
 				<NextRoundModal
 					fixtures={fixtures}
@@ -269,20 +352,9 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 					onSave={handleSaveScore}
 				/>
 			)}
-			<div id="fixturesDownloadTemplate">
-				<FixturesDoc tournament={tournamentName} fixtures={allFixtures} />
-			</div>
 			<div className="schedule-tab">
 				<div className="schedule-tab-header">
-					<Icon
-						className="schedule-tab-download-button"
-						name={'download'}
-						label="Download as PDF"
-						onClick={() =>
-							downloadPDF({ elementId: 'fixturesDownloadTemplate', filename: 'schedule.pdf', preview: true })
-						}
-					/>
-					<h2>Schedule</h2>
+					<h2>Schedule & Results</h2>
 					<div className="schedule-tab-content-filters">
 						<div
 							className={`schedule-tab-content-filter ${filter === 'all' ? 'active' : ''}`}
@@ -314,6 +386,45 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 						</div>
 					</div>
 				</div>
+				<div className="schedule-maker-launcher">
+					<div className="schedule-maker-launcher-copy">
+						<h3>Division Schedules</h3>
+						<p>
+							Open a division schedule to build court allocations, switch between grid and list views, add breaks, and export PDFs.
+						</p>
+					</div>
+					<div className="schedule-maker-launcher-grid">
+						{divisionRecords.length > 0 ? (
+							divisionRecords.map((division) => {
+								const divisionSchedule = getScheduleForDivision(division, tournamentDetails);
+								const divisionStats = calculateScheduledStats(divisionSchedule, division.fixtures || []);
+
+								return (
+									<div key={division.id} className="schedule-maker-launcher-card">
+										<div>
+											<h4>{division.name}</h4>
+											<p>
+												{divisionStats.scheduledFixtures}/{divisionStats.totalFixtures} fixtures scheduled
+											</p>
+										</div>
+										<div className="schedule-maker-launcher-card-meta">
+											<span>{divisionStats.days} day(s)</span>
+											<span>{divisionStats.courts} court(s)</span>
+											<span>{divisionStats.unscheduledFixtures} unscheduled</span>
+										</div>
+										<button type="button" onClick={() => handleOpenSchedule(division.id)}>
+											{creator ? 'Open Schedule Maker' : 'View Schedule'}
+										</button>
+									</div>
+								);
+							})
+						) : (
+							<div className="schedule-maker-launcher-empty">
+								<p>No division fixture data is available yet.</p>
+							</div>
+						)}
+					</div>
+				</div>
 				<div className="schedule-tab-content">
 					{filteredFixtures.length > 0 ? (
 						filteredFixtures.map((fixture, index) => {
@@ -339,7 +450,7 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName }
 						<p>No {filter !== 'all' ? filter : ''} fixtures found</p>
 					)}
 				</div>
-				{filteredFixtures.length > 0 && (
+				{filteredFixtures.length > 0 && fixtures?.rounds?.[fixtures.currentRound] && (
 					<div className="schedule-tab-progress">
 						<div className="schedule-tab-progress-content">
 							<h3>{fixtures.rounds[fixtures.currentRound].round}</h3>
@@ -385,9 +496,6 @@ export function StandingsTab({ standings, format, currentRound }) {
 			return newSet;
 		});
 	};
-
-	const standingsMessage =
-		'Standings are based on completed matches. The rankings are decided by number of wins, sets ratio, then points ratio (in that order)';
 
 	const renderStandingsTable = (data, poolIndex = null) =>
 		data.length > 0 ? (
@@ -446,10 +554,7 @@ export function StandingsTab({ standings, format, currentRound }) {
 
 	return (
 		<div className="tournament-standings">
-			<h2>
-				Standings
-				{/* <Tooltip message={standingsMessage} /> */}
-			</h2>
+			<h2>Standings</h2>
 			{standings.map((round, roundIndex) => (
 				<div key={roundIndex} className="round-standings">
 					<div

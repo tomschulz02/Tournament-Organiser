@@ -50,48 +50,64 @@ function CreateTournamentForm() {
 	const summaryRef = useRef(null);
 	const [showSummary, setShowSummary] = useState(false);
 
-	const calculateMatchCount = (format, teamCount, numGroups = 0) => {
+	const calculateMatchCount = (format, teamCount, numGroups = 0, knockoutTeams = 0) => {
 		if (format === 'Round Robin') {
 			return (teamCount * (teamCount - 1)) / 2;
 		} else if (format === 'Single Elimination') {
-			return teamCount - 1;
+			const firstRound = Math.pow(2, Math.floor(Math.log2(teamCount)));
+			const qualifyingRound = 2 * (teamCount - firstRound);
+			return (firstRound - 1) + (qualifyingRound / 2);
 		} else if (format === 'Groups + Knockout') {
-			if (numGroups === 0 || teamCount === 0) return 0;
-			const teamsPerGroup = Math.ceil(teamCount / numGroups);
-			const groupMatches = numGroups * ((teamsPerGroup * (teamsPerGroup - 1)) / 2);
-			const knockoutTeams = numGroups;
-			const knockoutMatches = knockoutTeams - 1;
-			return groupMatches + knockoutMatches;
+			const groups = getGroupDistribution(teamCount, numGroups);
+			const firstRound = Math.pow(2, Math.floor(Math.log2(knockoutTeams)));
+			const qualifyingRound = 2 * (knockoutTeams - firstRound);
+			let matchCount = 0;
+
+			for (let group of groups){
+				matchCount += (group * (group - 1)) / 2;
+			}
+		
+			if (knockoutTeams > 1){
+				matchCount += (firstRound - 1) + (qualifyingRound / 2);
+			}
+
+			return matchCount;
 		}
 		return 0;
 	};
 
-	const getGroupDistribution = (teamCount, numGroups) => {
-		const teamsPerGroup = Math.floor(teamCount / numGroups);
-		const remainder = teamCount % numGroups;
-		const distribution = [];
-		for (let i = 0; i < numGroups; i++) {
-			distribution.push(teamsPerGroup + (i < remainder ? 1 : 0));
+	const getGroupDistribution = (numTeams, numGroups) => {
+		const groupSizes = Array(numGroups).fill(0);
+
+		for (let team = 0; team < numTeams; team++) {
+			const row = Math.floor(team / numGroups);
+			const position = team % numGroups;
+
+			const groupIndex =
+				row % 2 === 0
+					? position
+					: numGroups - 1 - position;
+
+			groupSizes[groupIndex]++;
 		}
-		return distribution;
+
+		return groupSizes;
 	};
 
 	const getSingleElimRounds = (teamCount) => {
 		const rounds = [];
-		let remaining = teamCount;
-		const pow = Math.ceil(Math.log2(remaining));
+		const pow = Math.floor(Math.log2(teamCount));
 		const nearest = Math.pow(2, pow);
-		const byes = nearest - remaining;
+		const byes = 2 * nearest - teamCount;
 
-		if (byes > 0) {
-			rounds.push({ name: `Round of ${nearest}`, matches: byes / 2 });
-			remaining = nearest / 2 + byes / 2;
+		if (teamCount - byes > 0) {
+			rounds.push({ name: `Qualification`, matches: (teamCount - byes) / 2 });
 		}
 
 		let stage = nearest;
 		while (stage > 1) {
 			stage = stage / 2;
-			rounds.push({ name: stage === 1 ? 'Final' : stage === 2 ? 'Semifinals' : `Round of ${stage * 2}`, matches: stage });
+			rounds.push({ name: stage === 1 ? 'Final' : stage === 2 ? 'Semifinals' : stage === 4 ? 'Quarterfinals' : `Round of ${stage * 2}`, matches: stage });
 		}
 		return rounds;
 	};
@@ -249,7 +265,7 @@ function CreateTournamentForm() {
 			},
 			divisions: tournamentData.divisions.map((div) => ({
 				name: div.name,
-				type: div.format === 'Round Robin' ? 'Round Robin' : div.format === 'Single Elimination' ? 'Single Elimination' : 'Pool Play',
+				type: div.format === 'Round Robin' ? 'league' : div.format === 'Single Elimination' ? 'single_elim' : div.format === 'Groups + Knockout' ? 'classic' : 'undefined',
 				num_teams: div.teams.length,
 				num_groups: div.format === 'Groups + Knockout' ? div.num_groups : undefined,
 				knockout_teams: div.format === 'Groups + Knockout' ? div.knockout_teams : undefined,
@@ -609,22 +625,22 @@ function DivisionTeamsSection({ division, onAddTeam, onRemoveTeam, onUpdateTeam 
 }
 
 function DivisionPreviewSection({ division, calculateMatchCount, getGroupDistribution, getSingleElimRounds }) {
-	const matchCount = calculateMatchCount(division.format, division.teams.length, division.num_groups);
+	const matchCount = calculateMatchCount(division.format, division.teams.length, division.num_groups, division.knockout_teams);
 	const warnings = [];
 
-	if (division.format === 'Groups + Knockout') {
-		const distribution = getGroupDistribution(division.teams.length, division.num_groups);
-		const isEven = distribution.every((count) => count === distribution[0]);
-		if (!isEven) {
-			warnings.push('Teams cannot be evenly distributed across groups');
-		}
-	} else if (division.format === 'Single Elimination') {
-		const pow = Math.ceil(Math.log2(division.teams.length));
-		const nearest = Math.pow(2, pow);
-		if (nearest !== division.teams.length) {
-			warnings.push(`Single elimination requires ${nearest - division.teams.length} byes`);
-		}
-	}
+	// if (division.format === 'Groups + Knockout') {
+	// 	const distribution = getGroupDistribution(division.teams.length, division.num_groups);
+	// 	const isEven = distribution.every((count) => count === distribution[0]);
+	// 	if (!isEven) {
+	// 		warnings.push('Teams cannot be evenly distributed across groups');
+	// 	}
+	// } else if (division.format === 'Single Elimination') {
+	// 	const pow = Math.ceil(Math.log2(division.teams.length));
+	// 	const nearest = Math.pow(2, pow);
+	// 	if (nearest !== division.teams.length) {
+	// 		warnings.push(`Single elimination requires ${nearest - division.teams.length} byes`);
+	// 	}
+	// }
 
 	if (division.teams.length < 2) {
 		warnings.push('At least 2 teams are required');
@@ -706,7 +722,7 @@ function DivisionPreviewSection({ division, calculateMatchCount, getGroupDistrib
 
 function TournamentSummarySection({ divisions, calculateMatchCount }) {
 	const totalTeams = divisions.reduce((sum, d) => sum + d.teams.length, 0);
-	const totalMatches = divisions.reduce((sum, d) => sum + calculateMatchCount(d.format, d.teams.length, d.num_groups), 0);
+	const totalMatches = divisions.reduce((sum, d) => sum + calculateMatchCount(d.format, d.teams.length, d.num_groups, d.knockout_teams), 0);
 
 	return (
 		<div className="create-form-input-section">
@@ -731,7 +747,7 @@ function TournamentSummarySection({ divisions, calculateMatchCount }) {
 					<div className="summary-divisions">
 						<h5>Matches by Division</h5>
 						{divisions.map((division, idx) => {
-							const matches = calculateMatchCount(division.format, division.teams.length, division.num_groups);
+							const matches = calculateMatchCount(division.format, division.teams.length, division.num_groups, division.knockout_teams);
 							return (
 								<div key={idx} className="summary-division-row">
 									<span>{division.name || `Division ${idx + 1}`}</span>

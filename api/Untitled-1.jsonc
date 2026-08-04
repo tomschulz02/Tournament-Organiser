@@ -1,0 +1,42 @@
+// tournament data
+{
+    "details": {
+        "name": "Tournament Name",
+        "location": "Tournament location",
+        "start_date": "Starting Date",
+        "end_date": "Ending date",
+        "description": "Tournament description"
+    },
+    "divisions": [
+        {
+            "name": "Division Name",
+            "num_teams": 10,
+            "num_groups": 2,
+            "type": "Pool Play",
+            "state": {
+                "teams": [
+                    {"name": "new Team name"}
+                ],
+                "rounds": [
+                    {
+                        "name": "Round Name",
+                        "type": "knockout/roundRobin",
+                        "groups": [],
+                        "results": [
+                            "results list generated at the end of the round"
+                        ],
+                        "totalGames": 0,
+                        "completedGames": 0,
+                        "fixtures": [
+                            "fixture ids"
+                        ]
+                    },
+                    {}
+                ],
+                "currentRound": 0
+            }
+        },
+        {},
+        {}
+    ]
+}

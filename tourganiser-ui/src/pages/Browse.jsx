@@ -1,29 +1,113 @@
-import React, { useEffect, useState, useContext, useRef } from 'react';
-import { Link, Outlet, useParams, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../AuthContext';
+import { useEffect, useState, useRef } from 'react';
+import { Outlet, useParams, useNavigate } from 'react-router-dom';
 import { useMessage } from '../MessageContext';
-import { getTournaments, createCollection, createTournament, fetchUserCollections } from '../requests';
-import Tooltip from '../components/Tooltip';
-import { useConfirm } from '../components/ConfirmDialog';
+import { getTournaments } from '../requests';
 import LoadingScreen from '../components/LoadingScreen';
 import '../App.css';
 import TournamentCreation from '../components/TournamentCreation';
 import Icon from '../components/Icons';
 
-const tooltips = {
-	collections:
-		'You can group tournaments in collections so that they can be viewed together. Tournaments that are part of a collection will not be displayed on the browse page, but rather in the view page of the collection it belongs to.',
+const TOURNAMENT_GROUPS = [
+	{ key: 'ongoing', label: 'Ongoing', emptyMessage: 'There are currently no ongoing tournaments' },
+	{ key: 'upcoming', label: 'Upcoming', emptyMessage: 'There are currently no upcoming tournaments' },
+	{ key: 'completed', label: 'Completed', emptyMessage: 'There are currently no completed tournaments' },
+];
+
+const EMPTY_TOURNAMENT_GROUPS = {
+	ongoing: [],
+	upcoming: [],
+	completed: [],
 };
 
+function normaliseTournamentGroups(groups) {
+	const normalisedGroups = {};
+
+	for (const { key } of TOURNAMENT_GROUPS) {
+		normalisedGroups[key] = Array.isArray(groups?.[key]) ? groups[key] : [];
+	}
+
+	return normalisedGroups;
+}
+
+function getTournamentFormat(details) {
+	return details.type || details.format || details.classification || '';
+}
+
+function formatTournamentType(type) {
+	if (!type) {
+		return '';
+	}
+
+	return type
+		.split(/[_-\s]+/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+		.join(' ');
+}
+
+function getTournamentStatus(details) {
+	return details.status || '';
+}
+
+function getTournamentStatusVariant(details) {
+	const status = getTournamentStatus(details).toLowerCase();
+
+	if (status === 'ongoing') {
+		return 'ongoing';
+	}
+
+	if (status === 'finished' || status === 'completed') {
+		return 'completed';
+	}
+
+	return 'upcoming';
+}
+
+function formatTournamentDate(value) {
+	if (!value) {
+		return '';
+	}
+
+	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		const [year, month, day] = value.split('-').map(Number);
+		const utcDate = new Date(Date.UTC(year, month - 1, day));
+		return new Intl.DateTimeFormat('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			timeZone: 'UTC',
+		}).format(utcDate);
+	}
+
+	const parsedDate = new Date(value);
+	if (!Number.isNaN(parsedDate.getTime())) {
+		return new Intl.DateTimeFormat('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+		}).format(parsedDate);
+	}
+
+	return value;
+}
+
+function getTournamentDateRange(details) {
+	const startDate = formatTournamentDate(details.start_date || details.startDate || details.date || '');
+	const endDate = formatTournamentDate(details.end_date || details.endDate || '');
+
+	return {
+		startDate,
+		endDate,
+	};
+}
+
 export default function Browse() {
-	const [currentPage, setCurrentPage] = useState('browse');
+	const [currentPage, setCurrentPage] = useState(() => window.location.hash.replace('#', '') || 'browse');
 	const { id } = useParams();
 
 	useEffect(() => {
 		const section = window.location.hash.replace('#', '');
 		if (section) {
-			setCurrentPage(section);
-
 			window.history.replaceState(null, '', window.location.pathname + window.location.search);
 		}
 	}, []);
@@ -54,7 +138,12 @@ export default function Browse() {
 }
 
 function BrowseTournaments() {
-	const [tournaments, setTournaments] = useState([]);
+	const [tournaments, setTournaments] = useState(EMPTY_TOURNAMENT_GROUPS);
+	const [expandedGroups, setExpandedGroups] = useState({
+		ongoing: true,
+		upcoming: true,
+		completed: true,
+	});
 	const [isLoading, setIsLoading] = useState(true);
 	const { showMessage } = useMessage();
 	const hasFetchedTournaments = useRef(false);
@@ -65,29 +154,36 @@ function BrowseTournaments() {
 	const { id } = useParams();
 	const navigate = useNavigate();
 
-	const filteredTournaments = tournaments.filter((tournament) => {
-		if (filter.format !== 'all' && tournament.type !== filter.format) {
-			return false;
-		}
-		if (filter.search && !tournament.name.toLowerCase().includes(filter.search.toLowerCase())) {
-			return false;
-		}
-		return true;
-	});
+	const filteredTournamentGroups = TOURNAMENT_GROUPS.map(({ key, label, emptyMessage }) => ({
+		key,
+		label,
+		emptyMessage,
+		tournaments: tournaments[key].filter((tournament) => {
+			const tournamentFormat = getTournamentFormat(tournament).toLowerCase();
+			const tournamentName = `${tournament.name || ''}`.toLowerCase();
 
-	console.log(filteredTournaments);
+			if (filter.format !== 'all' && !tournamentFormat.includes(filter.format)) {
+				return false;
+			}
+			if (filter.search && !tournamentName.includes(filter.search.toLowerCase())) {
+				return false;
+			}
+			return true;
+		}),
+	}));
 
 	useEffect(() => {
-		setIsLoading(true);
 		const fetchTournaments = async () => {
 			try {
 				const response = await getTournaments();
-				if (response.message.length > 0) {
-					setTournaments(response.message);
-				} else {
-					setTournaments([]);
+
+				if (response?.error) {
+					throw new Error(response.error);
 				}
-			} catch (error) {
+
+				setTournaments(normaliseTournamentGroups(response?.message));
+			} catch {
+				setTournaments(EMPTY_TOURNAMENT_GROUPS);
 				showMessage('Error fetching tournaments', 'error');
 			} finally {
 				setIsLoading(false);
@@ -97,7 +193,7 @@ function BrowseTournaments() {
 			hasFetchedTournaments.current = true;
 			fetchTournaments();
 		}
-	}, []);
+	}, [showMessage]);
 
 	const handlefilterChange = (e) => {
 		if (e.target.id === 'searchTournaments') {
@@ -105,6 +201,13 @@ function BrowseTournaments() {
 		} else if (e.target.id === 'filterFormat') {
 			setFilter((prev) => ({ ...prev, format: e.target.value }));
 		}
+	};
+
+	const toggleGroup = (groupKey) => {
+		setExpandedGroups((prev) => ({
+			...prev,
+			[groupKey]: !prev[groupKey],
+		}));
 	};
 
 	return (
@@ -127,23 +230,49 @@ function BrowseTournaments() {
 							<option value="all">All</option>
 							<option value="beach">Beach Tournaments</option>
 							<option value="indoor">Indoor Tournaments</option>
-							<option value="collection">Collections</option>
 						</select>
 					</div>
-					<div className="tournaments-grid" id="tournamentsGrid">
-						{filteredTournaments.length > 0 ? (
-							filteredTournaments.map((tournament, index) => {
-								return (
-									<TournamentCard
-										key={index}
-										details={tournament}
-										action={() => navigate(`/tournaments/view/${tournament.id}`)}
-									/>
-								);
-							})
-						) : (
-							<div className="no-tournaments-message">No tournaments available</div>
-						)}
+					<div className="browse-groups" id="tournamentsGrid">
+						{filteredTournamentGroups.map(({ key, label, emptyMessage, tournaments }) => (
+							<div key={key} className="browse-group">
+								<button
+									type="button"
+									className={`browse-group-header ${expandedGroups[key] ? 'expanded' : ''}`}
+									aria-expanded={expandedGroups[key]}
+									aria-controls={`browse-group-${key}`}
+									onClick={() => toggleGroup(key)}>
+									<div className="browse-group-heading">
+										<h3>{label}</h3>
+										<span className="browse-group-count">{tournaments.length}</span>
+									</div>
+									<svg
+										className="expand-icon"
+										xmlns="http://www.w3.org/2000/svg"
+										height="24"
+										viewBox="0 -960 960 960"
+										width="24">
+										<path d="M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z" />
+									</svg>
+								</button>
+								<div
+									id={`browse-group-${key}`}
+									className={`browse-group-content ${expandedGroups[key] ? 'expanded' : ''}`}>
+									<div className="tournaments-grid browse-group-grid">
+										{tournaments.length > 0 ? (
+											tournaments.map((tournament) => (
+												<TournamentCard
+													key={tournament.id}
+													details={tournament}
+													action={() => navigate(`/tournaments/view/${tournament.id}`)}
+												/>
+											))
+										) : (
+											<div className="browse-group-empty-message">{emptyMessage}</div>
+										)}
+									</div>
+								</div>
+							</div>
+						))}
 					</div>
 				</div>
 			)}
@@ -207,14 +336,48 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 }
 
 export function TournamentCard({ details, action }) {
+	const tournamentStatus = getTournamentStatus(details);
+	const tournamentType = formatTournamentType(getTournamentFormat(details));
+	const { startDate, endDate } = getTournamentDateRange(details);
+	const location = details.location || 'Location to be confirmed';
+	const statusVariant = getTournamentStatusVariant(details);
+
 	return (
-		<div className="tournament-card">
-			<div className="tournament-card-name">{details.name}</div>
-			<div className="tournament-card-date">{details.date || details.startDate || ''}</div>
-			<div className={`${details.location ? 'tournament-card-location' : 'tournament-card-collection-badge'}`}>
-				{details.location || (details.classification === 'collection' ? 'Collection' : '')}
+		<button type="button" className={`tournament-card tournament-card-${statusVariant}`} onClick={action}>
+			<div className="tournament-card-accent" aria-hidden="true" />
+			<div className="tournament-card-body">
+				<div className="tournament-card-topline">
+					<div className="tournament-card-name">{details.name}</div>
+					{tournamentStatus && <div className={`tournament-card-status ${statusVariant}`}>{tournamentStatus}</div>}
+				</div>
+				<div className="tournament-card-subline">
+					{tournamentType ? (
+						<div className="tournament-card-type">
+							<Icon name={'structure'} className="tournament-card-meta-icon" size={18} />
+							<span>{tournamentType}</span>
+						</div>
+					) : (
+						<div className="tournament-card-type tournament-card-type-empty">Tournament</div>
+					)}
+				</div>
+				<div className="tournament-card-meta">
+					<div className="tournament-card-location">
+						<Icon name={'location'} className="tournament-card-meta-icon" size={18} />
+						<span>{location}</span>
+					</div>
+				</div>
+				<div className="tournament-card-dates">
+					<div className="tournament-card-date">
+						<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
+						<span>{startDate ? `Starts: ${startDate}` : 'Start date to be confirmed'}</span>
+					</div>
+					<div className="tournament-card-date">
+						<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
+						<span>{endDate ? `Ends: ${endDate}` : 'End date to be confirmed'}</span>
+					</div>
+				</div>
 			</div>
-			<Icon name={'arrowRight'} className="tournament-card-action" onClick={action} />
-		</div>
+			<Icon name={'arrowRight'} className="tournament-card-action" label={`View ${details.name}`} />
+		</button>
 	);
 }

@@ -1,6 +1,7 @@
 import DatabaseConnection from "../config/db.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { generateFixtures, fixtureService } from "./fixtures.service.js";
+import { v4 as uuidv4 } from "uuid";
 
 const db = DatabaseConnection();
 
@@ -10,8 +11,18 @@ async function createDivision(details, tournamentId, userId){
     try {
         await client.query("BEGIN");
 
+        const divisionId = uuidv4();
+
+        // insert teams into DB, returns team ids for rounds and fixtures
+        const teamIds = [];
+        for (let team of details.teams) {
+            teamIds.push(await divisionsRepository.createTeam())
+        }
+
+        details.teams = teamIds;
+
         //generate division details
-        const division = generateDivisionDetails(details.format, details.teams, details.num_teams, details.num_groups, details.qualifyingTeams)
+        const division = generateDivisionDetails(details.type, details.teams, details.num_teams, details.num_groups, details.knockout_teams)
         division.name = details.name;
         division.num_teams = details.num_teams;
 
@@ -20,12 +31,14 @@ async function createDivision(details, tournamentId, userId){
         division.state.rounds = generatedFixtures.rounds;
 
         //store division in database
-        const divisionId = await divisionsRepository.createDivision(tournamentId, division, userId, client);
+        await divisionsRepository.createDivision(divisionId, tournamentId, division, userId, client);
 
         //store fixtures in database
         generatedFixtures.fixtures.forEach(fixture => {
             fixtureService.createFixture(divisionId, fixture, client);
         })
+
+        await client.query("COMMIT");
 
         return divisionId;
     } catch (error) {

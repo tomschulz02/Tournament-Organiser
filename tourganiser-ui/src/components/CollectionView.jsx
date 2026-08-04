@@ -1,10 +1,13 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Icon from './Icons';
 import { TournamentCard } from '../pages/Browse';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+
+function getBrowseCards() {
+	return document.querySelectorAll('#tournamentsGrid .tournament-card');
+}
 
 export default function CollectionView({ collection, status }) {
-	const location = useLocation();
 	const navigate = useNavigate();
 
 	useEffect(() => {
@@ -18,16 +21,16 @@ export default function CollectionView({ collection, status }) {
 			} else {
 				gridWidth = window.innerWidth - 420;
 			}
-			for (let card of document.getElementById('tournamentsGrid').children) {
+			for (let card of getBrowseCards()) {
 				card.style.width = gridWidth ? gridWidth + 'px' : '100%';
 			}
 			document.getElementById('tournamentsSearch').style.width = gridWidth ? gridWidth + 'px' : '100%';
 		}
-	}, []);
+	}, [status]);
 
-	const handleClose = (e) => {
+	const handleClose = () => {
 		document.getElementById('collectionPreview').classList.add('closed');
-		for (let card of document.getElementById('tournamentsGrid').children) {
+		for (let card of getBrowseCards()) {
 			card.style.width = '100%';
 		}
 		document.getElementById('tournamentsSearch').style.width = '100%';

@@ -309,6 +309,24 @@ export async function updateRounds(divisionId, rounds, qualifiedTeams, standings
 	}
 }
 
+export async function updateDivisionSchedule(divisionId, schedule) {
+	try {
+		return await fetchWithRetry(`divisions/updateSchedule/${divisionId}`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			credentials: 'include',
+			body: JSON.stringify({ schedule }),
+		});
+	} catch (error) {
+		if (error.isConnectionError) {
+			return { success: false, error: error.message };
+		}
+		throw error;
+	}
+}
+
 export async function endTournament(tournamentId) {
 	try {
 		return await fetchWithRetry(`tournaments/end/${tournamentId}`, {

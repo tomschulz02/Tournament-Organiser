@@ -5,15 +5,16 @@ const db = DatabaseConnection();
 
 // function used to create the division for a tournament based on user input
 // returns the id of the created division, which is used to link fixtures to the division and for future updates to the division
-async function createDivision(tournamentId, details, userId, client = db) {
+async function createDivision(divisionId, tournamentId, details, userId, client = db) {
     try {
 
         const divisionSql = "INSERT INTO divisions (id, tournament_id, name, num_teams, type, state) VALUES ($1, $2, $3, $4, $5, $6)";
-        const divisionId = uuidv4();
         await client.query(divisionSql, [divisionId, tournamentId, details.name, details.num_teams, details.type, details.state || JSON.stringify({})]);
         
         return divisionId;
     } catch (err) {
+        console.log('DIVISION_ERROR: ', err);
+        
         throw new Error(err.message ||"DATABASE_ERROR");
     }
 }
@@ -28,14 +29,36 @@ async function updateTeams(divisionId, userId, teams) {
         const sql = "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2 RETURNING num_groups";
         const result = await client.query(sql, [JSON.stringify(teams), divisionId]);
         
-        if (!result.success) return ("UPDATE_TEAMS_ERROR");
         await client.query("COMMIT");
-        return result.message;
+        return result;
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "UPDATE_TEAMS_ERROR");
     } finally {
         client.release();
+    }
+}
+
+// used to create a new team
+async function createTeam(name, divisionId){
+    try {
+        const teamId = uuidv4();
+        await db.query('INSERT INTO teams (id, name, division_id) VALUES ($1, $2, $3);', [teamId, name, divisionId]);
+
+        return teamId;
+    } catch (error) {
+        throw new Error('TEAM_CREATION_ERROR_DB');
+    }
+}
+
+// fetch team name by id
+async function getTeamNames(divisionId){
+    try {
+        const result = await db.query('SELECT id, name FROM teams WHERE division_id=$1;', [divisionId]);
+
+        return result;
+    } catch (error){
+        throw new Error('TEAM_FETCH_ERROR_DB');
     }
 }
 
@@ -137,5 +160,7 @@ export const divisionsRepository = {
     updateTeam,
     updateGroups,
     updateRounds,
-    getDivisionDetails
+    getDivisionDetails,
+    createTeam,
+    getTeamNames
 };

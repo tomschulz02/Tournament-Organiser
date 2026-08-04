@@ -21,6 +21,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
+const SECRET_KEY = process.env.JWT_SECRET;
 
 // token check
 const publicRoutes = ["/api/users/login", "/api/users/signup"];

@@ -27,14 +27,12 @@ class DBConnection {
 		DBConnection.instance = this;
     }
 
-    async query(sql, params) {
-		const values = params || [];
-		
+    async query(sql, params = []) {
 		try {
-			const res = await this.pool.query(sql, values);
-			return { success: true, message: res.rows };
+			const res = await this.pool.query(sql, params);
+			return res.rows;
 		} catch (err) {
-			return { success: false, error: "DATABASE_ERROR", message: err };
+			throw new Error(err);
 		}
 	}
 }

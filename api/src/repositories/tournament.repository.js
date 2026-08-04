@@ -13,6 +13,7 @@ async function createTournament(details, userId, client = db) {
 
         return { tournamentId };
     } catch (err) {
+        console.log(err)
         throw new Error(err.message || "DATABASE_ERROR");
     }
 }
@@ -20,11 +21,10 @@ async function createTournament(details, userId, client = db) {
 // fetches info on all tournaments for the browse page in the frontend
 async function getAllTournaments() {
     try {
-        const sql = "SELECT * FROM tournaments WHERE collection_id IS NULL";
+        const sql = "SELECT * FROM tournaments;";
         const result = await db.query(sql, []);
         
-        if (!result.success) return ("GET_TOURNAMENTS_ERROR");
-        return result.message;
+        return result;
     } catch (err) {
         return (err.message || "GET_TOURNAMENTS_ERROR");
     }
@@ -40,7 +40,7 @@ async function startTournament(tournamentId, userId) {
         const result = await client.query(sql, [tournamentId, userId]);
         
         await client.query("COMMIT");
-        return result.message;
+        return result;
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "START_TOURNAMENT_ERROR");
@@ -59,7 +59,7 @@ async function endTournament(tournamentId, userId) {
         const result = await client.query(sql, [tournamentId, userId]);
 
         await client.query("COMMIT");
-        return result.message;
+        return result;
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "END_TOURNAMENT_ERROR");
@@ -78,7 +78,7 @@ async function deleteTournament(tournamentId, userId) {
         const result = await client.query(sql, [tournamentId, userId]);
 
         await client.query("COMMIT");
-        return result.message;
+        return result;
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "DELETE_TOURNAMENT_ERROR");

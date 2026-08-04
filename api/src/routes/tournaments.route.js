@@ -11,6 +11,6 @@ tournamentRouter.post('/create', tournamentController.createTournament);
 // tournamentRouter.post('/end/:tournamentId',);
 // tournamentRouter.delete('/delete/:tournamentId',);
 // tournamentRouter.get('/:tournamentId',);
-// tournamentRouter.get('/',);
+tournamentRouter.get('/', tournamentController.fetchTournaments);
 
 export default tournamentRouter;

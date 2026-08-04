@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 const saltRounds = 10;
-const jwtSecret = process.env.JWT_SECRET
+const jwtSecret = process.env.JWT_SECRET;
 
 async function createUser(username, email, password, confirmPassword) {
     if (password !== confirmPassword) {

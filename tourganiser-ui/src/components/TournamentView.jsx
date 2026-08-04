@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { OverviewTab, ScheduleTab, StandingsTab, TeamsTab } from './ViewTabs';
 import Icon from './Icons';
@@ -29,7 +29,19 @@ export default function TournamentView({ tournament }) {
 		};
 		window.addEventListener('scroll', handleScroll);
 		return () => window.removeEventListener('scroll', handleScroll);
-	}, [lastScrollY]);
+	}, [lastScrollY, lastScrollUp]);
+
+	const handleTabChange = (tab) => {
+		setSearchParams({ tab });
+	};
+
+	const handleGoBack = () => {
+		if (location.state?.from) {
+			navigate(location.state.from, { replace: true });
+		} else {
+			navigate('/tournaments', { replace: true });
+		}
+	};
 
 	// console.log(tournament);
 
@@ -59,10 +71,12 @@ export default function TournamentView({ tournament }) {
 			content: (
 				<ScheduleTab
 					fixtures={tournament.message.fixtures}
+					divisions={tournament.message.divisions}
 					creator={tournament.creator}
 					standings={tournament.message.standings}
 					id={tournament.message.details.id}
 					tournamentName={tournament.message.details.name}
+					tournamentDetails={tournament.message.details}
 				/>
 			),
 		},
@@ -115,18 +129,6 @@ export default function TournamentView({ tournament }) {
 		// 	content: <h2>Settings</h2>,
 		// },
 	];
-
-	const handleTabChange = (tab) => {
-		setSearchParams({ tab });
-	};
-
-	const handleGoBack = () => {
-		if (location.state?.from) {
-			navigate(location.state.from, { replace: true });
-		} else {
-			navigate('/tournaments', { replace: true });
-		}
-	};
 
 	return (
 		<div className="tournament-view-section">

@@ -30,6 +30,17 @@ async function getAllTournaments() {
     }
 }
 
+async function getTournamentById(tournamentId) {
+    try {
+        const sql = "SELECT * FROM tournaments WHERE id = $1 LIMIT 1;";
+        const result = await db.query(sql, [tournamentId]);
+
+        return result[0] || null;
+    } catch (err) {
+        throw new Error(err.message || "GET_TOURNAMENT_ERROR");
+    }
+}
+
 // starts the tournament
 async function startTournament(tournamentId, userId) {
     const client = await db.pool.connect();
@@ -90,6 +101,7 @@ async function deleteTournament(tournamentId, userId) {
 export const tournamentRepository = {
     createTournament,
     getAllTournaments,
+    getTournamentById,
     startTournament,
     endTournament,
     deleteTournament

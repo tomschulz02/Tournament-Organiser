@@ -1,6 +1,9 @@
 import { tournamentRepository } from "../repositories/tournament.repository.js";
+import { divisionsRepository } from "../repositories/divisions.repository.js";
+import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { divisionService } from "./divisions.service.js";
 import { getISODate, getLongDate } from "../utils/DateHandler.js";
+import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
 
 async function createTournament(tournamentData, userId) {
     let tournamentId = 0;
@@ -38,9 +41,43 @@ async function fetchTournaments() {
     }
 }
 
+async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
+    try {
+        const tournament = await tournamentRepository.getTournamentById(tournamentId);
+        if (!tournament) {
+            return null;
+        }
+
+        const divisions = await divisionsRepository.getDivisionsByTournamentId(tournamentId);
+        const divisionIds = divisions.map((division) => division.id);
+        const [teams, fixtures] = await Promise.all([
+            divisionsRepository.getTeamsByDivisionIds(divisionIds),
+            fixturesRepository.getFixturesByDivisionIds(divisionIds)
+        ]);
+
+        const teamsByDivisionId = groupByDivisionId(teams);
+        const fixturesByDivisionId = groupByDivisionId(fixtures);
+        const message = formatTournamentViewPayload({
+            tournament,
+            divisions,
+            teamsByDivisionId,
+            fixturesByDivisionId
+        });
+
+        return {
+            creator: viewerUserId !== null && viewerUserId === tournament.created_by,
+            message
+        };
+    } catch (error) {
+        console.log(error);
+        throw new Error("FETCH_TOURNAMENT_DETAILS_ERROR");
+    }
+}
+
 export const tournamentService = {
     createTournament,
-    fetchTournaments
+    fetchTournaments,
+    fetchTournamentDetails
 }
 
 
@@ -70,4 +107,15 @@ function groupTournamentsByStatus(tournaments){
     }
 
     return result;
+}
+
+function groupByDivisionId(records) {
+    return records.reduce((grouped, record) => {
+        if (!grouped.has(record.division_id)) {
+            grouped.set(record.division_id, []);
+        }
+
+        grouped.get(record.division_id).push(record);
+        return grouped;
+    }, new Map());
 }

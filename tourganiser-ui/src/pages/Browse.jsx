@@ -213,7 +213,7 @@ function BrowseTournaments() {
 	return (
 		<>
 			{isLoading && <LoadingScreen />}
-			{id && id.startsWith('t') ? (
+			{id ? (
 				<Outlet />
 			) : (
 				<div className="browse-tournaments">

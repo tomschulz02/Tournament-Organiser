@@ -25,21 +25,18 @@ async function createUser(username, email, password) {
 	}
 }
 
-// user login
-async function loginUser(username, password) {
+// Looks up a user by email. Returns null when there is no match — the caller
+// decides how to respond, so that a missing user and a bad password can be
+// handled identically.
+async function findUserByEmail(email) {
 	try {
 		const sql = "SELECT * FROM users WHERE email = $1";
-		const result = await db.query(sql, [username]);
-		
-		if (!result.success || result.message.length === 0) {
-			throw new Error("USER_NOT_FOUND");
-		}
+		const rows = await db.query(sql, [email]);
 
-		const user = result.message[0];
-		
-		return user;
+		return rows.length > 0 ? rows[0] : null;
 	} catch (err) {
-		throw new Error(err.message || "LOGIN_ERROR");
+		console.error(err);
+		throw new Error("LOGIN_ERROR");
 	}
 }
 
@@ -110,7 +107,7 @@ async function unfollowTournament(userId, tournamentId) {
 
 export const userRepository = {
 	createUser,
-	loginUser,
+	findUserByEmail,
 	addFriend,
 	getFriends,
 	joinTournament,

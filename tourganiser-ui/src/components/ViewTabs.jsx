@@ -1,192 +1,196 @@
 import { useMemo, useState } from 'react';
 import Icon from './Icons';
-import { TeamNameChangePopup } from '../pages/Browse';
 import LoadingScreen from './LoadingScreen';
 import ScheduleMakerModal from './ScheduleMakerModal';
-import { updateTeams, updateRounds, updateScore, startTournament, deleteTournament, updateDivisionSchedule } from '../requests';
+import { updateDivisionSchedule } from '../requests';
 import { useMessage } from '../MessageContext';
-import { useConfirm } from './ConfirmDialog';
-import ScoreUpdateModal from './ScoreUpdateModal';
-import NextRoundModal from './NextRoundModal';
-import { calculateScheduledStats, getScheduleForDivision, normaliseDivisionFixtures } from '../utils/scheduleUtils';
+import { calculateScheduledStats, formatDateLabel, getScheduleForDivision, normaliseDivisionFixtures } from '../utils/scheduleUtils';
 
-export function OverviewTab({ details, loggedIn, creator }) {
-	const [loading, setLoading] = useState(false);
-	const confirm = useConfirm();
-	const { showMessage } = useMessage();
-
-	let actions = [];
-
-	const handleStartTournament = async () => {
-		const confirmed = await confirm(
-			"Are you sure you want to start the tournament? Once you do you won't be able to change anything"
-		);
-		if (!confirmed) return;
-
-		setLoading(true);
-		try {
-			const response = await startTournament(details.id);
-			setLoading(false);
-
-			if (!response.success) {
-				showMessage('Failed to start tournament. Please try again later', 'error');
-				return;
-			}
-
-			showMessage('Successfully started tournament. Refreshing page...', 'success');
-			setTimeout(() => {
-				window.location.reload();
-			}, 2000);
-		} catch {
-			showMessage('An error occurred. Please try again later', 'error');
-		}
-	};
-
-	const handleDeleteTournament = async () => {
-		const confirmed = await confirm('Are you sure you want to delete this tournament? This action cannot be undone');
-		if (!confirmed) return;
-
-		setLoading(true);
-		try {
-			const response = await deleteTournament(details.id);
-			setLoading(false);
-
-			if (!response.success) {
-				showMessage('Failed to delete tournament. Please try again later', 'error');
-				return;
-			}
-
-			showMessage('Successfully deleted tournament. Redirecting...', 'success');
-			setTimeout(() => {
-				window.location.pathname = '/tournaments';
-			}, 2000);
-		} catch {
-			showMessage('An error occurred. Please try again later', 'error');
-		}
-	};
-
-	if (creator) {
-		actions.push(
-			<div key={1} className="overview-tab-details-actions-button" onClick={handleStartTournament}>
-				Start
-			</div>,
-			<div key={2} className="overview-tab-details-actions-button" onClick={handleDeleteTournament}>
-				Delete
-			</div>
-		);
-	} else {
-		if (loggedIn) {
-			actions.push(
-				<div key={1} className="overview-tab-details-actions-button">
-					Save
-				</div>
-			);
-		}
-	}
+export function TournamentOverviewTab({ tournament, dashboard, divisions, onSelectDivision }) {
+	const divisionSummaries = Array.isArray(dashboard?.divisions) ? dashboard.divisions : [];
+	const upcomingFixtures = Array.isArray(dashboard?.upcomingFixtures) ? dashboard.upcomingFixtures : [];
+	const recentResults = Array.isArray(dashboard?.recentResults) ? dashboard.recentResults : [];
 
 	return (
-		<>
-			{loading && <LoadingScreen />}
-			<div className="overview-tab-content">
-				<div className="overview-tab-details">
-					<div className="overview-tab-details-title">{details.name}</div>
-					<div className="overview-tab-details-description">{details.description}</div>
-					<div className="overview-tab-details-tags">
-						<div className="overview-tab-details-tag">
-							<Icon name={'progress'} className="overview-tab-details-tag-icon" />
-							{details.status}
-						</div>
-						<div className="overview-tab-details-tag">
-							<Icon name={'calendar'} className="overview-tab-details-tag-icon" />
-							{details.startDate}
-						</div>
-						<div className="overview-tab-details-tag">
-							<Icon name={'location'} className="overview-tab-details-tag-icon" />
-							{details.location}
-						</div>
-						<div className="overview-tab-details-tag">
-							<Icon name={'structure'} className="overview-tab-details-tag-icon" />
-							{details.format}
-						</div>
-					</div>
-					<div className="overview-tab-details-actions">{actions}</div>
+		<div className="tournament-dashboard">
+			<section className="dashboard-hero">
+				<div className="dashboard-hero-copy">
+					<div className="dashboard-eyebrow">Tournament Overview</div>
+					<h2>{tournament.name}</h2>
+					<p>{tournament.description || 'No tournament description has been added yet.'}</p>
 				</div>
-				{/* <div className="overview-tab-links"></div> */}
-				<div className="overview-tab-fixtures">
-					<h2>Upcoming Fixtures</h2>
-					<div className="overview-tab-fixtures-scroll">
-						{details.upcomingFixtures.map((fixture, index) => {
-							return <FixtureCard key={index} fixture={fixture} />;
-						})}
-					</div>
+				<div className="dashboard-hero-meta">
+					<DetailPill icon="calendar" label={buildDateRangeLabel(tournament)} />
+					<DetailPill icon="location" label={tournament.location || 'Location to be confirmed'} />
+					<DetailPill icon="structure" label={tournament.type || formatDivisionCount(divisions.length)} />
+					<DetailPill icon="progress" label={tournament.status || 'Not Started'} />
 				</div>
-				<div className="overview-tab-fixtures">
-					<h2>Recent Results</h2>
-					<div className="overview-tab-fixtures-scroll">
-						{details.results.map((fixture, index) => {
-							return <FixtureCard key={index} fixture={fixture} />;
-						})}
-					</div>
+			</section>
+
+			<section className="dashboard-stats-grid">
+				<StatCard label="Divisions" value={dashboard?.divisionCount || divisions.length || 0} />
+				<StatCard label="Teams" value={dashboard?.totalTeams || 0} />
+				<StatCard label="Fixtures" value={dashboard?.totalFixtures || 0} />
+				<StatCard label="Upcoming" value={dashboard?.upcomingFixtureCount || 0} />
+			</section>
+
+			<section className="dashboard-section">
+				<div className="dashboard-section-heading">
+					<h3>Divisions</h3>
+					<p>Select a division to open its overview, fixtures, standings, and teams.</p>
 				</div>
+				<div className="dashboard-division-grid">
+					{divisionSummaries.length > 0 ? (
+						divisionSummaries.map((division) => (
+							<button
+								key={division.id}
+								type="button"
+								className="dashboard-division-card"
+								onClick={() => onSelectDivision(division.id)}>
+								<div className="dashboard-division-card-top">
+									<div>
+										<h4>{division.name}</h4>
+										<p>{division.type || 'Division'}</p>
+									</div>
+									<Icon name="arrowRight" className="dashboard-division-card-arrow" />
+								</div>
+								<div className="dashboard-division-card-stats">
+									<span>{division.teamCount || 0} teams</span>
+									<span>{division.fixtureCount || 0} fixtures</span>
+									<span>{division.currentRoundName || 'No round active'}</span>
+								</div>
+								<div className="dashboard-division-card-footer">
+									<span>{division.completedFixtureCount || 0} completed</span>
+									<span>{division.upcomingFixtureCount || 0} upcoming</span>
+									<span>{division.hasSchedule ? 'Schedule ready' : 'No schedule yet'}</span>
+								</div>
+							</button>
+						))
+					) : (
+						<InlineEmptyState message="No divisions are available for this tournament yet." />
+					)}
+				</div>
+			</section>
+
+			<div className="dashboard-columns">
+				<FixtureSection
+					title="Upcoming Fixtures"
+					description="Next matches across the tournament."
+					fixtures={upcomingFixtures}
+					emptyMessage="There are no upcoming fixtures yet."
+				/>
+				<FixtureSection
+					title="Recent Results"
+					description="Latest completed or cancelled fixtures."
+					fixtures={recentResults}
+					emptyMessage="There are no results to show yet."
+				/>
 			</div>
-		</>
+		</div>
 	);
 }
 
-function buildScheduleDivisions({ divisions, fixtures, tournamentDetails, id }) {
-	if (Array.isArray(divisions) && divisions.length > 0) {
-		return divisions.map((division, index) => ({
-			...division,
-			name: division.name || `Division ${index + 1}`,
-			fixtures: normaliseDivisionFixtures(division.fixtures || []),
-		}));
-	}
+export function DivisionOverviewTab({ division, tournament }) {
+	const overview = division?.overview || {};
+	const fixtureCount = overview.totalFixtures || division?.fixtures?.length || 0;
 
-	const legacyFixtures = [...(fixtures?.remainingFixtures || []), ...(fixtures?.results || [])];
-	if (legacyFixtures.length === 0) {
-		return [];
-	}
+	return (
+		<div className="tournament-dashboard">
+			<section className="dashboard-hero dashboard-hero--division">
+				<div className="dashboard-hero-copy">
+					<div className="dashboard-eyebrow">Division Overview</div>
+					<h2>{division.name}</h2>
+					<p>
+						{division.type || 'Division'} division inside {tournament.name}. Use the tabs above to move between the
+						schedule, standings, and team list.
+					</p>
+				</div>
+				<div className="dashboard-hero-meta">
+					<DetailPill icon="structure" label={division.type || 'Division'} />
+					<DetailPill icon="calendar" label={buildDateRangeLabel(tournament)} />
+					<DetailPill icon="progress" label={overview.currentRound || 'No round active'} />
+				</div>
+			</section>
 
-	return [
-		{
-			id: `division-${id}`,
-			name: tournamentDetails?.format || 'Division Schedule',
-			schedule: tournamentDetails?.schedule || null,
-			fixtures: normaliseDivisionFixtures(legacyFixtures),
-		},
-	];
+			<section className="dashboard-stats-grid">
+				<StatCard label="Teams" value={overview.teamCount || division?.teams?.length || 0} />
+				<StatCard label="Fixtures" value={fixtureCount} />
+				<StatCard label="Completed" value={overview.completedFixtures || 0} />
+				<StatCard label="Upcoming" value={overview.upcomingFixturesCount || 0} />
+			</section>
+
+			<div className="dashboard-columns">
+				<FixtureSection
+					title="Upcoming Fixtures"
+					description="Quick look at the next matches in this division."
+					fixtures={overview.upcomingFixtures || []}
+					emptyMessage="There are currently no upcoming fixtures in this division."
+				/>
+				<FixtureSection
+					title="Recent Results"
+					description="Most recent finished matches for this division."
+					fixtures={overview.recentResults || []}
+					emptyMessage="There are currently no results in this division."
+				/>
+			</div>
+
+			<section className="dashboard-section">
+				<div className="dashboard-section-heading">
+					<h3>Division Snapshot</h3>
+					<p>Quick context before diving into the more detailed tabs.</p>
+				</div>
+				<div className="dashboard-detail-grid">
+					<InfoCard
+						title="Current Round"
+						value={overview.currentRound || 'No round active'}
+						description={`${overview.completedFixtures || 0} of ${fixtureCount} fixtures completed`}
+					/>
+					<InfoCard
+						title="Schedule"
+						value={overview.hasSchedule ? 'Available' : 'Not created'}
+						description={
+							overview.hasSchedule
+								? 'A saved division schedule is available in the Fixtures & Schedule tab.'
+								: 'A schedule can be added later for this division.'
+						}
+					/>
+					<InfoCard
+						title="Teams"
+						value={overview.teamCount || division?.teams?.length || 0}
+						description="Participating teams currently registered in this division."
+					/>
+				</div>
+			</section>
+		</div>
+	);
 }
 
-export function ScheduleTab({ fixtures, creator, standings, id, tournamentName, tournamentDetails, divisions = [] }) {
+export function ScheduleTab({ division, creator, tournamentName, tournamentDetails }) {
 	const [filter, setFilter] = useState('all');
-	const allFixtures = [...(fixtures?.remainingFixtures || []), ...(fixtures?.results || [])];
-	const [showNextRoundModal, setShowNextRoundModal] = useState(false);
-	const [showScoreModal, setShowScoreModal] = useState(false);
 	const [showScheduleModal, setShowScheduleModal] = useState(false);
 	const [loading, setLoading] = useState(false);
-	const confirm = useConfirm();
+	const [scheduleOverride, setScheduleOverride] = useState(null);
 	const { showMessage } = useMessage();
-	const [selectedFixture, setSelectedFixture] = useState(null);
-	const [selectedDivisionId, setSelectedDivisionId] = useState(null);
-	const [scheduleOverrides, setScheduleOverrides] = useState({});
-	const divisionRecords = useMemo(() => {
-		return buildScheduleDivisions({ divisions, fixtures, tournamentDetails, id }).map((division) => {
-			const savedSchedule = scheduleOverrides[division.id];
 
-			return savedSchedule
-				? {
-						...division,
-						schedule: savedSchedule,
-						state: {
-							...(division.state || {}),
-							schedule: savedSchedule,
-						},
-				  }
-				: division;
-		});
-	}, [divisions, fixtures, tournamentDetails, id, scheduleOverrides]);
+	const fixtures = useMemo(() => normaliseDivisionFixtures(division?.fixtures || []), [division]);
+	const divisionRecord = useMemo(() => {
+		if (!scheduleOverride) {
+			return division;
+		}
 
-	const filteredFixtures = allFixtures.filter((fixture) => {
+		return {
+			...division,
+			schedule: scheduleOverride,
+			state: {
+				...(division?.state || {}),
+				schedule: scheduleOverride,
+			},
+		};
+	}, [division, scheduleOverride]);
+
+	const divisionSchedule = getScheduleForDivision(divisionRecord, tournamentDetails);
+	const divisionStats = calculateScheduledStats(divisionSchedule, fixtures);
+	const filteredFixtures = fixtures.filter((fixture) => {
 		switch (filter) {
 			case 'upcoming':
 				return fixture.status === 'WAITING';
@@ -198,137 +202,36 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName, 
 				return true;
 		}
 	});
-
-	const formatScore = (score) => {
-		const updatedScores = score.map((s) => {
-			return [s.team1, s.team2];
-		});
-		return updatedScores;
-	};
-
-	const startNextRound = async (qualifiedTeams) => {
-		const confirmed = await confirm("Are you sure you want to start the next round? This action can't be undone.");
-
-		if (!confirmed) {
-			setShowNextRoundModal(false);
-			return;
-		}
-
-		setLoading(true);
-
-		try {
-			const response = await updateRounds(
-				id,
-				fixtures.rounds,
-				qualifiedTeams,
-				null,
-				fixtures.remainingFixtures,
-				fixtures.currentRound
-			);
-
-			setLoading(false);
-
-			if (!response.success) {
-				showMessage("Couldn't start next round. Please try again later.", 'error');
-				return;
-			}
-
-			setShowNextRoundModal(false);
-			showMessage('Successfully started next round. Refreshing to reflect changes...', 'success');
-
-			setTimeout(() => {
-				window.location.reload();
-			}, 2000);
-		} catch {
-			showMessage('An error occurred. Please try again later.', 'error');
-		}
-	};
-
-	const handleOpenScoreUpdate = (fixture) => {
-		setSelectedFixture(fixture);
-		setShowScoreModal(true);
-	};
-
-	const handleSaveScore = async (score) => {
-		setLoading(true);
-		try {
-			const response = await updateScore(selectedFixture.id, formatScore(score), 'ONGOING', id, null);
-			setLoading(false);
-			if (!response.success) {
-				showMessage("Couldn't save score. Please try again later", 'error');
-				return;
-			}
-			showMessage('Successfully updated score', 'success');
-			setShowScoreModal(false);
-		} catch {
-			setLoading(false);
-			showMessage('An error occurred. Please try again later', 'error');
-		}
-		setShowScoreModal(false);
-	};
-
-	const handleEndMatch = async (score) => {
-		const confirmed = await confirm('Are you sure you want to end this match? This action cannot be undone');
-		if (!confirmed) return;
-
-		setLoading(true);
-		const updatedRounds = fixtures.rounds.map((round, index) =>
-			index === fixtures.currentRound ? { ...round, completed: round.completed + 1 } : round
-		);
-		try {
-			const response = await updateScore(selectedFixture.id, formatScore(score), 'COMPLETED', id, updatedRounds);
-			setLoading(false);
-
-			if (!response.success) {
-				showMessage("Couldn't end match. Please try again later", 'error');
-				return;
-			}
-
-			setShowScoreModal(false);
-			showMessage('Successfully ended the match. Refreshing to reflect changes...', 'success');
-			setTimeout(() => {
-				window.location.reload();
-			}, 2000);
-		} catch {
-			setLoading(false);
-			showMessage('An error occurred. Please try again later', 'error');
-		}
-	};
-
-	const selectedDivision =
-		divisionRecords.find((division) => division.id === selectedDivisionId) || divisionRecords[0] || null;
-
-	const handleOpenSchedule = (divisionId) => {
-		setSelectedDivisionId(divisionId);
-		setShowScheduleModal(true);
-	};
+	const roundProgress = getRoundProgress(divisionRecord);
 
 	const handleSaveDivision = async (schedulePayload) => {
-		if (!selectedDivision) {
-			return { success: false, error: 'No division selected.' };
-		}
+		setLoading(true);
+		try {
+			const response = await updateDivisionSchedule(division.id, schedulePayload);
+			if (!response?.success) {
+				showMessage(response?.error || 'Unable to save the division schedule right now.', 'error');
+				return response;
+			}
 
-		const response = await updateDivisionSchedule(selectedDivision.id, schedulePayload);
-		if (response?.success === false) {
+			setScheduleOverride(schedulePayload);
+			showMessage('Division schedule updated successfully.', 'success');
 			return response;
+		} catch {
+			showMessage('An error occurred while saving the schedule.', 'error');
+			return { success: false, error: 'SCHEDULE_SAVE_ERROR' };
+		} finally {
+			setLoading(false);
 		}
-
-		setScheduleOverrides((previous) => ({
-			...previous,
-			[selectedDivision.id]: schedulePayload,
-		}));
-
-		return response;
 	};
 
 	return (
 		<>
 			{loading && <LoadingScreen />}
-			{showScheduleModal && selectedDivision && (
+			{showScheduleModal && divisionRecord && (
 				<ScheduleMakerModal
-					key={selectedDivision.id}
+					key={division.id}
 					isOpen={showScheduleModal}
-					division={selectedDivision}
+					division={divisionRecord}
 					tournamentName={tournamentName}
 					tournamentDetails={tournamentDetails}
 					canEdit={creator}
@@ -336,144 +239,64 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName, 
 					onSave={handleSaveDivision}
 				/>
 			)}
-			{showNextRoundModal && (
-				<NextRoundModal
-					fixtures={fixtures}
-					standings={standings}
-					onCancel={() => setShowNextRoundModal(false)}
-					onConfirm={startNextRound}
-				/>
-			)}
-			{showScoreModal && (
-				<ScoreUpdateModal
-					fixture={selectedFixture}
-					onClose={() => setShowScoreModal(false)}
-					onEndMatch={handleEndMatch}
-					onSave={handleSaveScore}
-				/>
-			)}
 			<div className="schedule-tab">
 				<div className="schedule-tab-header">
-					<h2>Schedule & Results</h2>
-					<div className="schedule-tab-content-filters">
-						<div
-							className={`schedule-tab-content-filter ${filter === 'all' ? 'active' : ''}`}
-							onClick={() => {
-								setFilter('all');
-							}}>
-							All
-						</div>
-						<div
-							className={`schedule-tab-content-filter ${filter === 'upcoming' ? 'active' : ''}`}
-							onClick={() => {
-								setFilter('upcoming');
-							}}>
-							Upcoming
-						</div>
-						<div
-							className={`schedule-tab-content-filter ${filter === 'live' ? 'active' : ''}`}
-							onClick={() => {
-								setFilter('live');
-							}}>
-							Live
-						</div>
-						<div
-							className={`schedule-tab-content-filter ${filter === 'done' ? 'active' : ''}`}
-							onClick={() => {
-								setFilter('done');
-							}}>
-							Results
-						</div>
-					</div>
-				</div>
-				<div className="schedule-maker-launcher">
-					<div className="schedule-maker-launcher-copy">
-						<h3>Division Schedules</h3>
-						<p>
-							Open a division schedule to build court allocations, switch between grid and list views, add breaks, and export PDFs.
+					<div>
+						<h2>Fixtures &amp; Schedule</h2>
+						<p className="schedule-tab-subtitle">
+							All fixtures for the {division.name} division, plus access to the saved schedule.
 						</p>
 					</div>
-					<div className="schedule-maker-launcher-grid">
-						{divisionRecords.length > 0 ? (
-							divisionRecords.map((division) => {
-								const divisionSchedule = getScheduleForDivision(division, tournamentDetails);
-								const divisionStats = calculateScheduledStats(divisionSchedule, division.fixtures || []);
-
-								return (
-									<div key={division.id} className="schedule-maker-launcher-card">
-										<div>
-											<h4>{division.name}</h4>
-											<p>
-												{divisionStats.scheduledFixtures}/{divisionStats.totalFixtures} fixtures scheduled
-											</p>
-										</div>
-										<div className="schedule-maker-launcher-card-meta">
-											<span>{divisionStats.days} day(s)</span>
-											<span>{divisionStats.courts} court(s)</span>
-											<span>{divisionStats.unscheduledFixtures} unscheduled</span>
-										</div>
-										<button type="button" onClick={() => handleOpenSchedule(division.id)}>
-											{creator ? 'Open Schedule Maker' : 'View Schedule'}
-										</button>
-									</div>
-								);
-							})
-						) : (
-							<div className="schedule-maker-launcher-empty">
-								<p>No division fixture data is available yet.</p>
+					<div className="schedule-tab-content-filters">
+						{['all', 'upcoming', 'live', 'done'].map((option) => (
+							<div
+								key={option}
+								className={`schedule-tab-content-filter ${filter === option ? 'active' : ''}`}
+								onClick={() => setFilter(option)}>
+								{option === 'done' ? 'Results' : capitalize(option)}
 							</div>
-						)}
+						))}
 					</div>
 				</div>
+
+				<div className="division-schedule-summary">
+					<div className="division-schedule-summary-copy">
+						<h3>Division Schedule</h3>
+						<p>
+							{divisionStats.scheduledFixtures}/{divisionStats.totalFixtures} fixtures scheduled across{' '}
+							{divisionStats.days} day(s) and {divisionStats.courts} court(s).
+						</p>
+					</div>
+					<div className="division-schedule-summary-meta">
+						<span>{divisionStats.unscheduledFixtures} unscheduled</span>
+						<button type="button" onClick={() => setShowScheduleModal(true)}>
+							{creator ? 'Open Schedule Maker' : 'View Schedule'}
+						</button>
+					</div>
+				</div>
+
 				<div className="schedule-tab-content">
 					{filteredFixtures.length > 0 ? (
-						filteredFixtures.map((fixture, index) => {
-							return (
-								<FixtureCard
-									key={index}
-									fixture={fixture}
-									actions={[
-										fixture.editable && creator && (
-											<Icon
-												key={1}
-												name={'edit'}
-												className="fixture-card-actions-button"
-												label="Update Result"
-												onClick={() => handleOpenScoreUpdate(fixture)}
-											/>
-										),
-									]}
-								/>
-							);
-						})
+						filteredFixtures.map((fixture) => <FixtureCard key={fixture.id} fixture={fixture} />)
 					) : (
-						<p>No {filter !== 'all' ? filter : ''} fixtures found</p>
+						<InlineEmptyState
+							message={`No ${filter !== 'all' ? filter : ''} fixtures are available for this division.`.trim()}
+						/>
 					)}
 				</div>
-				{filteredFixtures.length > 0 && fixtures?.rounds?.[fixtures.currentRound] && (
+
+				{roundProgress && (
 					<div className="schedule-tab-progress">
 						<div className="schedule-tab-progress-content">
-							<h3>{fixtures.rounds[fixtures.currentRound].round}</h3>
+							<h3>{roundProgress.roundName}</h3>
+							<p className="schedule-tab-progress-copy">
+								{roundProgress.completed} of {roundProgress.total} fixtures completed in the active round.
+							</p>
 							<div className="schedule-tab-progress-bar">
 								<div
 									className="schedule-tab-progress-bar fill"
-									style={{
-										width: `${
-											(fixtures.rounds[fixtures.currentRound].completed /
-												fixtures.rounds[fixtures.currentRound].matches) *
-											100
-										}%`,
-									}}></div>
+									style={{ width: `${roundProgress.percent}%` }}></div>
 							</div>
-							{creator &&
-								fixtures.rounds[fixtures.currentRound].completed === fixtures.rounds[fixtures.currentRound].matches &&
-								(fixtures.currentRound === fixtures.rounds.length ? (
-									<div className="schedule-tab-progress-button">End Tournament</div>
-								) : (
-									<div className="schedule-tab-progress-button" onClick={() => setShowNextRoundModal(true)}>
-										Next Round
-									</div>
-								))}
 						</div>
 					</div>
 				)}
@@ -482,249 +305,175 @@ export function ScheduleTab({ fixtures, creator, standings, id, tournamentName, 
 	);
 }
 
-export function StandingsTab({ standings, format, currentRound }) {
-	const [expandedRounds, setExpandedRounds] = useState(new Set([currentRound])); // First round expanded by default
+export function StandingsTab({ standings = [], bracket = {}, finalStandings = [], currentRound = 0 }) {
+	const [expandedRounds, setExpandedRounds] = useState(new Set([currentRound]));
+	const bracketRounds = Array.isArray(bracket?.rounds) ? bracket.rounds : [];
 
 	const toggleRound = (roundIndex) => {
 		setExpandedRounds((prev) => {
-			const newSet = new Set(prev);
-			if (newSet.has(roundIndex)) {
-				newSet.delete(roundIndex);
+			const next = new Set(prev);
+			if (next.has(roundIndex)) {
+				next.delete(roundIndex);
 			} else {
-				newSet.add(roundIndex);
+				next.add(roundIndex);
 			}
-			return newSet;
+			return next;
 		});
 	};
-
-	const renderStandingsTable = (data, poolIndex = null) =>
-		data.length > 0 ? (
-			<table className="standings-table">
-				<thead>
-					<tr>
-						<th>Position</th>
-						<th className="sticky-column">Team</th>
-						<th>Played</th>
-						<th>Won</th>
-						<th>Lost</th>
-						<th>Sets Won</th>
-						<th>Sets Lost</th>
-						<th>Set Ratio</th>
-						<th>Points For</th>
-						<th>Points Against</th>
-						<th>Points Ratio</th>
-					</tr>
-				</thead>
-				<tbody>
-					{data.map((team, index) => (
-						<tr key={`${poolIndex}-${index}`}>
-							<td>{index + 1}</td>
-							<td className="sticky-column">{team.name}</td>
-							<td>{team.played}</td>
-							<td>{team.won}</td>
-							<td>{team.lost}</td>
-							<td>{team.setsWon}</td>
-							<td>{team.setsLost}</td>
-							<td>{team.setsRatio !== null ? team.setsRatio.toFixed(3) : 'MAX'}</td>
-							<td>{team.pointsFor}</td>
-							<td>{team.pointsAgainst}</td>
-							<td>{team.pointsRatio !== null ? team.pointsRatio.toFixed(3) : 'MAX'}</td>
-						</tr>
-					))}
-				</tbody>
-			</table>
-		) : (
-			<div className="standings-placeholder">
-				<div className="placeholder-icon">📊</div>
-				<p>Standings will be available once matches have been played</p>
-				{format && <p className="format-info">Format: {format}</p>}
-			</div>
-		);
-
-	const renderEmptyRound = (round) => (
-		<div className="empty-round-placeholder">
-			<div className="placeholder-content">
-				<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
-					<path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z" />
-				</svg>
-				<p>Standings for {round.round} will be available once matches begin</p>
-			</div>
-		</div>
-	);
 
 	return (
 		<div className="tournament-standings">
 			<h2>Standings</h2>
-			{standings.map((round, roundIndex) => (
-				<div key={roundIndex} className="round-standings">
-					<div
-						className={`round-header ${expandedRounds.has(roundIndex) ? 'expanded' : ''}`}
-						onClick={() => toggleRound(roundIndex)}>
-						<h4>{round.round}</h4>
-						<svg
-							className="expand-icon"
-							xmlns="http://www.w3.org/2000/svg"
-							height="24"
-							viewBox="0 -960 960 960"
-							width="24">
-							<path d="M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z" />
-						</svg>
+
+			{finalStandings.length > 0 && (
+				<section className="standings-summary-block">
+					<div className="dashboard-section-heading">
+						<h3>Final Standings</h3>
+						<p>End-of-division placing generated from the available completed results.</p>
 					</div>
-					<div className={`round-content ${expandedRounds.has(roundIndex) ? 'expanded' : ''}`}>
-						{round.groups && round.groups.length > 0 ? (
-							<div className="pools-standings">
-								{round.groups.map((pool, index) => (
-									<div key={index} className="pool-standings">
-										{renderStandingsTable(pool, index)}
-									</div>
+					<div className="pool-standings">
+						<table className="standings-table">
+							<thead>
+								<tr>
+									<th>Rank</th>
+									<th className="sticky-column">Team</th>
+									<th>Note</th>
+								</tr>
+							</thead>
+							<tbody>
+								{finalStandings.map((team) => (
+									<tr key={`${team.rank}-${team.team_id || team.name}`}>
+										<td>{team.rank}</td>
+										<td className="sticky-column">{team.name}</td>
+										<td>{team.note || '-'}</td>
+									</tr>
 								))}
-							</div>
-						) : (
-							renderEmptyRound(round)
-						)}
+							</tbody>
+						</table>
 					</div>
+				</section>
+			)}
+
+			{standings.length > 0 ? (
+				standings.map((round, roundIndex) => (
+					<div key={`${round.round}-${roundIndex}`} className="round-standings">
+						<div
+							className={`round-header ${expandedRounds.has(roundIndex) ? 'expanded' : ''}`}
+							onClick={() => toggleRound(roundIndex)}>
+							<h4>{round.round}</h4>
+							<svg className="expand-icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+								<path d="M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z" />
+							</svg>
+						</div>
+						<div className={`round-content ${expandedRounds.has(roundIndex) ? 'expanded' : ''}`}>
+							{round.groups?.length > 0 ? (
+								<div className="pools-standings">
+									{round.groups.map((group) => (
+										<div key={`${round.round}-${group.groupIndex}`} className="pool-standings">
+											<h5 className="standings-group-title">{group.name}</h5>
+											{renderStandingsTable(group.standings || [], group.name)}
+										</div>
+									))}
+								</div>
+							) : (
+								<InlineEmptyState message={`Standings for ${round.round} will appear once matches are completed.`} />
+							)}
+						</div>
+					</div>
+				))
+			) : (
+				<InlineEmptyState message="Round-robin standings are not available for this division yet." />
+			)}
+
+			<section className="dashboard-section">
+				<div className="dashboard-section-heading">
+					<h3>Knockout Bracket</h3>
+					<p>Graph-friendly round structure built from the stored division rounds.</p>
 				</div>
-			))}
+				{bracketRounds.length > 0 ? (
+					<div className="bracket-rounds-grid">
+						{bracketRounds.map((round) => (
+							<div key={`${round.name}-${round.roundIndex}`} className="bracket-round-card">
+								<h4>{round.name}</h4>
+								<div className="bracket-match-list">
+									{round.matches.map((match) => (
+										<div key={match.id} className="bracket-match-card">
+											<div className="bracket-match-meta">
+												<span>{match.round}</span>
+												<span>{match.match_no ? `Match #${match.match_no}` : 'TBD'}</span>
+											</div>
+											<div className="bracket-team-row">
+												<strong>{match.participants?.[0]?.name || 'TBD'}</strong>
+											</div>
+											<div className="bracket-team-row">
+												<strong>{match.participants?.[1]?.name || 'TBD'}</strong>
+											</div>
+											<div className="bracket-match-footer">
+												<span>{match.status || 'WAITING'}</span>
+												<span>{match.winner?.name ? `Winner: ${match.winner.name}` : 'Winner TBD'}</span>
+											</div>
+										</div>
+									))}
+								</div>
+							</div>
+						))}
+					</div>
+				) : (
+					<InlineEmptyState message="This division does not currently have knockout bracket data." />
+				)}
+			</section>
 		</div>
 	);
 }
 
-export function TeamsTab({ teams, status, setPageUnsavedChanges, tournamentId, creator, onUpdate }) {
-	const editTeams = status === 'Not Started' && creator;
-	const [openTeamNameChangePopup, setOpenTeamNameChangePopup] = useState(false);
-	const [currentTeam, setCurrentTeam] = useState(null);
-	const [selectedTeamIndex, setSelectedTeamIndex] = useState(null);
-	const { showMessage } = useMessage();
-	const [unsavedChanges, setUnsavedChanges] = useState(false);
-	const [originalTeams, setOriginalTeams] = useState(teams);
-	const [stagedTeams, setStagedTeams] = useState(JSON.parse(JSON.stringify(teams)));
-	const [loading, setLoading] = useState(false);
-
+export function TeamsTab({ teams = [], divisionName }) {
 	if (!Array.isArray(teams) || teams.length === 0) {
 		return (
 			<div className="tournament-teams">
-				<h3>Teams</h3>
-				<div className="team-card">
-					<p>No teams available</p>
+				<div className="tournament-teams-header">
+					<h3>Teams</h3>
 				</div>
+				<InlineEmptyState message={`No teams are currently available for the ${divisionName || 'selected'} division.`} />
 			</div>
 		);
 	}
 
-	const handleTeamNameChange = async (event, teamIndex) => {
-		setCurrentTeam({ element: event.currentTarget });
-		setSelectedTeamIndex(teamIndex);
-		setOpenTeamNameChangePopup(true);
-	};
-
-	const changeTeamName = (e, rank, newName) => {
-		if (stagedTeams.includes(newName)) {
-			return false;
-		}
-		const updated = [...stagedTeams];
-		updated[selectedTeamIndex] = newName;
-		setStagedTeams(updated);
-		currentTeam.element.parentElement.classList.add('team-name-changed');
-		setUnsavedChanges(true);
-		setPageUnsavedChanges(true);
-		setCurrentTeam(null);
-		return true;
-	};
-
-	const handleDiscardChanges = () => {
-		setStagedTeams(JSON.parse(JSON.stringify(originalTeams)));
-		document.querySelectorAll('.team-name-changed').forEach((element) => {
-			element.classList.remove('team-name-changed');
-		});
-		setUnsavedChanges(false);
-		setPageUnsavedChanges(false);
-		showMessage('Changes discarded', 'success');
-	};
-
-	const handleSaveChanges = async () => {
-		setLoading(true);
-		if (JSON.stringify(originalTeams) === JSON.stringify(stagedTeams)) {
-			setLoading(false);
-			showMessage('No changes to save', 'info');
-			return;
-		}
-		if (stagedTeams.includes('')) {
-			setLoading(false);
-			showMessage('Team names cannot be empty', 'error');
-			return;
-		}
-		const response = await updateTeams(tournamentId, stagedTeams);
-		if (!response.success) {
-			setLoading(false);
-			showMessage('Error saving changes. Please try again later', 'error');
-			return;
-		} else {
-			setLoading(false);
-			setOriginalTeams(JSON.parse(JSON.stringify(stagedTeams)));
-			document.querySelectorAll('.team-name-changed').forEach((element) => {
-				element.classList.remove('team-name-changed');
-			});
-			setUnsavedChanges(false);
-			setPageUnsavedChanges(false);
-			showMessage('Changes saved successfully', 'success');
-			onUpdate();
-		}
-	};
-
 	return (
-		<>
-			{openTeamNameChangePopup && (
-				<TeamNameChangePopup
-					onClose={() => setOpenTeamNameChangePopup(false)}
-					onSubmit={changeTeamName}
-					currName={currentTeam.element.parentElement.innerText ? currentTeam.element.parentElement.innerText : ''}
-					rank={selectedTeamIndex + 1}
-				/>
-			)}
-			{loading && <LoadingScreen />}
-			<div className="tournament-teams">
-				<div className="tournament-teams-header">
-					<h3>Teams</h3>
-					{unsavedChanges && (
-						<div className="button-group">
-							<button onClick={handleSaveChanges}>Save Changes</button>
-							<button onClick={handleDiscardChanges}>Discard Changes</button>
-						</div>
-					)}
-				</div>
-				<div className="teams-grid">
-					{stagedTeams.map((team, index) => (
-						<div key={index} className="team-card">
-							{team}
-							{editTeams && (
-								<Icon
-									className="teams-tab-edit-team-icon"
-									name={'edit'}
-									onClick={(e) => handleTeamNameChange(e, index)}
-								/>
-							)}
-						</div>
-					))}
-				</div>
+		<div className="tournament-teams">
+			<div className="tournament-teams-header">
+				<h3>Teams</h3>
 			</div>
-		</>
+			<div className="teams-grid">
+				{teams.map((team, index) => (
+					<div key={team.id || `${team.name}-${index}`} className="team-card">
+						<div>
+							<strong>{team.name}</strong>
+							<div className="team-card-subtitle">{team.id || 'Pending team id'}</div>
+						</div>
+						<span className="team-card-rank">#{index + 1}</span>
+					</div>
+				))}
+			</div>
+		</div>
 	);
 }
 
-export function FixtureCard({ fixture, actions = [] }) {
+export function FixtureCard({ fixture }) {
+	const hasResult = Array.isArray(fixture.result) && fixture.result.length > 0;
 	let cols = '1fr';
-	let sets = { 1: [], 2: [] };
-	if (fixture.result) {
+	const sets = { 1: [], 2: [] };
+
+	if (hasResult) {
 		let index = 0;
-		for (let set of fixture.result) {
+		for (const set of fixture.result) {
 			cols += ' 25px';
 			sets[1].push(<div key={index++}>{set[0]}</div>);
 			sets[2].push(<div key={index++}>{set[1]}</div>);
 		}
 	} else {
 		cols += ' 25px';
-		sets[1].push(<div key={1}>0</div>);
-		sets[2].push(<div key={2}>0</div>);
+		sets[1].push(<div key={`${fixture.id}-a`}>0</div>);
+		sets[2].push(<div key={`${fixture.id}-b`}>0</div>);
 	}
 
 	const statusMap = {
@@ -737,9 +486,12 @@ export function FixtureCard({ fixture, actions = [] }) {
 	return (
 		<div className="fixture-card" key={fixture.id}>
 			<div className="fixture-card-header">
-				<div className={`fixture-card-header-status ${fixture.status.toLowerCase()}`}>{statusMap[fixture.status]}</div>
+				<div className={`fixture-card-header-status ${String(fixture.status || '').toLowerCase()}`}>
+					{statusMap[fixture.status] || fixture.status}
+				</div>
 				<div className="fixture-card-header-round">{fixture.round}</div>
-				<div className="fixture-card-header-match">Match #{fixture.match_no}</div>
+				<div className="fixture-card-header-match">Match #{fixture.match_no || fixture.matchNo}</div>
+				{fixture.division_name && <div className="fixture-card-header-division">{fixture.division_name}</div>}
 			</div>
 			<div className="fixture-card-content">
 				<div className="fixture-card-content-team" style={{ gridTemplateColumns: cols }}>
@@ -751,7 +503,136 @@ export function FixtureCard({ fixture, actions = [] }) {
 					{sets[2]}
 				</div>
 			</div>
-			{actions.length > 0 && <div className="fixture-card-actions">{actions}</div>}
 		</div>
 	);
+}
+
+function StatCard({ label, value }) {
+	return (
+		<div className="dashboard-stat-card">
+			<small>{label}</small>
+			<strong>{value}</strong>
+		</div>
+	);
+}
+
+function InfoCard({ title, value, description }) {
+	return (
+		<div className="dashboard-info-card">
+			<small>{title}</small>
+			<strong>{value}</strong>
+			<p>{description}</p>
+		</div>
+	);
+}
+
+function DetailPill({ icon, label }) {
+	return (
+		<div className="dashboard-detail-pill">
+			<Icon name={icon} className="dashboard-detail-pill-icon" />
+			<span>{label}</span>
+		</div>
+	);
+}
+
+function FixtureSection({ title, description, fixtures, emptyMessage }) {
+	return (
+		<section className="dashboard-section">
+			<div className="dashboard-section-heading">
+				<h3>{title}</h3>
+				<p>{description}</p>
+			</div>
+			<div className="dashboard-fixture-stack">
+				{fixtures.length > 0 ? fixtures.map((fixture) => <FixtureCard key={fixture.id} fixture={fixture} />) : <InlineEmptyState message={emptyMessage} />}
+			</div>
+		</section>
+	);
+}
+
+function InlineEmptyState({ message }) {
+	return (
+		<div className="dashboard-inline-empty">
+			<p>{message}</p>
+		</div>
+	);
+}
+
+function renderStandingsTable(data, poolKey = null) {
+	return data.length > 0 ? (
+		<table className="standings-table">
+			<thead>
+				<tr>
+					<th>Position</th>
+					<th className="sticky-column">Team</th>
+					<th>Played</th>
+					<th>Won</th>
+					<th>Lost</th>
+					<th>Sets Won</th>
+					<th>Sets Lost</th>
+					<th>Set Ratio</th>
+					<th>Points For</th>
+					<th>Points Against</th>
+					<th>Points Ratio</th>
+				</tr>
+			</thead>
+			<tbody>
+				{data.map((team, index) => (
+					<tr key={`${poolKey}-${team.id || team.name}-${index}`}>
+						<td>{index + 1}</td>
+						<td className="sticky-column">{team.name}</td>
+						<td>{team.played}</td>
+						<td>{team.won}</td>
+						<td>{team.lost}</td>
+						<td>{team.setsWon}</td>
+						<td>{team.setsLost}</td>
+						<td>{team.setsRatio !== null ? Number(team.setsRatio).toFixed(3) : 'MAX'}</td>
+						<td>{team.pointsFor}</td>
+						<td>{team.pointsAgainst}</td>
+						<td>{team.pointsRatio !== null ? Number(team.pointsRatio).toFixed(3) : 'MAX'}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	) : (
+		<InlineEmptyState message="Standings will be available once matches have been played." />
+	);
+}
+
+function buildDateRangeLabel(tournament) {
+	const start = tournament?.start_date_label || formatDateLabel(tournament?.startDate || tournament?.start_date);
+	const end = tournament?.end_date_label || formatDateLabel(tournament?.endDate || tournament?.end_date);
+
+	if (start && end && start !== end) {
+		return `${start} - ${end}`;
+	}
+
+	return start || end || 'Date to be confirmed';
+}
+
+function formatDivisionCount(count) {
+	return `${count} division${count === 1 ? '' : 's'}`;
+}
+
+function getRoundProgress(division) {
+	const rounds = Array.isArray(division?.state?.rounds) ? division.state.rounds : [];
+	const currentRound = rounds[division?.state?.currentRound || 0];
+
+	if (!currentRound) {
+		return null;
+	}
+
+	const completed = currentRound.completedGames ?? currentRound.completed ?? 0;
+	const total = currentRound.totalGames ?? currentRound.matches ?? 0;
+
+	return {
+		roundName: currentRound.name || 'Current Round',
+		completed,
+		total,
+		percent: total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0,
+	};
+}
+
+function capitalize(value) {
+	if (!value) return '';
+	return value.charAt(0).toUpperCase() + value.slice(1);
 }

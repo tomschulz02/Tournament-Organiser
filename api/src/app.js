@@ -15,7 +15,7 @@ app.use(cors({
 			? [process.env.FRONTEND_URL, 'http://localhost:5173']
 			: process.env.FRONTEND_URL,
 	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-	headers: ['Content-Type, Authorization'],
+	allowedHeaders: ['Content-Type', 'Authorization'],
 	credentials: true,
 	optionsSuccessStatus: 200,
 }));
@@ -23,12 +23,12 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 const SECRET_KEY = process.env.JWT_SECRET;
 
-// token check
+// Populates req.user from the session cookie. This middleware never rejects a
+// request — it sets req.user to null when there is no valid token. Routes that
+// must not be reachable anonymously use requireAuth from ../middleware/requireAuth.js
 const publicRoutes = ["/api/users/login", "/api/users/signup"];
 app.use((req, res, next) => {
-    console.log("Incoming request:", req.method, req.path);
     if (publicRoutes.includes(req.path)) {
-        console.log("Public route accessed:", req.path);
         return next();
     }
 

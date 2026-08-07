@@ -1,9 +1,18 @@
 import { userRepository } from "../repositories/users.repository.js"
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { SESSION_TTL_JWT } from "../config/auth.js";
 
 const saltRounds = 10;
 const jwtSecret = process.env.JWT_SECRET;
+
+function issueToken(user) {
+    return jwt.sign(
+        { id: user.id, username: user.username, email: user.email, admin: user.admin },
+        jwtSecret,
+        { expiresIn: SESSION_TTL_JWT }
+    );
+}
 
 async function createUser(username, email, password, confirmPassword) {
     if (password !== confirmPassword) {
@@ -17,13 +26,7 @@ async function createUser(username, email, password, confirmPassword) {
         const hash = await bcrypt.hash(password, saltRounds);
         const user = await userRepository.createUser(username, email, hash);
 
-        const token = jwt.sign(
-            {id: user.id, username: user.username, email: user.email, admin: user.admin},
-            jwtSecret,
-            { expiresIn: "7d" }
-        );
-
-        return token;
+        return issueToken(user);
     } catch (err) {
         console.error(err);
         throw new Error("USER_CREATION_ERROR");
@@ -35,26 +38,26 @@ async function loginUser(email, password) {
         throw new Error("MISSING_FIELDS");
     }
 
+    let user;
     try {
-        const user = await userRepository.loginUser(email, password);
-
-        const isMatch = await bcrypt.compare(password, user.password);
-		
-		if (!isMatch) {
-			throw new Error("INCORRECT_PASSWORD");
-		}
-
-        const token = jwt.sign(
-            {id: user.id, username: user.username, email: user.email, admin: user.admin},
-            jwtSecret,
-            { expiresIn: "7d" }
-        );
-
-        return token;
+        user = await userRepository.findUserByEmail(email);
     } catch (err) {
         console.error(err);
         throw new Error("LOGIN_ERROR");
     }
+
+    // Deliberately identical outcomes for "no such user" and "wrong password".
+    // Distinguishing them lets an attacker enumerate registered accounts.
+    if (!user) {
+        throw new Error("INVALID_CREDENTIALS");
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+        throw new Error("INVALID_CREDENTIALS");
+    }
+
+    return issueToken(user);
 }
 
 export const userService = {

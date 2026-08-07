@@ -9,8 +9,7 @@ async function getFixtures(divisionId) {
         const sql = "SELECT * FROM fixtures WHERE division_id = $1";
         const result = await db.query(sql, [divisionId]);
         
-        if (!result.success) return ("GET_FIXTURES_ERROR");
-        return result.message;
+        return result;
     } catch (err) {
         return (err.message || "GET_FIXTURES_ERROR");
     }
@@ -22,10 +21,22 @@ async function getResults(divisionId) {
         const sql = "SELECT * FROM fixtures WHERE division_id = $1 AND status = 'COMPLETED'";
         const result = await db.query(sql, [divisionId]);
         
-        if (!result.success) return ("GET_RESULTS_ERROR");
-        return result.message;
+        return result;
     } catch (err) {
         return (err.message || "GET_RESULTS_ERROR");
+    }
+}
+
+async function getFixturesByDivisionIds(divisionIds) {
+    if (!Array.isArray(divisionIds) || divisionIds.length === 0) {
+        return [];
+    }
+
+    try {
+        const sql = "SELECT * FROM fixtures WHERE division_id = ANY($1::uuid[]) ORDER BY division_id, match_no ASC;";
+        return await db.query(sql, [divisionIds]);
+    } catch (error) {
+        throw new Error(error.message || "GET_FIXTURES_BY_DIVISION_IDS_ERROR");
     }
 }
 
@@ -88,6 +99,7 @@ async function updateFixtures(divisionId, fixtures) {
 export const fixturesRepository = {
     getFixtures,
     getResults,
+    getFixturesByDivisionIds,
     updateResult,
     createFixture,
     updateFixtures

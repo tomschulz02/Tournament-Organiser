@@ -154,6 +154,28 @@ async function getDivisionDetails(tournamentId) {
     }
 }
 
+async function getDivisionsByTournamentId(tournamentId) {
+    try {
+        const sql = "SELECT * FROM divisions WHERE tournament_id = $1 ORDER BY name ASC;";
+        return await db.query(sql, [tournamentId]);
+    } catch (error) {
+        throw new Error(error.message || "GET_DIVISIONS_ERROR");
+    }
+}
+
+async function getTeamsByDivisionIds(divisionIds) {
+    if (!Array.isArray(divisionIds) || divisionIds.length === 0) {
+        return [];
+    }
+
+    try {
+        const sql = "SELECT * FROM teams WHERE division_id = ANY($1::uuid[]) ORDER BY division_id, name ASC;";
+        return await db.query(sql, [divisionIds]);
+    } catch (error) {
+        throw new Error(error.message || "GET_TEAMS_ERROR");
+    }
+}
+
 export const divisionsRepository = {
     createDivision,
     updateTeams,
@@ -161,6 +183,8 @@ export const divisionsRepository = {
     updateGroups,
     updateRounds,
     getDivisionDetails,
+    getDivisionsByTournamentId,
+    getTeamsByDivisionIds,
     createTeam,
     getTeamNames
 };

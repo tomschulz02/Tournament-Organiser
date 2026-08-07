@@ -4,42 +4,32 @@ import { fetchTournamentData } from '../requests';
 import '../App.css';
 import LoadingScreen from '../components/LoadingScreen';
 import TournamentView from '../components/TournamentView';
-import CollectionView from '../components/CollectionView';
 
 export default function ViewPage() {
 	const { id } = useParams();
-	const [tournamentData, setTournamentData] = useState({});
-	const [type, setType] = useState(null);
+	const [tournamentData, setTournamentData] = useState(null);
+	const [notFound, setNotFound] = useState(false);
 	const [loading, setLoading] = useState(false);
-	const [openPreview, setOpenPreview] = useState(false);
 
 	useEffect(() => {
 		const fetchDetails = async () => {
 			setLoading(true);
-			try {
-				let response;
-				if ([...id][0] === 'c') {
-					// fetch collection data
-					setLoading(false);
-					response = await fetchTournamentData(id);
-					setOpenPreview(true);
-				} else {
-					// fetch tournament data
-					response = await fetchTournamentData(id);
-				}
+			setNotFound(false);
 
-				if (!response.success) {
-					setType(404);
+			try {
+				const response = await fetchTournamentData(id);
+
+				if (!response?.success) {
+					setTournamentData(null);
+					setNotFound(true);
 					return;
 				}
 
-				console.log(response);
-
-				setTournamentData(await response);
-				setType([...id][0]);
+				setTournamentData(response);
 			} catch (error) {
 				console.error(error);
-				setType(null);
+				setTournamentData(null);
+				setNotFound(true);
 			} finally {
 				setLoading(false);
 			}
@@ -50,23 +40,18 @@ export default function ViewPage() {
 
 	if (loading) return <LoadingScreen />;
 
-	if (type === 404) {
+	if (notFound) {
 		return (
 			<div className="tournament-not-found">
-				<h2>⛔ Tournament Not Found</h2>
-				<p>The tournament you are looking for doesn't exist or was removed.</p>
+				<h2>Tournament Not Found</h2>
+				<p>The tournament you are looking for doesn&apos;t exist or was removed.</p>
 			</div>
 		);
 	}
 
-	if (!type) {
+	if (!tournamentData) {
 		return <div></div>;
 	}
 
-	return (
-		<>
-			<CollectionView collection={tournamentData} status={openPreview} setStatus={setOpenPreview} />
-			{type === 't' && <TournamentView tournament={tournamentData} />}
-		</>
-	);
+	return <TournamentView tournament={tournamentData} />;
 }

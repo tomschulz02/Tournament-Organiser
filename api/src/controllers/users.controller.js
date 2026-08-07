@@ -1,16 +1,12 @@
 import { userService } from "../services/users.service.js";
+import { SESSION_TTL_MS, sessionCookieOptions } from "../config/auth.js";
 
 async function signup(req, res) {
     try {
         const { username, email, password, confirmPassword } = req.body;
         const token = await userService.createUser(username, email, password, confirmPassword);
 
-        res.cookie('token', token, {
-			httpOnly: true,
-			sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-			secure: process.env.NODE_ENV === 'production',
-			maxAge: 24 * 60 * 60 * 1000, // 24 hours
-		});
+        res.cookie('token', token, { ...sessionCookieOptions(), maxAge: SESSION_TTL_MS });
 		res.status(201).json({ success: true, message: 'User registered successfully', user: { username } });
     } catch (err) {
         if (err.message === "PASSWORDS_DO_NOT_MATCH"){
@@ -30,21 +26,16 @@ async function login(req, res) {
         const { email, password } = req.body;
         const token = await userService.loginUser(email, password);
 
-        res.cookie('token', token, {
-            httpOnly: true,
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        });
+        res.cookie('token', token, { ...sessionCookieOptions(), maxAge: SESSION_TTL_MS });
         res.status(200).json({ success: true, message: 'Login successful'});
     } catch (err) {
         console.error(err);
         if (err.message === "MISSING_FIELDS") {
             res.status(400).json({ error: "Missing required fields" });
-        } else if (err.message === "USER_NOT_FOUND") {
-            res.status(404).json({ error: "User not found" });
-        } else if (err.message === "INCORRECT_PASSWORD") {
-            res.status(401).json({ error: "Incorrect password" });
+        } else if (err.message === "INVALID_CREDENTIALS") {
+            // One message for both an unknown email and a wrong password, so the
+            // response cannot be used to discover which accounts exist.
+            res.status(401).json({ error: "Invalid email or password" });
         } else {
             res.status(500).json({ error: "Internal server error" });
         }
@@ -53,12 +44,7 @@ async function login(req, res) {
 
 async function logout(req, res) {
     try {
-        res.clearCookie('token', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            path: '/',
-        });
+        res.clearCookie('token', sessionCookieOptions());
         res.json({ success: true, message: 'User logged out' });
     } catch (err) {
         res.status(500).json({ error: "Internal server error" });

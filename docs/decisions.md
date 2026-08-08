@@ -123,6 +123,52 @@ file rather than being reinvented per controller. Preserving `cause` is what mak
 possible to turn a unique-constraint violation into a 409 that says the email is already
 registered, instead of the 500 it currently produces.
 
+## Creating A Tournament Is One Transaction
+
+Decided 2026-08-08.
+
+The whole creation path — the tournament row, every division, every team, every fixture —
+runs on a single client inside a single transaction. A `withTransaction(fn)` helper in
+`api/src/config/db.js` owns `BEGIN`, `COMMIT`, `ROLLBACK` and releasing the client. The
+service chooses the boundary; repositories keep owning the SQL.
+
+This replaces one transaction per division plus a compensating `deleteTournament` that
+relied on foreign-key cascade to clean up after a partial failure.
+
+Reason:
+The compensating delete is a hand-written undo of something the database does for free,
+and it can fail on its own account, leaving orphans that nothing records as orphans. It
+also cannot cover its most important case: if the tournament insert is what failed, the
+id is still its initial `0` and the cleanup throws an invalid-uuid error over the top of
+the real error. A transaction cannot half-succeed, so the whole class disappears. It also
+closes a window in which a concurrent read could see a tournament with no divisions.
+
+Consequence: parallel work inside the transaction becomes sequential, because one pg
+client cannot run concurrent queries. Nothing is lost — the previous `Promise.all` over
+divisions opened a connection each and contended for the same pool.
+
+## Teams Are Selected Or Created, Never Duplicated
+
+Decided 2026-08-08.
+
+A team in the creation payload is either an existing team, carrying `id`, or a new one,
+carrying `name` only. Existing teams are linked as they are; new names are inserted with
+`user_id` set to the organiser and the resulting id is what lands in `state.teams`. State
+holds ids and nothing else, unchanged.
+
+An id supplied by the client is untrusted. It must be confirmed to belong to the
+organiser before being linked, or one user can attach another user's team to their
+division.
+
+`getTeamNames` is repurposed to `getTeamsByUserId`, listing the teams a user owns, which
+is what populates the selection dropdown. It is exposed as `GET /api/teams`, scoped to
+the authenticated caller.
+
+Reason:
+Teams outlive a single tournament — the same club side enters repeatedly — and
+re-creating a row per entry would scatter one team's history across many ids and make
+cross-tournament statistics impossible later. This is also what `teams.user_id` is for.
+
 ## REST Paths, And Collections Removed
 
 Decided 2026-08-08. The convention and the full endpoint list are in `docs/api.md`.

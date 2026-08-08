@@ -36,8 +36,30 @@ dbMock.instance = {
     query: vi.fn(async () => []),
     pool: {
         connect: vi.fn(async () => dbMock.client)
-    }
+    },
+    // Mirrors DBConnection.withTransaction, so a suite can assert the
+    // BEGIN/COMMIT sequencing and the release through clientSql() exactly as it
+    // does for a repository that opens its own transaction. Kept faithful to the
+    // real implementation on purpose: if one changes, change both.
+    withTransaction: vi.fn(async (fn) => {
+        const client = dbMock.client;
+
+        try {
+            await client.query("BEGIN");
+            const result = await fn(client);
+            await client.query("COMMIT");
+
+            return result;
+        } catch (err) {
+            await client.query("ROLLBACK");
+            throw err;
+        } finally {
+            client.release();
+        }
+    })
 };
+
+const defaultWithTransaction = dbMock.instance.withTransaction.getMockImplementation();
 
 // Wipes call history AND any leftover one-shot implementations, then reinstalls
 // the defaults. Call from beforeEach in any suite that touches the database.
@@ -50,6 +72,8 @@ export function resetDbMock() {
     dbMock.instance.query.mockImplementation(async () => []);
     dbMock.instance.pool.connect.mockReset();
     dbMock.instance.pool.connect.mockImplementation(async () => dbMock.client);
+    dbMock.instance.withTransaction.mockReset();
+    dbMock.instance.withTransaction.mockImplementation(defaultWithTransaction);
 }
 
 // The SQL text of every call made on the transaction client, in order. Used to

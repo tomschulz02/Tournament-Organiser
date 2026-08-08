@@ -20,19 +20,14 @@ items are identified, and remove them as they are fixed.
 
 The schema in `docs/database.md` is correct; the code below is not.
 
-- `divisions.repository.js` `getTeamsByDivisionIds`, `getTeamNames` and `createTeam`
-  still read and write a `teams.division_id` column. The `teams` table has `user_id`,
-  not `division_id`. Division membership lives in `state.teams`. This breaks team names
-  in the tournament detail view, and it breaks tournament creation outright —
-  `createTeam` cannot insert at all. `getTeamsByIds` was added for round progression and
-  does it correctly, looking up ids from `state.teams`. Use it as the pattern when
-  fixing the rest.
-- `createTeam` also never populates `teams.user_id`, which is `NOT NULL`. Deciding what
-  belongs there is an open design question — see `docs/gap-analysis.md`, item B7.
-- `divisions.repository.js` `updateTeams` uses `RETURNING num_groups`. The `divisions`
-  table has no such column.
 - `users.repository.js` queries a `friends` table that does not exist. Reserved for a
   future social feature.
+
+The `teams.division_id` drift is gone as of 2026-08-08. `createTeam` inserts
+`(id, name, user_id)` with the organiser's id, `getTeamNames` is now `getTeamsByUserId`,
+`getTeamsByDivisionIds` has been removed in favour of resolving `state.teams` through
+`getTeamsByIds`, and `updateTeams` no longer asks for a `num_groups` column that does not
+exist.
 
 ## API Contract
 

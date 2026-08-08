@@ -26,11 +26,13 @@ async function updateTeams(divisionId, userId, teams) {
     try {
         await client.query("BEGIN");
         
-        const sql = "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2 RETURNING num_groups";
-        const result = await client.query(sql, [JSON.stringify(teams), divisionId]);
-        
+        // No RETURNING: divisions has no num_groups column — group count is
+        // derived from state.rounds[].groups.
+        const sql = "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2";
+        await client.query(sql, [JSON.stringify(teams), divisionId]);
+
         await client.query("COMMIT");
-        return result;
+        return { message: "Teams updated" };
     } catch (err) {
         await client.query("ROLLBACK");
         throw new Error("Failed to update teams", { cause: err });
@@ -41,10 +43,10 @@ async function updateTeams(divisionId, userId, teams) {
 }
 
 // used to create a new team
-async function createTeam(name, divisionId){
+async function createTeam(name, userId, client = db){
     try {
         const teamId = uuidv4();
-        await db.query('INSERT INTO teams (id, name, division_id) VALUES ($1, $2, $3);', [teamId, name, divisionId]);
+        await client.query('INSERT INTO teams (id, name, user_id) VALUES ($1, $2, $3);', [teamId, name, userId]);
 
         return teamId;
     } catch (error) {
@@ -52,14 +54,13 @@ async function createTeam(name, divisionId){
     }
 }
 
-// fetch team name by id
-async function getTeamNames(divisionId){
+// The teams a user owns. Populates the team dropdown in tournament creation;
+// GET /api/teams will expose it.
+async function getTeamsByUserId(userId){
     try {
-        const result = await db.query('SELECT id, name FROM teams WHERE division_id=$1;', [divisionId]);
-
-        return result;
+        return await db.query('SELECT id, name FROM teams WHERE user_id = $1 ORDER BY name ASC;', [userId]);
     } catch (error){
-        throw new Error("Failed to fetch team names", { cause: error });
+        throw new Error("Failed to fetch teams", { cause: error });
     }
 }
 
@@ -151,15 +152,17 @@ async function getDivisionWithOwner(divisionId) {
 // Looks up teams by their ids, taken from state.teams.
 //
 // The teams table has no division_id column — division membership lives in
-// divisions.state.teams. getTeamsByDivisionIds and getTeamNames still query a
-// division_id that does not exist; see docs/known-limitations.md.
+// divisions.state.teams, so this is the only way to resolve a division's teams.
+//
+// user_id is selected so the service can confirm ownership of ids supplied by a
+// client; see docs/decisions.md, "Ownership Is Checked In The Service".
 async function getTeamsByIds(teamIds) {
     if (!Array.isArray(teamIds) || teamIds.length === 0) {
         return [];
     }
 
     try {
-        const sql = "SELECT id, name FROM teams WHERE id = ANY($1::uuid[]);";
+        const sql = "SELECT id, name, user_id FROM teams WHERE id = ANY($1::uuid[]);";
         return await db.query(sql, [teamIds]);
     } catch (error) {
         throw new Error("Failed to fetch teams", { cause: error });
@@ -228,19 +231,6 @@ async function getDivisionsByTournamentId(tournamentId) {
     }
 }
 
-async function getTeamsByDivisionIds(divisionIds) {
-    if (!Array.isArray(divisionIds) || divisionIds.length === 0) {
-        return [];
-    }
-
-    try {
-        const sql = "SELECT * FROM teams WHERE division_id = ANY($1::uuid[]) ORDER BY division_id, name ASC;";
-        return await db.query(sql, [divisionIds]);
-    } catch (error) {
-        throw new Error("Failed to fetch teams by division", { cause: error });
-    }
-}
-
 export const divisionsRepository = {
     createDivision,
     updateTeams,
@@ -253,7 +243,6 @@ export const divisionsRepository = {
     getFixturesByDivisionId,
     updateSchedule,
     getDivisionsByTournamentId,
-    getTeamsByDivisionIds,
     createTeam,
-    getTeamNames
+    getTeamsByUserId
 };

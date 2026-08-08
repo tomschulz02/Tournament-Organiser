@@ -104,22 +104,23 @@ The frontend already calls the missing endpoints. `docs/api.md` lists which ones
 Consequence: wiring up the rest of divisions and fixtures is mostly controller and route
 work, not new business logic. Check the existing service before writing anything new.
 
-Note that creating a tournament currently fails against the documented schema — see
-`docs/gap-analysis.md`, item C1. Nothing downstream of creation can be exercised
-end to end until that is fixed.
+Creating a tournament used to fail against the documented schema. As of 2026-08-08 it
+works, and it is one transaction: the tournament, its divisions, their teams and their
+fixtures all commit together or none of them do. `createTournament` in
+`tournaments.service.js` opens that transaction through `withTransaction` and passes the
+client down; the repositories take it as their last parameter.
 
 ## Code and Schema Drift
 
 The database schema in `docs/database.md` is the source of truth. Where the code
 disagrees, the code is wrong. Known cases:
 
-- `divisions.repository.js` writes `teams (id, name, division_id)` and selects
-  `WHERE division_id = ...`. The `teams` table has `user_id`, not `division_id`.
-  Division membership lives in `state.teams`, not on the team row.
-- `divisions.repository.js` `updateTeams` uses `RETURNING num_groups`. The `divisions`
-  table has no `num_groups` column. Group count is derived from `state.rounds[].groups`.
 - `users.repository.js` references a `friends` table. It does not exist. It is reserved
   for a future social feature and the code is ahead of the schema.
+
+The `teams.division_id` writes and reads, and the `RETURNING num_groups` in
+`updateTeams`, were fixed on 2026-08-08. Division membership lives in `state.teams`, not
+on the team row, and group count is derived from `state.rounds[].groups`.
 
 Do not fix these as a batch. Fix each one when working on the feature that touches it.
 

@@ -224,6 +224,9 @@ function CreateTournamentForm() {
 		if (!tournamentData.details.name || tournamentData.details.name.trim().length === 0) {
 			newErrors.name = 'Tournament name is required';
 		}
+		if (tournamentData.details.name.length > 50) {
+			newErrors.name = 'Input for tournament name is too long (50 Character Limit)';
+		}
 		if (!tournamentData.details.start_date) {
 			newErrors.start_date = 'Start date is required';
 		}
@@ -232,6 +235,15 @@ function CreateTournamentForm() {
 		}
 		if (tournamentData.divisions.length === 0) {
 			newErrors.divisions = 'At least one division is required';
+		}
+		if (!tournamentData.details.location || tournamentData.details.location.trim().length === 0){
+			newErrors.location = 'Location is required';
+		}
+		// tournaments.location is varchar(50), so an oversized value is a 500 from
+		// Postgres rather than a validation failure. The error belongs on the
+		// location field; it used to be written to newErrors.name.
+		if (tournamentData.details.location.length>50){
+			newErrors.location = 'Input for location is too long (50 Character Limit)';
 		}
 
 		tournamentData.divisions.forEach((div, idx) => {
@@ -380,8 +392,10 @@ function TournamentDetailsSection({ tournamentData, setTournamentData, errors })
 	};
 
 	const fields = [
-		{ id: 'name', label: 'Tournament Name *', type: 'text', required: true },
-		{ id: 'location', label: 'Location', type: 'text', required: false },
+		// maxLength stops the field exceeding what the column accepts as it is
+		// typed. The validator still checks, since this only guards the input.
+		{ id: 'name', label: 'Tournament Name *', type: 'text', required: true, maxLength: 50 },
+		{ id: 'location', label: 'Location *', type: 'text', required: true, maxLength: 50 },
 		{ id: 'start_date', label: 'Start Date *', type: 'date', required: true },
 		{ id: 'end_date', label: 'End Date *', type: 'date', required: true },
 		{ id: 'description', label: 'Description', type: 'textarea', required: false },
@@ -409,6 +423,7 @@ function TournamentDetailsSection({ tournamentData, setTournamentData, errors })
 								className="create-form-input-element-type"
 								placeholder=" "
 								required={field.required}
+								maxLength={field.maxLength}
 								min={field.type === 'date' ? new Date().toISOString().split('T')[0] : undefined}
 							/>
 						)}
@@ -552,7 +567,7 @@ function DivisionFormSection({ division, onUpdate, errors }) {
 					<select id={`div-format-${division.id}`} name="format" value={division.format} onChange={handleChange} className="form-input">
 						<option value="Round Robin">Round Robin</option>
 						<option value="Groups + Knockout">Groups + Knockout</option>
-						<option value="Single Elimination">Single Elimination</option>
+						<option disabled value="Single Elimination">Single Elimination - Coming Soon</option>
 					</select>
 					{errors[`division_${divisionIndex}_format`] && <span className="form-error">{errors[`division_${divisionIndex}_format`]}</span>}
 				</div>

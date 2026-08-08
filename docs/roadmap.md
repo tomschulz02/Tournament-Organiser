@@ -31,22 +31,34 @@ Complete.
 
 Nothing else can be exercised end to end until a tournament can be created.
 
-- **C1** — fix `createTeam`. It is called with no arguments, and it writes to a
-  `division_id` column that does not exist. Follow `getTeamsByIds`, which already does
-  this correctly.
+- ~~**C1**~~ — **done 2026-08-08: team creation works.** `createTeam` inserts
+  `(id, name, user_id)` with the organiser's id, on the caller's client.
+  `divisions.service.js` links a team the organiser already owns by id, or inserts a
+  typed name, and rejects an id belonging to another user, a team entered twice, and an
+  entry carrying neither an id nor a name.
 - ~~**B7**~~ — **settled 2026-08-08: `teams.user_id` holds the id of the organiser who
   created the tournament.** No schema change, and it matches how teams are actually
   entered — the organiser types the names in. `createTeam` therefore needs the creating
   user's id passed down from `createTournament`. Leaves room to reassign a team to a
   captain account later without forcing that decision now.
-- **C2** — make `createDivision` genuinely transactional. Team and fixture inserts
-  currently bypass the transaction client, and the fixture loop is not awaited, so
-  `COMMIT` runs before the writes complete.
-- **C3** — stop the creation form offering Single Elimination, which the backend rejects,
-  and make `location` required to match the schema.
+- ~~**C2**~~ — **done 2026-08-08: creating a tournament is one transaction.** A
+  `withTransaction` helper on the connection in `api/src/config/db.js` owns the client;
+  `createTournament` opens the boundary and threads it through every division, team and
+  fixture insert. `createDivision` no longer opens its own client, both loops are
+  sequential because one pg client cannot run concurrent queries, and the compensating
+  `deleteTournament` is gone — the rollback does that work, and it also covers the case
+  the delete never could, where the tournament insert itself failed.
+- ~~**C3**~~ — **done 2026-08-08: the form no longer produces input the backend
+  rejects.** Single Elimination is offered but disabled, `location` is required and
+  capped at the 50 characters the column allows, `name` is capped at 50 as a soft limit,
+  and the oversize-location error now reports on the location field rather than the name
+  field. `generateDivisionDetails` throws `AppError` for both unsupported-format cases,
+  so client-side validation is not the only check.
 
-Related drift to fix while in these files: `getTeamsByDivisionIds` and `getTeamNames`
-(same `division_id` problem), and the `RETURNING num_groups` in `updateTeams`.
+The related drift is fixed with C1: `getTeamsByDivisionIds` is gone, with
+`tournaments.service.js` resolving each division's teams from `state.teams` through
+`getTeamsByIds`; `getTeamNames` is now `getTeamsByUserId`, listing the teams a user owns;
+and the `RETURNING num_groups` in `updateTeams` is dropped.
 
 ## Phase 2 — Settle the contracts
 

@@ -22,7 +22,7 @@ const {
     getFixturesForRound
 } = await import("../../../src/services/fixtures.service.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
-const { resetDbMock } = await import("../../helpers/dbMock.js");
+const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
 const { makeRound } = await import("../../helpers/fixtures.js");
 
 beforeEach(() => {
@@ -196,7 +196,7 @@ describe("fixtureService.createFixture", () => {
         });
 
         expect(fixturesRepository.createFixture).toHaveBeenCalledWith(
-            "f1", "div-1", 3, "team-a", "team-b", undefined, null, "Pool Play"
+            "f1", "div-1", 3, "team-a", "team-b", undefined, null, "Pool Play", dbMock.instance
         );
     });
 
@@ -212,7 +212,7 @@ describe("fixtureService.createFixture", () => {
         });
 
         expect(fixturesRepository.createFixture).toHaveBeenCalledWith(
-            "f2", "div-1", 9, undefined, undefined, "Rank 1", "Rank 4", "Semifinals"
+            "f2", "div-1", 9, undefined, undefined, "Rank 1", "Rank 4", "Semifinals", dbMock.instance
         );
     });
 
@@ -228,19 +228,20 @@ describe("fixtureService.createFixture", () => {
         });
 
         expect(fixturesRepository.createFixture).toHaveBeenCalledWith(
-            "f3", "div-1", 4, "team-a", undefined, undefined, "Rank 2", "Semifinals"
+            "f3", "div-1", 4, "team-a", undefined, undefined, "Rank 2", "Semifinals", dbMock.instance
         );
     });
 
-    it("does not forward the transaction client to the repository", async () => {
-        // The client parameter is accepted but never passed on, so these inserts
-        // run on the pool rather than joining the caller's transaction.
+    it("forwards the transaction client, so the insert joins the caller's transaction", async () => {
+        // The client used to be accepted and dropped, so fixture inserts ran on
+        // the pool while the rest of creation was inside a transaction.
         const client = { query: vi.fn() };
 
         await fixtureService.createFixture("div-1", { id: "f4", matchNo: 1, team1: "a", team2: "b", round: "R" }, client);
 
-        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(1);
-        expect(fixturesRepository.createFixture.mock.calls[0]).toHaveLength(8);
+        expect(fixturesRepository.createFixture).toHaveBeenCalledWith(
+            "f4", "div-1", 1, "a", "b", undefined, null, "R", client
+        );
     });
 
     it("lets a repository failure propagate untouched", async () => {

@@ -38,6 +38,30 @@ class DBConnection {
 			throw new Error(err.message, { cause: err });
 		}
 	}
+
+	// One transaction on one client. The callback receives the client; a
+	// rejection rolls back and rethrows, and the client is released either way.
+	//
+	// The service decides what belongs in a transaction, because "these things
+	// must all succeed together" is business logic. The repository keeps owning
+	// the SQL. See docs/architecture.md.
+	async withTransaction(fn) {
+		const client = await this.pool.connect();
+
+		try {
+			await client.query("BEGIN");
+			const result = await fn(client);
+			await client.query("COMMIT");
+
+			return result;
+		} catch (err) {
+			await client.query("ROLLBACK");
+			throw err;
+			/* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
+		} finally {
+			client.release();
+		}
+	}
 }
 
 export default () => new DBConnection();

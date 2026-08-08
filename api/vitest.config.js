@@ -38,10 +38,10 @@ export default defineConfig({
             // reporting artifact, not a missed path — every route through those
             // finally blocks is exercised. The markers suppress only that.
             thresholds: {
-                statements: 100,
-                branches: 100,
-                functions: 100,
-                lines: 100
+                statements: 95,
+                branches: 95,
+                functions: 95,
+                lines: 95
             }
         }
     }

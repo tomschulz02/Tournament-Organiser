@@ -78,36 +78,46 @@ describe("createDivision", () => {
 });
 
 describe("createTeam", () => {
-    it("inserts a team and returns the generated id", async () => {
-        expect(await divisionsRepository.createTeam("Aces", "div-1")).toBe("uuid-1");
+    it("inserts a team owned by the organiser and returns the generated id", async () => {
+        expect(await divisionsRepository.createTeam("Aces", "user-1")).toBe("uuid-1");
 
         expect(db.query).toHaveBeenCalledWith(
-            "INSERT INTO teams (id, name, division_id) VALUES ($1, $2, $3);",
-            ["uuid-1", "Aces", "div-1"]
+            "INSERT INTO teams (id, name, user_id) VALUES ($1, $2, $3);",
+            ["uuid-1", "Aces", "user-1"]
         );
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await divisionsRepository.createTeam("Aces", "user-1", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
     });
 
     it("throws, keeping the underlying error as cause", async () => {
         const underlying = new Error("relation does not exist");
         db.query.mockRejectedValueOnce(underlying);
 
-        await expectWrapped(divisionsRepository.createTeam("Aces", "div-1"), "Failed to create team", underlying);
+        await expectWrapped(divisionsRepository.createTeam("Aces", "user-1"), "Failed to create team", underlying);
     });
 });
 
-describe("getTeamNames", () => {
-    it("returns the id and name of every team in the division", async () => {
+describe("getTeamsByUserId", () => {
+    it("returns the teams the user owns, by name", async () => {
         db.query.mockResolvedValueOnce([{ id: "t1", name: "Aces" }]);
 
-        expect(await divisionsRepository.getTeamNames("div-1")).toEqual([{ id: "t1", name: "Aces" }]);
-        expect(db.query).toHaveBeenCalledWith("SELECT id, name FROM teams WHERE division_id=$1;", ["div-1"]);
+        expect(await divisionsRepository.getTeamsByUserId("user-1")).toEqual([{ id: "t1", name: "Aces" }]);
+        expect(db.query).toHaveBeenCalledWith(
+            "SELECT id, name FROM teams WHERE user_id = $1 ORDER BY name ASC;",
+            ["user-1"]
+        );
     });
 
     it("throws, keeping the underlying error as cause", async () => {
-        const underlying = new Error("column does not exist");
+        const underlying = new Error("connection lost");
         db.query.mockRejectedValueOnce(underlying);
 
-        await expectWrapped(divisionsRepository.getTeamNames("div-1"), "Failed to fetch team names", underlying);
+        await expectWrapped(divisionsRepository.getTeamsByUserId("user-1"), "Failed to fetch teams", underlying);
     });
 });
 
@@ -115,20 +125,21 @@ describe("updateTeams", () => {
     it("commits the new team order", async () => {
         client.query.mockResolvedValue({ rows: [], rowCount: 1 });
 
+        // No RETURNING clause: divisions has no num_groups column.
         const result = await divisionsRepository.updateTeams("div-1", "user-1", ["t2", "t1"]);
 
         expect(clientSql().map(squash)).toEqual([
             "BEGIN",
-            "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2 RETURNING num_groups",
+            "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2",
             "COMMIT"
         ]);
         expect(client.query.mock.calls[1][1]).toEqual(['["t2","t1"]', "div-1"]);
-        expect(result).toEqual({ rows: [], rowCount: 1 });
+        expect(result).toEqual({ message: "Teams updated" });
         expect(client.release).toHaveBeenCalledOnce();
     });
 
     it("rolls back and throws rather than returning an error string", async () => {
-        const underlying = new Error("column num_groups does not exist");
+        const underlying = new Error("connection lost");
         client.query.mockImplementation(async (sql) => {
             if (sql.startsWith("UPDATE")) throw underlying;
             return { rows: [] };
@@ -248,11 +259,15 @@ describe("getDivisionWithOwner", () => {
 });
 
 describe("getTeamsByIds", () => {
-    it("looks the teams up by id array", async () => {
-        db.query.mockResolvedValueOnce([{ id: "t1", name: "Aces" }]);
+    it("looks the teams up by id array, with the owner for the caller to check", async () => {
+        db.query.mockResolvedValueOnce([{ id: "t1", name: "Aces", user_id: "user-1" }]);
 
-        expect(await divisionsRepository.getTeamsByIds(["t1"])).toEqual([{ id: "t1", name: "Aces" }]);
-        expect(db.query).toHaveBeenCalledWith("SELECT id, name FROM teams WHERE id = ANY($1::uuid[]);", [["t1"]]);
+        expect(await divisionsRepository.getTeamsByIds(["t1"]))
+            .toEqual([{ id: "t1", name: "Aces", user_id: "user-1" }]);
+        expect(db.query).toHaveBeenCalledWith(
+            "SELECT id, name, user_id FROM teams WHERE id = ANY($1::uuid[]);",
+            [["t1"]]
+        );
     });
 
     it("does not query at all for an empty or missing list", async () => {
@@ -368,32 +383,6 @@ describe("getDivisionsByTournamentId", () => {
         await expectWrapped(
             divisionsRepository.getDivisionsByTournamentId("tour-1"),
             "Failed to fetch divisions",
-            underlying
-        );
-    });
-});
-
-describe("getTeamsByDivisionIds", () => {
-    it("returns the teams of several divisions at once", async () => {
-        db.query.mockResolvedValueOnce([{ id: "t1", division_id: "div-1" }]);
-
-        expect(await divisionsRepository.getTeamsByDivisionIds(["div-1"])).toEqual([{ id: "t1", division_id: "div-1" }]);
-        expect(squash(db.query.mock.calls[0][0])).toContain("WHERE division_id = ANY($1::uuid[])");
-    });
-
-    it("does not query at all for an empty or missing list", async () => {
-        expect(await divisionsRepository.getTeamsByDivisionIds([])).toEqual([]);
-        expect(await divisionsRepository.getTeamsByDivisionIds(undefined)).toEqual([]);
-        expect(db.query).not.toHaveBeenCalled();
-    });
-
-    it("throws, keeping the underlying error as cause", async () => {
-        const underlying = new Error("column division_id does not exist");
-        db.query.mockRejectedValueOnce(underlying);
-
-        await expectWrapped(
-            divisionsRepository.getTeamsByDivisionIds(["div-1"]),
-            "Failed to fetch teams by division",
             underlying
         );
     });

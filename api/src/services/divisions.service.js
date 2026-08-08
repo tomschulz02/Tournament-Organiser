@@ -1,62 +1,82 @@
-import DatabaseConnection from "../config/db.js";
+import { AppError } from "../errors.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { generateFixtures, fixtureService } from "./fixtures.service.js";
 import { v4 as uuidv4 } from "uuid";
 
-const db = DatabaseConnection();
+// `client` is required, not defaulted: a division is only ever created as part
+// of creating a tournament, inside that transaction. createTournament owns the
+// boundary — see docs/decisions.md.
+async function createDivision(details, tournamentId, userId, client){
+    const divisionId = uuidv4();
 
-async function createDivision(details, tournamentId, userId){
-    const client = await db.pool.connect();
+    // A team is either an existing one, carrying an id, or a new one carrying a
+    // name. An id from the client is untrusted and must be confirmed to belong
+    // to the organiser before it is linked; see docs/decisions.md.
+    const suppliedIds = details.teams.filter((team) => team.id).map((team) => team.id);
+    const ownedById = new Map();
 
-    try {
-        await client.query("BEGIN");
-
-        const divisionId = uuidv4();
-
-        // insert teams into DB, returns team ids for rounds and fixtures
-        const teamIds = [];
-        for (let team of details.teams) {
-            teamIds.push(await divisionsRepository.createTeam())
+    if (suppliedIds.length > 0) {
+        const supplied = await divisionsRepository.getTeamsByIds(suppliedIds);
+        for (const team of supplied) {
+            if (team.user_id === userId) ownedById.set(team.id, team);
         }
 
-        details.teams = teamIds;
-
-        //generate division details
-        const division = generateDivisionDetails(details.type, details.teams, details.num_teams, details.num_groups, details.knockout_teams)
-        division.name = details.name;
-        division.num_teams = details.num_teams;
-
-        // generate fixture details
-        const generatedFixtures = generateFixtures(division.state.rounds);
-        division.state.rounds = generatedFixtures.rounds;
-
-        //store division in database
-        await divisionsRepository.createDivision(divisionId, tournamentId, division, userId, client);
-
-        //store fixtures in database
-        // Awaited: createFixture now throws on a failed insert, and an unawaited
-        // rejection here would be an unhandled rejection rather than a rollback.
-        await Promise.all(
-            generatedFixtures.fixtures.map(fixture =>
-                fixtureService.createFixture(divisionId, fixture, client)
-            )
-        );
-
-        await client.query("COMMIT");
-
-        return divisionId;
-    } catch (error) {
-        await client.query("ROLLBACK");
-        // Rethrown untouched. new Error(error) stringified it and lost the cause.
-        throw error;
-        // Coverage artifact: v8 emits a single-path "branch" on the finally
-        // below, for the case of the catch completing normally — which cannot
-        // happen because it always rethrows. Both real routes through the
-        // finally are exercised in divisions.service.test.js.
-        /* v8 ignore next */
-    } finally {
-        client.release();
+        if (suppliedIds.some((id) => !ownedById.has(id))) {
+            throw new AppError("TEAM_NOT_OWNED");
+        }
     }
+
+    // A new team is nothing but its name, so an entry carrying neither is not a
+    // team. teams.name is NOT NULL; without this it is a 500.
+    if (details.teams.some((team) => !team.id && !team.name?.trim())) {
+        throw new AppError("MISSING_FIELDS");
+    }
+
+    // The same team twice in one division would corrupt standings and fixture
+    // generation, whether it repeats as an id or as a name.
+    const names = details.teams.map((team) =>
+        (team.id ? ownedById.get(team.id).name : team.name).trim().toLowerCase()
+    );
+
+    if (new Set(suppliedIds).size !== suppliedIds.length || new Set(names).size !== names.length) {
+        throw new AppError("DUPLICATE_TEAM");
+    }
+
+    // insert teams into DB, returns team ids for rounds and fixtures
+    const teamIds = [];
+    for (let team of details.teams) {
+        // Absent, not null: TournamentCreation.jsx omits the key entirely for a
+        // new team, so a === null test would take the existing-team branch and
+        // push undefined into state.teams.
+        if (!team.id){
+            teamIds.push(await divisionsRepository.createTeam(team.name, userId, client));
+        } else {
+            teamIds.push(team.id);
+        }
+    }
+
+    details.teams = teamIds;
+
+    //generate division details
+    const division = generateDivisionDetails(details.type, details.teams, details.num_teams, details.num_groups, details.knockout_teams)
+    division.name = details.name;
+    division.num_teams = details.num_teams;
+
+    // generate fixture details
+    const generatedFixtures = generateFixtures(division.state.rounds);
+    division.state.rounds = generatedFixtures.rounds;
+
+    //store division in database
+    await divisionsRepository.createDivision(divisionId, tournamentId, division, userId, client);
+
+    //store fixtures in database
+    // Sequential and awaited, for the same reason as the divisions loop in
+    // createTournament: one pg client cannot run concurrent queries.
+    for (const fixture of generatedFixtures.fixtures) {
+        await fixtureService.createFixture(divisionId, fixture, client);
+    }
+
+    return divisionId;
 }
 
 export const divisionService = {
@@ -76,16 +96,16 @@ function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualify
         division.type = "League";
         division.state = createLeagueState(teams, num_teams);
     } else if (format === 'single_elim'){
-        throw new Error("FORMAT_NOT_IMPLEMENTED");
+        throw new AppError("FORMAT_NOT_IMPLEMENTED");
         /* v8 ignore next 2 -- unreachable: kept as a note of the intended shape */
         division.type = "Single Elimination";
         numGroups = Math.ceil(num_teams/2);
     } else if (format === 'double_elim'){
-        throw new Error("FORMAT_NOT_IMPLEMENTED");
+        throw new AppError("FORMAT_NOT_IMPLEMENTED");
         /* v8 ignore next -- unreachable: kept as a note of the intended shape */
         division.type = "Double Elimination";
     } else {
-        throw new Error("UNSUPPORTED_FORMAT");
+        throw new AppError("UNSUPPORTED_FORMAT");
     }
 
     return division;

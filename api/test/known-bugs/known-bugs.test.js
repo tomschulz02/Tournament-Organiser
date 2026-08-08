@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 //
 // Each one encodes the behaviour the code was written to have, per
 // docs/tournament-rules.md and docs/division-state.md, and names the line that
-// currently prevents it. They are the specification for ten outstanding fixes;
+// currently prevents it. They are the specification for the outstanding fixes;
 // as each bug is fixed, its test turns green and stays as the regression guard.
 //
 // The rest of the suite locks in what the code does *today*, so the two are
@@ -47,7 +47,7 @@ vi.mock("../../src/services/divisions.service.js", async (importOriginal) => awa
 
 const { computeRoundResults, hasPlayedFixtures, normalizeFixtureResult, progressionService } =
     await import("../../src/services/progression.service.js");
-const { createLeagueState, divisionService } = await import("../../src/services/divisions.service.js");
+const { createLeagueState } = await import("../../src/services/divisions.service.js");
 const { generateFixtures } = await import("../../src/services/fixtures.service.js");
 const { tournamentService } = await import("../../src/services/tournaments.service.js");
 const { buildFinalStandings } = await import("../../src/utils/tournamentViewFormatter.js");
@@ -108,21 +108,9 @@ describe("bug 2: a League division produces no standings", () => {
     });
 });
 
-describe("bug 3: every team is created with no name", () => {
-    // api/src/services/divisions.service.js:19 calls createTeam() with no
-    // arguments, inside a loop whose `team` variable is never used.
-    it("passes the team name and the division id when inserting a team", async () => {
-        await divisionService.createDivision(
-            { name: "Division A", type: "league", teams: ["Aces", "Bears"], num_teams: 2, num_groups: 1 },
-            "tour-1",
-            "user-1"
-        );
-
-        expect(divisionsRepository.createTeam).toHaveBeenCalledTimes(2);
-        expect(divisionsRepository.createTeam).toHaveBeenNthCalledWith(1, "Aces", "uuid-1");
-        expect(divisionsRepository.createTeam).toHaveBeenNthCalledWith(2, "Bears", "uuid-1");
-    });
-});
+// bug 3, every team created with no name, is fixed. Its regression guard now
+// lives in test/unit/services/divisions.service.test.js, asserting the team name
+// and the organiser's user id.
 
 describe("bug 4: one tournament without a status hides every tournament after it", () => {
     // api/src/services/tournaments.service.js:92 uses `break` where it means

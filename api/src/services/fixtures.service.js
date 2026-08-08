@@ -21,7 +21,7 @@ async function createFixture(divisionId, details, client = db){
         team2 = details.team2;
     }
 
-    await fixturesRepository.createFixture(details.id, divisionId, details.matchNo, team1, team2, placeholder1, placeholder2, details.round);
+    await fixturesRepository.createFixture(details.id, divisionId, details.matchNo, team1, team2, placeholder1, placeholder2, details.round, client);
 }
 
 export const fixtureService = {

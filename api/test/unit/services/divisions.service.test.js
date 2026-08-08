@@ -12,7 +12,8 @@ vi.mock("../../../src/config/db.js", async () => {
 vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     divisionsRepository: {
         createTeam: vi.fn(),
-        createDivision: vi.fn()
+        createDivision: vi.fn(),
+        getTeamsByIds: vi.fn()
     }
 }));
 
@@ -36,6 +37,7 @@ beforeEach(() => {
     resetDbMock();
     divisionsRepository.createTeam.mockReset();
     divisionsRepository.createDivision.mockReset();
+    divisionsRepository.getTeamsByIds.mockReset().mockResolvedValue([]);
     fixturesRepository.createFixture.mockReset();
 });
 
@@ -159,20 +161,22 @@ describe("generateDivisionDetails", () => {
     });
 
     it("rejects the elimination formats as not yet implemented", () => {
-        expect(() => generateDivisionDetails("single_elim", ["a"], 1)).toThrow("FORMAT_NOT_IMPLEMENTED");
-        expect(() => generateDivisionDetails("double_elim", ["a"], 1)).toThrow("FORMAT_NOT_IMPLEMENTED");
+        expect(() => generateDivisionDetails("single_elim", ["a"], 1)).toThrow("This format is not available yet");
+        expect(() => generateDivisionDetails("double_elim", ["a"], 1)).toThrow("This format is not available yet");
     });
 
     it("rejects an unknown format", () => {
-        expect(() => generateDivisionDetails("swiss", ["a"], 1)).toThrow("UNSUPPORTED_FORMAT");
+        expect(() => generateDivisionDetails("swiss", ["a"], 1)).toThrow("This format is not supported");
     });
 });
 
 describe("divisionService.createDivision", () => {
+    // Teams arrive as objects: a new team carries a name and no id key at all,
+    // an existing one carries the id. See TournamentCreation.jsx.
     const details = () => ({
         name: "Division A",
         type: "classic",
-        teams: ["Aces", "Bears", "Cubs", "Ducks"],
+        teams: [{ name: "Aces" }, { name: "Bears" }, { name: "Cubs" }, { name: "Ducks" }],
         num_teams: 4,
         num_groups: 2,
         knockout_teams: 2
@@ -186,16 +190,20 @@ describe("divisionService.createDivision", () => {
             .mockResolvedValueOnce("team-4");
     });
 
-    it("commits a transaction and returns the new division id", async () => {
-        const divisionId = await divisionService.createDivision(details(), "tour-1", "user-1");
+    it("returns the new division id without owning a transaction of its own", async () => {
+        // The caller's transaction is the only one. createTournament opens it and
+        // hands the client down; this service neither begins, commits nor
+        // releases. See docs/decisions.md.
+        const divisionId = await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
         expect(divisionId).toBe("uuid-1");
-        expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
-        expect(dbMock.client.release).toHaveBeenCalledOnce();
+        expect(clientSql()).toEqual([]);
+        expect(dbMock.instance.pool.connect).not.toHaveBeenCalled();
+        expect(dbMock.client.release).not.toHaveBeenCalled();
     });
 
     it("stores the division with the generated state and every fixture", async () => {
-        await divisionService.createDivision(details(), "tour-1", "user-1");
+        await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
         expect(divisionsRepository.createDivision).toHaveBeenCalledOnce();
         const [divisionId, tournamentId, division, userId, client] =
@@ -216,57 +224,149 @@ describe("divisionService.createDivision", () => {
         expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
     });
 
-    it("creates every team without passing it a name or a division", async () => {
-        // createTeam() is invoked with no arguments, so every row is inserted
-        // with an undefined name. test/known-bugs asserts the intended call.
-        await divisionService.createDivision(details(), "tour-1", "user-1");
+    it("creates each new team with its name and the organiser's id, on the caller's client", async () => {
+        // Regression guard, previously known bug 3: createTeam was called with
+        // no arguments at all, inserting a row per team with an undefined name.
+        await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
         expect(divisionsRepository.createTeam).toHaveBeenCalledTimes(4);
-        expect(divisionsRepository.createTeam.mock.calls.every((call) => call.length === 0)).toBe(true);
+        expect(divisionsRepository.createTeam)
+            .toHaveBeenNthCalledWith(1, "Aces", "user-1", dbMock.client);
+        expect(divisionsRepository.createTeam)
+            .toHaveBeenNthCalledWith(2, "Bears", "user-1", dbMock.client);
     });
 
-    it("rolls back and rethrows the original failure when storing the division fails", async () => {
-        // Rethrown by identity: new Error(error) used to stringify it, losing
-        // both the cause and the error's own type.
+    it("links an existing team by id rather than inserting it again", async () => {
+        // The id key is absent for a new team, so the branch tests for a missing
+        // id rather than for null — undefined would otherwise be treated as an
+        // existing team and pushed straight into state.teams.
+        divisionsRepository.getTeamsByIds.mockResolvedValue([
+            { id: "team-9", name: "Eagles", user_id: "user-1" }
+        ]);
+
+        await divisionService.createDivision(
+            { ...details(), teams: [{ id: "team-9", name: "Eagles" }, { name: "Bears" }], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        );
+
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledWith(["team-9"]);
+        expect(divisionsRepository.createTeam).toHaveBeenCalledOnce();
+        expect(divisionsRepository.createTeam).toHaveBeenCalledWith("Bears", "user-1", dbMock.client);
+        expect(divisionsRepository.createDivision.mock.calls[0][2].state.teams)
+            .toEqual(["team-9", "team-1"]);
+    });
+
+    it("rejects a team id that does not belong to the organiser", async () => {
+        divisionsRepository.getTeamsByIds.mockResolvedValue([
+            { id: "team-9", name: "Eagles", user_id: "user-2" }
+        ]);
+
+        await expect(divisionService.createDivision(
+            { ...details(), teams: [{ id: "team-9" }, { name: "Bears" }], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "TEAM_NOT_OWNED", status: 403 });
+
+        expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
+    });
+
+    it("rejects a team id that does not exist, without saying which", async () => {
+        divisionsRepository.getTeamsByIds.mockResolvedValue([]);
+
+        await expect(divisionService.createDivision(
+            { ...details(), teams: [{ id: "team-9" }, { name: "Bears" }], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "TEAM_NOT_OWNED", status: 403 });
+    });
+
+    it("rejects an entry that is neither an id nor a name", async () => {
+        // teams.name is NOT NULL, so this would otherwise surface as a 500.
+        await expect(divisionService.createDivision(
+            { ...details(), teams: [{ name: "Bears" }, { name: "   " }], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "MISSING_FIELDS", status: 400 });
+
+        await expect(divisionService.createDivision(
+            { ...details(), teams: [{ name: "Bears" }, {}], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "MISSING_FIELDS", status: 400 });
+
+        expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
+    });
+
+    it("rejects the same team twice, whether by id or by name", async () => {
+        divisionsRepository.getTeamsByIds.mockResolvedValue([
+            { id: "team-9", name: "Eagles", user_id: "user-1" }
+        ]);
+
+        // Two entries resolving to one team would corrupt standings and fixtures.
+        await expect(divisionService.createDivision(
+            { ...details(), teams: [{ id: "team-9" }, { id: "team-9" }], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "DUPLICATE_TEAM", status: 400 });
+
+        // Names are compared trimmed and case-insensitively.
+        await expect(divisionService.createDivision(
+            { ...details(), teams: [{ name: "Bears" }, { name: " bears " }], num_teams: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "DUPLICATE_TEAM", status: 400 });
+
+        expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
+    });
+
+    it("lets the original failure propagate when storing the division fails", async () => {
+        // Propagated by identity, for the caller's transaction to roll back:
+        // new Error(error) used to stringify it, losing both the cause and the
+        // error's own type.
         const failure = new Error("Failed to create division", { cause: new Error("duplicate key") });
         divisionsRepository.createDivision.mockRejectedValueOnce(failure);
 
-        await expect(divisionService.createDivision(details(), "tour-1", "user-1")).rejects.toBe(failure);
-
-        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
-        expect(dbMock.client.release).toHaveBeenCalledOnce();
+        await expect(divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client))
+            .rejects.toBe(failure);
     });
 
-    it("rolls back when a fixture insert fails, rather than leaving it unhandled", async () => {
+    it("lets a fixture failure propagate, rather than leaving it unhandled", async () => {
         // The fixture inserts used to run in an unawaited forEach, so a rejection
         // escaped the transaction entirely.
         const failure = new Error("Failed to create fixture");
         fixturesRepository.createFixture.mockRejectedValueOnce(failure);
 
-        await expect(divisionService.createDivision(details(), "tour-1", "user-1")).rejects.toBe(failure);
-
-        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
-        expect(dbMock.client.release).toHaveBeenCalledOnce();
+        await expect(divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client))
+            .rejects.toBe(failure);
     });
 
-    it("still releases the client when the rollback itself fails", async () => {
-        divisionsRepository.createDivision.mockRejectedValueOnce(new Error("DATABASE_ERROR"));
-        dbMock.client.query.mockImplementation(async (sql) => {
-            if (sql === "ROLLBACK") throw new Error("CONNECTION_LOST");
-            return { rows: [], rowCount: 0 };
+    it("creates the fixtures one at a time, since a single client cannot run concurrent queries", async () => {
+        let inFlight = 0;
+        let overlapped = false;
+        fixturesRepository.createFixture.mockImplementation(async () => {
+            inFlight += 1;
+            if (inFlight > 1) overlapped = true;
+            await Promise.resolve();
+            inFlight -= 1;
         });
 
-        await expect(divisionService.createDivision(details(), "tour-1", "user-1"))
-            .rejects.toThrow("CONNECTION_LOST");
+        await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
-        expect(dbMock.client.release).toHaveBeenCalledOnce();
+        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
+        expect(overlapped).toBe(false);
     });
 
-    it("rolls back when the division format is not supported", async () => {
+    it("rejects a division format it does not support", async () => {
         await expect(
-            divisionService.createDivision({ ...details(), type: "swiss" }, "tour-1", "user-1")
-        ).rejects.toThrow("UNSUPPORTED_FORMAT");
-
-        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+            divisionService.createDivision({ ...details(), type: "swiss" }, "tour-1", "user-1", dbMock.client)
+        ).rejects.toThrow("This format is not supported");
     });
 });

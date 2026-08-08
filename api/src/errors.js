@@ -45,6 +45,8 @@ export const ERRORS = {
 	WRONG_QUALIFIER_COUNT: [400, "Wrong number of qualifying teams"],
 	DUPLICATE_TEAM: [400, "A team appears more than once"],
 	TEAM_NOT_IN_ROUND: [400, "A team did not play in this round"],
+	FORMAT_NOT_IMPLEMENTED: [400, "This format is not available yet"],
+	UNSUPPORTED_FORMAT: [400, "This format is not supported"],
 
 	// Accounts and sessions.
 	MISSING_FIELDS: [400, "Missing required fields"],
@@ -58,6 +60,9 @@ export const ERRORS = {
 
 	// Tournaments.
 	TOURNAMENT_NOT_FOUND: [404, "Tournament not found"],
+	// One code for both an unknown team id and one belonging to another user, so
+	// the response cannot be used to discover which teams exist.
+	TEAM_NOT_OWNED: [403, "You do not own one of the selected teams"],
 
 	// Generic.
 	MALFORMED_JSON: [400, "Request body is not valid JSON"],

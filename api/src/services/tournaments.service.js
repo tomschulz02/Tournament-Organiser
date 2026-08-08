@@ -1,3 +1,4 @@
+import DatabaseConnection from "../config/db.js";
 import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
@@ -6,27 +7,29 @@ import { getISODate, getLongDate } from "../utils/DateHandler.js";
 import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
 import { AppError } from "../errors.js";
 
-async function createTournament(tournamentData, userId) {
-    let tournamentId = 0;
-    try {
-        //create tournament
-        tournamentId = (await tournamentRepository.createTournament(tournamentData.details, userId)).tournamentId;
+const db = DatabaseConnection();
 
-        //create divisions
-        await Promise.all(
-            tournamentData.divisions.map( division =>
-                divisionService.createDivision(division, tournamentId, userId)
-            )
-        )
+async function createTournament(tournamentData, userId) {
+    // One transaction for the whole creation: the tournament, its divisions,
+    // their teams and their fixtures commit together or not at all.
+    //
+    // This replaces a compensating delete. The database undoes a failed
+    // transaction for free, whereas the delete was a hand-written undo that
+    // could itself fail, and it could not cover the case it most needed to —
+    // a failed tournament insert left no id to delete by.
+    return await db.withTransaction(async (client) => {
+        const { tournamentId } =
+            await tournamentRepository.createTournament(tournamentData.details, userId, client);
+
+        // Sequential, not Promise.all: a single pg client cannot run concurrent
+        // queries. Nothing is lost — each division used to open its own
+        // connection and they contended for the same pool.
+        for (const division of tournamentData.divisions) {
+            await divisionService.createDivision(division, tournamentId, userId, client);
+        }
 
         return tournamentId;
-    } catch (error) {
-        // Compensating delete, so a half-built tournament is not left behind. It
-        // must not mask the failure that caused it, so its own failure is
-        // discarded and the original error is rethrown untouched.
-        await tournamentRepository.deleteTournament(tournamentId, userId).catch(() => {});
-        throw error;
-    }
+    });
 }
 
 async function fetchTournaments() {
@@ -48,12 +51,11 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
 
     const divisions = await divisionsRepository.getDivisionsByTournamentId(tournamentId);
     const divisionIds = divisions.map((division) => division.id);
-    const [teams, fixtures] = await Promise.all([
-        divisionsRepository.getTeamsByDivisionIds(divisionIds),
+    const [teamsByDivisionId, fixtures] = await Promise.all([
+        getTeamsByDivision(divisions),
         fixturesRepository.getFixturesByDivisionIds(divisionIds)
     ]);
 
-    const teamsByDivisionId = groupByDivisionId(teams);
     const fixturesByDivisionId = groupByDivisionId(fixtures);
     const view = formatTournamentViewPayload({
         tournament,
@@ -101,6 +103,22 @@ function groupTournamentsByStatus(tournaments){
     }
 
     return result;
+}
+
+// Division membership lives in divisions.state.teams, not on the team row — see
+// docs/division-state.md — so each division's teams are resolved from its own
+// state. The formatter reorders them by state.teams itself.
+async function getTeamsByDivision(divisions) {
+    const grouped = new Map();
+
+    for (const division of divisions) {
+        const state = typeof division.state === "string" ? JSON.parse(division.state) : division.state;
+        const teamIds = Array.isArray(state?.teams) ? state.teams : [];
+
+        grouped.set(division.id, await divisionsRepository.getTeamsByIds(teamIds));
+    }
+
+    return grouped;
 }
 
 function groupByDivisionId(records) {

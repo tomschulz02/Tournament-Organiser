@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+vi.mock("../../../src/config/db.js", async () => {
+    const { dbMock } = await import("../../helpers/dbMock.js");
+    return { default: () => dbMock.instance };
+});
+
 vi.mock("../../../src/repositories/tournament.repository.js", () => ({
     tournamentRepository: {
         createTournament: vi.fn(),
@@ -12,7 +17,7 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
 vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     divisionsRepository: {
         getDivisionsByTournamentId: vi.fn(),
-        getTeamsByDivisionIds: vi.fn()
+        getTeamsByIds: vi.fn()
     }
 }));
 
@@ -36,15 +41,17 @@ const { divisionsRepository } = await import("../../../src/repositories/division
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { divisionService } = await import("../../../src/services/divisions.service.js");
 const { formatTournamentViewPayload } = await import("../../../src/utils/tournamentViewFormatter.js");
-const { makeDivision, makeTournament } = await import("../../helpers/fixtures.js");
+const { makeDivision, makeState, makeTournament } = await import("../../helpers/fixtures.js");
+const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
 
 beforeEach(() => {
+    resetDbMock();
     vi.mocked(tournamentRepository.createTournament).mockReset();
     vi.mocked(tournamentRepository.getAllTournaments).mockReset();
     vi.mocked(tournamentRepository.getTournamentById).mockReset();
     vi.mocked(tournamentRepository.deleteTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(divisionsRepository.getDivisionsByTournamentId).mockReset();
-    vi.mocked(divisionsRepository.getTeamsByDivisionIds).mockReset();
+    vi.mocked(divisionsRepository.getTeamsByIds).mockReset();
     vi.mocked(fixturesRepository.getFixturesByDivisionIds).mockReset();
     vi.mocked(divisionService.createDivision).mockReset();
     vi.mocked(formatTournamentViewPayload).mockReset().mockReturnValue({ formatted: true });
@@ -56,19 +63,44 @@ describe("tournamentService.createTournament", () => {
         divisions: [{ name: "Division A" }, { name: "Division B" }]
     };
 
-    it("creates the tournament and then every division", async () => {
+    it("creates the tournament and then every division, on one client in one transaction", async () => {
         tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
         divisionService.createDivision.mockResolvedValue("div-1");
 
         expect(await tournamentService.createTournament(payload, "user-1")).toBe("tour-1");
 
-        expect(tournamentRepository.createTournament).toHaveBeenCalledWith(payload.details, "user-1");
+        expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+        expect(tournamentRepository.createTournament)
+            .toHaveBeenCalledWith(payload.details, "user-1", dbMock.client);
         expect(divisionService.createDivision).toHaveBeenCalledTimes(2);
-        expect(divisionService.createDivision).toHaveBeenCalledWith({ name: "Division A" }, "tour-1", "user-1");
-        expect(tournamentRepository.deleteTournament).not.toHaveBeenCalled();
+        expect(divisionService.createDivision)
+            .toHaveBeenNthCalledWith(1, { name: "Division A" }, "tour-1", "user-1", dbMock.client);
+        expect(divisionService.createDivision)
+            .toHaveBeenNthCalledWith(2, { name: "Division B" }, "tour-1", "user-1", dbMock.client);
     });
 
-    it("deletes the tournament again when a division fails, so no half-built tournament survives", async () => {
+    it("creates the divisions one at a time, since a single client cannot run concurrent queries", async () => {
+        tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
+
+        let inFlight = 0;
+        let overlapped = false;
+        divisionService.createDivision.mockImplementation(async () => {
+            inFlight += 1;
+            if (inFlight > 1) overlapped = true;
+            await Promise.resolve();
+            inFlight -= 1;
+            return "div-1";
+        });
+
+        await tournamentService.createTournament(payload, "user-1");
+
+        expect(overlapped).toBe(false);
+    });
+
+    it("rolls the whole creation back when a division fails, rather than deleting afterwards", async () => {
+        // The compensating delete is gone: the transaction undoes the tournament
+        // row for free, and a hand-written undo could itself fail.
         const failure = new Error("division insert failed");
         tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
         divisionService.createDivision.mockRejectedValue(failure);
@@ -77,26 +109,23 @@ describe("tournamentService.createTournament", () => {
         // real cause rather than a code invented here.
         await expect(tournamentService.createTournament(payload, "user-1")).rejects.toBe(failure);
 
-        expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith("tour-1", "user-1");
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+        expect(tournamentRepository.deleteTournament).not.toHaveBeenCalled();
     });
 
-    it("attempts the compensating delete with id 0 when the tournament itself failed", async () => {
+    it("surfaces the real failure when the tournament insert is what failed", async () => {
+        // This is the case the compensating delete could not cover: there was no
+        // id yet, so deleteTournament(0) threw an invalid-uuid error over the top
+        // of the error that actually happened.
         const failure = new Error("tournament insert failed");
         tournamentRepository.createTournament.mockRejectedValue(failure);
 
         await expect(tournamentService.createTournament(payload, "user-1")).rejects.toBe(failure);
 
-        expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith(0, "user-1");
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
         expect(divisionService.createDivision).not.toHaveBeenCalled();
-    });
-
-    it("does not let a failed compensating delete mask the original failure", async () => {
-        const failure = new Error("division insert failed");
-        tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
-        divisionService.createDivision.mockRejectedValue(failure);
-        tournamentRepository.deleteTournament.mockRejectedValue(new Error("delete failed too"));
-
-        await expect(tournamentService.createTournament(payload, "user-1")).rejects.toBe(failure);
+        expect(tournamentRepository.deleteTournament).not.toHaveBeenCalled();
     });
 });
 
@@ -156,15 +185,15 @@ describe("tournamentService.fetchTournaments", () => {
 describe("tournamentService.fetchTournamentDetails", () => {
     function loadable() {
         tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+        // Membership comes from each division's own state.teams; there is no
+        // division_id on a team row. See docs/division-state.md.
         divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([
-            makeDivision({ id: "div-1" }),
-            makeDivision({ id: "div-2" })
+            makeDivision({ id: "div-1", state: makeState({ teams: ["t1", "t2"] }) }),
+            makeDivision({ id: "div-2", state: makeState({ teams: ["t3"] }) })
         ]);
-        divisionsRepository.getTeamsByDivisionIds.mockResolvedValue([
-            { id: "t1", division_id: "div-1" },
-            { id: "t2", division_id: "div-1" },
-            { id: "t3", division_id: "div-2" }
-        ]);
+        divisionsRepository.getTeamsByIds.mockImplementation(async (teamIds) =>
+            teamIds.map((id) => ({ id, name: id.toUpperCase() }))
+        );
         fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-2" }]);
     }
 
@@ -182,13 +211,28 @@ describe("tournamentService.fetchTournamentDetails", () => {
         const result = await tournamentService.fetchTournamentDetails("tour-1", "user-1");
 
         expect(result).toEqual({ creator: true, view: { formatted: true } });
-        expect(divisionsRepository.getTeamsByDivisionIds).toHaveBeenCalledWith(["div-1", "div-2"]);
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledTimes(2);
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(1, ["t1", "t2"]);
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(2, ["t3"]);
 
         const [args] = vi.mocked(formatTournamentViewPayload).mock.calls[0];
         expect(args.teamsByDivisionId).toBeInstanceOf(Map);
         expect(args.teamsByDivisionId.get("div-1")).toHaveLength(2);
         expect(args.teamsByDivisionId.get("div-2")).toHaveLength(1);
         expect(args.fixturesByDivisionId.get("div-2")).toHaveLength(1);
+    });
+
+    it("reads state.teams whether the column arrives parsed or as a string", async () => {
+        loadable();
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([
+            makeDivision({ id: "div-1", state: JSON.stringify(makeState({ teams: ["t1"] })) }),
+            makeDivision({ id: "div-2", state: null })
+        ]);
+
+        await tournamentService.fetchTournamentDetails("tour-1", "user-1");
+
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(1, ["t1"]);
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(2, []);
     });
 
     it("does not mark an anonymous viewer as the creator", async () => {

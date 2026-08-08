@@ -1,6 +1,6 @@
 import '../App.css';
 
-export default function SummaryPage({ fields, collections}) {
+export default function SummaryPage({ fields}) {
 	const knockoutRoundMap = {
 		24: 'Round of 24',
 		16: 'Round of 16',

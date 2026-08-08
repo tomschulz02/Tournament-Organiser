@@ -28,6 +28,11 @@ with it, the code is wrong.
 | `totalGames` | integer | Fixture count for the round. |
 | `completedGames` | integer | Fixtures with status `COMPLETED`. Round is over when this equals `totalGames`. |
 
+Not yet present, but required by `docs/tournament-rules.md`: match format is defined
+**per round**, so a round needs a key recording its best-of. Pool play at best-of-3 and
+knockout at best-of-5 in the same division cannot currently be expressed. Add it when
+implementing per-round formats.
+
 ### groups
 
 The meaning of `groups` depends on `type`:
@@ -49,6 +54,9 @@ resolved against it.
 `results` is therefore how teams progress between rounds. There is no separate
 `qualifiedTeams` key — if you find one in older code or data, it predates this and its
 contents belong in `results`.
+
+The ordering differs by round type — a flat cross-pool seeding for round-robin rounds,
+winners before losers for knockout rounds. `docs/tournament-rules.md` defines both.
 
 ## Standings
 

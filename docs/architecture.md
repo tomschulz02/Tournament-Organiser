@@ -129,8 +129,8 @@ backend service is planned but not scheduled. Until then, `scheduleUtils.js` hol
 shared slot and time primitives that both tiers will need, so keep it free of React and
 DOM references to make the move cheap.
 
-Persistence: schedules are stored as JSONB on `divisions.schedule`, written via
-`POST /api/divisions/updateSchedule/:divisionId`. Neither the column nor the endpoint
-exists yet. `tournamentViewFormatter.js` already reads
-`division.schedule ?? state.schedule ?? null`, so it tolerates both a dedicated column
-and the older location inside division state.
+Persistence: schedules are stored as JSONB on `divisions.schedule`. The column exists as
+of 2026-08-07; the endpoint that writes it does not yet.
+`tournamentViewFormatter.js` already reads `division.schedule ?? state.schedule ?? null`,
+so it tolerates both the dedicated column and the older location inside division state.
+New code should write the column only.

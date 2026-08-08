@@ -1,0 +1,69 @@
+name: API tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Vitest + coverage
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Runs every suite and enforces 100% statement, branch, function and line
+      # coverage of api/src. The three files excluded from that figure are listed
+      # in api/vitest.config.js with the reason for each.
+      #
+      # This job is EXPECTED TO FAIL today: test/known-bugs holds fourteen tests
+      # that assert the behaviour ten outstanding bugs prevent. Each one names the
+      # source line responsible. As the bugs are fixed the job goes green on its own.
+      #
+      # To get a mergeable pipeline before then, swap the line below for:
+      #     run: npm test -- --exclude 'test/known-bugs/**'
+      # and re-enable the reporting job underneath. Coverage stays at 100% either
+      # way — the bug tests are not load-bearing for it.
+      - name: Run tests
+        run: npm test
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: api/coverage/
+          retention-days: 14
+
+  # Reports the outstanding bugs without blocking the pipeline. Only useful once
+  # the job above stops running them; left disabled so they are not run twice.
+  #
+  # known-bugs:
+  #   name: Known bugs (informational)
+  #   runs-on: ubuntu-latest
+  #   continue-on-error: true
+  #   defaults:
+  #     run:
+  #       working-directory: api
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 24
+  #         cache: npm
+  #         cache-dependency-path: api/package-lock.json
+  #     - run: npm ci
+  #     - run: npm run test:bugs

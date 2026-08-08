@@ -44,6 +44,11 @@ async function createDivision(details, tournamentId, userId){
     } catch (error) {
         await client.query("ROLLBACK");
         throw new Error(error);
+        // Coverage artifact: v8 emits a single-path "branch" on the finally
+        // below, for the case of the catch completing normally — which cannot
+        // happen because it always rethrows. Both real routes through the
+        // finally are exercised in divisions.service.test.js.
+        /* v8 ignore next */
     } finally {
         client.release();
     }
@@ -67,10 +72,12 @@ function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualify
         division.state = createLeagueState(teams, num_teams);
     } else if (format === 'single_elim'){
         throw new Error("FORMAT_NOT_IMPLEMENTED");
+        /* v8 ignore next 2 -- unreachable: kept as a note of the intended shape */
         division.type = "Single Elimination";
         numGroups = Math.ceil(num_teams/2);
     } else if (format === 'double_elim'){
         throw new Error("FORMAT_NOT_IMPLEMENTED");
+        /* v8 ignore next -- unreachable: kept as a note of the intended shape */
         division.type = "Double Elimination";
     } else {
         throw new Error("UNSUPPORTED_FORMAT");
@@ -142,8 +149,13 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
                     case 2:
                         round.name = "Finals";
                         break;
+                    // Unreachable: the loop only runs while num_teams >= 2 and
+                    // this arm only runs for powers of two, so the switch can
+                    // only ever see 8, 4 or 2.
+                    /* v8 ignore start */
                     default:
                         round.name = "Unknown";
+                    /* v8 ignore stop */
                 }
             }
             round.groups = populateGroups(num_teams/2, teams);
@@ -201,6 +213,16 @@ function populateGroups(numGroups, teamList) {
 	// console.log('Groups populated', groups);
 	return groups;
 }
+
+// Exported for unit tests only. Application code goes through createDivision,
+// which wraps these in a database transaction; the generation logic itself is
+// pure and is tested directly.
+export {
+    generateDivisionDetails,
+    createLeagueState,
+    createClassicState,
+    populateGroups
+};
 
 // const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8","team9"], 9, 2, 6);
 // console.dir(generateFixtures(division.rounds), {depth: null});

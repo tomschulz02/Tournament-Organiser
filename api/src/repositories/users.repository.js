@@ -20,6 +20,7 @@ async function createUser(username, email, password) {
 		await client.query("ROLLBACK");
 		console.error(err);
 		throw new Error(err.message || "USER_CREATION_ERROR");
+		/* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
 	} finally {
 		client.release();
 	}

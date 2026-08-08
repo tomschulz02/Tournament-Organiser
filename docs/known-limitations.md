@@ -19,13 +19,16 @@ items are identified, and remove them as they are fixed.
 
 The schema in `docs/database.md` is correct; the code below is not.
 
-- `divisions.repository.js` reads and writes a `teams.division_id` column. The `teams`
-  table has `user_id`, not `division_id`. Division membership lives in `state.teams`.
+- `divisions.repository.js` `getTeamsByDivisionIds`, `getTeamNames`, `createTeam` and
+  `getTeamNamesByDivision` still read and write a `teams.division_id` column. The
+  `teams` table has `user_id`, not `division_id`. Division membership lives in
+  `state.teams`. This breaks team names in the tournament detail view.
+  `getTeamsByIds` was added for round progression and does it correctly — look up ids
+  from `state.teams`. Use it as the pattern when fixing the rest.
 - `divisions.repository.js` `updateTeams` uses `RETURNING num_groups`. The `divisions`
   table has no such column.
 - `users.repository.js` queries a `friends` table that does not exist. Reserved for a
   future social feature.
-- `divisions.schedule` does not exist yet. Schedule persistence is blocked on it.
 
 ## API Contract
 
@@ -82,13 +85,25 @@ branches, and missing environment variables failing at request time instead of b
 - Nothing enforces the shape of `divisions.state`. A malformed write only surfaces on
   read.
 
+Ranking now matches `docs/tournament-rules.md` and is computed only in the backend.
+`NextRoundModal.jsx` no longer calculates qualifiers, so the two cannot disagree.
+
+Outstanding:
+
+- **`NextRoundModal` is not rendered anywhere.** It was already orphaned before being
+  rewritten — nothing imports it. Round progression is therefore unreachable from the
+  UI until the modal is mounted and given a trigger.
+- Round objects cannot express a match format, so the per-round best-of rule is
+  undeliverable until `divisions.state` gains a key for it.
+
 ## Scheduling
 
 - Automatic schedule generation currently runs in the frontend
   (`tourganiser-ui/src/utils/scheduleGenerator.js`). It is intended to move to a backend
   service. Manual schedule editing stays in the frontend.
-- Schedules cannot be persisted until the `divisions.schedule` column and the
-  `updateSchedule` endpoint exist.
+- The `divisions.schedule` column was added on 2026-08-07 and
+  `divisionsRepository.updateSchedule` writes to it, but no route or controller calls
+  that yet, so schedules still cannot be saved.
 - Officials assignment is described in `docs/tournament-rules.md` as optional but is not
   implemented anywhere.
 

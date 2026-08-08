@@ -136,3 +136,11 @@ function getFixturesForRound(group, round){
 
     return fixtures;
 }
+
+// Exported for unit tests only. Application code goes through generateFixtures.
+export {
+    generateRoundRobinFixtures,
+    generateKnockoutFixtures,
+    rotateGroupTeams,
+    getFixturesForRound
+};

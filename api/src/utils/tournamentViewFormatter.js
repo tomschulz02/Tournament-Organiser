@@ -1,4 +1,13 @@
 import { getISODate, getLongDate } from "./DateHandler.js";
+import {
+    applyFixtureToStandings,
+    buildHeadToHeadMap,
+    buildSeedIndex,
+    computeRatios,
+    createStandingsRow,
+    isCountableFixture,
+    rankGroup
+} from "./standings.js";
 
 const FIXTURE_STATUS_LABELS = {
     WAITING: "Upcoming",
@@ -174,6 +183,8 @@ function buildDivisionOverview({ division, teams, fixtures, results, schedule, s
 function buildDivisionStandings(state, fixtures, teamLookup) {
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
     const standings = [];
+    const seedIndex = buildSeedIndex(state.teams);
+    const headToHead = buildHeadToHeadMap(fixtures);
 
     rounds.forEach((round, roundIndex) => {
         if (round.type !== "roundRobin" || !Array.isArray(round.groups)) {
@@ -191,7 +202,7 @@ function buildDivisionStandings(state, fixtures, teamLookup) {
             const rows = participantIds.map((teamId) => createStandingsRow(teamLookup.get(teamId), teamId));
 
             fixtures.forEach((fixture) => {
-                if (fixture.status !== "COMPLETED" || !Array.isArray(fixture.result) || fixture.result.length === 0) {
+                if (!isCountableFixture(fixture)) {
                     return;
                 }
 
@@ -208,22 +219,12 @@ function buildDivisionStandings(state, fixtures, teamLookup) {
                 applyFixtureToStandings(teamOne, teamTwo, fixture.result);
             });
 
-            rows.forEach((team) => {
-                team.pointsRatio = team.pointsAgainst > 0 ? team.pointsFor / team.pointsAgainst : team.pointsFor > 0 ? null : 0;
-                team.setsRatio = team.setsLost > 0 ? team.setsWon / team.setsLost : team.setsWon > 0 ? null : 0;
-            });
-
-            rows.sort((a, b) =>
-                b.won - a.won ||
-                sortRatio(b.setsRatio) - sortRatio(a.setsRatio) ||
-                sortRatio(b.pointsRatio) - sortRatio(a.pointsRatio) ||
-                a.name.localeCompare(b.name)
-            );
+            rows.forEach(computeRatios);
 
             roundStandings.groups.push({
                 name: getGroupLabel(groupIndex),
                 groupIndex,
-                standings: rows
+                standings: rankGroup(rows, { headToHead, seedIndex })
             });
         });
 
@@ -289,6 +290,9 @@ function buildFinalStandings({ division, fixtures, standings, bracket, teams }) 
 
     if (bracket.rounds.length > 0) {
         const finalRound = bracket.rounds.find((round) => round.name === "Finals") || bracket.rounds.at(-1);
+        /* v8 ignore next -- the falsy path is unreachable: rounds is non-empty
+           here, so at(-1) always yields an element, and a rounds array holding an
+           undefined element would already have thrown inside find() above */
         if (finalRound) {
             finalRound.matches.forEach((match) => {
                 if (!Array.isArray(match.participants) || match.participants.length < 2) {
@@ -567,54 +571,9 @@ function pushFinalStanding(rankings, seenTeams, participant, rank, note) {
     seenTeams.add(key);
 }
 
-function createStandingsRow(team, fallbackId) {
-    return {
-        id: team?.id || fallbackId,
-        name: team?.name || "TBD",
-        played: 0,
-        won: 0,
-        lost: 0,
-        setsWon: 0,
-        setsLost: 0,
-        pointsFor: 0,
-        pointsAgainst: 0,
-        setsRatio: 0,
-        pointsRatio: 0
-    };
-}
+// createStandingsRow, applyFixtureToStandings and the ranking comparator now live
+// in ./standings.js so progression and this view cannot drift apart.
 
-function applyFixtureToStandings(teamOne, teamTwo, result) {
-    let teamOneSetsWon = 0;
-    let teamTwoSetsWon = 0;
-
-    result.forEach(([teamOneScore, teamTwoScore]) => {
-        teamOne.pointsFor += teamOneScore;
-        teamOne.pointsAgainst += teamTwoScore;
-        teamTwo.pointsFor += teamTwoScore;
-        teamTwo.pointsAgainst += teamOneScore;
-
-        if (teamOneScore > teamTwoScore) {
-            teamOne.setsWon += 1;
-            teamTwo.setsLost += 1;
-            teamOneSetsWon += 1;
-        } else if (teamTwoScore > teamOneScore) {
-            teamTwo.setsWon += 1;
-            teamOne.setsLost += 1;
-            teamTwoSetsWon += 1;
-        }
-    });
-
-    teamOne.played += 1;
-    teamTwo.played += 1;
-
-    if (teamOneSetsWon > teamTwoSetsWon) {
-        teamOne.won += 1;
-        teamTwo.lost += 1;
-    } else if (teamTwoSetsWon > teamOneSetsWon) {
-        teamTwo.won += 1;
-        teamOne.lost += 1;
-    }
-}
 
 function fixtureBelongsToRoundRobinGroup(fixture, round, participantIds) {
     if (fixture.round !== round.name) {
@@ -664,10 +623,42 @@ function toISODate(date) {
     return date ? getISODate(date) : null;
 }
 
-function sortRatio(value) {
-    return value === null ? Number.POSITIVE_INFINITY : value;
-}
 
 function participantKey(participant) {
     return participant?.id || participant?.name || null;
 }
+
+// Exported for unit tests only. formatTournamentViewPayload remains the sole
+// entry point for application code — nothing in src/ imports the names below.
+// They are exposed because driving 27 helpers through one funnel would need
+// elaborate fixtures that obscure what each branch actually does.
+export {
+    formatTournamentDetails,
+    formatDivisionPayload,
+    buildTournamentDashboard,
+    buildDivisionOverview,
+    buildDivisionStandings,
+    buildDivisionBracket,
+    buildFinalStandings,
+    normalizeDivisionState,
+    orderTeamsByState,
+    normalizeFixture,
+    buildFixtureTeam,
+    normalizeFixtureResult,
+    parseStoredResultValue,
+    sanitizeSetPairs,
+    resolveParticipant,
+    determineFixtureWinner,
+    getFixtureLoser,
+    pushFinalStanding,
+    fixtureBelongsToRoundRobinGroup,
+    getFixturesForKnockoutRound,
+    getCurrentRoundName,
+    getGroupLabel,
+    isResultFixture,
+    isDivisionComplete,
+    fixtureSortValue,
+    toISODate,
+    participantKey,
+    FIXTURE_STATUS_LABELS
+};

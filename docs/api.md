@@ -96,6 +96,8 @@ Implemented:
 | GET | `/api/users/check-login` | any | Report login state |
 | GET | `/api/users/profile/:id` | required | Fetch user profile — **empty stub, see warning below** |
 | POST | `/api/tournaments/create` | required | Create tournament and divisions |
+| GET | `/api/divisions/:divisionId/progression` | required + owner | Proposed ranking and qualifiers for the current round. Read only. |
+| POST | `/api/divisions/:divisionId/progression` | required + owner | Commit the confirmed ranking and advance the round |
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
 | GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. |
 
@@ -103,6 +105,42 @@ Called by the frontend but **not implemented** on the backend. `divisions.route.
 `fixtures.route.js` are empty routers, and `divisions.controller.js` and
 `fixtures.controller.js` are empty files, although the services and repositories behind
 them exist:
+
+### Round progression
+
+Two steps, deliberately separate. `GET` computes the default ranking under
+`docs/tournament-rules.md` and returns it with the teams that would qualify. The
+organiser reviews, optionally reorders or substitutes, then `POST`s the confirmed list
+as `{ "teams": ["<teamId>", ...] }`.
+
+The confirmed list is untrusted input that writes into `divisions.state`, so the commit
+recomputes the ranking from scratch and validates rather than trusting the proposal it
+issued. Rejections:
+
+| Status | Meaning |
+|---|---|
+| 400 | Empty list, duplicate team, wrong qualifier count, or a team that did not play the round |
+| 403 | Caller does not own the tournament |
+| 409 | Round still has unplayed fixtures, is the final round, or the next round has already started |
+
+Both the confirmed list and the computed default are stored on the round, along with a
+`resultsAmended` flag, so an unexpected bracket can be traced to either the rules or a
+manual override.
+
+Re-progression is allowed only while no fixture in the next round has been played. Once
+one has, the commit returns 409 rather than discarding real scores.
+
+The proposal includes each team's name alongside its id and record, so the client does
+not need a second lookup. Ids are the identity throughout — two teams in a division may
+share a name.
+
+On commit, the next round's placeholder fixtures are bound to real teams:
+`nextRound.groups[i]` holds two positions in the confirmed results, and
+`nextRound.fixtures[i]` is the fixture they belong to. Fixtures are updated in place
+rather than recreated, so their ids stay stable and any schedule referencing them
+survives.
+
+### Pending
 
 | Method | Path | Frontend caller |
 |---|---|---|

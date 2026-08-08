@@ -11,6 +11,7 @@ CREATE TABLE "divisions" (
 	"num_teams" integer DEFAULT 0,
 	"type" varchar(50),
 	"state" jsonb,
+	"schedule" jsonb,
 	"last_update" timestamp DEFAULT now() NOT NULL
 );
 CREATE TABLE "fixtures" (

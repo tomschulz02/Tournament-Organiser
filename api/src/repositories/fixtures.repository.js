@@ -60,6 +60,7 @@ async function updateResult(fixtureId, score, status, rounds) {
     } catch (error) {
         await client.query("ROLLBACK");
         return (error.message || "UPDATE_FIXTURE_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -90,7 +91,9 @@ async function updateFixtures(divisionId, fixtures) {
         return { message: "Fixtures updated" };
     } catch (error) {
         await client.query("ROLLBACK");
-        return (error.message || "UPDATE_FIXTURES_ERROR");
+        console.error(error);
+        throw new Error("UPDATE_FIXTURES_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }

@@ -1,121 +1,163 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { fetchRoundProgression, confirmRoundProgression } from '../requests';
 import '../App.css';
 
-function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
-	const [qualifiedSpots, setQualifiedSpots] = useState([]);
-	const [availableTeams, setAvailableTeams] = useState([]);
-	const initialPop = useRef(false);
-	const nextRound = fixtures.rounds[fixtures.currentRound + 1];
-	const currentRoundStandings = standings[fixtures.currentRound].groups;
-	let generatedFixtures = [];
+// Round progression.
+//
+// The ranking is computed by the backend from the rules in docs/tournament-rules.md,
+// so this component never calculates qualifiers itself. It displays the proposal,
+// lets the organiser reorder or substitute, and posts the confirmed list back.
+//
+// Teams are identified by id throughout. Names are for display only — two teams in
+// a division may share a name.
+function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
+	const [proposal, setProposal] = useState(null);
+	const [selectedIds, setSelectedIds] = useState([]);
+	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState(null);
 
 	useEffect(() => {
-		// Initialize qualified spots with calculated teams
-		const initialQualified = getQualifiedTeams(currentRoundStandings);
-		const allTeams = Array.isArray(currentRoundStandings[0]) ? currentRoundStandings.flat() : currentRoundStandings;
-		setAvailableTeams(allTeams);
-		setQualifiedSpots(initialQualified.map((team) => team.name));
-	}, [currentRoundStandings]);
+		let cancelled = false;
 
-	if (qualifiedSpots.length > 0) {
-		generatedFixtures = generateFixtures(qualifiedSpots);
-	}
+		async function load() {
+			setLoading(true);
+			setError(null);
 
-	function getQualifiedTeams(standings) {
-		let qualifiedTeams = [];
-		let currentStandings = [...standings];
-		for (let i = 0; i < Math.floor(nextRound.qualifyingTeams / currentStandings.length); i++) {
-			currentStandings.forEach((group) => {
-				qualifiedTeams.push(group[i]);
-			});
-		}
+			try {
+				const response = await fetchRoundProgression(divisionId);
+				if (cancelled) return;
 
-		currentStandings = currentStandings.slice(
-			Math.floor(nextRound.qualifyingTeams / currentStandings.length) * currentStandings.length
-		);
-
-		currentStandings.flat().sort((a, b) => b.won - a.won || b.setsRatio - a.setsRatio || b.pointsRatio - a.pointsRatio);
-		qualifiedTeams.push(...currentStandings.slice(0, nextRound.qualifyingTeams - qualifiedTeams.length));
-
-		return qualifiedTeams;
-	}
-
-	function generateFixtures(teams) {
-		const _fixtures = [];
-		const gap = nextRound.qualifyingTeams - nextRound.matches * 2;
-		if (nextRound.round === 'Finals' || fixtures.rounds.length === fixtures.currentRound + 1) {
-			for (let i = 0; i < teams.length; i += 2) {
-				const team1 = teams[i];
-				const team2 = teams[i + 1];
-				if (team1 && team2) {
-					_fixtures.push({ team1: team1, team2: team2 });
-				} else if (team1) {
-					_fixtures.push({ team1: team1, team2: 'TBD' });
-				} else if (team2) {
-					_fixtures.push({ team1: 'TBD', team2: team2 });
+				if (!response?.success) {
+					setError(response?.error || 'Could not load the round results.');
+					return;
 				}
-			}
-			return _fixtures;
-		}
 
-		for (let i = gap; i < teams.length - nextRound.matches; i++) {
-			const team1 = teams[i];
-			const team2 = teams[teams.length - (i - gap) - 1];
-			if (team1 && team2) {
-				_fixtures.push({ team1: team1, team2: team2 });
+				setProposal(response.data);
+				setSelectedIds(response.data.qualifiers.map((team) => team.id));
+			} catch (err) {
+				if (!cancelled) setError(err?.error || 'Could not load the round results.');
+			} finally {
+				if (!cancelled) setLoading(false);
 			}
 		}
-		for (let i = 0; i < gap; i++) {
-			_fixtures.push({ team1: teams[i], team2: 'TBD' });
-		}
 
-		return _fixtures;
-	}
+		load();
+		return () => {
+			cancelled = true;
+		};
+	}, [divisionId]);
 
-	const handleTeamSelect = (index, teamName) => {
-		setQualifiedSpots((current) => {
+	const eligible = proposal?.eligibleTeams || [];
+	const nameFor = (teamId) => eligible.find((team) => team.id === teamId)?.name || 'Unknown';
+	const statsFor = (teamId) => eligible.find((team) => team.id === teamId);
+
+	// True when the organiser has changed the backend's proposed order.
+	const amended =
+		proposal &&
+		(selectedIds.length !== proposal.qualifiers.length ||
+			selectedIds.some((id, index) => id !== proposal.qualifiers[index]?.id));
+
+	const hasDuplicates = new Set(selectedIds).size !== selectedIds.length;
+	const complete = selectedIds.length > 0 && selectedIds.every(Boolean);
+
+	const handleSelect = (index, teamId) => {
+		setSelectedIds((current) => {
 			const updated = [...current];
-			updated[index] = teamName;
+			updated[index] = teamId;
 			return updated;
 		});
 	};
 
-	const handleConfirm = () => {
-		onConfirm(qualifiedSpots);
+	const handleReset = () => {
+		if (proposal) setSelectedIds(proposal.qualifiers.map((team) => team.id));
 	};
+
+	const handleConfirm = async () => {
+		setSaving(true);
+		setError(null);
+
+		try {
+			const response = await confirmRoundProgression(divisionId, selectedIds);
+
+			if (!response?.success) {
+				// The backend revalidates independently, so this is a real rejection
+				// rather than something the disabled state should have caught.
+				setError(response?.error || 'Could not start the next round.');
+				return;
+			}
+
+			onConfirmed?.(response.data);
+		} catch (err) {
+			setError(err?.error || 'Could not start the next round.');
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	if (loading) {
+		return (
+			<div className="modal-backdrop">
+				<div className="next-round-modal">
+					<h2>Next Round Setup</h2>
+					<p>Loading results...</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (!proposal) {
+		return (
+			<div className="modal-backdrop">
+				<div className="next-round-modal">
+					<h2>Next Round Setup</h2>
+					<p className="error-text">{error || 'No results available for this round.'}</p>
+					<div className="modal-actions">
+						<button className="cancel-btn" onClick={onCancel}>
+							Close
+						</button>
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="modal-backdrop">
 			<div className="next-round-modal">
 				<h2>Next Round Setup</h2>
+				<p className="modal-subtitle">
+					{proposal.roundName} is complete. These teams progress to {proposal.nextRoundName}.
+				</p>
+
 				<div className="modal-content">
 					<div className="qualified-teams">
-						<h3>Qualified Teams</h3>
+						<h3>Qualifying Teams</h3>
 						<div className="teams-list">
-							{qualifiedSpots.map((selectedTeam, index) => {
-								const teamData = availableTeams.find((t) => t.name === selectedTeam);
+							{selectedIds.map((teamId, index) => {
+								const stats = statsFor(teamId);
 								return (
 									<div key={index} className="team-selection">
 										<label htmlFor={`team-${index}`}>{index + 1}.</label>
 										<select
 											id={`team-${index}`}
-											value={selectedTeam}
-											onChange={(e) => handleTeamSelect(index, e.target.value)}
+											value={teamId || ''}
+											onChange={(event) => handleSelect(index, event.target.value)}
 											className="team-dropdown">
-											{availableTeams.map((team) => (
+											{eligible.map((team) => (
 												<option
-													key={team.name}
-													value={team.name}
-													disabled={qualifiedSpots.includes(team.name) && team.name !== selectedTeam}>
+													key={team.id}
+													value={team.id}
+													disabled={selectedIds.includes(team.id) && team.id !== teamId}>
 													{team.name}
 												</option>
 											))}
 										</select>
-										{teamData && (
+										{stats && (
 											<div className="team-stats">
-												<span>W: {teamData.won}</span>
-												<span>L: {teamData.lost}</span>
-												<span>Ratio: {teamData.pointsRatio ? teamData.pointsRatio.toFixed(3) : 'MAX'}</span>
+												<span>W: {stats.won}</span>
+												<span>L: {stats.lost}</span>
+												<span>Sets: {stats.setsWon}-{stats.setsLost}</span>
 											</div>
 										)}
 									</div>
@@ -123,32 +165,42 @@ function NextRoundModal({ standings, fixtures, onConfirm, onCancel }) {
 							})}
 						</div>
 					</div>
+
 					<div className="fixture-preview">
-						<h3>Next Round Fixtures</h3>
+						<h3>Full Ranking</h3>
 						<div className="fixtures-list">
-							{qualifiedSpots ? (
-								generatedFixtures.map((fixture, index) => (
-									<div key={index} className="preview-fixture">
-										<span>{fixture.team1}</span>
-										<span>vs</span>
-										<span>{fixture.team2}</span>
-									</div>
-								))
-							) : (
-								<div>No teams selected yet</div>
-							)}
+							{proposal.computedResults.map((team, index) => (
+								<div key={team.id} className="preview-fixture">
+									<span>{index + 1}.</span>
+									<span>{nameFor(team.id)}</span>
+									<span>{index < proposal.qualifyingTeams ? 'Qualifies' : ''}</span>
+								</div>
+							))}
 						</div>
 					</div>
 				</div>
+
+				{amended && (
+					<p className="modal-note">
+						You have changed the calculated ranking. The original will be kept on record.
+					</p>
+				)}
+				{error && <p className="error-text">{error}</p>}
+
 				<div className="modal-actions">
-					<button className="cancel-btn" onClick={onCancel}>
+					<button className="cancel-btn" onClick={onCancel} disabled={saving}>
 						Cancel
 					</button>
+					{amended && (
+						<button className="cancel-btn" onClick={handleReset} disabled={saving}>
+							Reset to calculated
+						</button>
+					)}
 					<button
 						className="confirm-btn"
 						onClick={handleConfirm}
-						disabled={qualifiedSpots.length % 2 !== 0 || new Set(qualifiedSpots).size !== qualifiedSpots.length}>
-						Start Next Round
+						disabled={saving || hasDuplicates || !complete}>
+						{saving ? 'Starting...' : 'Start Next Round'}
 					</button>
 				</div>
 			</div>

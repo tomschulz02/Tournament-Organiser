@@ -34,6 +34,7 @@ async function updateTeams(divisionId, userId, teams) {
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "UPDATE_TEAMS_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -76,6 +77,7 @@ async function updateTeam(teamId, newTeamName) {
     } catch (error) {
         await client.query("ROLLBACK");
         return (error.message || "UPDATE_TEAM_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -97,7 +99,9 @@ async function updateGroups(divisionId, userId, groups, fixtures) {
         return { message: "Updated groups" };
     } catch (error) {
         await client.query("ROLLBACK");
-        return (error.message || "UPDATE_GROUPS_ERROR");
+        console.error(error);
+        throw new Error("UPDATE_GROUPS_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -111,8 +115,9 @@ async function updateRounds(divisionId, userId, updatedRounds, updatedFixtures, 
     try {
         await client.query("BEGIN");
 
+        // divisions.id is a uuid. This previously cast to INTEGER and threw on every call.
         await client.query(
-            `UPDATE divisions SET state = jsonb_set(jsonb_set(state, '{rounds}', $1::jsonb), '{currentRound}', $2::jsonb) WHERE id=$3::INTEGER`,
+            `UPDATE divisions SET state = jsonb_set(jsonb_set(state, '{rounds}', $1::jsonb), '{currentRound}', $2::jsonb), last_update = now() WHERE id = $3::uuid`,
             [JSON.stringify(updatedRounds), JSON.stringify(nextRound), divisionId]
         );
 
@@ -120,9 +125,71 @@ async function updateRounds(divisionId, userId, updatedRounds, updatedFixtures, 
         return { message: "Round progressed" };
     } catch (error) {
         await client.query("ROLLBACK");
-        return (error.message || "UPDATE_ROUNDS_ERROR");
+        console.error(error);
+        throw new Error("UPDATE_ROUNDS_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
+    }
+}
+
+// Fetches a division together with the id of the user who owns its tournament,
+// so the service can authorise before mutating anything.
+async function getDivisionWithOwner(divisionId) {
+    try {
+        const sql = `
+            SELECT d.id, d.tournament_id, d.name, d.state, d.schedule, t.created_by
+            FROM divisions d
+            JOIN tournaments t ON t.id = d.tournament_id
+            WHERE d.id = $1::uuid`;
+        const rows = await db.query(sql, [divisionId]);
+
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error(error);
+        throw new Error("GET_DIVISION_ERROR");
+    }
+}
+
+// Looks up teams by their ids, taken from state.teams.
+//
+// The teams table has no division_id column — division membership lives in
+// divisions.state.teams. getTeamsByDivisionIds and getTeamNames still query a
+// division_id that does not exist; see docs/known-limitations.md.
+async function getTeamsByIds(teamIds) {
+    if (!Array.isArray(teamIds) || teamIds.length === 0) {
+        return [];
+    }
+
+    try {
+        const sql = "SELECT id, name FROM teams WHERE id = ANY($1::uuid[]);";
+        return await db.query(sql, [teamIds]);
+    } catch (error) {
+        console.error(error);
+        throw new Error("GET_TEAMS_ERROR");
+    }
+}
+
+async function getFixturesByDivisionId(divisionId) {
+    try {
+        const sql = "SELECT * FROM fixtures WHERE division_id = $1::uuid ORDER BY match_no ASC;";
+        return await db.query(sql, [divisionId]);
+    } catch (error) {
+        console.error(error);
+        throw new Error("GET_FIXTURES_ERROR");
+    }
+}
+
+// Persists a schedule to the dedicated jsonb column added 2026-08-07.
+async function updateSchedule(divisionId, schedule) {
+    try {
+        const sql = "UPDATE divisions SET schedule = $1::jsonb, last_update = now() WHERE id = $2::uuid";
+        await db.query(sql, [JSON.stringify(schedule), divisionId]);
+
+        return { message: "Schedule updated" };
+    } catch (error) {
+        console.error(error);
+        throw new Error("UPDATE_SCHEDULE_ERROR");
     }
 }
 
@@ -149,6 +216,7 @@ async function getDivisionDetails(tournamentId) {
         return details;
     } catch (err) {
         return (err.message || "GET_DIVISION_DETAILS_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -183,6 +251,10 @@ export const divisionsRepository = {
     updateGroups,
     updateRounds,
     getDivisionDetails,
+    getDivisionWithOwner,
+    getTeamsByIds,
+    getFixturesByDivisionId,
+    updateSchedule,
     getDivisionsByTournamentId,
     getTeamsByDivisionIds,
     createTeam,

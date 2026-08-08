@@ -51,12 +51,16 @@ async function logout(req, res) {
     }
 }
 
+// Unimplemented. The empty try means this never sends a response, so
+// GET /api/users/profile/:id hangs until the client times out.
 async function getUserProfile(req, res) {
     try {
 
+    /* v8 ignore start -- unreachable while the try block above is empty */
     } catch (err) {
         res.status(500).json({ error: "Internal server error" });
     }
+    /* v8 ignore stop */
 }
 
 async function checkLogin(req, res) {

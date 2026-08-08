@@ -55,6 +55,7 @@ async function startTournament(tournamentId, userId) {
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "START_TOURNAMENT_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -74,6 +75,7 @@ async function endTournament(tournamentId, userId) {
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "END_TOURNAMENT_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }
@@ -93,6 +95,7 @@ async function deleteTournament(tournamentId, userId) {
     } catch (err) {
         await client.query("ROLLBACK");
         return (err.message || "DELETE_TOURNAMENT_ERROR");
+        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
     }

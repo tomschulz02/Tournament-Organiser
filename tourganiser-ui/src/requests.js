@@ -309,6 +309,42 @@ export async function updateRounds(divisionId, rounds, qualifiedTeams, standings
 	}
 }
 
+// Round progression is a two step flow. This fetches the default ranking and the
+// teams that would qualify, computed by the backend. It mutates nothing.
+export async function fetchRoundProgression(divisionId) {
+	try {
+		return await fetchWithRetry(`divisions/${divisionId}/progression`, {
+			method: 'GET',
+			credentials: 'include',
+		});
+	} catch (error) {
+		if (error.isConnectionError) {
+			return { success: false, error: error.message };
+		}
+		throw error;
+	}
+}
+
+// Commits the confirmed ranking and advances the division to the next round.
+// teamIds is the ordered list of qualifiers, which the organiser may have changed.
+export async function confirmRoundProgression(divisionId, teamIds) {
+	try {
+		return await fetchWithRetry(`divisions/${divisionId}/progression`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			credentials: 'include',
+			body: JSON.stringify({ teams: teamIds }),
+		});
+	} catch (error) {
+		if (error.isConnectionError) {
+			return { success: false, error: error.message };
+		}
+		throw error;
+	}
+}
+
 export async function updateDivisionSchedule(divisionId, schedule) {
 	try {
 		return await fetchWithRetry(`divisions/updateSchedule/${divisionId}`, {

@@ -78,22 +78,35 @@ Pages
 
 The backend is mid-rebuild. Treat this section as the map of what actually works.
 
+Last reviewed 2026-08-08.
+
 Complete:
-- `users` — routes, controller, service, repository.
+- `users` — routes, controller, service, repository, apart from `getUserProfile` below.
 - `tournaments` — create, list, and detail only. Join, leave, start, end and delete are
   commented out in `tournaments.route.js`.
+- `divisions` — round progression only. `divisions.controller.js` and
+  `divisions.route.js` implement `GET` and `POST /:divisionId/progression`, backed by
+  `progression.service.js` and `standings.js`. This is the newest code in the repository
+  and the pattern the rest should follow: the service owns the rules, checks ownership
+  via `getDivisionWithOwner`, and revalidates untrusted input; the controller maps named
+  service errors to status codes through a lookup table.
 
 Incomplete:
-- `divisions` — `divisions.service.js` and `divisions.repository.js` are written, but
-  `divisions.route.js` is an empty router and `divisions.controller.js` is an empty file.
-  The router is still mounted at `/api/divisions`, so calls return 404.
-- `fixtures` — same shape. Service and repository exist, route and controller are empty.
+- `divisions` — everything other than progression. `divisions.service.js` and
+  `divisions.repository.js` carry functions for updating teams, groups and schedules,
+  but no route or controller reaches them.
+- `fixtures` — `fixtures.route.js` is an empty router and `fixtures.controller.js` is an
+  empty file, so no fixture endpoint exists. The service and repository do.
 - `users.controller.js` `getUserProfile` is an empty stub with a live route.
 
 The frontend already calls the missing endpoints. `docs/api.md` lists which ones.
 
-Consequence: wiring up divisions and fixtures is mostly controller and route work, not
-new business logic. Check the existing service before writing anything new.
+Consequence: wiring up the rest of divisions and fixtures is mostly controller and route
+work, not new business logic. Check the existing service before writing anything new.
+
+Note that creating a tournament currently fails against the documented schema — see
+`docs/gap-analysis.md`, item C1. Nothing downstream of creation can be exercised
+end to end until that is fixed.
 
 ## Code and Schema Drift
 

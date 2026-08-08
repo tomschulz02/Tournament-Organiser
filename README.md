@@ -29,7 +29,14 @@ Frontend, from `tourganiser-ui/`:
     npm run build    # production build
     npm run lint     # ESLint
 
-There is no test suite.
+Tests, from `api/`:
+
+    npm test            # unit and integration suites, with coverage
+    npm run test:watch
+    npm run test:bugs   # the known-bug suite, which is expected to fail
+
+`api/test/known-bugs/` documents outstanding defects as failing tests and is excluded
+from the default run. There is no test suite for `tourganiser-ui/`.
 
 ## Environment
 
@@ -67,6 +74,7 @@ same as what is designed.
 - `docs/api.md` — HTTP contract, auth flow, endpoint reference
 - `docs/tournament-rules.md` — domain terminology and rules
 - `docs/known-limitations.md` — what is broken or missing
+- `docs/gap-analysis.md` — dated survey of gaps across the whole repository
 - `docs/decisions.md` — architectural decisions and why
 - `docs/project-philosophy.md` — how changes should be made
 - `docs/roadmap.md` and `docs/future-features.md` — planned work

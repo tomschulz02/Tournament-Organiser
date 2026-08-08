@@ -5,8 +5,11 @@ items are identified, and remove them as they are fixed.
 
 ## Backend Completeness
 
-- `divisions` and `fixtures` have working services and repositories, but empty routers
-  and empty controller files. The routers are still mounted, so calls return 404.
+- `divisions` has a route and controller for round progression only. Every other
+  division endpoint is missing, though the service and repository functions behind them
+  exist.
+- `fixtures` has a working service and repository, but an empty router and an empty
+  controller file. The router is still mounted, so calls return 404.
 - The frontend calls eleven endpoints that do not exist. `docs/api.md` lists them.
 - `users.controller.js` `getUserProfile` is an empty stub behind a live route. It never
   calls `res`, so an authenticated request hangs until the client times out, holding the
@@ -19,12 +22,15 @@ items are identified, and remove them as they are fixed.
 
 The schema in `docs/database.md` is correct; the code below is not.
 
-- `divisions.repository.js` `getTeamsByDivisionIds`, `getTeamNames`, `createTeam` and
-  `getTeamNamesByDivision` still read and write a `teams.division_id` column. The
-  `teams` table has `user_id`, not `division_id`. Division membership lives in
-  `state.teams`. This breaks team names in the tournament detail view.
-  `getTeamsByIds` was added for round progression and does it correctly — look up ids
-  from `state.teams`. Use it as the pattern when fixing the rest.
+- `divisions.repository.js` `getTeamsByDivisionIds`, `getTeamNames` and `createTeam`
+  still read and write a `teams.division_id` column. The `teams` table has `user_id`,
+  not `division_id`. Division membership lives in `state.teams`. This breaks team names
+  in the tournament detail view, and it breaks tournament creation outright —
+  `createTeam` cannot insert at all. `getTeamsByIds` was added for round progression and
+  does it correctly, looking up ids from `state.teams`. Use it as the pattern when
+  fixing the rest.
+- `createTeam` also never populates `teams.user_id`, which is `NOT NULL`. Deciding what
+  belongs there is an open design question — see `docs/gap-analysis.md`, item B7.
 - `divisions.repository.js` `updateTeams` uses `RETURNING num_groups`. The `divisions`
   table has no such column.
 - `users.repository.js` queries a `friends` table that does not exist. Reserved for a
@@ -109,10 +115,16 @@ Outstanding:
 
 ## Project
 
-- No automated tests, and no test runner configured in either package.
+- `tourganiser-ui/` has no tests and no test runner. `api/` has Vitest, with unit and
+  integration suites gated at 100% coverage, plus the deliberately failing known-bug
+  suite in `api/test/known-bugs/`.
+- Nothing runs the test suite automatically. There is no CI, so the coverage gate only
+  binds when someone remembers to run it.
 - `api/` has no lint setup. `tourganiser-ui/` has ESLint.
 - Single environment. No staging, and no migration tooling — schema changes are applied
-  by hand against Neon.
+  by hand against Neon and `docs/database.md` is updated by hand to match. This is a
+  deliberate choice given how rarely the schema is expected to change; revisit it if
+  that stops being true.
 - `docs/` and `CLAUDE.md` are untracked by git.
 - Claude's sandbox can create but not delete files under `.git/`, so any git command it
   runs can leave a stale `.git/index.lock` that blocks the developer's commits. Claude

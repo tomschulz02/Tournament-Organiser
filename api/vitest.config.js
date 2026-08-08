@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
     test: {
@@ -6,6 +6,11 @@ export default defineConfig({
         globals: true,
         setupFiles: ["./test/setup.js"],
         include: ["test/**/*.test.js"],
+        // test/known-bugs/ is written to fail until the bugs it documents are
+        // fixed, so including it would leave `npm test` permanently red and
+        // therefore useless as a signal. Run it on its own with
+        // `npm run test:bugs`, which uses vitest.bugs.config.js.
+        exclude: [...configDefaults.exclude, "test/known-bugs/**"],
         // Call history is wiped between tests. Implementations are not, so the
         // defaults installed by test/helpers/dbMock.js survive; tests that need a
         // clean slate call resetDbMock() themselves.
@@ -13,8 +18,8 @@ export default defineConfig({
         coverage: {
             provider: "v8",
             reporter: ["text", "lcov", "html"],
-            // Without this, a failing run prints no coverage at all. The
-            // known-bug suite fails by design, so the report would never appear.
+            // Without this, a failing run prints no coverage at all, which is
+            // exactly when the report is most useful.
             reportOnFailure: true,
             include: ["src/**/*.js"],
             exclude: [

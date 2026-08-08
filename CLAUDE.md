@@ -113,7 +113,18 @@ Frontend (run from tourganiser-ui/):
 - npm run build
 - npm run lint
 
-No test suite exists. Do not claim a change is verified by tests.
+Tests (run from api/):
+- npm test (vitest run --coverage — unit and integration suites, gated at 100% coverage)
+- npm run test:watch
+- npm run test:bugs (the known-bug suite; see below)
+
+api/test/known-bugs/known-bugs.test.js is expected to fail. Each case encodes the
+behaviour the code was written to have and names the line that prevents it, so the
+suite is a specification for outstanding fixes rather than a regression guard. It is
+excluded from the default run so that npm test stays a usable signal. When a bug is
+fixed, move its test into the matching unit or integration file.
+
+No test suite exists for tourganiser-ui/.
 No lint setup exists for api/.
 
 ## Source of Truth
@@ -136,6 +147,7 @@ Additional documentation:
 - docs/decisions.md
 - docs/future-features.md
 - docs/known-limitations.md
+- docs/gap-analysis.md
 - docs/roadmap.md
 - docs/git-hygiene.md
 

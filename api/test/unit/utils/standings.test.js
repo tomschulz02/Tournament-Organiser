@@ -140,7 +140,7 @@ describe("isCountableFixture", () => {
     });
 
     it("ignores a fixture that is not completed", () => {
-        expect(isCountableFixture(makeNormalisedFixture({ status: "WAITING", result: [[21, 15]] }))).toBe(false);
+        expect(isCountableFixture(makeNormalisedFixture({ status: "UPCOMING", result: [[21, 15]] }))).toBe(false);
     });
 
     it("ignores a cancelled fixture — a cancelled match never happened", () => {
@@ -185,7 +185,7 @@ describe("buildHeadToHeadMap", () => {
 
     it("skips fixtures that do not count", () => {
         const map = buildHeadToHeadMap([
-            makeNormalisedFixture({ status: "WAITING", team_1_id: "a", team_2_id: "b", result: [[21, 15]] })
+            makeNormalisedFixture({ status: "UPCOMING", team_1_id: "a", team_2_id: "b", result: [[21, 15]] })
         ]);
 
         expect(map.size).toBe(0);

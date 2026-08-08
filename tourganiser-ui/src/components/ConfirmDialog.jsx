@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+import { useState, useRef, createContext, useContext } from 'react';
 import '../App.css';
 
 const ConfirmContext = createContext();

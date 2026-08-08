@@ -159,7 +159,7 @@ describe("isRoundComplete", () => {
 
     it("is false while a fixture is outstanding", () => {
         const fixtures = completedPoolFixtures();
-        fixtures[1].status = "WAITING";
+        fixtures[1].status = "UPCOMING";
 
         expect(isRoundComplete(round, fixtures)).toBe(false);
     });
@@ -177,7 +177,7 @@ describe("hasPlayedFixtures", () => {
     });
 
     it("is false when nothing in the round has started", () => {
-        expect(hasPlayedFixtures(round, [makeFixture({ round: "Finals", status: "WAITING" })])).toBe(false);
+        expect(hasPlayedFixtures(round, [makeFixture({ round: "Finals", status: "UPCOMING" })])).toBe(false);
     });
 
     it("ignores fixtures from other rounds", () => {
@@ -221,7 +221,7 @@ describe("buildKnockoutOutcomes", () => {
     it("ignores fixtures from other rounds and fixtures that do not count", () => {
         const fixtures = [
             knockoutFixture({ round: "Semifinals" }),
-            knockoutFixture({ status: "WAITING" })
+            knockoutFixture({ status: "UPCOMING" })
         ];
 
         expect(buildKnockoutOutcomes(round, fixtures)).toEqual([]);
@@ -270,7 +270,7 @@ describe("computeRoundResults", () => {
         const round = poolRound({ groups: [["t1", "t2"]] });
         const fixtures = normalised([
             makeFixture({ round: "Finals", status: "COMPLETED", team_1: "t1", team_2: "t2", team_1_result: [21], team_2_result: [15] }),
-            makeFixture({ round: "Pool Play", status: "WAITING", team_1: "t1", team_2: "t2", team_1_result: [21], team_2_result: [15] }),
+            makeFixture({ round: "Pool Play", status: "UPCOMING", team_1: "t1", team_2: "t2", team_1_result: [21], team_2_result: [15] }),
             makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t1", team_2: "outsider", team_1_result: [21], team_2_result: [15] })
         ]);
 
@@ -441,7 +441,7 @@ describe("progressionService.getProposal", () => {
 
     it("rejects a round that still has unplayed fixtures", async () => {
         const fixtures = completedPoolFixtures();
-        fixtures[1].status = "WAITING";
+        fixtures[1].status = "UPCOMING";
         loadable({ fixtures });
 
         await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({ code: "ROUND_NOT_COMPLETE" }));
@@ -534,7 +534,7 @@ describe("progressionService.commit", () => {
 
     it("refuses to progress a round that is still being played", async () => {
         const fixtures = completedPoolFixtures();
-        fixtures[0].status = "ONGOING";
+        fixtures[0].status = "LIVE";
         loadable({ fixtures });
 
         await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow(expect.objectContaining({ code: "ROUND_NOT_COMPLETE" }));
@@ -543,7 +543,7 @@ describe("progressionService.commit", () => {
     it("allows a correction while the next round is untouched", async () => {
         loadable({
             rounds: [poolRound({ results: ["t1", "t4", "t2", "t3"] }), finalsRound()],
-            fixtures: [...completedPoolFixtures(), makeFixture({ round: "Finals", status: "WAITING" })]
+            fixtures: [...completedPoolFixtures(), makeFixture({ round: "Finals", status: "UPCOMING" })]
         });
 
         await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).resolves.toBeDefined();
@@ -570,5 +570,19 @@ describe("progressionService.commit", () => {
         loadable({ createdBy: "someone-else" });
 
         await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow(expect.objectContaining({ code: "NOT_TOURNAMENT_OWNER" }));
+    });
+});
+
+describe("hasPlayedFixtures: the re-progression guard", () => {
+    // Regression guard for a fixed defect. hasPlayedFixtures tests for "LIVE",
+    // while tournamentViewFormatter.js used to emit "ONGOING" for the same
+    // state, so a round already under way went undetected and a correction
+    // could silently discard it. The two vocabularies were merged into the
+    // fixture_status enum on 2026-08-08 — see docs/decisions.md.
+    it("treats a LIVE fixture as the next round having started", () => {
+        const round = makeRound({ name: "Finals" });
+        const fixtures = [makeFixture({ round: "Finals", status: "LIVE" })];
+
+        expect(hasPlayedFixtures(round, fixtures)).toBe(true);
     });
 });

@@ -73,7 +73,7 @@ Decisions that constrain everything after them. Mostly discussion, little code.
   Cleared three live defects — "Welcome, undefined", the object stored as a username, and
   the empty error toast — plus the 500 on a duplicate signup email, which is now a 409.
 
-- ~~**F7**~~ — **settled 2026-08-08: the `fixture_status` enum is the only vocabulary,
+- ~~**F7**~~ — **done 2026-08-08: the `fixture_status` enum is the only vocabulary,
   and the server derives the status.** Recorded in `docs/decisions.md` and
   `docs/tournament-rules.md`. The work: remove the translation in
   `tournamentViewFormatter.js` and the `statusMap` in `ViewTabs.jsx`, and change that

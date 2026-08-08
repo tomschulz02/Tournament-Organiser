@@ -193,9 +193,9 @@ export function ScheduleTab({ division, creator, tournamentName, tournamentDetai
 	const filteredFixtures = fixtures.filter((fixture) => {
 		switch (filter) {
 			case 'upcoming':
-				return fixture.status === 'WAITING';
+				return fixture.status === 'UPCOMING';
 			case 'live':
-				return fixture.status === 'ONGOING';
+				return fixture.status === 'LIVE';
 			case 'done':
 				return fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED';
 			default:
@@ -406,7 +406,7 @@ export function StandingsTab({ standings = [], bracket = {}, finalStandings = []
 												<strong>{match.participants?.[1]?.name || 'TBD'}</strong>
 											</div>
 											<div className="bracket-match-footer">
-												<span>{match.status || 'WAITING'}</span>
+												<span>{match.status || 'UPCOMING'}</span>
 												<span>{match.winner?.name ? `Winner: ${match.winner.name}` : 'Winner TBD'}</span>
 											</div>
 										</div>
@@ -473,18 +473,11 @@ export function FixtureCard({ fixture }) {
 		sets[2].push(<div key={`${fixture.id}-b`}>0</div>);
 	}
 
-	const statusMap = {
-		ONGOING: 'LIVE',
-		WAITING: 'UPCOMING',
-		COMPLETED: 'COMPLETED',
-		CANCELLED: 'CANCELLED',
-	};
-
 	return (
 		<div className="fixture-card" key={fixture.id}>
 			<div className="fixture-card-header">
 				<div className={`fixture-card-header-status ${String(fixture.status || '').toLowerCase()}`}>
-					{statusMap[fixture.status] || fixture.status}
+					{fixture.statusLabel ?? fixture.status}
 				</div>
 				<div className="fixture-card-header-round">{fixture.round}</div>
 				<div className="fixture-card-header-match">Match #{fixture.match_no || fixture.matchNo}</div>

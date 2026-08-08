@@ -115,7 +115,7 @@ function Footer() {
 function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 	const { theme, toggleTheme } = useTheme();
 	const { showMessage } = useMessage();
-	const { username, setUsername } = useContext(AuthContext);
+	// const { username, setUsername } = useContext(AuthContext);
 	const [loading, setLoading] = useState(false);
 
 	const handleClickOutside = (e) => {
@@ -131,7 +131,7 @@ function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 			await logoutUser();
 			setLoggedIn(false);
 			showMessage('Successfully logged out!', 'success');
-			setUsername('Guest');
+			// setUsername('Guest');
 			// window.location.reload();
 		} catch (error) {
 			showMessage(error.message, 'error');

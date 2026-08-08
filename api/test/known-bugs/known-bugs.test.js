@@ -144,19 +144,6 @@ describe("bug 4: one tournament without a status hides every tournament after it
     });
 });
 
-describe("bug 5: the re-progression guard misses in-progress fixtures", () => {
-    // api/src/services/progression.service.js:320 checks for status "LIVE",
-    // but the rest of the code uses "ONGOING" (see FIXTURE_STATUS_LABELS in
-    // tournamentViewFormatter.js). A round already under way is not detected,
-    // so a correction can silently discard it.
-    it("treats an ONGOING fixture as the next round having started", () => {
-        const round = makeRound({ name: "Finals" });
-        const fixtures = [makeFixture({ round: "Finals", status: "ONGOING" })];
-
-        expect(hasPlayedFixtures(round, fixtures)).toBe(true);
-    });
-});
-
 describe("bug 6: the final-standings bracket fallback never produces anything", () => {
     // api/src/utils/tournamentViewFormatter.js:292 falls back to the last
     // bracket round when none is named "Finals", but the loop below it only

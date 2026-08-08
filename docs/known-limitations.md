@@ -92,17 +92,6 @@ branches, and missing environment variables failing at request time instead of b
 - `round.completedGames` is stored but nothing ever increments it, so the round progress
   bar in the UI sits at zero. `isRoundComplete` works around this by recomputing from
   the fixture rows. Fixed by the score-entry endpoint, per the F7 decision.
-- Fixture status has two vocabularies — the `fixture_status` enum, and the
-  `WAITING`/`ONGOING` pair used in `tournamentViewFormatter.js` and `ViewTabs.jsx`. The
-  enum won on 2026-08-08; until the translation is removed, known bug 5 stands.
-
-  This is not only untidy. `normalizeFixture` does **not** translate the enum — it only
-  defaults a null status to `WAITING`. So a real fixture keeps its `UPCOMING` status and
-  is then excluded by the filter in `buildDivisionOverview`, which looks for `WAITING`
-  or `ONGOING`. **"Upcoming Fixtures" is therefore empty on both the tournament
-  dashboard and the division overview for every real fixture**, and
-  `FIXTURE_STATUS_LABELS` never resolves a label for `UPCOMING` or `LIVE` either. Same
-  cause in `ViewTabs.jsx`, where the `upcoming` and `live` filters match nothing.
 - Nothing enforces the shape of `divisions.state`. A malformed write only surfaces on
   read.
 

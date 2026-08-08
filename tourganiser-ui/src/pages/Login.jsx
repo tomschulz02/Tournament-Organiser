@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../AuthContext';
 import '../App.css';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +33,7 @@ export default function Login() {
 			}
 		};
 		checkLogin();
-	}, []);
+	}, [navigate, setIsLoggedIn, setUsername, showMessage]);
 
 	const toggleForm = (formName) => {
 		setCurrentForm(formName);

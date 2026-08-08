@@ -10,8 +10,8 @@ import {
 } from "./standings.js";
 
 const FIXTURE_STATUS_LABELS = {
-    WAITING: "Upcoming",
-    ONGOING: "Live",
+    UPCOMING: "Upcoming",
+    LIVE: "Live",
     COMPLETED: "Completed",
     CANCELLED: "Cancelled"
 };
@@ -161,7 +161,7 @@ function buildTournamentDashboard(tournament, divisions) {
 function buildDivisionOverview({ division, teams, fixtures, results, schedule, state }) {
     const completedFixtures = fixtures.filter((fixture) => fixture.status === "COMPLETED").length;
     const upcomingFixtures = fixtures
-        .filter((fixture) => fixture.status === "WAITING" || fixture.status === "ONGOING")
+        .filter((fixture) => fixture.status === "UPCOMING" || fixture.status === "LIVE")
         .sort((a, b) => fixtureSortValue(a) - fixtureSortValue(b));
 
     return {
@@ -260,7 +260,7 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
                 id: fixture?.id || `${round.name}-${groupIndex}`,
                 match_no: fixture?.match_no ?? null,
                 round: fixture?.round || round.name,
-                status: fixture?.status || "WAITING",
+                status: fixture?.status || "UPCOMING",
                 participants: [participantOne, participantTwo],
                 result: fixture?.result || [],
                 winner: determineFixtureWinner(fixture),
@@ -404,7 +404,7 @@ function normalizeFixture(fixture, teamLookup) {
         division_id: fixture.division_id,
         match_no: fixture.match_no,
         round: fixture.round,
-        status: fixture.status || "WAITING",
+        status: fixture.status || "UPCOMING",
         statusLabel: FIXTURE_STATUS_LABELS[fixture.status] || fixture.status || "Upcoming",
         team_1_id: fixture.team_1 || null,
         team_2_id: fixture.team_2 || null,
@@ -615,7 +615,7 @@ function isDivisionComplete(fixtures) {
 }
 
 function fixtureSortValue(fixture) {
-    const statusPriority = fixture.status === "ONGOING" ? 0 : fixture.status === "WAITING" ? 1 : 2;
+    const statusPriority = fixture.status === "LIVE" ? 0 : fixture.status === "UPCOMING" ? 1 : 2;
     return statusPriority * 100000 + (fixture.match_no || 0);
 }
 

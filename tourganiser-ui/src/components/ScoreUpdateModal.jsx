@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import '../App.css';
 
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
@@ -12,7 +12,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 			}));
 			setSets(result);
 		}
-	}, []);
+	}, [fixture.result]);
 
 	const handleAddSet = () => {
 		setSets([...sets, { team1: 0, team2: 0 }]);

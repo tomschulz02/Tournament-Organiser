@@ -78,7 +78,7 @@ describe("isResultFixture", () => {
     });
 
     it("does not treat an unplayed fixture as a result", () => {
-        expect(isResultFixture({ status: "WAITING" })).toBe(false);
+        expect(isResultFixture({ status: "UPCOMING" })).toBe(false);
     });
 });
 
@@ -92,19 +92,19 @@ describe("isDivisionComplete", () => {
     });
 
     it("is false while any fixture is outstanding", () => {
-        expect(isDivisionComplete([{ status: "COMPLETED" }, { status: "WAITING" }])).toBe(false);
+        expect(isDivisionComplete([{ status: "COMPLETED" }, { status: "UPCOMING" }])).toBe(false);
     });
 });
 
 describe("fixtureSortValue", () => {
     it("puts live fixtures first, then upcoming, then everything else", () => {
-        expect(fixtureSortValue({ status: "ONGOING", match_no: 5 })).toBe(5);
-        expect(fixtureSortValue({ status: "WAITING", match_no: 5 })).toBe(100005);
+        expect(fixtureSortValue({ status: "LIVE", match_no: 5 })).toBe(5);
+        expect(fixtureSortValue({ status: "UPCOMING", match_no: 5 })).toBe(100005);
         expect(fixtureSortValue({ status: "COMPLETED", match_no: 5 })).toBe(200005);
     });
 
     it("treats a missing match number as zero", () => {
-        expect(fixtureSortValue({ status: "ONGOING" })).toBe(0);
+        expect(fixtureSortValue({ status: "LIVE" })).toBe(0);
     });
 });
 
@@ -385,9 +385,9 @@ describe("normalizeFixture", () => {
         });
     });
 
-    it("defaults an unset status to WAITING and nulls the empty columns", () => {
+    it("defaults an unset status to UPCOMING and nulls the empty columns", () => {
         expect(normalizeFixture(makeFixture({ status: null }), teamLookup)).toMatchObject({
-            status: "WAITING",
+            status: "UPCOMING",
             statusLabel: "Upcoming",
             team_1_id: null,
             team_2_id: null,
@@ -415,8 +415,8 @@ describe("normalizeFixture", () => {
 
     it("labels every known status", () => {
         expect(FIXTURE_STATUS_LABELS).toEqual({
-            WAITING: "Upcoming",
-            ONGOING: "Live",
+            UPCOMING: "Upcoming",
+            LIVE: "Live",
             COMPLETED: "Completed",
             CANCELLED: "Cancelled"
         });
@@ -448,7 +448,7 @@ describe("determineFixtureWinner", () => {
 
     it("returns null for a fixture that has not been played", () => {
         expect(determineFixtureWinner(null)).toBeNull();
-        expect(determineFixtureWinner({ ...completed, status: "WAITING", result: [[21, 15]] })).toBeNull();
+        expect(determineFixtureWinner({ ...completed, status: "UPCOMING", result: [[21, 15]] })).toBeNull();
         expect(determineFixtureWinner({ ...completed, result: null })).toBeNull();
         expect(determineFixtureWinner({ ...completed, result: [] })).toBeNull();
     });
@@ -651,7 +651,7 @@ describe("buildDivisionStandings", () => {
     it("ignores fixtures that do not count and fixtures from another group", () => {
         const state = makeState({ rounds: [makeRound({ groups: [["t1", "t2"]] })] });
         const fixtures = [
-            completedPoolFixture({ status: "WAITING" }),
+            completedPoolFixture({ status: "UPCOMING" }),
             completedPoolFixture({ round: "Finals" }),
             completedPoolFixture({ team_2_id: "outsider" })
         ];
@@ -705,7 +705,7 @@ describe("buildDivisionBracket", () => {
             id: "Semifinals-0",
             match_no: null,
             round: "Semifinals",
-            status: "WAITING",
+            status: "UPCOMING",
             result: [],
             winner: null,
             isPlacementMatch: false
@@ -718,8 +718,8 @@ describe("buildDivisionBracket", () => {
             rounds: [makeRound({ name: "Finals", type: "knockout", groups: [[2, 3], [0, 1]] })]
         });
         const fixtures = [
-            { id: "bronze", round: "3rd Place Playoff", status: "WAITING" },
-            { id: "gold", round: "Finals", status: "WAITING" }
+            { id: "bronze", round: "3rd Place Playoff", status: "UPCOMING" },
+            { id: "gold", round: "Finals", status: "UPCOMING" }
         ];
 
         const matches = buildDivisionBracket(state, fixtures, teamLookup).rounds[0].matches;
@@ -780,7 +780,7 @@ describe("buildFinalStandings", () => {
     it("returns nothing while the division is still running", () => {
         expect(buildFinalStandings({
             division,
-            fixtures: [{ status: "WAITING" }],
+            fixtures: [{ status: "UPCOMING" }],
             standings: [],
             bracket: { rounds: [] },
             teams
@@ -903,8 +903,8 @@ describe("buildDivisionOverview", () => {
     it("summarises counts and picks up the current round", () => {
         const fixtures = [
             { status: "COMPLETED", match_no: 1 },
-            { status: "WAITING", match_no: 2 },
-            { status: "ONGOING", match_no: 3 }
+            { status: "UPCOMING", match_no: 2 },
+            { status: "LIVE", match_no: 3 }
         ];
 
         const overview = buildDivisionOverview({
@@ -973,7 +973,7 @@ describe("buildDivisionOverview", () => {
 
     it("caps the recent results and upcoming lists at five", () => {
         const results = Array.from({ length: 7 }, (_, index) => ({ status: "COMPLETED", match_no: index + 1 }));
-        const upcoming = Array.from({ length: 7 }, (_, index) => ({ status: "WAITING", match_no: index + 10 }));
+        const upcoming = Array.from({ length: 7 }, (_, index) => ({ status: "UPCOMING", match_no: index + 10 }));
 
         const overview = buildDivisionOverview({
             division,
@@ -1004,7 +1004,7 @@ describe("buildTournamentDashboard", () => {
                 hasSchedule: false,
                 currentRound: "Pool Play",
                 recentResults: [{ id: `${id}-r1`, match_no: 2, status: "COMPLETED" }],
-                upcomingFixtures: [{ id: `${id}-u1`, match_no: 3, status: "WAITING" }],
+                upcomingFixtures: [{ id: `${id}-u1`, match_no: 3, status: "UPCOMING" }],
                 ...overrides
             }
         };
@@ -1012,7 +1012,7 @@ describe("buildTournamentDashboard", () => {
 
     it("totals every division and tags each fixture with its division", () => {
         const dashboard = buildTournamentDashboard(
-            { id: "tour-1", status: "Ongoing" },
+            { id: "tour-1", status: "LIVE" },
             [divisionSummary("a"), divisionSummary("b")]
         );
 
@@ -1023,14 +1023,14 @@ describe("buildTournamentDashboard", () => {
             totalFixtures: 12,
             completedFixtureCount: 4,
             upcomingFixtureCount: 8,
-            currentStatus: "Ongoing"
+            currentStatus: "LIVE"
         });
         expect(dashboard.recentResults[0]).toMatchObject({ division_id: "a", division_name: "Division a" });
         expect(dashboard.upcomingFixtures).toHaveLength(2);
     });
 
     it("sorts pooled results with no match number to the back", () => {
-        const dashboard = buildTournamentDashboard({ id: "tour-1", status: "Ongoing" }, [
+        const dashboard = buildTournamentDashboard({ id: "tour-1", status: "LIVE" }, [
             divisionSummary("a", {
                 recentResults: [{ id: "a1", match_no: null, status: "COMPLETED" }, { id: "a2", match_no: 5, status: "COMPLETED" }]
             }),
@@ -1051,13 +1051,13 @@ describe("buildTournamentDashboard", () => {
                     { id: `${index}-r2`, match_no: 2, status: "COMPLETED" }
                 ],
                 upcomingFixtures: [
-                    { id: `${index}-u1`, match_no: 1, status: "WAITING" },
-                    { id: `${index}-u2`, match_no: 2, status: "WAITING" }
+                    { id: `${index}-u1`, match_no: 1, status: "UPCOMING" },
+                    { id: `${index}-u2`, match_no: 2, status: "UPCOMING" }
                 ]
             })
         );
 
-        const dashboard = buildTournamentDashboard({ id: "tour-1", status: "Ongoing" }, divisions);
+        const dashboard = buildTournamentDashboard({ id: "tour-1", status: "LIVE" }, divisions);
 
         expect(dashboard.recentResults).toHaveLength(8);
         expect(dashboard.upcomingFixtures).toHaveLength(8);
@@ -1066,7 +1066,7 @@ describe("buildTournamentDashboard", () => {
 
 describe("formatTournamentDetails", () => {
     it("formats dates and reports a single division type", () => {
-        const details = formatTournamentDetails(makeTournament({ status: "Ongoing", description: "Open", location: "Hall" }), [
+        const details = formatTournamentDetails(makeTournament({ status: "LIVE", description: "Open", location: "Hall" }), [
             { type: "Classic" },
             { type: "Classic" }
         ]);
@@ -1075,7 +1075,7 @@ describe("formatTournamentDetails", () => {
             id: "tour-1",
             description: "Open",
             location: "Hall",
-            status: "Ongoing",
+            status: "LIVE",
             start_date: "2026-08-02",
             startDate: "2026-08-02",
             start_date_label: "1 August 2026",
@@ -1120,7 +1120,7 @@ describe("formatDivisionPayload", () => {
             state: makeState({ teams: ["t1", "t2"], rounds: [makeRound({ groups: [["t1", "t2"]] })] })
         });
         const fixtures = [
-            makeFixture({ id: "f2", match_no: 2, status: "WAITING", team_1: "t1", team_2: "t2" }),
+            makeFixture({ id: "f2", match_no: 2, status: "UPCOMING", team_1: "t1", team_2: "t2" }),
             makeFixture({ id: "f1", match_no: 1, status: "COMPLETED", team_1: "t1", team_2: "t2", team_1_result: [21], team_2_result: [15] })
         ];
 
@@ -1190,7 +1190,7 @@ describe("formatTournamentViewPayload", () => {
                 id: "sf-fixture-1",
                 match_no: 13,
                 round: "Semifinals",
-                status: "WAITING",
+                status: "UPCOMING",
                 team_1_placeholder: "Rank 1",
                 team_2_placeholder: "Rank 4"
             })

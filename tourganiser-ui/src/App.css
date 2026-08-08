@@ -3213,12 +3213,12 @@ Styles for the name change popup
 	height: fit-content;
 }
 
-.fixture-card-header-status.waiting {
+.fixture-card-header-status.upcoming {
 	background-color: #e3f2fd;
 	color: #1565c0;
 }
 
-.fixture-card-header-status.ongoing {
+.fixture-card-header-status.live {
 	background-color: #fff3e0;
 	color: #e65100;
 }

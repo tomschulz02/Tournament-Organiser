@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef, useEffect } from 'react';
+import { useContext, useState} from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
@@ -47,7 +47,6 @@ function CreateTournamentForm() {
 	const [loading, setLoading] = useState(false);
 	const { showMessage } = useMessage();
 	const navigate = useNavigate();
-	const summaryRef = useRef(null);
 	const [showSummary, setShowSummary] = useState(false);
 
 	const calculateMatchCount = (format, teamCount, numGroups = 0, knockoutTeams = 0) => {

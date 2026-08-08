@@ -27,7 +27,7 @@ export function makeFixture(overrides = {}) {
         division_id: "div-1",
         match_no: 1,
         round: "Pool Play",
-        status: "WAITING",
+        status: "UPCOMING",
         team_1: null,
         team_2: null,
         team_1_placeholder: null,

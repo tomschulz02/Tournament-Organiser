@@ -233,12 +233,12 @@
 	min-width: 150px;
 }
 
-.fixture-status.waiting {
+.fixture-status.upcoming {
 	background-color: #e3f2fd;
 	color: #1565c0;
 }
 
-.fixture-status.ongoing {
+.fixture-status.live {
 	background-color: #fff3e0;
 	color: #e65100;
 }

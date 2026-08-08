@@ -1,5 +1,5 @@
 // Tooltip.jsx
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import '../App.css';
 
 export default function Tooltip({ message, delay = 300 }) {

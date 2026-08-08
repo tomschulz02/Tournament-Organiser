@@ -21,14 +21,14 @@ export default function Login() {
 	useEffect(() => {
 		const checkLogin = async () => {
 			try {
-				const response = await checkLoginStatus();
-				if (response.loggedIn) {
+				const { data } = await checkLoginStatus();
+				if (data.loggedIn) {
 					setIsLoggedIn(true);
 					showMessage('Successfully logged in!', 'success');
-					setUsername(response.user);
+					setUsername(data.username);
 					navigate('/home'); // Redirect to home page if already logged in
 				}
-			} catch (error) {
+			} catch {
 				// do nothing
 			}
 		};
@@ -92,17 +92,14 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 		setIsLoading(true);
 
 		try {
-			const response = await loginUser(email, password);
-			if (response.success) {
-				setLoggedIn(true);
-				showMessage(`Welcome, ${response.user}`, 'success');
-				setUsername(response.user);
-				onClose();
-			} else {
-				showMessage('Username or password is incorrect', 'error');
-			}
+			const { data } = await loginUser(email, password);
+			setLoggedIn(true);
+			showMessage(`Welcome, ${data.username}`, 'success');
+			setUsername(data.username);
+			onClose();
 		} catch (error) {
-			showMessage(error.message, 'error'); // Show error message to user
+			// The server's message is display-ready, so it goes straight to the user.
+			showMessage(error.message, 'error');
 		} finally {
 			setIsLoading(false);
 		}
@@ -187,13 +184,11 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 		setIsLoading(true);
 
 		try {
-			const response = await registerUser(newUsername, newEmail, newPassword, confirmPassword);
-			if (response.success) {
-				setLoggedIn(true);
-				showMessage('Account created successfully!', 'success');
-				setUsername(response.user);
-				onClose();
-			}
+			const { data } = await registerUser(newUsername, newEmail, newPassword, confirmPassword);
+			setLoggedIn(true);
+			showMessage('Account created successfully!', 'success');
+			setUsername(data.username);
+			onClose();
 		} catch (error) {
 			showMessage(error.message, 'error');
 		} finally {

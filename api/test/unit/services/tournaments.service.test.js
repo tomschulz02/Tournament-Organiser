@@ -39,12 +39,10 @@ const { formatTournamentViewPayload } = await import("../../../src/utils/tournam
 const { makeDivision, makeTournament } = await import("../../helpers/fixtures.js");
 
 beforeEach(() => {
-    // The service logs the underlying error before rewrapping it.
-    vi.spyOn(console, "log").mockImplementation(() => {});
     vi.mocked(tournamentRepository.createTournament).mockReset();
     vi.mocked(tournamentRepository.getAllTournaments).mockReset();
     vi.mocked(tournamentRepository.getTournamentById).mockReset();
-    vi.mocked(tournamentRepository.deleteTournament).mockReset();
+    vi.mocked(tournamentRepository.deleteTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(divisionsRepository.getDivisionsByTournamentId).mockReset();
     vi.mocked(divisionsRepository.getTeamsByDivisionIds).mockReset();
     vi.mocked(fixturesRepository.getFixturesByDivisionIds).mockReset();
@@ -71,21 +69,34 @@ describe("tournamentService.createTournament", () => {
     });
 
     it("deletes the tournament again when a division fails, so no half-built tournament survives", async () => {
+        const failure = new Error("division insert failed");
         tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
-        divisionService.createDivision.mockRejectedValue(new Error("DIVISION_ERROR"));
+        divisionService.createDivision.mockRejectedValue(failure);
 
-        await expect(tournamentService.createTournament(payload, "user-1")).rejects.toThrow("DATABASE_ERROR");
+        // The original error propagates untouched, so the middleware sees the
+        // real cause rather than a code invented here.
+        await expect(tournamentService.createTournament(payload, "user-1")).rejects.toBe(failure);
 
         expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith("tour-1", "user-1");
     });
 
     it("attempts the compensating delete with id 0 when the tournament itself failed", async () => {
-        tournamentRepository.createTournament.mockRejectedValue(new Error("DATABASE_ERROR"));
+        const failure = new Error("tournament insert failed");
+        tournamentRepository.createTournament.mockRejectedValue(failure);
 
-        await expect(tournamentService.createTournament(payload, "user-1")).rejects.toThrow("DATABASE_ERROR");
+        await expect(tournamentService.createTournament(payload, "user-1")).rejects.toBe(failure);
 
         expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith(0, "user-1");
         expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("does not let a failed compensating delete mask the original failure", async () => {
+        const failure = new Error("division insert failed");
+        tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
+        divisionService.createDivision.mockRejectedValue(failure);
+        tournamentRepository.deleteTournament.mockRejectedValue(new Error("delete failed too"));
+
+        await expect(tournamentService.createTournament(payload, "user-1")).rejects.toBe(failure);
     });
 });
 
@@ -134,10 +145,11 @@ describe("tournamentService.fetchTournaments", () => {
         expect((await tournamentService.fetchTournaments()).ongoing.map((entry) => entry.id)).toEqual(["a"]);
     });
 
-    it("wraps a repository failure", async () => {
-        tournamentRepository.getAllTournaments.mockRejectedValue(new Error("GET_TOURNAMENTS_ERROR"));
+    it("lets a repository failure propagate untouched", async () => {
+        const failure = new Error("Failed to fetch tournaments");
+        tournamentRepository.getAllTournaments.mockRejectedValue(failure);
 
-        await expect(tournamentService.fetchTournaments()).rejects.toThrow("FETCH_TOURNAMENTS_ERROR");
+        await expect(tournamentService.fetchTournaments()).rejects.toBe(failure);
     });
 });
 
@@ -156,10 +168,11 @@ describe("tournamentService.fetchTournamentDetails", () => {
         fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-2" }]);
     }
 
-    it("returns null when the tournament does not exist", async () => {
+    it("names the not-found condition rather than returning null", async () => {
         tournamentRepository.getTournamentById.mockResolvedValue(null);
 
-        expect(await tournamentService.fetchTournamentDetails("tour-1")).toBeNull();
+        await expect(tournamentService.fetchTournamentDetails("tour-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
         expect(divisionsRepository.getDivisionsByTournamentId).not.toHaveBeenCalled();
     });
 
@@ -168,7 +181,7 @@ describe("tournamentService.fetchTournamentDetails", () => {
 
         const result = await tournamentService.fetchTournamentDetails("tour-1", "user-1");
 
-        expect(result).toEqual({ creator: true, message: { formatted: true } });
+        expect(result).toEqual({ creator: true, view: { formatted: true } });
         expect(divisionsRepository.getTeamsByDivisionIds).toHaveBeenCalledWith(["div-1", "div-2"]);
 
         const [args] = vi.mocked(formatTournamentViewPayload).mock.calls[0];
@@ -190,10 +203,10 @@ describe("tournamentService.fetchTournamentDetails", () => {
         expect((await tournamentService.fetchTournamentDetails("tour-1", "user-2")).creator).toBe(false);
     });
 
-    it("wraps a repository failure", async () => {
-        tournamentRepository.getTournamentById.mockRejectedValue(new Error("GET_TOURNAMENT_ERROR"));
+    it("lets a repository failure propagate untouched", async () => {
+        const failure = new Error("Failed to fetch tournament");
+        tournamentRepository.getTournamentById.mockRejectedValue(failure);
 
-        await expect(tournamentService.fetchTournamentDetails("tour-1"))
-            .rejects.toThrow("FETCH_TOURNAMENT_DETAILS_ERROR");
+        await expect(tournamentService.fetchTournamentDetails("tour-1")).rejects.toBe(failure);
     });
 });

@@ -125,25 +125,36 @@ Do not fix these as a batch. Fix each one when working on the feature that touch
 
 ## Scheduling
 
-Scheduling is a new feature and is deliberately split across the two tiers.
+Scheduling is deliberately split across the two tiers. The split was settled on
+2026-08-08; see `docs/decisions.md`.
 
-Backend (target):
-- Automatic schedule generation. Given a division's fixtures plus court, day and
-  duration constraints, produce a schedule. This is business logic and belongs in a
-  service.
+Frontend:
+- Automatic schedule generation, in `tourganiser-ui/src/utils/scheduleGenerator.js` and
+  `scheduleUtils.js`. A generated schedule is a proposal, not a commitment.
+- The schedule editing UI. Creating a schedule by hand and adjusting a generated one.
 
-Frontend (target):
-- The schedule editing UI. Creating a schedule by hand, and adjusting a generated one.
-  Direct manipulation of slots is a UI concern and stays in the client.
+Backend:
+- Validation on write, and storage. The server rejects schedules that are impossible —
+  fixtures that do not belong to the division, court clashes, a team in two places at
+  once, slots outside the tournament dates, a knockout fixture placed before the round
+  that feeds it. It does not judge whether a schedule is *good*; court balance, rest
+  time and gap minimisation are the generator's business.
 
-Current reality: the generator lives in the frontend at
-`tourganiser-ui/src/utils/scheduleGenerator.js` and `scheduleUtils.js`. Moving it to a
-backend service is planned but not scheduled. Until then, `scheduleUtils.js` holds the
-shared slot and time primitives that both tiers will need, so keep it free of React and
-DOM references to make the move cheap.
+An earlier version of this document planned to move the generator to a backend service.
+That is cancelled. Generation produces a proposal the organiser then edits, so it does
+not need server authority — only its result does.
+
+`scheduleUtils.js` should still stay free of React and DOM references, but for a
+different reason: it holds the slot and time primitives, and keeping it pure keeps it
+testable.
 
 Persistence: schedules are stored as JSONB on `divisions.schedule`. The column exists as
 of 2026-08-07; the endpoint that writes it does not yet.
-`tournamentViewFormatter.js` already reads `division.schedule ?? state.schedule ?? null`,
-so it tolerates both the dedicated column and the older location inside division state.
-New code should write the column only.
+`tournamentViewFormatter.js` reads `division.schedule ?? state.schedule ?? null`, so it
+tolerates both the dedicated column and the older location inside division state. New
+code should write the column only.
+
+The shape of `divisions.schedule` is not documented anywhere. It is implicit in
+`scheduleUtils.js` and `ScheduleMakerModal.jsx`, and carries a `SCHEDULE_VERSION`
+constant. Writing that contract down is a prerequisite for the validator, which cannot
+be specified against an undocumented payload.

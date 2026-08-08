@@ -11,6 +11,7 @@ import {
     seedAcrossGroups,
     seedKnockoutResults
 } from "../utils/standings.js";
+import { AppError } from "../errors.js";
 
 // Round progression.
 //
@@ -28,7 +29,7 @@ async function getProposal(divisionId, userId) {
         await loadDivision(divisionId, userId);
 
     if (!isRoundComplete(round, fixtures)) {
-        throw new Error("ROUND_NOT_COMPLETE");
+        throw new AppError("ROUND_NOT_COMPLETE");
     }
 
     const computed = computeRoundResults(round, state, fixtures).map((row) => ({
@@ -61,19 +62,19 @@ async function commit(divisionId, userId, confirmedTeamIds) {
         await loadDivision(divisionId, userId);
 
     if (!isRoundComplete(round, fixtures)) {
-        throw new Error("ROUND_NOT_COMPLETE");
+        throw new AppError("ROUND_NOT_COMPLETE");
     }
 
     const nextRound = rounds[roundIndex + 1] || null;
     if (!nextRound) {
-        throw new Error("NO_NEXT_ROUND");
+        throw new AppError("NO_NEXT_ROUND");
     }
 
     // Re-progression guard. Permitted only while nothing in the next round has
     // been played, so a correction can never discard real scores.
     if (Array.isArray(round.results) && round.results.length > 0) {
         if (hasPlayedFixtures(nextRound, fixtures)) {
-            throw new Error("NEXT_ROUND_ALREADY_STARTED");
+            throw new AppError("NEXT_ROUND_ALREADY_STARTED");
         }
     }
 
@@ -154,25 +155,25 @@ function bindFixturesToResults(nextRound, confirmed) {
 // change how many qualify.
 function validateConfirmedTeams(confirmedTeamIds, computed, nextRound) {
     if (!Array.isArray(confirmedTeamIds) || confirmedTeamIds.length === 0) {
-        throw new Error("INVALID_RESULTS");
+        throw new AppError("INVALID_RESULTS");
     }
 
     if (!confirmedTeamIds.every((id) => typeof id === "string" && id.length > 0)) {
-        throw new Error("INVALID_RESULTS");
+        throw new AppError("INVALID_RESULTS");
     }
 
     const expected = nextRound.qualifyingTeams ?? computed.length;
     if (confirmedTeamIds.length !== expected) {
-        throw new Error("WRONG_QUALIFIER_COUNT");
+        throw new AppError("WRONG_QUALIFIER_COUNT");
     }
 
     if (new Set(confirmedTeamIds).size !== confirmedTeamIds.length) {
-        throw new Error("DUPLICATE_TEAM");
+        throw new AppError("DUPLICATE_TEAM");
     }
 
     const eligible = new Set(computed.map((row) => row.id));
     if (!confirmedTeamIds.every((id) => eligible.has(id))) {
-        throw new Error("TEAM_NOT_IN_ROUND");
+        throw new AppError("TEAM_NOT_IN_ROUND");
     }
 
     return confirmedTeamIds;
@@ -248,12 +249,12 @@ function buildKnockoutOutcomes(round, fixtures) {
 async function loadDivision(divisionId, userId) {
     const division = await divisionsRepository.getDivisionWithOwner(divisionId);
     if (!division) {
-        throw new Error("DIVISION_NOT_FOUND");
+        throw new AppError("DIVISION_NOT_FOUND");
     }
 
     // requireAuth proves the caller is logged in. This proves the tournament is theirs.
     if (division.created_by !== userId) {
-        throw new Error("NOT_TOURNAMENT_OWNER");
+        throw new AppError("NOT_TOURNAMENT_OWNER");
     }
 
     const state = normalizeState(division.state);
@@ -262,7 +263,7 @@ async function loadDivision(divisionId, userId) {
     const round = rounds[roundIndex];
 
     if (!round) {
-        throw new Error("ROUND_NOT_FOUND");
+        throw new AppError("ROUND_NOT_FOUND");
     }
 
     const [rawFixtures, teams] = await Promise.all([

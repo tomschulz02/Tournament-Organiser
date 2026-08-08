@@ -13,8 +13,9 @@ async function createTournament(details, userId, client = db) {
 
         return { tournamentId };
     } catch (err) {
-        console.log(err)
-        throw new Error(err.message || "DATABASE_ERROR");
+        // Repositories always throw and never log. The underlying error is kept
+        // as cause so the Postgres code survives; the error middleware logs it.
+        throw new Error("Failed to create tournament", { cause: err });
     }
 }
 
@@ -23,10 +24,10 @@ async function getAllTournaments() {
     try {
         const sql = "SELECT * FROM tournaments;";
         const result = await db.query(sql, []);
-        
+
         return result;
     } catch (err) {
-        return (err.message || "GET_TOURNAMENTS_ERROR");
+        throw new Error("Failed to fetch tournaments", { cause: err });
     }
 }
 
@@ -37,7 +38,7 @@ async function getTournamentById(tournamentId) {
 
         return result[0] || null;
     } catch (err) {
-        throw new Error(err.message || "GET_TOURNAMENT_ERROR");
+        throw new Error("Failed to fetch tournament", { cause: err });
     }
 }
 
@@ -54,7 +55,7 @@ async function startTournament(tournamentId, userId) {
         return result;
     } catch (err) {
         await client.query("ROLLBACK");
-        return (err.message || "START_TOURNAMENT_ERROR");
+        throw new Error("Failed to start tournament", { cause: err });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -74,7 +75,7 @@ async function endTournament(tournamentId, userId) {
         return result;
     } catch (err) {
         await client.query("ROLLBACK");
-        return (err.message || "END_TOURNAMENT_ERROR");
+        throw new Error("Failed to end tournament", { cause: err });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -94,7 +95,7 @@ async function deleteTournament(tournamentId, userId) {
         return result;
     } catch (err) {
         await client.query("ROLLBACK");
-        return (err.message || "DELETE_TOURNAMENT_ERROR");
+        throw new Error("Failed to delete tournament", { cause: err });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();

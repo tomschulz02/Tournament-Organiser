@@ -13,9 +13,9 @@ async function createDivision(divisionId, tournamentId, details, userId, client 
         
         return divisionId;
     } catch (err) {
-        console.log('DIVISION_ERROR: ', err);
-        
-        throw new Error(err.message ||"DATABASE_ERROR");
+        // Repositories always throw and never log. The underlying error is kept
+        // as cause so the Postgres code survives; the error middleware logs it.
+        throw new Error("Failed to create division", { cause: err });
     }
 }
 
@@ -33,7 +33,7 @@ async function updateTeams(divisionId, userId, teams) {
         return result;
     } catch (err) {
         await client.query("ROLLBACK");
-        return (err.message || "UPDATE_TEAMS_ERROR");
+        throw new Error("Failed to update teams", { cause: err });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -48,7 +48,7 @@ async function createTeam(name, divisionId){
 
         return teamId;
     } catch (error) {
-        throw new Error('TEAM_CREATION_ERROR_DB');
+        throw new Error("Failed to create team", { cause: error });
     }
 }
 
@@ -59,7 +59,7 @@ async function getTeamNames(divisionId){
 
         return result;
     } catch (error){
-        throw new Error('TEAM_FETCH_ERROR_DB');
+        throw new Error("Failed to fetch team names", { cause: error });
     }
 }
 
@@ -76,7 +76,7 @@ async function updateTeam(teamId, newTeamName) {
         return { message: "Team updated" };
     } catch (error) {
         await client.query("ROLLBACK");
-        return (error.message || "UPDATE_TEAM_ERROR");
+        throw new Error("Failed to update team", { cause: error });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -99,8 +99,7 @@ async function updateGroups(divisionId, userId, groups, fixtures) {
         return { message: "Updated groups" };
     } catch (error) {
         await client.query("ROLLBACK");
-        console.error(error);
-        throw new Error("UPDATE_GROUPS_ERROR");
+        throw new Error("Failed to update groups", { cause: error });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -125,8 +124,7 @@ async function updateRounds(divisionId, userId, updatedRounds, updatedFixtures, 
         return { message: "Round progressed" };
     } catch (error) {
         await client.query("ROLLBACK");
-        console.error(error);
-        throw new Error("UPDATE_ROUNDS_ERROR");
+        throw new Error("Failed to update rounds", { cause: error });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -146,8 +144,7 @@ async function getDivisionWithOwner(divisionId) {
 
         return rows.length > 0 ? rows[0] : null;
     } catch (error) {
-        console.error(error);
-        throw new Error("GET_DIVISION_ERROR");
+        throw new Error("Failed to fetch division", { cause: error });
     }
 }
 
@@ -165,8 +162,7 @@ async function getTeamsByIds(teamIds) {
         const sql = "SELECT id, name FROM teams WHERE id = ANY($1::uuid[]);";
         return await db.query(sql, [teamIds]);
     } catch (error) {
-        console.error(error);
-        throw new Error("GET_TEAMS_ERROR");
+        throw new Error("Failed to fetch teams", { cause: error });
     }
 }
 
@@ -175,8 +171,7 @@ async function getFixturesByDivisionId(divisionId) {
         const sql = "SELECT * FROM fixtures WHERE division_id = $1::uuid ORDER BY match_no ASC;";
         return await db.query(sql, [divisionId]);
     } catch (error) {
-        console.error(error);
-        throw new Error("GET_FIXTURES_ERROR");
+        throw new Error("Failed to fetch fixtures", { cause: error });
     }
 }
 
@@ -188,8 +183,7 @@ async function updateSchedule(divisionId, schedule) {
 
         return { message: "Schedule updated" };
     } catch (error) {
-        console.error(error);
-        throw new Error("UPDATE_SCHEDULE_ERROR");
+        throw new Error("Failed to update schedule", { cause: error });
     }
 }
 
@@ -199,8 +193,11 @@ async function getDivisionDetails(tournamentId) {
         const details = {};
 
         const divisionsRes = await client.query("SELECT * FROM divisions WHERE tournament_id = $1", [tournamentId]);
+        // A tournament with no divisions is an empty collection, not a missing
+        // one. The caller decides whether that is a problem; the repository
+        // assigns no meaning to it, the same as getDivisionsByTournamentId.
         if (divisionsRes.rows.length === 0) {
-            return ("DIVISIONS_NOT_FOUND");
+            return { divisions: [] };
         }
 
         details.divisions = divisionsRes.rows.map(division => ({
@@ -215,7 +212,7 @@ async function getDivisionDetails(tournamentId) {
 
         return details;
     } catch (err) {
-        return (err.message || "GET_DIVISION_DETAILS_ERROR");
+        throw new Error("Failed to fetch division details", { cause: err });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -227,7 +224,7 @@ async function getDivisionsByTournamentId(tournamentId) {
         const sql = "SELECT * FROM divisions WHERE tournament_id = $1 ORDER BY name ASC;";
         return await db.query(sql, [tournamentId]);
     } catch (error) {
-        throw new Error(error.message || "GET_DIVISIONS_ERROR");
+        throw new Error("Failed to fetch divisions", { cause: error });
     }
 }
 
@@ -240,7 +237,7 @@ async function getTeamsByDivisionIds(divisionIds) {
         const sql = "SELECT * FROM teams WHERE division_id = ANY($1::uuid[]) ORDER BY division_id, name ASC;";
         return await db.query(sql, [divisionIds]);
     } catch (error) {
-        throw new Error(error.message || "GET_TEAMS_ERROR");
+        throw new Error("Failed to fetch teams by division", { cause: error });
     }
 }
 

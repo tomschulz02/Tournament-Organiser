@@ -20,8 +20,11 @@ beforeEach(() => {
     vi.mocked(tournamentService.fetchTournamentDetails).mockReset();
 });
 
+// The controllers no longer catch. A rejected service call propagates to the
+// error middleware, which owns every status and message.
+
 describe("tournamentController.createTournament", () => {
-    it("creates the tournament for the logged-in user", async () => {
+    it("creates the tournament for the logged-in user and returns 201", async () => {
         tournamentService.createTournament.mockResolvedValue("tour-1");
         const res = makeRes();
         const body = { details: {}, divisions: [] };
@@ -29,37 +32,29 @@ describe("tournamentController.createTournament", () => {
         await tournamentController.createTournament(makeReq({ body, user: { id: "user-1" } }), res);
 
         expect(tournamentService.createTournament).toHaveBeenCalledWith(body, "user-1");
-        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith({
             success: true,
             message: "Tournament created successfully",
-            id: "tour-1"
+            data: { id: "tour-1" }
         });
     });
 
-    it("returns the service error message on failure", async () => {
-        tournamentService.createTournament.mockRejectedValue(new Error("DATABASE_ERROR"));
+    it("lets a failure propagate rather than leaking the service's error text", async () => {
+        const failure = new Error("insert failed");
+        tournamentService.createTournament.mockRejectedValue(failure);
         const res = makeRes();
 
-        await tournamentController.createTournament(makeReq({ user: { id: "user-1" } }), res);
+        await expect(
+            tournamentController.createTournament(makeReq({ user: { id: "user-1" } }), res)
+        ).rejects.toBe(failure);
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "DATABASE_ERROR" });
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        tournamentService.createTournament.mockRejectedValue(new Error(""));
-        const res = makeRes();
-
-        await tournamentController.createTournament(makeReq({ user: { id: "user-1" } }), res);
-
-        expect(res.json).toHaveBeenCalledWith({ error: "CREATE_TOURNAMENT_ERROR" });
+        expect(res.json).not.toHaveBeenCalled();
     });
 });
 
 describe("tournamentController.fetchTournaments", () => {
-    it("returns the grouped tournaments under message", async () => {
-        // Note the payload sits in `message`, which docs/api.md flags as drift.
+    it("returns the grouped tournaments in data", async () => {
         const grouped = { upcoming: [], ongoing: [], completed: [] };
         tournamentService.fetchTournaments.mockResolvedValue(grouped);
         const res = makeRes();
@@ -67,32 +62,23 @@ describe("tournamentController.fetchTournaments", () => {
         await tournamentController.fetchTournaments(makeReq(), res);
 
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(res.json).toHaveBeenCalledWith({ success: true, message: grouped });
+        expect(res.json).toHaveBeenCalledWith({ success: true, message: "Tournaments fetched", data: grouped });
     });
 
-    it("returns the service error message on failure", async () => {
-        tournamentService.fetchTournaments.mockRejectedValue(new Error("FETCH_TOURNAMENTS_ERROR"));
-        const res = makeRes();
+    it("lets a failure propagate", async () => {
+        const failure = new Error("connection lost");
+        tournamentService.fetchTournaments.mockRejectedValue(failure);
 
-        await tournamentController.fetchTournaments(makeReq(), res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "FETCH_TOURNAMENTS_ERROR" });
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        tournamentService.fetchTournaments.mockRejectedValue(new Error(""));
-        const res = makeRes();
-
-        await tournamentController.fetchTournaments(makeReq(), res);
-
-        expect(res.json).toHaveBeenCalledWith({ error: "FETCH_TOURNAMENT_ERROR" });
+        await expect(tournamentController.fetchTournaments(makeReq(), makeRes())).rejects.toBe(failure);
     });
 });
 
 describe("tournamentController.fetchTournamentDetails", () => {
-    it("returns the tournament view for a logged-in creator", async () => {
-        tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: true, message: { tournament: {} } });
+    it("returns the view alongside loggedIn and creator, all inside data", async () => {
+        tournamentService.fetchTournamentDetails.mockResolvedValue({
+            creator: true,
+            view: { tournament: { id: "tour-1" }, dashboard: {}, divisions: [] }
+        });
         const res = makeRes();
 
         await tournamentController.fetchTournamentDetails(
@@ -104,76 +90,62 @@ describe("tournamentController.fetchTournamentDetails", () => {
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith({
             success: true,
-            loggedIn: true,
-            creator: true,
-            message: { tournament: {} }
+            message: "Tournament fetched",
+            data: {
+                loggedIn: true,
+                creator: true,
+                tournament: { id: "tour-1" },
+                dashboard: {},
+                divisions: []
+            }
         });
     });
 
     it("serves an anonymous viewer without a user id", async () => {
-        tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: false, message: {} });
+        tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: false, view: {} });
         const res = makeRes();
 
         await tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: VALID_UUID } }), res);
 
         expect(tournamentService.fetchTournamentDetails).toHaveBeenCalledWith(VALID_UUID, null);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ loggedIn: false, creator: false }));
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Tournament fetched",
+            data: { loggedIn: false, creator: false }
+        });
     });
 
     it("rejects an id that is not a v1-v5 UUID without calling the service", async () => {
         const res = makeRes();
 
-        await tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: "12345" } }), res);
+        await expect(
+            tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: "12345" } }), res)
+        ).rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
 
         expect(tournamentService.fetchTournamentDetails).not.toHaveBeenCalled();
-        expect(res.status).toHaveBeenCalledWith(404);
-        expect(res.json).toHaveBeenCalledWith({ success: false, error: "TOURNAMENT_NOT_FOUND" });
+        expect(res.json).not.toHaveBeenCalled();
     });
 
     it("also rejects the nil UUID and a v7 UUID, which the regex does not admit", async () => {
         for (const id of ["00000000-0000-0000-0000-000000000000", "018f7a2c-1b3d-7c4e-9f2a-6b1d2e3f4a5b"]) {
-            const res = makeRes();
-
-            await tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: id } }), res);
-
-            expect(res.status).toHaveBeenCalledWith(404);
+            await expect(
+                tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: id } }), makeRes())
+            ).rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND" });
         }
     });
 
     it("rejects a missing id", async () => {
-        const res = makeRes();
-
-        await tournamentController.fetchTournamentDetails(makeReq(), res);
-
-        expect(res.status).toHaveBeenCalledWith(404);
+        await expect(
+            tournamentController.fetchTournamentDetails(makeReq(), makeRes())
+        ).rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND" });
     });
 
-    it("returns 404 when the tournament does not exist", async () => {
-        tournamentService.fetchTournamentDetails.mockResolvedValue(null);
-        const res = makeRes();
+    it("lets the service's not-found propagate", async () => {
+        const failure = Object.assign(new Error("Tournament not found"), { code: "TOURNAMENT_NOT_FOUND" });
+        tournamentService.fetchTournamentDetails.mockRejectedValue(failure);
 
-        await tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: VALID_UUID } }), res);
-
-        expect(res.status).toHaveBeenCalledWith(404);
-        expect(res.json).toHaveBeenCalledWith({ success: false, error: "TOURNAMENT_NOT_FOUND" });
-    });
-
-    it("returns the service error message on failure", async () => {
-        tournamentService.fetchTournamentDetails.mockRejectedValue(new Error("FETCH_TOURNAMENT_DETAILS_ERROR"));
-        const res = makeRes();
-
-        await tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: VALID_UUID } }), res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "FETCH_TOURNAMENT_DETAILS_ERROR" });
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        tournamentService.fetchTournamentDetails.mockRejectedValue(new Error(""));
-        const res = makeRes();
-
-        await tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: VALID_UUID } }), res);
-
-        expect(res.json).toHaveBeenCalledWith({ error: "FETCH_TOURNAMENT_DETAILS_ERROR" });
+        await expect(
+            tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: VALID_UUID } }), makeRes())
+        ).rejects.toBe(failure);
     });
 });

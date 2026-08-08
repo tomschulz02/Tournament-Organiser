@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { requireAuth } from "../../../src/middleware/requireAuth.js";
+import { AppError } from "../../../src/errors.js";
 
 function makeRes() {
     const res = {
@@ -16,19 +17,23 @@ describe("requireAuth", () => {
 
         requireAuth({ user: { id: "user-1" } }, res, next);
 
-        expect(next).toHaveBeenCalledOnce();
+        expect(next).toHaveBeenCalledWith();
         expect(res.status).not.toHaveBeenCalled();
     });
 
-    it("rejects with 401 when req.user is null", () => {
+    it("hands a 401 to the error middleware when req.user is null", () => {
         const res = makeRes();
         const next = vi.fn();
 
         requireAuth({ user: null }, res, next);
 
-        expect(res.status).toHaveBeenCalledWith(401);
-        expect(res.json).toHaveBeenCalledWith({ error: "Authentication required" });
-        expect(next).not.toHaveBeenCalled();
+        const failure = next.mock.calls[0][0];
+        expect(failure).toBeInstanceOf(AppError);
+        expect(failure.code).toBe("AUTH_REQUIRED");
+        expect(failure.status).toBe(401);
+        // The middleware never responds itself, so the envelope stays in one place.
+        expect(res.status).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
     });
 
     it("rejects when req.user was never set", () => {
@@ -37,7 +42,7 @@ describe("requireAuth", () => {
 
         requireAuth({}, res, next);
 
-        expect(res.status).toHaveBeenCalledWith(401);
-        expect(next).not.toHaveBeenCalled();
+        expect(next.mock.calls[0][0].code).toBe("AUTH_REQUIRED");
+        expect(res.status).not.toHaveBeenCalled();
     });
 });

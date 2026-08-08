@@ -225,11 +225,25 @@ describe("divisionService.createDivision", () => {
         expect(divisionsRepository.createTeam.mock.calls.every((call) => call.length === 0)).toBe(true);
     });
 
-    it("rolls back and rethrows when storing the division fails", async () => {
-        divisionsRepository.createDivision.mockRejectedValueOnce(new Error("DATABASE_ERROR"));
+    it("rolls back and rethrows the original failure when storing the division fails", async () => {
+        // Rethrown by identity: new Error(error) used to stringify it, losing
+        // both the cause and the error's own type.
+        const failure = new Error("Failed to create division", { cause: new Error("duplicate key") });
+        divisionsRepository.createDivision.mockRejectedValueOnce(failure);
 
-        await expect(divisionService.createDivision(details(), "tour-1", "user-1"))
-            .rejects.toThrow("DATABASE_ERROR");
+        await expect(divisionService.createDivision(details(), "tour-1", "user-1")).rejects.toBe(failure);
+
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    it("rolls back when a fixture insert fails, rather than leaving it unhandled", async () => {
+        // The fixture inserts used to run in an unawaited forEach, so a rejection
+        // escaped the transaction entirely.
+        const failure = new Error("Failed to create fixture");
+        fixturesRepository.createFixture.mockRejectedValueOnce(failure);
+
+        await expect(divisionService.createDivision(details(), "tour-1", "user-1")).rejects.toBe(failure);
 
         expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
         expect(dbMock.client.release).toHaveBeenCalledOnce();

@@ -16,6 +16,7 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
 
 const app = (await import("../../../src/app.js")).default;
 const { tournamentService } = await import("../../../src/services/tournaments.service.js");
+const { AppError } = await import("../../../src/errors.js");
 const { authCookie } = await import("../../helpers/auth.js");
 
 const VALID_UUID = "45bb764e-c07d-474e-8d01-9d9711d39a3a";
@@ -24,6 +25,7 @@ beforeEach(() => {
     vi.mocked(tournamentService.createTournament).mockReset();
     vi.mocked(tournamentService.fetchTournaments).mockReset();
     vi.mocked(tournamentService.fetchTournamentDetails).mockReset();
+    vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("POST /api/tournaments/create", () => {
@@ -44,18 +46,17 @@ describe("POST /api/tournaments/create", () => {
             .set("Cookie", authCookie({ id: "user-1", username: "tom" }))
             .send(body);
 
-        // Note: 200, not 201.
-        expect(response.status).toBe(200);
+        expect(response.status).toBe(201);
         expect(response.body).toEqual({
             success: true,
             message: "Tournament created successfully",
-            id: "tour-1"
+            data: { id: "tour-1" }
         });
         expect(tournamentService.createTournament).toHaveBeenCalledWith(body, "user-1");
     });
 
-    it("reports a failure as 500", async () => {
-        tournamentService.createTournament.mockRejectedValue(new Error("DATABASE_ERROR"));
+    it("hides a failure behind a generic 500 rather than leaking the service's text", async () => {
+        tournamentService.createTournament.mockRejectedValue(new Error("null value in column \"name\""));
 
         const response = await request(app)
             .post("/api/tournaments/create")
@@ -63,7 +64,7 @@ describe("POST /api/tournaments/create", () => {
             .send(body);
 
         expect(response.status).toBe(500);
-        expect(response.body).toEqual({ error: "DATABASE_ERROR" });
+        expect(response.body).toEqual({ success: false, message: "Internal server error", data: null });
     });
 });
 
@@ -75,12 +76,11 @@ describe("GET /api/tournaments/", () => {
         const response = await request(app).get("/api/tournaments/");
 
         expect(response.status).toBe(200);
-        // The payload sits under `message`; docs/api.md records this as drift.
-        expect(response.body).toEqual({ success: true, message: grouped });
+        expect(response.body).toEqual({ success: true, message: "Tournaments fetched", data: grouped });
     });
 
     it("reports a failure as 500", async () => {
-        tournamentService.fetchTournaments.mockRejectedValue(new Error("FETCH_TOURNAMENTS_ERROR"));
+        tournamentService.fetchTournaments.mockRejectedValue(new Error("connection lost"));
 
         expect((await request(app).get("/api/tournaments/")).status).toBe(500);
     });
@@ -88,28 +88,30 @@ describe("GET /api/tournaments/", () => {
 
 describe("GET /api/tournaments/:tournamentId", () => {
     it("serves an anonymous viewer", async () => {
-        tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: false, message: { tournament: {} } });
+        tournamentService.fetchTournamentDetails.mockResolvedValue({
+            creator: false,
+            view: { tournament: { id: "tour-1" } }
+        });
 
         const response = await request(app).get(`/api/tournaments/${VALID_UUID}`);
 
         expect(response.status).toBe(200);
         expect(response.body).toEqual({
             success: true,
-            loggedIn: false,
-            creator: false,
-            message: { tournament: {} }
+            message: "Tournament fetched",
+            data: { loggedIn: false, creator: false, tournament: { id: "tour-1" } }
         });
         expect(tournamentService.fetchTournamentDetails).toHaveBeenCalledWith(VALID_UUID, null);
     });
 
     it("marks the owner as the creator", async () => {
-        tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: true, message: {} });
+        tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: true, view: {} });
 
         const response = await request(app)
             .get(`/api/tournaments/${VALID_UUID}`)
             .set("Cookie", authCookie({ id: "user-1", username: "tom" }));
 
-        expect(response.body).toMatchObject({ loggedIn: true, creator: true });
+        expect(response.body.data).toMatchObject({ loggedIn: true, creator: true });
         expect(tournamentService.fetchTournamentDetails).toHaveBeenCalledWith(VALID_UUID, "user-1");
     });
 
@@ -117,20 +119,21 @@ describe("GET /api/tournaments/:tournamentId", () => {
         const response = await request(app).get("/api/tournaments/not-a-uuid");
 
         expect(response.status).toBe(404);
-        expect(response.body).toEqual({ success: false, error: "TOURNAMENT_NOT_FOUND" });
+        expect(response.body).toEqual({ success: false, message: "Tournament not found", data: null });
         expect(tournamentService.fetchTournamentDetails).not.toHaveBeenCalled();
     });
 
     it("returns 404 when the tournament does not exist", async () => {
-        tournamentService.fetchTournamentDetails.mockResolvedValue(null);
+        tournamentService.fetchTournamentDetails.mockRejectedValue(new AppError("TOURNAMENT_NOT_FOUND"));
 
         const response = await request(app).get(`/api/tournaments/${VALID_UUID}`);
 
         expect(response.status).toBe(404);
+        expect(response.body).toEqual({ success: false, message: "Tournament not found", data: null });
     });
 
     it("reports a failure as 500", async () => {
-        tournamentService.fetchTournamentDetails.mockRejectedValue(new Error("FETCH_TOURNAMENT_DETAILS_ERROR"));
+        tournamentService.fetchTournamentDetails.mockRejectedValue(new Error("connection lost"));
 
         expect((await request(app).get(`/api/tournaments/${VALID_UUID}`)).status).toBe(500);
     });

@@ -18,8 +18,10 @@ async function createUser(username, email, password) {
 		return result.rows[0];
 	} catch (err) {
 		await client.query("ROLLBACK");
-		console.error(err);
-		throw new Error(err.message || "USER_CREATION_ERROR");
+		// Rethrown with the pg error as cause so the service can tell a unique
+		// constraint violation from an unexpected fault. Repositories assign no
+		// HTTP meaning and never log — the error middleware does both.
+		throw new Error("Failed to insert user", { cause: err });
 		/* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
 	} finally {
 		client.release();
@@ -36,8 +38,7 @@ async function findUserByEmail(email) {
 
 		return rows.length > 0 ? rows[0] : null;
 	} catch (err) {
-		console.error(err);
-		throw new Error("LOGIN_ERROR");
+		throw new Error("Failed to look up user by email", { cause: err });
 	}
 }
 

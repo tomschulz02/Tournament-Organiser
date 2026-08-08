@@ -12,6 +12,7 @@ vi.mock("../../../src/services/progression.service.js", () => ({
 
 const app = (await import("../../../src/app.js")).default;
 const { progressionService } = await import("../../../src/services/progression.service.js");
+const { AppError } = await import("../../../src/errors.js");
 const { authCookie } = await import("../../helpers/auth.js");
 
 const PROGRESSION_URL = "/api/divisions/div-1/progression";
@@ -27,7 +28,11 @@ describe("GET /api/divisions/:divisionId/progression", () => {
         const response = await request(app).get(PROGRESSION_URL);
 
         expect(response.status).toBe(401);
-        expect(response.body).toEqual({ error: "Authentication required" });
+        expect(response.body).toEqual({
+            success: false,
+            message: "You must be logged in to do that",
+            data: null
+        });
         expect(progressionService.getProposal).not.toHaveBeenCalled();
     });
 
@@ -68,7 +73,7 @@ describe("POST /api/divisions/:divisionId/progression", () => {
     });
 
     it("passes an absent teams field through as undefined", async () => {
-        progressionService.commit.mockRejectedValue(new Error("INVALID_RESULTS"));
+        progressionService.commit.mockRejectedValue(new AppError("INVALID_RESULTS"));
 
         const response = await request(app)
             .post(PROGRESSION_URL)
@@ -80,7 +85,9 @@ describe("POST /api/divisions/:divisionId/progression", () => {
     });
 });
 
-// The status codes documented in docs/api.md, driven end to end.
+// The status codes documented in docs/api.md, driven end to end. This is the
+// table that used to be ERROR_STATUS in divisions.controller.js; the codes now
+// resolve through the catalogue in src/errors.js and the error middleware.
 describe.each([
     ["DIVISION_NOT_FOUND", 404, "Division not found"],
     ["ROUND_NOT_FOUND", 404, "Round not found"],
@@ -92,19 +99,20 @@ describe.each([
     ["WRONG_QUALIFIER_COUNT", 400, "Wrong number of qualifying teams"],
     ["DUPLICATE_TEAM", 400, "A team appears more than once"],
     ["TEAM_NOT_IN_ROUND", 400, "A team did not play in this round"],
+    // Not a declared condition, so it falls through to the generic fault.
     ["SOMETHING_UNEXPECTED", 500, "Internal server error"]
 ])("progression error %s", (code, status, message) => {
     it(`returns ${status} from the proposal endpoint`, async () => {
-        progressionService.getProposal.mockRejectedValue(new Error(code));
+        progressionService.getProposal.mockRejectedValue(new AppError(code));
 
         const response = await request(app).get(PROGRESSION_URL).set("Cookie", authCookie());
 
         expect(response.status).toBe(status);
-        expect(response.body).toEqual({ error: message });
+        expect(response.body).toEqual({ success: false, message, data: null });
     });
 
     it(`returns ${status} from the commit endpoint`, async () => {
-        progressionService.commit.mockRejectedValue(new Error(code));
+        progressionService.commit.mockRejectedValue(new AppError(code));
 
         const response = await request(app)
             .post(PROGRESSION_URL)
@@ -112,6 +120,6 @@ describe.each([
             .send({ teams: ["t1"] });
 
         expect(response.status).toBe(status);
-        expect(response.body).toEqual({ error: message });
+        expect(response.body).toEqual({ success: false, message, data: null });
     });
 });

@@ -58,6 +58,30 @@ as won by neither team and contributes to no one's set total, though its points 
 count toward points for and against. Equal set scores should not occur in practice; the
 rule exists so that bad data degrades predictably rather than crashing.
 
+## Fixture Status
+
+There is one vocabulary, the `fixture_status` enum in `docs/database.md`. It travels
+unchanged from the database to the component. `WAITING` and `ONGOING` are not statuses;
+if you find them, they are drift.
+
+| Status | Meaning |
+|---|---|
+| `UPCOMING` | No set scores recorded. |
+| `LIVE` | At least one set recorded, and the organiser has not ended the match. |
+| `COMPLETED` | The organiser has ended the match. |
+| `CANCELLED` | The organiser cancelled it. The match never happened. |
+
+The server derives the status from the recorded sets and stores it. The client never
+asserts one — it submits scores and, when the match is over, says so. `CANCELLED` is the
+only status set directly, because nothing about it can be inferred from scores.
+
+The organiser's explicit end-of-match signal is a stopgap. Once rounds can express a
+match format, `COMPLETED` follows from a team reaching `ceil(N/2)` sets and the signal
+becomes a confirmation.
+
+Display labels are a separate concern. A component may render `LIVE` as "In progress";
+it may not rename the status in the payload.
+
 ## Standings
 
 Standings apply to round-robin rounds only. Knockout rounds produce a bracket, not a

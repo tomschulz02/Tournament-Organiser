@@ -19,3 +19,209 @@ Schedules should be regenerated independently of fixtures.
 
 Reason:
 Maintain direct SQL control and avoid unnecessary abstraction.
+
+## The Server Has Authority Over Tournament State
+
+Decided 2026-08-08.
+
+The test: **if the client and the server disagreed about a value, would the stored
+tournament be wrong? If yes, the server owns it.**
+
+Server-owned, regardless of what it costs in payload or response time:
+
+- standings, rankings and qualifiers
+- match outcomes derived from set scores
+- round completion and progression
+- tournament and fixture status transitions
+- fixture generation
+- team membership of a division (`state.teams`)
+- anything written to `divisions.state`, which is validated on write
+
+Client-owned, because it is derived from data the client already holds and is then
+discarded:
+
+- sorting, filtering, tab and expand state
+- date, ratio and status formatting
+- search over an already-fetched list
+- optimistic and pending UI states
+
+The client may propose. It may not decide. `progression.service.js` is the reference
+implementation: `getProposal` computes a default, the organiser may amend it, and
+`commit` revalidates the amended list from scratch rather than trusting the proposal it
+issued. Client-side validation is encouraged as user experience and is never the only
+check.
+
+Reason:
+Two authorities over the same state means the tournament record can disagree with what
+the organiser was shown, and there is no way to tell which is right after the fact.
+
+### Corollary: reducing payload does not license moving authority
+
+Where response time matters, scope and cache before relocating computation. Narrowing
+what an endpoint returns, and using `divisions.last_update` for conditional requests,
+both cut cost without moving a rule to the client. Computation moves to the client only
+when its output is genuinely ephemeral.
+
+## Schedule Generation Runs In The Client; The Server Validates
+
+Decided 2026-08-08. Supersedes the earlier intention, recorded in
+`docs/architecture.md`, to move the generator to a backend service.
+
+Generating a schedule is a proposal, not a commitment — the organiser edits it before it
+is saved. It can therefore run in the client without breaching the decision above, so
+long as the server validates before writing. This keeps generation off the server and
+avoids a round trip per regeneration.
+
+The line: **the server rejects schedules that are impossible; the client is responsible
+for schedules that are good.**
+
+Impossible, rejected by the server on write:
+
+- a fixture id not belonging to the division, or appearing twice
+- two fixtures on the same court in overlapping slots
+- one team required in two places at once
+- slots outside the tournament's start and end dates, or ending before they start
+- a knockout fixture scheduled before the round that feeds it
+
+Good, and none of the server's concern: court balance, rest time between a team's
+matches, minimising gaps, court preferences, how days are packed. These are the
+generator's heuristics and the organiser's judgement.
+
+Partial schedules are legal. Not every fixture has to be placed.
+
+Reason:
+The validator only has to detect impossibility, which is a far smaller job than
+generation. That keeps the duplication between the two tiers small enough that no shared
+module is needed.
+
+## Typed Errors With A Central Handler
+
+Decided 2026-08-08. The full contract is in `docs/api.md`.
+
+Repositories previously threw in some functions and returned an error string from the
+catch in others. That was not a disagreement between two positions; it was two
+half-finished attempts made before the approach had been decided. This is the decision.
+
+Failures are of exactly two kinds. **Expected domain failures** are part of the API
+contract and carry a code, a status and a client-safe message. **Unexpected faults** are
+everything else and are all 500s with a fixed generic message, with the detail logged
+rather than returned.
+
+Repositories always throw and never return an error string, wrapping the underlying
+error as `cause` so the Postgres code survives. Services translate expected conditions
+into a thrown `AppError` naming a condition, not a status. Controllers do not catch at
+all — Express 5 forwards async rejections on its own. One error middleware maps, builds
+the envelope and logs.
+
+Code, status and user-facing message are declared together in a single catalogue,
+`api/src/errors.js`. An unrecognised code is a 500.
+
+Reason:
+Keeping HTTP out of services is what `docs/architecture.md` already requires, and a
+single catalogue means the wording of every user-facing failure lives in one auditable
+file rather than being reinvented per controller. Preserving `cause` is what makes it
+possible to turn a unique-constraint violation into a 409 that says the email is already
+registered, instead of the 500 it currently produces.
+
+## Ownership Is Checked In The Service, Not In Middleware
+
+Decided 2026-08-08.
+
+Two layers, with different jobs. `requireAuth` middleware proves **identity** — that a
+valid session exists, so `req.user.id` can be trusted. The service proves **permission** —
+that this user owns the tournament being acted on. Middleware cannot do the second
+without duplicating work.
+
+Rules:
+
+- Every service function that mutates tournament data takes `userId` as a **required**
+  parameter. Not optional, not read from a context. A required parameter cannot be
+  omitted silently; skipping the check means passing an argument and ignoring it, which
+  is visible in review. This is what replaces the auditability that a route-level guard
+  would have provided.
+- The ownership check rides along with a fetch the service already needed. Three
+  resolvers, one per entry point, each returning the row plus the owner:
+  `getDivisionWithOwner` for a division id (exists); an equivalent joining fixtures →
+  divisions → tournaments for a fixture id; and `created_by` straight from
+  `getTournamentById` for a tournament id.
+- A mismatch throws `NOT_TOURNAMENT_OWNER`, which the catalogue maps to 403.
+- Ownership guards organiser-only **reads** as well as writes. `GET /progression`
+  already requires it, because the proposal is not public information. Which endpoints
+  need it is recorded per-endpoint in `docs/api.md`, not inferred from the HTTP verb.
+
+`progression.service.js` `loadDivision` is the reference implementation.
+
+Reason:
+Route middleware would fetch the row to authorise, then the service would fetch it again
+to work with. Every mutation starts from a different resource — a fixture id, a division
+id, a tournament id — so a single guard would need its own lookup per type and would
+still not save the service any work.
+
+### Corollary: existence is not secret
+
+`loadDivision` throws `DIVISION_NOT_FOUND` before `NOT_TOURNAMENT_OWNER`, so a non-owner
+learns that a division exists. That is deliberate and should not be "hardened".
+Tournaments are publicly browsable, so their existence is already public.
+
+### Open: admin override
+
+The JWT carries an `admin` claim and nothing reads it. Whether an admin bypasses the
+ownership check is undecided. Until it is, `admin` grants nothing.
+
+## One Fixture Status Vocabulary, Derived By The Server
+
+Decided 2026-08-08.
+
+The values are the `fixture_status` enum in `docs/database.md`: `UPCOMING`, `LIVE`,
+`COMPLETED`, `CANCELLED`. They travel unchanged from the database to the React
+component. `WAITING` and `ONGOING` are removed.
+
+`tournamentViewFormatter.js` currently translates the enum into `WAITING`/`ONGOING` on
+the way out, and `ViewTabs.jsx` translates it back with a `statusMap` in order to
+display it. Both translations go.
+
+**Status values and display labels are different things.** Showing a user "In progress"
+is a presentation choice and belongs in the component. A second vocabulary in the
+payload is not, and was the direct cause of known bug 5 — `hasPlayedFixtures` tests for
+`LIVE` while the formatter emits `ONGOING`, so a round already under way is not
+detected. Removing the translation fixes it.
+
+Status is **derived by the server, then stored**:
+
+| Status | Meaning |
+|---|---|
+| `UPCOMING` | No set scores recorded. |
+| `LIVE` | At least one set recorded, and the organiser has not ended the match. |
+| `COMPLETED` | The organiser has ended the match. |
+| `CANCELLED` | The organiser cancelled it. The match never happened. |
+
+Only `CANCELLED` is a genuine manual flag. The rest follow from the score data, so the
+client never sends a status — it sends scores and an intent. `updateScore` therefore
+narrows to `(fixtureId, sets, finished)`; `status`, `hashId` and `rounds` are removed
+from the payload.
+
+Because the write that sets `COMPLETED` is the only thing that can complete a fixture,
+the same transaction maintains `round.completedGames`, which nothing currently does.
+
+Reason:
+Two vocabularies for one concept meant every consumer had to know which side of the
+translation it was on, and one of them got it wrong. Deriving the status server-side
+follows from the server having authority over tournament state; a status the client
+asserts is a status the client can get wrong.
+
+Known dependency: the server cannot fully derive `COMPLETED` yet. A match ends when a
+team wins `ceil(N/2)` sets, and round objects have no match-format key — see
+`docs/division-state.md`. Until they do, the organiser signals the end of a match
+explicitly. When per-round best-of lands, that signal becomes a confirmation rather than
+the source of truth and nothing else changes.
+
+This does not foreclose live scoring. `LIVE` already means in progress; live scoring is
+more frequent writes to the same fields.
+
+### Corollary: the response envelope has exactly three keys
+
+`success`, `message`, `data`. `message` is display-ready — the client can pass it
+straight to `showMessage`. There is no machine-readable error code in the envelope; the
+HTTP status carries that, and the client's `request` helper preserves it on the thrown
+`ApiError` rather than discarding it as `fetchWithRetry` did. If two conditions ever need
+distinguishing within one status, a code goes inside `data` at that point.

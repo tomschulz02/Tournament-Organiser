@@ -34,16 +34,21 @@ async function createDivision(details, tournamentId, userId){
         await divisionsRepository.createDivision(divisionId, tournamentId, division, userId, client);
 
         //store fixtures in database
-        generatedFixtures.fixtures.forEach(fixture => {
-            fixtureService.createFixture(divisionId, fixture, client);
-        })
+        // Awaited: createFixture now throws on a failed insert, and an unawaited
+        // rejection here would be an unhandled rejection rather than a rollback.
+        await Promise.all(
+            generatedFixtures.fixtures.map(fixture =>
+                fixtureService.createFixture(divisionId, fixture, client)
+            )
+        );
 
         await client.query("COMMIT");
 
         return divisionId;
     } catch (error) {
         await client.query("ROLLBACK");
-        throw new Error(error);
+        // Rethrown untouched. new Error(error) stringified it and lost the cause.
+        throw error;
         // Coverage artifact: v8 emits a single-path "branch" on the finally
         // below, for the case of the catch completing normally — which cannot
         // happen because it always rethrows. Both real routes through the

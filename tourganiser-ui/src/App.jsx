@@ -128,17 +128,13 @@ function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 		e.preventDefault();
 		setLoading(true);
 		try {
-			const response = await logoutUser();
-			if (response.success) {
-				setLoggedIn(false);
-				showMessage('Successfully logged out!', 'success');
-				setUsername('Guest');
-				// window.location.reload();
-			} else {
-				showMessage('Logout failed. Please try again.', 'error');
-			}
+			await logoutUser();
+			setLoggedIn(false);
+			showMessage('Successfully logged out!', 'success');
+			setUsername('Guest');
+			// window.location.reload();
 		} catch (error) {
-			showMessage(`Error logging out: ${error}`, 'error');
+			showMessage(error.message, 'error');
 		} finally {
 			onClose();
 			setLoading(false);

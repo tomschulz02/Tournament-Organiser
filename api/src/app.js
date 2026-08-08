@@ -6,6 +6,8 @@ import userRouter from "./routes/users.route.js";
 import divisionRouter from "./routes/divisions.route.js";
 import fixtureRouter from "./routes/fixtures.route.js";
 import tournamentRouter from "./routes/tournaments.route.js";
+import { notFound } from "./middleware/notFound.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 app.use(express.json());
@@ -53,5 +55,10 @@ app.use("/api/users", userRouter);
 app.use("/api/divisions", divisionRouter);
 app.use("/api/fixtures", fixtureRouter);
 app.use("/api/tournaments", tournamentRouter);
+
+// Order matters. notFound turns an unmatched route into an AppError, and
+// errorHandler must be last or Express will not treat it as error middleware.
+app.use(notFound);
+app.use(errorHandler);
 
 export default app;

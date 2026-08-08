@@ -9,6 +9,7 @@ vi.mock("../../../src/services/users.service.js", () => ({
 
 const { userController } = await import("../../../src/controllers/users.controller.js");
 const { userService } = await import("../../../src/services/users.service.js");
+const { AppError } = await import("../../../src/errors.js");
 const { makeReq, makeRes } = await import("../../helpers/http.js");
 
 // NODE_ENV is "test" in the suite, so the cookie is the non-production variant.
@@ -23,14 +24,17 @@ const EXPECTED_COOKIE = {
 beforeEach(() => {
     vi.mocked(userService.createUser).mockReset();
     vi.mocked(userService.loginUser).mockReset();
-    vi.spyOn(console, "error").mockImplementation(() => {});
 });
+
+// The controllers no longer catch. A rejected service call propagates to the
+// error middleware, which owns every status and message; these tests assert only
+// that the rejection is not swallowed.
 
 describe("userController.signup", () => {
     const body = { username: "tom", email: "tom@example.com", password: "secret", confirmPassword: "secret" };
 
-    it("sets the session cookie and returns the new username", async () => {
-        userService.createUser.mockResolvedValue("signed-token");
+    it("sets the session cookie and returns the new username in data", async () => {
+        userService.createUser.mockResolvedValue({ token: "signed-token", username: "tom" });
         const res = makeRes();
 
         await userController.signup(makeReq({ body }), res);
@@ -41,32 +45,27 @@ describe("userController.signup", () => {
         expect(res.json).toHaveBeenCalledWith({
             success: true,
             message: "User registered successfully",
-            user: { username: "tom" }
+            data: { username: "tom" }
         });
     });
 
-    it.each([
-        ["PASSWORDS_DO_NOT_MATCH", 400, "Passwords do not match"],
-        ["MISSING_FIELDS", 400, "Missing required fields"],
-        ["USER_CREATION_ERROR", 500, "Failed to create account"],
-        ["SOMETHING_ELSE", 500, "Internal server error"]
-    ])("maps %s to %i", async (code, status, message) => {
-        userService.createUser.mockRejectedValue(new Error(code));
+    it("lets a failure propagate instead of mapping it", async () => {
+        const failure = new AppError("EMAIL_ALREADY_REGISTERED");
+        userService.createUser.mockRejectedValue(failure);
         const res = makeRes();
 
-        await userController.signup(makeReq({ body }), res);
+        await expect(userController.signup(makeReq({ body }), res)).rejects.toBe(failure);
 
-        expect(res.status).toHaveBeenCalledWith(status);
-        expect(res.json).toHaveBeenCalledWith({ error: message });
         expect(res.cookie).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
     });
 });
 
 describe("userController.login", () => {
     const body = { email: "tom@example.com", password: "secret" };
 
-    it("sets the session cookie on success", async () => {
-        userService.loginUser.mockResolvedValue("signed-token");
+    it("sets the session cookie and returns the username, so the client can greet the user", async () => {
+        userService.loginUser.mockResolvedValue({ token: "signed-token", username: "tom" });
         const res = makeRes();
 
         await userController.login(makeReq({ body }), res);
@@ -74,21 +73,20 @@ describe("userController.login", () => {
         expect(userService.loginUser).toHaveBeenCalledWith("tom@example.com", "secret");
         expect(res.cookie).toHaveBeenCalledWith("token", "signed-token", EXPECTED_COOKIE);
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(res.json).toHaveBeenCalledWith({ success: true, message: "Login successful" });
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Login successful",
+            data: { username: "tom" }
+        });
     });
 
-    it.each([
-        ["MISSING_FIELDS", 400, "Missing required fields"],
-        ["INVALID_CREDENTIALS", 401, "Invalid email or password"],
-        ["LOGIN_ERROR", 500, "Internal server error"]
-    ])("maps %s to %i", async (code, status, message) => {
-        userService.loginUser.mockRejectedValue(new Error(code));
+    it("lets a failure propagate instead of mapping it", async () => {
+        const failure = new AppError("INVALID_CREDENTIALS");
+        userService.loginUser.mockRejectedValue(failure);
         const res = makeRes();
 
-        await userController.login(makeReq({ body }), res);
+        await expect(userController.login(makeReq({ body }), res)).rejects.toBe(failure);
 
-        expect(res.status).toHaveBeenCalledWith(status);
-        expect(res.json).toHaveBeenCalledWith({ error: message });
         expect(res.cookie).not.toHaveBeenCalled();
     });
 });
@@ -105,29 +103,23 @@ describe("userController.logout", () => {
             sameSite: "lax",
             path: "/"
         });
-        expect(res.json).toHaveBeenCalledWith({ success: true, message: "User logged out" });
-    });
-
-    it("reports a failure to clear the cookie as a 500", async () => {
-        const res = makeRes();
-        res.clearCookie.mockImplementationOnce(() => {
-            throw new Error("HEADERS_SENT");
-        });
-
-        await userController.logout(makeReq(), res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ success: true, message: "User logged out", data: null });
     });
 });
 
 describe("userController.checkLogin", () => {
-    it("reports the signed-in username", async () => {
+    it("reports the signed-in username inside data", async () => {
         const res = makeRes();
 
         await userController.checkLogin(makeReq({ user: { username: "tom" } }), res);
 
-        expect(res.json).toHaveBeenCalledWith({ loggedIn: true, user: "tom" });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Logged in",
+            data: { loggedIn: true, username: "tom" }
+        });
     });
 
     it("reports an anonymous caller", async () => {
@@ -135,33 +127,22 @@ describe("userController.checkLogin", () => {
 
         await userController.checkLogin(makeReq(), res);
 
-        expect(res.json).toHaveBeenCalledWith({ loggedIn: false });
-    });
-
-    it("reports a failure to respond as a 500", async () => {
-        const res = makeRes();
-        res.json.mockImplementationOnce(() => {
-            throw new Error("HEADERS_SENT");
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Not logged in",
+            data: { loggedIn: false, username: null }
         });
-
-        await userController.checkLogin(makeReq(), res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenLastCalledWith({ error: "Internal server error" });
     });
 });
 
 describe("userController.getUserProfile", () => {
-    it("is unimplemented and never sends a response", async () => {
-        // The try block is empty, so this resolves without touching res. Over
-        // HTTP that leaves the request hanging until the client gives up, which
-        // is why the route is not exercised through supertest.
+    it("rejects with 501 rather than hanging the request", async () => {
         const res = makeRes();
 
-        await expect(userController.getUserProfile(makeReq({ params: { id: "user-1" } }), res)).resolves.toBeUndefined();
+        await expect(
+            userController.getUserProfile(makeReq({ params: { id: "user-1" } }), res)
+        ).rejects.toMatchObject({ code: "NOT_IMPLEMENTED", status: 501 });
 
-        expect(res.status).not.toHaveBeenCalled();
         expect(res.json).not.toHaveBeenCalled();
-        expect(res.send).not.toHaveBeenCalled();
     });
 });

@@ -243,11 +243,14 @@ describe("fixtureService.createFixture", () => {
         expect(fixturesRepository.createFixture.mock.calls[0]).toHaveLength(8);
     });
 
-    it("wraps a repository failure", async () => {
-        fixturesRepository.createFixture.mockRejectedValueOnce(new Error("CREATE_FIXTURE_ERROR"));
+    it("lets a repository failure propagate untouched", async () => {
+        // It used to be rethrown as new Error(error), which stringified it and
+        // discarded the cause the middleware needs for its log.
+        const failure = new Error("Failed to create fixture", { cause: new Error("duplicate key") });
+        fixturesRepository.createFixture.mockRejectedValueOnce(failure);
 
         await expect(
             fixtureService.createFixture("div-1", { id: "f5", matchNo: 1, team1: "a", team2: "b", round: "R" })
-        ).rejects.toThrow("CREATE_FIXTURE_ERROR");
+        ).rejects.toBe(failure);
     });
 });

@@ -177,14 +177,10 @@ function BrowseTournaments() {
 			try {
 				const response = await getTournaments();
 
-				if (response?.error) {
-					throw new Error(response.error);
-				}
-
-				setTournaments(normaliseTournamentGroups(response?.message));
-			} catch {
+				setTournaments(normaliseTournamentGroups(response?.data));
+			} catch (error) {
 				setTournaments(EMPTY_TOURNAMENT_GROUPS);
-				showMessage('Error fetching tournaments', 'error');
+				showMessage(error.message, 'error');
 			} finally {
 				setIsLoading(false);
 			}

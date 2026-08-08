@@ -28,15 +28,11 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 				const response = await fetchRoundProgression(divisionId);
 				if (cancelled) return;
 
-				if (!response?.success) {
-					setError(response?.error || 'Could not load the round results.');
-					return;
-				}
-
 				setProposal(response.data);
 				setSelectedIds(response.data.qualifiers.map((team) => team.id));
 			} catch (err) {
-				if (!cancelled) setError(err?.error || 'Could not load the round results.');
+				// The server's message is display-ready.
+				if (!cancelled) setError(err.message || 'Could not load the round results.');
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -80,16 +76,11 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 		try {
 			const response = await confirmRoundProgression(divisionId, selectedIds);
 
-			if (!response?.success) {
-				// The backend revalidates independently, so this is a real rejection
-				// rather than something the disabled state should have caught.
-				setError(response?.error || 'Could not start the next round.');
-				return;
-			}
-
 			onConfirmed?.(response.data);
 		} catch (err) {
-			setError(err?.error || 'Could not start the next round.');
+			// The backend revalidates independently, so a rejection here is real
+			// rather than something the disabled state should have caught.
+			setError(err.message || 'Could not start the next round.');
 		} finally {
 			setSaving(false);
 		}

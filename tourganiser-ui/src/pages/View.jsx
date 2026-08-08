@@ -19,13 +19,7 @@ export default function ViewPage() {
 			try {
 				const response = await fetchTournamentData(id);
 
-				if (!response?.success) {
-					setTournamentData(null);
-					setNotFound(true);
-					return;
-				}
-
-				setTournamentData(response);
+				setTournamentData(response.data);
 			} catch (error) {
 				console.error(error);
 				setTournamentData(null);

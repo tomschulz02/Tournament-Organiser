@@ -20,10 +20,11 @@ export default function TournamentView({ tournament }) {
 	const navigate = useNavigate();
 	const location = useLocation();
 
-	const tournamentMessage = tournament?.message || {};
-	const tournamentDetails = tournamentMessage.tournament || {};
-	const dashboard = tournamentMessage.dashboard || {};
-	const divisions = Array.isArray(tournamentMessage.divisions) ? tournamentMessage.divisions : [];
+	// `tournament` is the response envelope's data, which carries the view payload
+	// alongside loggedIn and creator.
+	const tournamentDetails = tournament?.tournament || {};
+	const dashboard = tournament?.dashboard || {};
+	const divisions = Array.isArray(tournament?.divisions) ? tournament.divisions : [];
 
 	const selectedDivisionId = searchParams.get('division') || '';
 	const selectedDivision = divisions.find((division) => division.id === selectedDivisionId) || null;

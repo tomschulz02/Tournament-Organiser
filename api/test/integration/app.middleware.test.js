@@ -29,6 +29,10 @@ beforeEach(() => {
 
 // The middleware in src/app.js populates req.user from the session cookie and
 // never rejects; requireAuth is what turns a missing session into a 401.
+//
+// check-login is the observation point: its data reports whatever req.user was
+// left as.
+const ANONYMOUS = { loggedIn: false, username: null };
 
 describe("session middleware", () => {
     it("populates req.user from a valid token", async () => {
@@ -37,13 +41,13 @@ describe("session middleware", () => {
             .set("Cookie", authCookie({ id: "user-1", username: "tom" }));
 
         expect(response.status).toBe(200);
-        expect(response.body).toEqual({ loggedIn: true, user: "tom" });
+        expect(response.body.data).toEqual({ loggedIn: true, username: "tom" });
     });
 
     it("leaves req.user null when there is no cookie", async () => {
         const response = await request(app).get("/api/users/check-login");
 
-        expect(response.body).toEqual({ loggedIn: false });
+        expect(response.body.data).toEqual(ANONYMOUS);
     });
 
     it("leaves req.user null for a token signed with the wrong secret", async () => {
@@ -51,7 +55,7 @@ describe("session middleware", () => {
             .get("/api/users/check-login")
             .set("Cookie", cookieSignedWithWrongSecret());
 
-        expect(response.body).toEqual({ loggedIn: false });
+        expect(response.body.data).toEqual(ANONYMOUS);
     });
 
     it("leaves req.user null for an expired token", async () => {
@@ -59,13 +63,13 @@ describe("session middleware", () => {
             .get("/api/users/check-login")
             .set("Cookie", expiredAuthCookie());
 
-        expect(response.body).toEqual({ loggedIn: false });
+        expect(response.body.data).toEqual(ANONYMOUS);
     });
 
     it("leaves req.user null for a token that is not a JWT at all", async () => {
         const response = await request(app).get("/api/users/check-login").set("Cookie", "token=garbage");
 
-        expect(response.body).toEqual({ loggedIn: false });
+        expect(response.body.data).toEqual(ANONYMOUS);
     });
 
     it("skips the login route entirely, so a broken cookie cannot block signing in", async () => {
@@ -96,7 +100,11 @@ describe("requireAuth on protected routes", () => {
         const response = await request(app).get("/api/divisions/div-1/progression");
 
         expect(response.status).toBe(401);
-        expect(response.body).toEqual({ error: "Authentication required" });
+        expect(response.body).toEqual({
+            success: false,
+            message: "You must be logged in to do that",
+            data: null
+        });
     });
 
     it("rejects a request whose token did not verify", async () => {

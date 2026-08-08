@@ -1,3 +1,5 @@
+import { AppError } from "../errors.js";
+
 // Rejects a request when no valid session is present.
 //
 // The global middleware in app.js only populates req.user; it never rejects.
@@ -5,7 +7,7 @@
 
 export function requireAuth(req, res, next) {
 	if (!req.user) {
-		return res.status(401).json({ error: "Authentication required" });
+		return next(new AppError("AUTH_REQUIRED"));
 	}
 
 	next();

@@ -18,9 +18,26 @@ const client = dbMock.client;
 beforeEach(() => {
     uuidState.next = 0;
     resetDbMock();
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
 });
+
+// Every function here throws on failure and keeps the underlying error as cause,
+// so the Postgres code survives as far as the error middleware's log.
+async function failureFrom(promise) {
+    return promise.then(
+        (value) => {
+            throw new Error(`expected a rejection, got ${JSON.stringify(value)}`);
+        },
+        (err) => err
+    );
+}
+
+async function expectWrapped(promise, message, underlying) {
+    const failure = await failureFrom(promise);
+
+    expect(failure.message).toBe(message);
+    expect(failure.cause).toBe(underlying);
+    return failure;
+}
 
 describe("createDivision", () => {
     const details = { name: "Division A", num_teams: 8, type: "Classic", state: { teams: [] } };
@@ -48,18 +65,15 @@ describe("createDivision", () => {
         expect(db.query.mock.calls[0][1][5]).toBe("{}");
     });
 
-    it("rethrows the database message", async () => {
-        db.query.mockRejectedValueOnce(new Error("duplicate key"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("duplicate key");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.createDivision("div-1", "tour-1", details, "user-1"))
-            .rejects.toThrow("duplicate key");
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        db.query.mockRejectedValueOnce(new Error(""));
-
-        await expect(divisionsRepository.createDivision("div-1", "tour-1", details, "user-1"))
-            .rejects.toThrow("DATABASE_ERROR");
+        await expectWrapped(
+            divisionsRepository.createDivision("div-1", "tour-1", details, "user-1"),
+            "Failed to create division",
+            underlying
+        );
     });
 });
 
@@ -73,10 +87,11 @@ describe("createTeam", () => {
         );
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("relation does not exist"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("relation does not exist");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.createTeam("Aces", "div-1")).rejects.toThrow("TEAM_CREATION_ERROR_DB");
+        await expectWrapped(divisionsRepository.createTeam("Aces", "div-1"), "Failed to create team", underlying);
     });
 });
 
@@ -88,10 +103,11 @@ describe("getTeamNames", () => {
         expect(db.query).toHaveBeenCalledWith("SELECT id, name FROM teams WHERE division_id=$1;", ["div-1"]);
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("column does not exist"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("column does not exist");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.getTeamNames("div-1")).rejects.toThrow("TEAM_FETCH_ERROR_DB");
+        await expectWrapped(divisionsRepository.getTeamNames("div-1"), "Failed to fetch team names", underlying);
     });
 });
 
@@ -111,24 +127,20 @@ describe("updateTeams", () => {
         expect(client.release).toHaveBeenCalledOnce();
     });
 
-    it("rolls back and returns the failure message rather than throwing", async () => {
+    it("rolls back and throws rather than returning an error string", async () => {
+        const underlying = new Error("column num_groups does not exist");
         client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("column num_groups does not exist");
+            if (sql.startsWith("UPDATE")) throw underlying;
             return { rows: [] };
         });
 
-        expect(await divisionsRepository.updateTeams("div-1", "user-1", [])).toBe("column num_groups does not exist");
+        await expectWrapped(
+            divisionsRepository.updateTeams("div-1", "user-1", []),
+            "Failed to update teams",
+            underlying
+        );
         expect(clientSql()).toContain("ROLLBACK");
         expect(client.release).toHaveBeenCalledOnce();
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("");
-            return { rows: [] };
-        });
-
-        expect(await divisionsRepository.updateTeams("div-1", "user-1", [])).toBe("UPDATE_TEAMS_ERROR");
     });
 });
 
@@ -140,23 +152,15 @@ describe("updateTeam", () => {
         expect(client.query.mock.calls[1][1]).toEqual(["Aces", "t1"]);
     });
 
-    it("rolls back and returns the failure message", async () => {
+    it("rolls back and throws rather than returning an error string", async () => {
+        const underlying = new Error("no such team");
         client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("no such team");
+            if (sql.startsWith("UPDATE")) throw underlying;
             return { rows: [] };
         });
 
-        expect(await divisionsRepository.updateTeam("t1", "Aces")).toBe("no such team");
+        await expectWrapped(divisionsRepository.updateTeam("t1", "Aces"), "Failed to update team", underlying);
         expect(clientSql()).toContain("ROLLBACK");
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("");
-            return { rows: [] };
-        });
-
-        expect(await divisionsRepository.updateTeam("t1", "Aces")).toBe("UPDATE_TEAM_ERROR");
     });
 });
 
@@ -173,14 +177,18 @@ describe("updateGroups", () => {
         expect(client.query.mock.calls[1][1]).toEqual(['[["t1"]]', "div-1"]);
     });
 
-    it("rolls back and throws on failure", async () => {
+    it("rolls back and throws on failure, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid jsonb");
         client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("invalid jsonb");
+            if (sql.startsWith("UPDATE")) throw underlying;
             return { rows: [] };
         });
 
-        await expect(divisionsRepository.updateGroups("div-1", "user-1", [], null))
-            .rejects.toThrow("UPDATE_GROUPS_ERROR");
+        await expectWrapped(
+            divisionsRepository.updateGroups("div-1", "user-1", [], null),
+            "Failed to update groups",
+            underlying
+        );
         expect(clientSql()).toContain("ROLLBACK");
         expect(client.release).toHaveBeenCalledOnce();
     });
@@ -201,14 +209,18 @@ describe("updateRounds", () => {
         expect(client.query.mock.calls[1][1]).toEqual([JSON.stringify(rounds), "1", "div-1"]);
     });
 
-    it("rolls back and throws on failure", async () => {
+    it("rolls back and throws on failure, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid uuid");
         client.query.mockImplementation(async (sql) => {
-            if (squash(sql).startsWith("UPDATE")) throw new Error("invalid uuid");
+            if (squash(sql).startsWith("UPDATE")) throw underlying;
             return { rows: [] };
         });
 
-        await expect(divisionsRepository.updateRounds("div-1", "user-1", [], null, 1))
-            .rejects.toThrow("UPDATE_ROUNDS_ERROR");
+        await expectWrapped(
+            divisionsRepository.updateRounds("div-1", "user-1", [], null, 1),
+            "Failed to update rounds",
+            underlying
+        );
         expect(clientSql()).toContain("ROLLBACK");
     });
 });
@@ -227,10 +239,11 @@ describe("getDivisionWithOwner", () => {
         expect(await divisionsRepository.getDivisionWithOwner("div-1")).toBeNull();
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.getDivisionWithOwner("div-1")).rejects.toThrow("GET_DIVISION_ERROR");
+        await expectWrapped(divisionsRepository.getDivisionWithOwner("div-1"), "Failed to fetch division", underlying);
     });
 });
 
@@ -248,10 +261,11 @@ describe("getTeamsByIds", () => {
         expect(db.query).not.toHaveBeenCalled();
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.getTeamsByIds(["t1"])).rejects.toThrow("GET_TEAMS_ERROR");
+        await expectWrapped(divisionsRepository.getTeamsByIds(["t1"]), "Failed to fetch teams", underlying);
     });
 });
 
@@ -266,10 +280,15 @@ describe("getFixturesByDivisionId", () => {
         );
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.getFixturesByDivisionId("div-1")).rejects.toThrow("GET_FIXTURES_ERROR");
+        await expectWrapped(
+            divisionsRepository.getFixturesByDivisionId("div-1"),
+            "Failed to fetch fixtures",
+            underlying
+        );
     });
 });
 
@@ -285,10 +304,11 @@ describe("updateSchedule", () => {
         expect(params).toEqual(['{"slots":[]}', "div-1"]);
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(divisionsRepository.updateSchedule("div-1", {})).rejects.toThrow("UPDATE_SCHEDULE_ERROR");
+        await expectWrapped(divisionsRepository.updateSchedule("div-1", {}), "Failed to update schedule", underlying);
     });
 });
 
@@ -308,23 +328,25 @@ describe("getDivisionDetails", () => {
         expect(client.release).toHaveBeenCalledOnce();
     });
 
-    it("returns a not-found code when the tournament has no divisions", async () => {
+    it("returns an empty collection when the tournament has no divisions", async () => {
+        // Not a missing resource: the repository assigns no meaning to it, the
+        // same as getDivisionsByTournamentId returning [].
         client.query.mockResolvedValueOnce({ rows: [] });
 
-        expect(await divisionsRepository.getDivisionDetails("tour-1")).toBe("DIVISIONS_NOT_FOUND");
+        expect(await divisionsRepository.getDivisionDetails("tour-1")).toEqual({ divisions: [] });
         expect(client.release).toHaveBeenCalledOnce();
     });
 
-    it("returns the failure message rather than throwing", async () => {
-        client.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws rather than returning an error string", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
 
-        expect(await divisionsRepository.getDivisionDetails("tour-1")).toBe("connection lost");
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        client.query.mockRejectedValueOnce(new Error(""));
-
-        expect(await divisionsRepository.getDivisionDetails("tour-1")).toBe("GET_DIVISION_DETAILS_ERROR");
+        await expectWrapped(
+            divisionsRepository.getDivisionDetails("tour-1"),
+            "Failed to fetch division details",
+            underlying
+        );
+        expect(client.release).toHaveBeenCalledOnce();
     });
 });
 
@@ -339,12 +361,15 @@ describe("getDivisionsByTournamentId", () => {
         );
     });
 
-    it("rethrows the database message, falling back to a generic code", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
-        await expect(divisionsRepository.getDivisionsByTournamentId("tour-1")).rejects.toThrow("connection lost");
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        db.query.mockRejectedValueOnce(new Error(""));
-        await expect(divisionsRepository.getDivisionsByTournamentId("tour-1")).rejects.toThrow("GET_DIVISIONS_ERROR");
+        await expectWrapped(
+            divisionsRepository.getDivisionsByTournamentId("tour-1"),
+            "Failed to fetch divisions",
+            underlying
+        );
     });
 });
 
@@ -362,12 +387,14 @@ describe("getTeamsByDivisionIds", () => {
         expect(db.query).not.toHaveBeenCalled();
     });
 
-    it("rethrows the database message, falling back to a generic code", async () => {
-        db.query.mockRejectedValueOnce(new Error("column division_id does not exist"));
-        await expect(divisionsRepository.getTeamsByDivisionIds(["div-1"]))
-            .rejects.toThrow("column division_id does not exist");
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("column division_id does not exist");
+        db.query.mockRejectedValueOnce(underlying);
 
-        db.query.mockRejectedValueOnce(new Error(""));
-        await expect(divisionsRepository.getTeamsByDivisionIds(["div-1"])).rejects.toThrow("GET_TEAMS_ERROR");
+        await expectWrapped(
+            divisionsRepository.getTeamsByDivisionIds(["div-1"]),
+            "Failed to fetch teams by division",
+            underlying
+        );
     });
 });

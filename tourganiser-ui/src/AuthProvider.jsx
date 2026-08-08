@@ -10,15 +10,15 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         const checkLogin = async () => {
             try {
-                const response = await checkLoginStatus();
-                setIsLoggedIn(response.loggedIn);
-                if (response.loggedIn) {
-                    setUsername(response.user);
+                const { data } = await checkLoginStatus();
+                setIsLoggedIn(data.loggedIn);
+                if (data.loggedIn) {
+                    setUsername(data.username);
                 } else {
                     setUsername("Guest");
                     setIsLoggedIn(false);
                 }
-            } catch (error) {
+            } catch {
                 setIsLoggedIn(false);
             }
         };

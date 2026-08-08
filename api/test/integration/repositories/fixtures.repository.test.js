@@ -13,8 +13,18 @@ const client = dbMock.client;
 
 beforeEach(() => {
     resetDbMock();
-    vi.spyOn(console, "error").mockImplementation(() => {});
 });
+
+// Every function here throws on failure and keeps the underlying error as cause,
+// so the Postgres code survives as far as the error middleware's log.
+async function failureFrom(promise) {
+    return promise.then(
+        (value) => {
+            throw new Error(`expected a rejection, got ${JSON.stringify(value)}`);
+        },
+        (err) => err
+    );
+}
 
 describe("getFixtures", () => {
     it("returns every fixture in the division", async () => {
@@ -24,16 +34,14 @@ describe("getFixtures", () => {
         expect(db.query).toHaveBeenCalledWith("SELECT * FROM fixtures WHERE division_id = $1", ["div-1"]);
     });
 
-    it("returns the failure message rather than throwing", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws rather than returning an error string, keeping the cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        expect(await fixturesRepository.getFixtures("div-1")).toBe("connection lost");
-    });
+        const failure = await failureFrom(fixturesRepository.getFixtures("div-1"));
 
-    it("falls back to a generic code when the failure has no message", async () => {
-        db.query.mockRejectedValueOnce(new Error(""));
-
-        expect(await fixturesRepository.getFixtures("div-1")).toBe("GET_FIXTURES_ERROR");
+        expect(failure.message).toBe("Failed to fetch fixtures");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
@@ -45,16 +53,14 @@ describe("getResults", () => {
         expect(squash(db.query.mock.calls[0][0])).toContain("AND status = 'COMPLETED'");
     });
 
-    it("returns the failure message rather than throwing", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws rather than returning an error string, keeping the cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        expect(await fixturesRepository.getResults("div-1")).toBe("connection lost");
-    });
+        const failure = await failureFrom(fixturesRepository.getResults("div-1"));
 
-    it("falls back to a generic code when the failure has no message", async () => {
-        db.query.mockRejectedValueOnce(new Error(""));
-
-        expect(await fixturesRepository.getResults("div-1")).toBe("GET_RESULTS_ERROR");
+        expect(failure.message).toBe("Failed to fetch results");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
@@ -73,13 +79,14 @@ describe("getFixturesByDivisionIds", () => {
         expect(db.query).not.toHaveBeenCalled();
     });
 
-    it("rethrows the database message, falling back to a generic code", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
-        await expect(fixturesRepository.getFixturesByDivisionIds(["div-1"])).rejects.toThrow("connection lost");
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        db.query.mockRejectedValueOnce(new Error(""));
-        await expect(fixturesRepository.getFixturesByDivisionIds(["div-1"]))
-            .rejects.toThrow("GET_FIXTURES_BY_DIVISION_IDS_ERROR");
+        const failure = await failureFrom(fixturesRepository.getFixturesByDivisionIds(["div-1"]));
+
+        expect(failure.message).toBe("Failed to fetch fixtures by division");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
@@ -98,37 +105,30 @@ describe("updateResult", () => {
         expect(client.query.mock.calls[1][1]).toEqual([[21, 18], [15, 21], "COMPLETED", "f1"]);
     });
 
-    it("returns a not-found code and leaves the transaction open when no row matched", async () => {
+    it("returns null and closes the transaction when no row matched", async () => {
         client.query.mockResolvedValue({ rows: [], rowCount: 0 });
 
-        expect(await fixturesRepository.updateResult("missing", [[], []], "COMPLETED", null))
-            .toBe("FIXTURE_NOT_FOUND");
+        expect(await fixturesRepository.updateResult("missing", [[], []], "COMPLETED", null)).toBeNull();
 
-        // Neither COMMIT nor ROLLBACK is issued on this path; only release ends it.
+        // This path used to return without a COMMIT or a ROLLBACK, leaving the
+        // transaction open until the client was released.
+        expect(clientSql()).toContain("ROLLBACK");
         expect(clientSql()).not.toContain("COMMIT");
-        expect(clientSql()).not.toContain("ROLLBACK");
         expect(client.release).toHaveBeenCalledOnce();
     });
 
-    it("rolls back and returns the failure message", async () => {
+    it("rolls back and throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid input syntax");
         client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("invalid input syntax");
+            if (sql.startsWith("UPDATE")) throw underlying;
             return { rows: [] };
         });
 
-        expect(await fixturesRepository.updateResult("f1", [[], []], "COMPLETED", null))
-            .toBe("invalid input syntax");
+        const failure = await failureFrom(fixturesRepository.updateResult("f1", [[], []], "COMPLETED", null));
+
+        expect(failure.message).toBe("Failed to update fixture");
+        expect(failure.cause).toBe(underlying);
         expect(clientSql()).toContain("ROLLBACK");
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("");
-            return { rows: [] };
-        });
-
-        expect(await fixturesRepository.updateResult("f1", [[], []], "COMPLETED", null))
-            .toBe("UPDATE_FIXTURE_ERROR");
     });
 });
 
@@ -152,16 +152,16 @@ describe("createFixture", () => {
         expect(db.query).not.toHaveBeenCalled();
     });
 
-    it("swallows a failure and returns its message", async () => {
-        db.query.mockRejectedValueOnce(new Error("duplicate key"));
+    it("throws on a failed insert rather than failing silently", async () => {
+        // It used to return the message, which the service ignored, so a failed
+        // insert left the division short of fixtures with nothing reported.
+        const underlying = new Error("duplicate key");
+        db.query.mockRejectedValueOnce(underlying);
 
-        expect(await fixturesRepository.createFixture(...args)).toBe("duplicate key");
-    });
+        const failure = await failureFrom(fixturesRepository.createFixture(...args));
 
-    it("falls back to a generic code when the failure has no message", async () => {
-        db.query.mockRejectedValueOnce(new Error(""));
-
-        expect(await fixturesRepository.createFixture(...args)).toBe("CREATE_FIXTURE_ERROR");
+        expect(failure.message).toBe("Failed to create fixture");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
@@ -190,14 +190,17 @@ describe("updateFixtures", () => {
         expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
     });
 
-    it("rolls back and throws on failure", async () => {
+    it("rolls back and throws on failure, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid uuid");
         client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw new Error("invalid uuid");
+            if (sql.startsWith("UPDATE")) throw underlying;
             return { rows: [] };
         });
 
-        await expect(fixturesRepository.updateFixtures("div-1", [{ id: "f1" }]))
-            .rejects.toThrow("UPDATE_FIXTURES_ERROR");
+        const failure = await failureFrom(fixturesRepository.updateFixtures("div-1", [{ id: "f1" }]));
+
+        expect(failure.message).toBe("Failed to update fixtures");
+        expect(failure.cause).toBe(underlying);
         expect(clientSql()).toContain("ROLLBACK");
         expect(client.release).toHaveBeenCalledOnce();
     });

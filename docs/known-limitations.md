@@ -11,10 +11,8 @@ items are identified, and remove them as they are fixed.
 - `fixtures` has a working service and repository, but an empty router and an empty
   controller file. The router is still mounted, so calls return 404.
 - The frontend calls eleven endpoints that do not exist. `docs/api.md` lists them.
-- `users.controller.js` `getUserProfile` is an empty stub behind a live route. It never
-  calls `res`, so an authenticated request hangs until the client times out, holding the
-  connection open. Anonymous callers are safe only because `requireAuth` answers first.
-  Should return 501 until it is implemented.
+- `users.controller.js` `getUserProfile` is not implemented. It now returns 501 rather
+  than hanging.
 - Join, leave, start, end and delete tournament are commented out in
   `tournaments.route.js`.
 
@@ -38,10 +36,13 @@ The schema in `docs/database.md` is correct; the code below is not.
 
 ## API Contract
 
-- Several endpoints return the payload in `message` instead of `data`, use ad-hoc
-  top-level keys, or return a bare `{ error }` on failure. Full list in `docs/api.md`.
-- The frontend's `fetchWithRetry` reads `data.error`, so it is coupled to the current
-  wrong error shape. The two must be fixed together.
+Settled on 2026-08-08 and now implemented throughout. Every endpoint answers with
+exactly `success`, `message` and `data`; repositories throw and preserve `cause`;
+services throw a typed `AppError` naming a condition; controllers do not catch; and one
+middleware maps, builds the envelope and logs. See `docs/api.md` and the "Typed Errors
+With A Central Handler" decision.
+
+Nothing outstanding here.
 
 ## Stale Response Envelope In Repositories
 
@@ -88,6 +89,20 @@ branches, and missing environment variables failing at request time instead of b
   bound once the previous round's `results` are populated.
 - Standings are recomputed on every tournament detail fetch rather than stored. Correct
   but unoptimised.
+- `round.completedGames` is stored but nothing ever increments it, so the round progress
+  bar in the UI sits at zero. `isRoundComplete` works around this by recomputing from
+  the fixture rows. Fixed by the score-entry endpoint, per the F7 decision.
+- Fixture status has two vocabularies — the `fixture_status` enum, and the
+  `WAITING`/`ONGOING` pair used in `tournamentViewFormatter.js` and `ViewTabs.jsx`. The
+  enum won on 2026-08-08; until the translation is removed, known bug 5 stands.
+
+  This is not only untidy. `normalizeFixture` does **not** translate the enum — it only
+  defaults a null status to `WAITING`. So a real fixture keeps its `UPCOMING` status and
+  is then excluded by the filter in `buildDivisionOverview`, which looks for `WAITING`
+  or `ONGOING`. **"Upcoming Fixtures" is therefore empty on both the tournament
+  dashboard and the division overview for every real fixture**, and
+  `FIXTURE_STATUS_LABELS` never resolves a label for `UPCOMING` or `LIVE` either. Same
+  cause in `ViewTabs.jsx`, where the `upcoming` and `live` filters match nothing.
 - Nothing enforces the shape of `divisions.state`. A malformed write only surfaces on
   read.
 
@@ -104,12 +119,14 @@ Outstanding:
 
 ## Scheduling
 
-- Automatic schedule generation currently runs in the frontend
-  (`tourganiser-ui/src/utils/scheduleGenerator.js`). It is intended to move to a backend
-  service. Manual schedule editing stays in the frontend.
 - The `divisions.schedule` column was added on 2026-08-07 and
   `divisionsRepository.updateSchedule` writes to it, but no route or controller calls
   that yet, so schedules still cannot be saved.
+- Nothing validates a schedule. Under the split settled on 2026-08-08 the server must
+  reject impossible schedules on write — court clashes, a team in two places at once,
+  fixtures outside the division. None of that exists.
+- The shape of `divisions.schedule` is undocumented. It is implicit in `scheduleUtils.js`
+  and `ScheduleMakerModal.jsx`. The validator cannot be written until it is recorded.
 - Officials assignment is described in `docs/tournament-rules.md` as optional but is not
   implemented anywhere.
 

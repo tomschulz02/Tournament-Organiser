@@ -32,7 +32,10 @@ class DBConnection {
 			const res = await this.pool.query(sql, params);
 			return res.rows;
 		} catch (err) {
-			throw new Error(err);
+			// Keep the pg error as the cause. Stringifying it here discarded the
+			// error code and constraint name before any repository could see them,
+			// which is why a unique-constraint violation surfaced as a 500.
+			throw new Error(err.message, { cause: err });
 		}
 	}
 }

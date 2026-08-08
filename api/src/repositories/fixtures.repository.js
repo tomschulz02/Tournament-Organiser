@@ -8,10 +8,12 @@ async function getFixtures(divisionId) {
     try {
         const sql = "SELECT * FROM fixtures WHERE division_id = $1";
         const result = await db.query(sql, [divisionId]);
-        
+
         return result;
     } catch (err) {
-        return (err.message || "GET_FIXTURES_ERROR");
+        // Repositories always throw and never log. The underlying error is kept
+        // as cause so the Postgres code survives; the error middleware logs it.
+        throw new Error("Failed to fetch fixtures", { cause: err });
     }
 }
 
@@ -23,7 +25,7 @@ async function getResults(divisionId) {
         
         return result;
     } catch (err) {
-        return (err.message || "GET_RESULTS_ERROR");
+        throw new Error("Failed to fetch results", { cause: err });
     }
 }
 
@@ -36,7 +38,7 @@ async function getFixturesByDivisionIds(divisionIds) {
         const sql = "SELECT * FROM fixtures WHERE division_id = ANY($1::uuid[]) ORDER BY division_id, match_no ASC;";
         return await db.query(sql, [divisionIds]);
     } catch (error) {
-        throw new Error(error.message || "GET_FIXTURES_BY_DIVISION_IDS_ERROR");
+        throw new Error("Failed to fetch fixtures by division", { cause: error });
     }
 }
 
@@ -51,15 +53,18 @@ async function updateResult(fixtureId, score, status, rounds) {
             [score[0], score[1], status, fixtureId]
         );
 
+        // No such fixture. Returning here without a COMMIT or ROLLBACK left the
+        // transaction open until the client was released; it now rolls back.
         if (updateRes.rows.length === 0) {
-            return ("FIXTURE_NOT_FOUND");
+            await client.query("ROLLBACK");
+            return null;
         }
 
         await client.query("COMMIT");
         return { message: "Fixture updated" };
     } catch (error) {
         await client.query("ROLLBACK");
-        return (error.message || "UPDATE_FIXTURE_ERROR");
+        throw new Error("Failed to update fixture", { cause: error });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();
@@ -70,9 +75,11 @@ async function updateResult(fixtureId, score, status, rounds) {
 async function createFixture(fixtureId, divisionId, matchNo, team1, team2, team1Placeholder, team2Placeholder, round, client = db){
     try{
         const sql = "INSERT INTO fixtures (id, division_id, match_no, team_1, team_2, team_1_placeholder, team_2_placeholder, round) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
-        const result = await client.query(sql, [fixtureId, divisionId, matchNo, team1, team2, team1Placeholder, team2Placeholder, round]);
+        await client.query(sql, [fixtureId, divisionId, matchNo, team1, team2, team1Placeholder, team2Placeholder, round]);
     } catch (error) {
-        return (error.message || "CREATE_FIXTURE_ERROR");
+        // Previously returned a string, which the caller ignored, so a failed
+        // insert was silent.
+        throw new Error("Failed to create fixture", { cause: error });
     }
 }
 
@@ -91,8 +98,7 @@ async function updateFixtures(divisionId, fixtures) {
         return { message: "Fixtures updated" };
     } catch (error) {
         await client.query("ROLLBACK");
-        console.error(error);
-        throw new Error("UPDATE_FIXTURES_ERROR");
+        throw new Error("Failed to update fixtures", { cause: error });
         /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
     } finally {
         client.release();

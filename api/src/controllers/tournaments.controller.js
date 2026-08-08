@@ -1,53 +1,44 @@
 import { tournamentService } from "../services/tournaments.service.js";
+import { AppError } from "../errors.js";
+
+// Controllers do not catch. Express 5 forwards a rejected promise from an async
+// handler to the error middleware, which owns every status and message.
 
 async function createTournament(req, res){
-    try {
-        const tournamentData = req.body;
-        // requireAuth guarantees req.user is set on this route.
-        const userId = req.user.id;
+    const tournamentData = req.body;
+    // requireAuth guarantees req.user is set on this route.
+    const userId = req.user.id;
 
-        const result = await tournamentService.createTournament(tournamentData, userId);
+    const id = await tournamentService.createTournament(tournamentData, userId);
 
-        res.status(200).json({success: true, message: "Tournament created successfully", id: result});
-    } catch (error) {
-        res.status(500).json({ error: error.message || "CREATE_TOURNAMENT_ERROR" });
-    }
+    res.status(201).json({ success: true, message: "Tournament created successfully", data: { id } });
 }
 
 async function fetchTournaments(req, res){
-    try {
-        //TODO: cache tournaments
-        const tournaments = await tournamentService.fetchTournaments();
+    //TODO: cache tournaments
+    const tournaments = await tournamentService.fetchTournaments();
 
-        res.status(200).json({success: true, message: tournaments})
-    } catch (error) {
-        res.status(500).json({ error: error.message || "FETCH_TOURNAMENT_ERROR" });
-    }
+    res.status(200).json({ success: true, message: "Tournaments fetched", data: tournaments });
 }
 
 async function fetchTournamentDetails(req, res){
-    try {
-        const { tournamentId } = req.params;
-        if (!isUuid(tournamentId)) {
-            res.status(404).json({ success: false, error: "TOURNAMENT_NOT_FOUND" });
-            return;
-        }
+    const { tournamentId } = req.params;
+    // A malformed id can never match a row, so it is a 404 rather than a query.
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
 
-        const tournament = await tournamentService.fetchTournamentDetails(tournamentId, req.user?.id || null);
-        if (!tournament) {
-            res.status(404).json({ success: false, error: "TOURNAMENT_NOT_FOUND" });
-            return;
-        }
+    const tournament = await tournamentService.fetchTournamentDetails(tournamentId, req.user?.id || null);
 
-        res.status(200).json({
-            success: true,
+    res.status(200).json({
+        success: true,
+        message: "Tournament fetched",
+        data: {
             loggedIn: Boolean(req.user),
             creator: tournament.creator,
-            message: tournament.message
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message || "FETCH_TOURNAMENT_DETAILS_ERROR" });
-    }
+            ...tournament.view
+        }
+    });
 }
 
 export const tournamentController = {

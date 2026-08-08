@@ -7,8 +7,7 @@ Layer responsibilities (Routes → Controllers → Services → Repositories) ar
 
 ## Response Format
 
-This is the **target contract**. Parts of the current code do not yet follow it
-(see Known Drift below). New and refactored endpoints must use it.
+Every endpoint follows this contract. Implemented throughout on 2026-08-08.
 
 Success:
 
@@ -28,10 +27,23 @@ Error:
 
 Rules:
 
+- Exactly three keys. `success`, `message`, `data`. Nothing else, ever.
 - `data` carries the payload. Never put payload in `message`.
 - `message` is always a string, never an object or array.
+- **`message` is display-ready.** The frontend must be able to pass it straight to
+  `showMessage` without editing it. It therefore never contains an error code, a SQL
+  fragment, a stack, an internal identifier, or anything the user should not see.
 - No ad-hoc top-level keys. Anything else the client needs goes inside `data`.
 - Always use an appropriate HTTP status code. `success` must agree with it.
+
+`message` being display-ready does not oblige the client to display it. A `GET` that
+populates a page should not raise a toast; the message is available, not mandatory.
+
+There is deliberately **no machine-readable error code in the envelope**. The HTTP
+status is the machine-readable signal, and it is enough to distinguish the cases the UI
+actually branches on. The client's `request` helper preserves it on the thrown
+`ApiError`. If a client ever needs to distinguish two conditions that share a status,
+add a code inside `data` at that point rather than pre-emptively.
 
 Status codes in use:
 
@@ -41,7 +53,49 @@ Status codes in use:
 - 401 Unauthorized — missing or invalid token
 - 403 Forbidden — authenticated but not permitted
 - 404 Not Found — resource does not exist, or invalid UUID in path
+- 409 Conflict — the request is valid but the resource is in a state that forbids it
 - 500 Internal Server Error — unexpected failure
+- 501 Not Implemented — the route exists but the feature does not yet
+
+## Error Handling
+
+Decided and implemented 2026-08-08. See `docs/decisions.md` for the reasoning.
+
+Two kinds of failure, handled differently:
+
+**Expected domain failures** are part of the contract. "This round is not finished",
+"you do not own this tournament", "that team did not play". Each has a stable code, an
+HTTP status, and a client-safe message.
+
+**Unexpected faults** are everything else — a dropped connection, an unanticipated
+constraint violation, a bug. All become 500 with a fixed generic message. Detail goes to
+the log, never to the client.
+
+Responsibilities by layer:
+
+| Layer | Does |
+|---|---|
+| Repositories | Always throw, never return an error string. Wrap the underlying error as `cause` so the Postgres code and constraint name survive. Assign no HTTP meaning. |
+| Services | Translate expected conditions into a thrown `AppError` carrying a code. Name the condition, not the status — HTTP stays out of the business layer. Let anything unexpected propagate untouched. |
+| Controllers | Do not catch. Express 5 forwards rejected promises from async handlers to the error middleware automatically. |
+| Error middleware | The single place that maps a failure to a status, builds the envelope, and logs. |
+
+The code-to-status-and-message catalogue lives in one file, `api/src/errors.js`. A code
+with no entry is a 500, which is the correct default for an unrecognised condition. The
+catalogue holds the user-facing copy, so wording is fixed in one place. Catalogue
+messages are static; anything dynamic belongs in `data`.
+
+The catalogue generalises the `ERROR_STATUS` table that used to live in
+`divisions.controller.js`, which was the reference for the shape.
+
+A catch-all 404 handler for unmatched routes, `api/src/middleware/notFound.js`, sits
+immediately before the error middleware in `app.js`. `requireAuth` hands its 401 to the
+same middleware rather than responding itself, so it too uses the envelope.
+
+On the client, `tourganiser-ui/src/requests.js` has one `request` helper behind every
+endpoint wrapper. It throws an `ApiError` carrying the display-ready `message`, the HTTP
+`status` and any `data`, and it retries only when `fetch` itself rejects — never a 4xx
+or a 5xx.
 
 ## Authentication
 
@@ -94,7 +148,7 @@ Implemented:
 | POST | `/api/users/login` | public | Authenticate, set cookie |
 | POST | `/api/users/logout` | any | Clear cookie |
 | GET | `/api/users/check-login` | any | Report login state |
-| GET | `/api/users/profile/:id` | required | Fetch user profile — **empty stub, see warning below** |
+| GET | `/api/users/profile/:id` | required | Fetch user profile — **not implemented, returns 501** |
 | POST | `/api/tournaments/create` | required | Create tournament and divisions |
 | GET | `/api/divisions/:divisionId/progression` | required + owner | Proposed ranking and qualifiers for the current round. Read only. |
 | POST | `/api/divisions/:divisionId/progression` | required + owner | Commit the confirmed ranking and advance the round |
@@ -156,11 +210,9 @@ survives.
 | POST | `/api/collection/create` | `createCollection` |
 | GET | `/api/collections` | `fetchUserCollections` |
 
-Warning: `GET /api/users/profile/:id` has an empty `try` block and never calls `res`.
-An authenticated request to it **hangs until the client times out** — the connection is
-held open and no response is ever sent. It fails closed for anonymous callers only
-because `requireAuth` responds before the handler runs. Either implement it or make it
-return 501.
+`GET /api/users/profile/:id` throws `NOT_IMPLEMENTED` and returns 501 in the standard
+envelope. It previously had an empty `try` block and never called `res`, so an
+authenticated request hung until the client timed out.
 
 Note the path inconsistency in the pending set: verbs appear in paths
 (`updateTeams`, `create`, `delete`) and `collection` / `collections` are inconsistently
@@ -168,18 +220,25 @@ pluralised. Worth settling on a convention before implementing them.
 
 ## Known Drift
 
-Current code that does not match the contract above. Fix when touching these files.
+None. The response envelope, the error handling and the client's request layer were
+converted together on 2026-08-08 — they are coupled, so neither side could be changed
+alone, which is why the auth fixes of 2026-08-07 left the error shape untouched.
 
-- `tournaments.controller.js` `fetchTournaments` returns the payload in `message`
-  instead of `data`.
-- `tournaments.controller.js` `fetchTournamentDetails` returns ad-hoc top-level
-  `loggedIn` and `creator` keys instead of nesting them in `data`.
-- Every error path in `tournaments.controller.js` and `users.controller.js` returns a
-  bare `{ error: "..." }` with no `success` or `message`.
-- `users.controller.js` `signup` returns a top-level `user` key.
-- The frontend's `fetchWithRetry` reads `data.error` on failure, so it depends on the
-  current wrong shape. Backend and frontend must change together. This is why the auth
-  fixes of 2026-08-07 left the error shape alone.
+Cleared by that work:
+
+- `fetchTournaments` returned the payload in `message`; `fetchTournamentDetails`
+  returned ad-hoc top-level `loggedIn` and `creator`; `createTournament` returned a
+  top-level `id` with a 200.
+- Error paths in `tournaments.controller.js` and `users.controller.js` returned a bare
+  `{ error: "..." }`; `checkLogin` returned a bare `{ loggedIn, user }`.
+- `signup` returned `user` as an object, so `Login.jsx` stored an object where a string
+  was expected.
+- `login` returned no user information, so the UI rendered **"Welcome, undefined"**.
+- `fetchWithRetry` read `data.error`, discarded the HTTP status, and threw a plain
+  object rather than an `Error`, so `error.message` was `undefined` in `Login.jsx`'s
+  catch blocks and the user saw an empty message.
+- A duplicate email at signup was a 500. `db.js` and the repositories now preserve the
+  pg error as `cause`, so it is a 409 that says so.
 
 ## Security
 
@@ -198,10 +257,13 @@ Implemented:
 
 Outstanding, in rough priority order:
 
-- **Ownership checks.** `requireAuth` only proves a caller is logged in. Mutation
-  endpoints should compare `req.user.id` against `tournaments.created_by` and return
-  403 on mismatch. This becomes urgent the moment the pending division and fixture
-  endpoints are wired up, since those mutate tournament data.
+- **Ownership checks.** Still unimplemented outside round progression, and urgent the
+  moment the pending division and fixture endpoints are wired up. The approach was
+  settled on 2026-08-08: the check lives in the service, not in middleware. Every
+  mutating service function takes `userId` as a required parameter and resolves the
+  owner as part of a fetch it already needed. `requireAuth` proves identity; the service
+  proves permission. See `docs/decisions.md`, and `progression.service.js` for the
+  reference implementation.
 - Validate and length-limit user input at the service boundary. `username` and `email`
   are `varchar(100)`, `location` is `varchar(50)`; oversized input currently surfaces
   as a 500 from Postgres rather than a 400.

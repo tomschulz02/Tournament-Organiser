@@ -14,7 +14,6 @@ const { makeReq, makeRes } = await import("../../helpers/http.js");
 beforeEach(() => {
     vi.mocked(progressionService.getProposal).mockReset();
     vi.mocked(progressionService.commit).mockReset();
-    vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 function req(overrides = {}) {
@@ -55,50 +54,28 @@ describe("divisionController.commitProgression", () => {
     });
 });
 
-describe("error mapping", () => {
-    // Every entry of ERROR_STATUS, driven through both endpoints.
-    const cases = [
-        ["DIVISION_NOT_FOUND", 404, "Division not found"],
-        ["ROUND_NOT_FOUND", 404, "Round not found"],
-        ["NOT_TOURNAMENT_OWNER", 403, "You do not own this tournament"],
-        ["ROUND_NOT_COMPLETE", 409, "This round still has unplayed fixtures"],
-        ["NO_NEXT_ROUND", 409, "This is the final round"],
-        ["NEXT_ROUND_ALREADY_STARTED", 409, "The next round has already started"],
-        ["INVALID_RESULTS", 400, "Invalid results list"],
-        ["WRONG_QUALIFIER_COUNT", 400, "Wrong number of qualifying teams"],
-        ["DUPLICATE_TEAM", 400, "A team appears more than once"],
-        ["TEAM_NOT_IN_ROUND", 400, "A team did not play in this round"]
-    ];
-
-    it.each(cases)("maps %s from the proposal endpoint to %i", async (code, status, message) => {
-        progressionService.getProposal.mockRejectedValue(new Error(code));
-        const res = makeRes();
-
-        await divisionController.getProgression(req(), res);
-
-        expect(res.status).toHaveBeenCalledWith(status);
-        expect(res.json).toHaveBeenCalledWith({ error: message });
-    });
-
-    it.each(cases)("maps %s from the commit endpoint to %i", async (code, status, message) => {
-        progressionService.commit.mockRejectedValue(new Error(code));
-        const res = makeRes();
-
-        await divisionController.commitProgression(req({ body: { teams: [] } }), res);
-
-        expect(res.status).toHaveBeenCalledWith(status);
-        expect(res.json).toHaveBeenCalledWith({ error: message });
-    });
-
-    it("hides an unmapped error behind a 500 and logs it", async () => {
-        const failure = new Error("SOMETHING_UNEXPECTED");
+// Status and message mapping is no longer this controller's job. The full table
+// of progression codes is driven end to end in
+// test/integration/routes/divisions.route.test.js; here we only check that a
+// failure is not swallowed on its way to the error middleware.
+describe("failure handling", () => {
+    it("lets a failure from the proposal endpoint propagate", async () => {
+        const failure = new Error("ROUND_NOT_COMPLETE");
         progressionService.getProposal.mockRejectedValue(failure);
         const res = makeRes();
 
-        await divisionController.getProgression(req(), res);
+        await expect(divisionController.getProgression(req(), res)).rejects.toBe(failure);
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
-        expect(console.error).toHaveBeenCalledWith(failure);
+        expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it("lets a failure from the commit endpoint propagate", async () => {
+        const failure = new Error("DUPLICATE_TEAM");
+        progressionService.commit.mockRejectedValue(failure);
+        const res = makeRes();
+
+        await expect(divisionController.commitProgression(req({ body: { teams: [] } }), res)).rejects.toBe(failure);
+
+        expect(res.json).not.toHaveBeenCalled();
     });
 });

@@ -286,18 +286,14 @@ function CreateTournamentForm() {
 		setLoading(true);
 		try {
 			const payload = generatePayload();
-			const result = await createTournament(payload);
+			await createTournament(payload);
 
-			if (result.success) {
-				showMessage('Tournament created successfully', 'success');
-				setTimeout(() => {
-					navigate('/tournaments', { replace: true });
-				}, 1500);
-			} else {
-				showMessage('Failed to create tournament', 'error');
-			}
+			showMessage('Tournament created successfully', 'success');
+			setTimeout(() => {
+				navigate('/tournaments', { replace: true });
+			}, 1500);
 		} catch (error) {
-			showMessage('An error occurred while creating the tournament', 'error');
+			showMessage(error.message, 'error');
 		} finally {
 			setLoading(false);
 		}

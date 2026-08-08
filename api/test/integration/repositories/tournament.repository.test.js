@@ -18,7 +18,6 @@ const client = dbMock.client;
 beforeEach(() => {
     uuidState.next = 0;
     resetDbMock();
-    vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("createTournament", () => {
@@ -47,12 +46,14 @@ describe("createTournament", () => {
         expect(db.query).not.toHaveBeenCalled();
     });
 
-    it("rethrows the database message, falling back to a generic code", async () => {
-        db.query.mockRejectedValueOnce(new Error("null value in column"));
-        await expect(tournamentRepository.createTournament(details, "user-1")).rejects.toThrow("null value in column");
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("null value in column");
+        db.query.mockRejectedValueOnce(underlying);
 
-        db.query.mockRejectedValueOnce(new Error(""));
-        await expect(tournamentRepository.createTournament(details, "user-1")).rejects.toThrow("DATABASE_ERROR");
+        const failure = await tournamentRepository.createTournament(details, "user-1").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to create tournament");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
@@ -64,16 +65,14 @@ describe("getAllTournaments", () => {
         expect(db.query).toHaveBeenCalledWith("SELECT * FROM tournaments;", []);
     });
 
-    it("returns the failure message rather than throwing", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws rather than returning an error string, keeping the cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        expect(await tournamentRepository.getAllTournaments()).toBe("connection lost");
-    });
+        const failure = await tournamentRepository.getAllTournaments().catch((err) => err);
 
-    it("falls back to a generic code when the failure has no message", async () => {
-        db.query.mockRejectedValueOnce(new Error(""));
-
-        expect(await tournamentRepository.getAllTournaments()).toBe("GET_TOURNAMENTS_ERROR");
+        expect(failure.message).toBe("Failed to fetch tournaments");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
@@ -91,23 +90,25 @@ describe("getTournamentById", () => {
         expect(await tournamentRepository.getTournamentById("tour-1")).toBeNull();
     });
 
-    it("rethrows the database message, falling back to a generic code", async () => {
-        db.query.mockRejectedValueOnce(new Error("invalid uuid"));
-        await expect(tournamentRepository.getTournamentById("nope")).rejects.toThrow("invalid uuid");
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid uuid");
+        db.query.mockRejectedValueOnce(underlying);
 
-        db.query.mockRejectedValueOnce(new Error(""));
-        await expect(tournamentRepository.getTournamentById("nope")).rejects.toThrow("GET_TOURNAMENT_ERROR");
+        const failure = await tournamentRepository.getTournamentById("nope").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch tournament");
+        expect(failure.cause).toBe(underlying);
     });
 });
 
 // startTournament, endTournament and deleteTournament share a shape: one
 // owner-scoped statement inside a transaction, returning the raw pg result and
-// swallowing failures into a message string.
+// throwing on failure.
 describe.each([
-    ["startTournament", "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1 AND created_by = $2", "START_TOURNAMENT_ERROR"],
-    ["endTournament", "UPDATE tournaments SET status = 'Finished' WHERE id = $1 AND created_by = $2", "END_TOURNAMENT_ERROR"],
-    ["deleteTournament", "DELETE FROM tournaments WHERE id = $1 AND created_by = $2", "DELETE_TOURNAMENT_ERROR"]
-])("%s", (method, expectedSql, fallbackCode) => {
+    ["startTournament", "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1 AND created_by = $2", "Failed to start tournament"],
+    ["endTournament", "UPDATE tournaments SET status = 'Finished' WHERE id = $1 AND created_by = $2", "Failed to end tournament"],
+    ["deleteTournament", "DELETE FROM tournaments WHERE id = $1 AND created_by = $2", "Failed to delete tournament"]
+])("%s", (method, expectedSql, expectedMessage) => {
     it("commits a statement scoped to the owner", async () => {
         client.query.mockResolvedValue({ rows: [], rowCount: 1 });
 
@@ -118,22 +119,18 @@ describe.each([
         expect(client.release).toHaveBeenCalledOnce();
     });
 
-    it("rolls back and returns the failure message", async () => {
+    it("rolls back and throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
         client.query.mockImplementation(async (sql) => {
-            if (sql === expectedSql) throw new Error("connection lost");
+            if (sql === expectedSql) throw underlying;
             return { rows: [] };
         });
 
-        expect(await tournamentRepository[method]("tour-1", "user-1")).toBe("connection lost");
+        const failure = await tournamentRepository[method]("tour-1", "user-1").catch((err) => err);
+
+        expect(failure.message).toBe(expectedMessage);
+        expect(failure.cause).toBe(underlying);
         expect(clientSql()).toContain("ROLLBACK");
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        client.query.mockImplementation(async (sql) => {
-            if (sql === expectedSql) throw new Error("");
-            return { rows: [] };
-        });
-
-        expect(await tournamentRepository[method]("tour-1", "user-1")).toBe(fallbackCode);
+        expect(client.release).toHaveBeenCalledOnce();
     });
 });

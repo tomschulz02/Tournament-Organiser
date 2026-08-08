@@ -4,25 +4,24 @@ import { fixturesRepository } from "../repositories/fixtures.repository.js";
 
 const db = DatabaseConnection();
 
+// The try/catch that used to wrap this only stringified the error with
+// new Error(error), destroying it. There is nothing to add here, so the failure
+// propagates untouched and the error middleware logs it.
 async function createFixture(divisionId, details, client = db){
-    try {
-        let team1, team2, placeholder1, placeholder2 = null;
-        if (details.placeholder1){
-            placeholder1 = "Rank " + (details.team1 + 1);
-        } else {
-            team1 = details.team1;
-        }
-
-        if (details.placeholder2){
-            placeholder2 = "Rank " + (details.team2 + 1);
-        } else {
-            team2 = details.team2;
-        }
-
-        await fixturesRepository.createFixture(details.id, divisionId, details.matchNo, team1, team2, placeholder1, placeholder2, details.round);
-    } catch (error) {
-        throw new Error(error);
+    let team1, team2, placeholder1, placeholder2 = null;
+    if (details.placeholder1){
+        placeholder1 = "Rank " + (details.team1 + 1);
+    } else {
+        team1 = details.team1;
     }
+
+    if (details.placeholder2){
+        placeholder2 = "Rank " + (details.team2 + 1);
+    } else {
+        team2 = details.team2;
+    }
+
+    await fixturesRepository.createFixture(details.id, divisionId, details.matchNo, team1, team2, placeholder1, placeholder2, details.round);
 }
 
 export const fixtureService = {

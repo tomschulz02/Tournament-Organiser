@@ -40,26 +40,25 @@ describe("createUser", () => {
         expect(client.release).toHaveBeenCalledOnce();
     });
 
-    it("rolls back and rethrows the database message", async () => {
+    it("rolls back and rethrows, keeping the pg error as cause", async () => {
+        // The cause is what lets the service tell a duplicate email from a fault.
+        // Stringifying it here is what used to make a duplicate email a 500.
+        const pgError = Object.assign(new Error("duplicate key value violates unique constraint"), {
+            code: "23505",
+            constraint: "users_email_key"
+        });
         client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("INSERT")) throw new Error("duplicate key value violates unique constraint");
+            if (sql.startsWith("INSERT")) throw pgError;
             return { rows: [] };
         });
 
-        await expect(userRepository.createUser("tom", "tom@example.com", "hash"))
-            .rejects.toThrow("duplicate key value violates unique constraint");
+        const failure = await userRepository.createUser("tom", "tom@example.com", "hash").catch((err) => err);
+
+        expect(failure.cause).toBe(pgError);
+        expect(failure.cause.code).toBe("23505");
+        expect(failure.cause.constraint).toBe("users_email_key");
         expect(clientSql()).toContain("ROLLBACK");
         expect(client.release).toHaveBeenCalledOnce();
-    });
-
-    it("falls back to a generic code when the failure has no message", async () => {
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("INSERT")) throw new Error("");
-            return { rows: [] };
-        });
-
-        await expect(userRepository.createUser("tom", "tom@example.com", "hash"))
-            .rejects.toThrow("USER_CREATION_ERROR");
     });
 });
 
@@ -78,10 +77,14 @@ describe("findUserByEmail", () => {
         expect(await userRepository.findUserByEmail("nobody@example.com")).toBeNull();
     });
 
-    it("throws a repository code on failure", async () => {
-        db.query.mockRejectedValueOnce(new Error("connection lost"));
+    it("throws on failure, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
 
-        await expect(userRepository.findUserByEmail("tom@example.com")).rejects.toThrow("LOGIN_ERROR");
+        const failure = await userRepository.findUserByEmail("tom@example.com").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to look up user by email");
+        expect(failure.cause).toBe(underlying);
     });
 });
 

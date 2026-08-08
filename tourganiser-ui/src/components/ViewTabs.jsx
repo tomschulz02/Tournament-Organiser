@@ -208,17 +208,14 @@ export function ScheduleTab({ division, creator, tournamentName, tournamentDetai
 		setLoading(true);
 		try {
 			const response = await updateDivisionSchedule(division.id, schedulePayload);
-			if (!response?.success) {
-				showMessage(response?.error || 'Unable to save the division schedule right now.', 'error');
-				return response;
-			}
 
 			setScheduleOverride(schedulePayload);
 			showMessage('Division schedule updated successfully.', 'success');
 			return response;
-		} catch {
-			showMessage('An error occurred while saving the schedule.', 'error');
-			return { success: false, error: 'SCHEDULE_SAVE_ERROR' };
+		} catch (error) {
+			showMessage(error.message, 'error');
+			// ScheduleMakerModal reads this to decide whether to stay open.
+			return { success: false, message: error.message };
 		} finally {
 			setLoading(false);
 		}

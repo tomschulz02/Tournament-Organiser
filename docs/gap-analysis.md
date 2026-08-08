@@ -33,6 +33,18 @@ Reviewed with the maintainer on 2026-08-08. Settled since:
   run and behind `vitest.bugs.config.js`.
 - **X1 decided**: no migration tooling. Schema changes are applied by hand and
   `database.md` is overwritten to match, with git holding the history.
+- **S2 decided**: the server has authority over tournament state. Schedule generation is
+  the explicit exception — it produces a proposal, so it stays in the client and the
+  server validates on write. Both recorded in `docs/decisions.md`.
+- **B1, B3, B4 decided**: typed errors with a central handler and a single code
+  catalogue. The envelope is exactly `success`, `message`, `data`, with `message`
+  display-ready. **F5 is pulled forward** into Phase 2 because every backend conversion
+  depends on it. Contract in `docs/api.md`.
+- **B7 decided**: `teams.user_id` holds the organiser who created the tournament.
+- **F7 decided**: the `fixture_status` enum is the only vocabulary, and the server
+  derives the status from the recorded sets. This also fixes known bug 5 and settles
+  **B5**, since the write that completes a fixture is the one that can maintain
+  `completedGames`.
 
 Everything else below is still open. See `docs/roadmap.md` for the order of work.
 
@@ -139,20 +151,33 @@ cannot tell success from failure without inspecting the shape of what came back 
 `getAllTournaments` failing returns a string, which `fetchTournaments` then iterates as
 if it were rows. This needs one convention, chosen deliberately.
 
+*Fixed 2026-08-08. Every repository throws and wraps the underlying error as `cause`.
+See `docs/decisions.md`, "Typed Errors With A Central Handler".*
+
 **B2 — `updateResult` can return a client to the pool mid-transaction.** On
 `FIXTURE_NOT_FOUND` it returns from inside the `try` after `BEGIN`, with no `COMMIT` or
 `ROLLBACK`. The `finally` then releases the client with the transaction still open.
 Pool poisoning; intermittent and unpleasant to diagnose.
+
+*Fixed 2026-08-08 alongside B1. The no-such-fixture path rolls back and returns `null`.*
 
 **B3 — Errors are stringified rather than wrapped.** `db.js` does `throw new Error(err)`,
 as do `divisions.service.js` and `fixtures.service.js`. This discards the Postgres error
 code, the constraint name and the stack — exactly the information needed to map a
 failure to a 400 rather than a 500. `cause` or a small typed error would keep it.
 
+*Fixed 2026-08-08. All three stringification sites are gone; `db.js` passes `cause`, and
+the two services rethrow untouched. A duplicate email at signup is now a 409 rather than
+a 500, which is what preserving the pg code bought.*
+
 **B4 — There is no central error handler and no 404 handler.** `app.js` mounts four
 routers and nothing else. Every controller hand-rolls its own try/catch and its own
 status mapping; `divisions.controller.js` has a good `ERROR_STATUS` table that the other
 controllers do not use. An unmatched path falls through to Express's default HTML page.
+
+*Fixed 2026-08-08. `api/src/middleware/notFound.js` and `errorHandler.js` sit after the
+routers; `ERROR_STATUS` was generalised into the catalogue in `api/src/errors.js`; no
+controller catches.*
 
 **B5 — `completedGames` is never maintained.** `updateResult` takes a `rounds` argument
 and ignores it. Nothing increments `round.completedGames` when a fixture completes. The
@@ -186,7 +211,8 @@ closes the pool. There is no cheap endpoint to check liveness against.
 **B11 — Dead and duplicated repository code.** `fixturesRepository.getFixtures` and
 `getResults` have no callers. `divisionsRepository.getDivisionDetails` duplicates what
 `getDivisionsByTournamentId` plus `fixturesRepository.getFixturesByDivisionIds` already
-do, and is the only remaining user of the "return an error string" pattern in that file.
+do. It no longer uses the "return an error string" pattern — that went with B1 — but the
+duplication stands.
 
 **B12 — `npm test` cannot pass, by design.** `vitest.config.js` includes
 `test/**/*.test.js`, which sweeps in `test/known-bugs/`, a suite written to fail until
@@ -231,11 +257,16 @@ helper would reduce it to roughly a third, and would give a single place to fix 
 error-shape coupling described in `docs/api.md` when the backend contract changes.
 `deleteTournament` already deviates — it swallows every error rather than rethrowing.
 
+*Fixed 2026-08-08. One `request` helper; every export is a one-line call to it.*
+
 **F6 — The retry in `fetchWithRetry` is dead code.** It retries only when the error
 message contains `reset` or `network`. A failed `fetch` throws `TypeError: Failed to
 fetch` in Chrome and `NetworkError when attempting to fetch resource` in Firefox — so
 the branch fires on some browsers and not others, and never on the one most users are
 on. `MAX_RETRIES = 5` is effectively `0`.
+
+*Fixed 2026-08-08 with F5. The retry now keys on `fetch` itself rejecting, which is
+browser-independent and cannot retry a 4xx or a 5xx.*
 
 **F7 — Fixture status has two vocabularies.** The database enum is `UPCOMING`, `LIVE`,
 `COMPLETED`, `CANCELLED`. The frontend filters on `WAITING` and `ONGOING`, and
@@ -324,9 +355,9 @@ conversation should start.
 2. **Where does authority over tournament state live?** (S2) Server-authoritative is the
    direction `progression.service.js` already went, and it would mean deleting most of
    the `updateRounds` payload rather than implementing it — but it is a real choice.
-3. **What is a team?** (B7) A row owned by the organiser, an entity that can outlive a
-   tournament, or something a future user account can claim? `teams.user_id` implies the
-   third and nothing implements it.
+3. ~~**What is a team?**~~ (B7) Answered: `teams.user_id` holds the organiser who created
+   the tournament. No schema change. Reassignment to a captain account stays possible
+   later without committing to it now.
 4. **Is Collections a feature or an abandoned idea?** (F4)
 5. **How much does live scoring matter?** It is in `future-features.md`, and the answer
    changes whether F7's status vocabulary needs a `LIVE` state with real semantics or

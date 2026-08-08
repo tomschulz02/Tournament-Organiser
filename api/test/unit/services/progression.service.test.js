@@ -334,33 +334,33 @@ describe("validateConfirmedTeams", () => {
     });
 
     it("rejects anything that is not a non-empty array", () => {
-        expect(() => validateConfirmedTeams(null, computed, nextRound)).toThrow("INVALID_RESULTS");
-        expect(() => validateConfirmedTeams([], computed, nextRound)).toThrow("INVALID_RESULTS");
+        expect(() => validateConfirmedTeams(null, computed, nextRound)).toThrow(expect.objectContaining({ code: "INVALID_RESULTS" }));
+        expect(() => validateConfirmedTeams([], computed, nextRound)).toThrow(expect.objectContaining({ code: "INVALID_RESULTS" }));
     });
 
     it("rejects entries that are not non-empty strings", () => {
-        expect(() => validateConfirmedTeams(["t1", 2, "t3", "t4"], computed, nextRound)).toThrow("INVALID_RESULTS");
-        expect(() => validateConfirmedTeams(["t1", "", "t3", "t4"], computed, nextRound)).toThrow("INVALID_RESULTS");
+        expect(() => validateConfirmedTeams(["t1", 2, "t3", "t4"], computed, nextRound)).toThrow(expect.objectContaining({ code: "INVALID_RESULTS" }));
+        expect(() => validateConfirmedTeams(["t1", "", "t3", "t4"], computed, nextRound)).toThrow(expect.objectContaining({ code: "INVALID_RESULTS" }));
     });
 
     it("rejects the wrong number of teams", () => {
-        expect(() => validateConfirmedTeams(["t1", "t2"], computed, nextRound)).toThrow("WRONG_QUALIFIER_COUNT");
+        expect(() => validateConfirmedTeams(["t1", "t2"], computed, nextRound)).toThrow(expect.objectContaining({ code: "WRONG_QUALIFIER_COUNT" }));
     });
 
     it("honours an explicit qualifier count on the next round", () => {
         const limited = finalsRound({ qualifyingTeams: 2 });
 
         expect(validateConfirmedTeams(["t1", "t4"], computed, limited)).toEqual(["t1", "t4"]);
-        expect(() => validateConfirmedTeams(TEAM_IDS, computed, limited)).toThrow("WRONG_QUALIFIER_COUNT");
+        expect(() => validateConfirmedTeams(TEAM_IDS, computed, limited)).toThrow(expect.objectContaining({ code: "WRONG_QUALIFIER_COUNT" }));
     });
 
     it("rejects a duplicated team", () => {
-        expect(() => validateConfirmedTeams(["t1", "t1", "t2", "t3"], computed, nextRound)).toThrow("DUPLICATE_TEAM");
+        expect(() => validateConfirmedTeams(["t1", "t1", "t2", "t3"], computed, nextRound)).toThrow(expect.objectContaining({ code: "DUPLICATE_TEAM" }));
     });
 
     it("rejects a team that did not play the round", () => {
         expect(() => validateConfirmedTeams(["t1", "t2", "t3", "stranger"], computed, nextRound))
-            .toThrow("TEAM_NOT_IN_ROUND");
+            .toThrow(expect.objectContaining({ code: "TEAM_NOT_IN_ROUND" }));
     });
 });
 
@@ -418,19 +418,19 @@ describe("progressionService.getProposal", () => {
     it("rejects a division that does not exist", async () => {
         divisionsRepository.getDivisionWithOwner.mockResolvedValue(null);
 
-        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow("DIVISION_NOT_FOUND");
+        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({ code: "DIVISION_NOT_FOUND" }));
     });
 
     it("rejects a caller who does not own the tournament", async () => {
         loadable({ createdBy: "someone-else" });
 
-        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow("NOT_TOURNAMENT_OWNER");
+        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({ code: "NOT_TOURNAMENT_OWNER" }));
     });
 
     it("rejects a state whose current round does not exist", async () => {
         loadable({ rounds: [], currentRound: 0 });
 
-        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow("ROUND_NOT_FOUND");
+        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({ code: "ROUND_NOT_FOUND" }));
     });
 
     it("falls back to round zero when currentRound is not an integer", async () => {
@@ -444,7 +444,7 @@ describe("progressionService.getProposal", () => {
         fixtures[1].status = "WAITING";
         loadable({ fixtures });
 
-        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow("ROUND_NOT_COMPLETE");
+        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({ code: "ROUND_NOT_COMPLETE" }));
     });
 
     it("looks up no teams when the state has none", async () => {
@@ -467,7 +467,7 @@ describe("progressionService.getProposal", () => {
             id: "div-1", name: "Division A", created_by: "user-1", state: { currentRound: 0 }
         });
 
-        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow("ROUND_NOT_FOUND");
+        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({ code: "ROUND_NOT_FOUND" }));
     });
 });
 
@@ -529,7 +529,7 @@ describe("progressionService.commit", () => {
     it("refuses to progress past the final round", async () => {
         loadable({ rounds: [poolRound()] });
 
-        await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow("NO_NEXT_ROUND");
+        await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow(expect.objectContaining({ code: "NO_NEXT_ROUND" }));
     });
 
     it("refuses to progress a round that is still being played", async () => {
@@ -537,7 +537,7 @@ describe("progressionService.commit", () => {
         fixtures[0].status = "ONGOING";
         loadable({ fixtures });
 
-        await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow("ROUND_NOT_COMPLETE");
+        await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow(expect.objectContaining({ code: "ROUND_NOT_COMPLETE" }));
     });
 
     it("allows a correction while the next round is untouched", async () => {
@@ -556,19 +556,19 @@ describe("progressionService.commit", () => {
         });
 
         await expect(progressionService.commit("div-1", "user-1", TEAM_IDS))
-            .rejects.toThrow("NEXT_ROUND_ALREADY_STARTED");
+            .rejects.toThrow(expect.objectContaining({ code: "NEXT_ROUND_ALREADY_STARTED" }));
     });
 
     it("rejects an invalid confirmed list before writing anything", async () => {
         loadable();
 
-        await expect(progressionService.commit("div-1", "user-1", ["t1"])).rejects.toThrow("WRONG_QUALIFIER_COUNT");
+        await expect(progressionService.commit("div-1", "user-1", ["t1"])).rejects.toThrow(expect.objectContaining({ code: "WRONG_QUALIFIER_COUNT" }));
         expect(divisionsRepository.updateRounds).not.toHaveBeenCalled();
     });
 
     it("rejects a division the caller does not own", async () => {
         loadable({ createdBy: "someone-else" });
 
-        await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow("NOT_TOURNAMENT_OWNER");
+        await expect(progressionService.commit("div-1", "user-1", TEAM_IDS)).rejects.toThrow(expect.objectContaining({ code: "NOT_TOURNAMENT_OWNER" }));
     });
 });

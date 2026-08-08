@@ -209,7 +209,8 @@ export default function ScheduleMakerModal({
 			const result = await onSave(payload);
 
 			if (result?.success === false) {
-				showMessage(result.error || 'Failed to save schedule changes.', 'error');
+				// onSave has already shown the message; this only stops the modal
+				// closing on a failed save.
 				return;
 			}
 

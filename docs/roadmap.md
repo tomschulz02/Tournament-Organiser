@@ -85,8 +85,12 @@ Decisions that constrain everything after them. Mostly discussion, little code.
   every mutating service function takes `userId` as a required parameter. Two resolvers
   still to write — one for a fixture id, one for a tournament id — each returning the
   row plus its owner. Build them with the Phase 3 endpoints that need them.
-- Path naming for the pending endpoints. `docs/api.md` already flags the verbs-in-paths
-  and the `collection`/`collections` inconsistency.
+- ~~**Path naming**~~ — **settled 2026-08-08: REST conventions.** Nouns only, plural
+  collections, actions as sub-resources. The full replacement table is in `docs/api.md`.
+  Collections are removed outright, since a tournament with multiple divisions replaced
+  them — this also closes **F4** ahead of Phase 6.
+
+Phase 2 is complete. Everything below is implementation.
 
 ## Phase 3 — Make the tournament runnable
 
@@ -138,8 +142,6 @@ service is cancelled, so this phase is smaller than it was.
 Each of these is currently a stub with no schema behind it. Either it enters the roadmap
 properly or the stub is removed.
 
-- **F4** Collections — two request functions, a component, and a field in the creation
-  summary, with no table and no endpoint.
 - **F9** Profile, Friends, Saved Tournaments — inert menu items, plus a `getUserProfile`
   route that hangs.
 - Live scoring, officials assignment, configurable ranking basis, and the rest of

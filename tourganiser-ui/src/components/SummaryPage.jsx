@@ -10,11 +10,6 @@ export default function SummaryPage({ fields, collections}) {
 		2: 'Final',
 	};
 
-	const collectionMap = {};
-	collections.forEach((collection) => {
-		collectionMap[collection.value] = collection.name;
-	});
-
 	return (
 		<div className="new-tournament-summary">
 			{fields['template'] && (
@@ -43,10 +38,6 @@ export default function SummaryPage({ fields, collections}) {
 						<div className="tournament-summary-section-fields-row">
 							<h4>Description</h4>
 							<p>{fields.details.description || '-'}</p>
-						</div>
-						<div className="tournament-summary-section-fields-row">
-							<h4>Collection</h4>
-							<p>{collectionMap[fields.details.collection] || 'None'}</p>
 						</div>
 					</div>
 				</div>

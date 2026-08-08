@@ -196,27 +196,49 @@ survives.
 
 ### Pending
 
-| Method | Path | Frontend caller |
+These are the paths to build, not the paths the frontend currently calls. The old paths
+put verbs at the front (`/tournaments/delete/:id`, `/divisions/updateTeams/:divisionId`);
+the convention below replaced them on 2026-08-08.
+
+| Method | Path | Replaces |
 |---|---|---|
-| POST | `/api/tournaments/join/:tournamentId` | `joinTournament` |
-| POST | `/api/tournaments/leave/:tournamentId` | `leaveTournament` |
-| POST | `/api/tournaments/start/:tournamentId` | `startTournament` |
-| PUT | `/api/tournaments/end/:tournamentId` | `endTournament` |
-| DELETE | `/api/tournaments/delete/:id` | `deleteTournament` |
-| POST | `/api/fixtures/result/:fixtureId` | `updateScore` |
-| POST | `/api/divisions/updateTeams/:divisionId` | `updateTeams` |
-| POST | `/api/divisions/updateRounds/:divisionId` | `updateRounds` |
-| POST | `/api/divisions/updateSchedule/:divisionId` | `updateDivisionSchedule` |
-| POST | `/api/collection/create` | `createCollection` |
-| GET | `/api/collections` | `fetchUserCollections` |
+| POST | `/api/tournaments/:tournamentId/save` | `/tournaments/join/:tournamentId` |
+| DELETE | `/api/tournaments/:tournamentId/save` | `/tournaments/leave/:tournamentId` |
+| POST | `/api/tournaments/:tournamentId/start` | `/tournaments/start/:tournamentId` |
+| POST | `/api/tournaments/:tournamentId/end` | `PUT /tournaments/end/:tournamentId` |
+| DELETE | `/api/tournaments/:tournamentId` | `/tournaments/delete/:id` |
+| PUT | `/api/fixtures/:fixtureId/result` | `POST /fixtures/result/:fixtureId` |
+| PUT | `/api/divisions/:divisionId/teams` | `/divisions/updateTeams/:divisionId` |
+| PUT | `/api/divisions/:divisionId/schedule` | `/divisions/updateSchedule/:divisionId` |
+
+Also renamed: `POST /api/tournaments/create` becomes `POST /api/tournaments`.
+
+`/divisions/updateRounds/:divisionId` is **not** in the list. The progression endpoints
+supersede it and it is deleted rather than implemented — see `docs/decisions.md`, "The
+Server Has Authority Over Tournament State".
+
+`/api/collection/create` and `/api/collections` are also gone. Collections were replaced
+by a single tournament holding multiple divisions, and the feature is removed.
 
 `GET /api/users/profile/:id` throws `NOT_IMPLEMENTED` and returns 501 in the standard
 envelope. It previously had an empty `try` block and never called `res`, so an
 authenticated request hung until the client timed out.
 
-Note the path inconsistency in the pending set: verbs appear in paths
-(`updateTeams`, `create`, `delete`) and `collection` / `collections` are inconsistently
-pluralised. Worth settling on a convention before implementing them.
+### Path convention
+
+Settled 2026-08-08. Resource-oriented, following REST:
+
+- **Nouns only in path segments.** Never a verb. `POST /api/tournaments`, not
+  `/api/tournaments/create`.
+- **Collections are plural.** `/api/tournaments`, `/api/divisions`, `/api/fixtures`.
+- **The HTTP method carries the intent** for plain CRUD. `POST` creates, `GET` reads,
+  `PUT` replaces, `DELETE` removes.
+- **Genuine actions become sub-resources** of the thing they act on:
+  `/api/tournaments/:tournamentId/start`. This is why start and end are not a
+  `PATCH { status }` — the server owns status transitions, and a generic PATCH invites
+  the client to assert one. `GET /api/divisions/:divisionId/progression` already follows
+  this shape and is the model.
+- **Path parameters name their resource.** `:tournamentId`, never `:id`.
 
 ## Known Drift
 

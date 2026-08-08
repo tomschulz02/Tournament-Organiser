@@ -45,6 +45,7 @@ Reviewed with the maintainer on 2026-08-08. Settled since:
   derives the status from the recorded sets. This also fixes known bug 5 and settles
   **B5**, since the write that completes a fixture is the one that can maintain
   `completedGames`.
+- **F4 resolved**: Collections have been removed 
 
 Everything else below is still open. See `docs/roadmap.md` for the order of work.
 
@@ -249,6 +250,8 @@ endpoint, and no route. `CollectionView` also reads the old response envelope
 (`collection.message`, `tournament.message.details`), so it would not work even if the
 endpoints appeared. Decide whether Collections is a real roadmap item or should be
 deleted.
+
+*Fixed 2026-08-08. Collections have been removed.*
 
 **F5 — `requests.js` is ~378 lines of the same twelve lines repeated twenty times.**
 Every function is `try { fetchWithRetry(...) } catch { if (error.isConnectionError)

@@ -283,13 +283,6 @@
 	/* box-shadow: 0 0 8px rgba(21, 101, 192, 0.2); */
 }
 
-.type-indicator.collection {
-	background-color: #e8f5e9;
-	color: #2e7d32;
-	border-color: #2e7d32;
-	/* box-shadow: 0 0 8px rgba(46, 125, 50, 0.2); */
-}
-
 /* Tournament info popup window */
 
 .tournament-popup {

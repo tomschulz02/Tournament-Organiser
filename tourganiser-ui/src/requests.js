@@ -93,12 +93,6 @@ export const endTournament = (tournamentId) => request(`tournaments/end/${tourna
 
 export const deleteTournament = (id) => request(`tournaments/delete/${id}`, { method: 'DELETE' });
 
-// Collections
-
-export const createCollection = (name) => request('collection/create', { method: 'POST', body: { name } });
-
-export const fetchUserCollections = () => request('collections');
-
 // Fixtures
 
 export const updateScore = (fixtureId, scores, status, hashId, rounds) =>

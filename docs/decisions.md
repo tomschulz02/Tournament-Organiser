@@ -123,6 +123,29 @@ file rather than being reinvented per controller. Preserving `cause` is what mak
 possible to turn a unique-constraint violation into a 409 that says the email is already
 registered, instead of the 500 it currently produces.
 
+## REST Paths, And Collections Removed
+
+Decided 2026-08-08. The convention and the full endpoint list are in `docs/api.md`.
+
+Paths are resource-oriented: nouns only, plural collections, the HTTP method carrying
+intent for CRUD, and genuine actions expressed as sub-resources —
+`POST /api/tournaments/:tournamentId/start` rather than
+`POST /api/tournaments/start/:tournamentId`. Path parameters name their resource, so
+`:tournamentId` rather than `:id`.
+
+Start and end are deliberately sub-resources rather than a `PATCH { status }`. The
+server owns status transitions, and a generic PATCH invites the client to assert one.
+
+**Collections are removed.** The idea was a grouping of related tournaments; it was
+replaced by a single tournament holding multiple divisions, which covers the same need.
+Nothing referenced the feature — both components were orphaned, both request functions
+uncalled, no table, no endpoint — so it is deleted rather than carried.
+
+Reason:
+The old paths were inconsistent enough that each new endpoint needed a judgement call.
+Settling the convention before Phase 3 builds these avoids renaming across both tiers
+afterwards.
+
 ## Ownership Is Checked In The Service, Not In Middleware
 
 Decided 2026-08-08.

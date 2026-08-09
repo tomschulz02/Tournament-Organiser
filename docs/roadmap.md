@@ -60,6 +60,30 @@ The related drift is fixed with C1: `getTeamsByDivisionIds` is gone, with
 `getTeamsByIds`; `getTeamNames` is now `getTeamsByUserId`, listing the teams a user owns;
 and the `RETURNING num_groups` in `updateTeams` is dropped.
 
+> **B7 has since been reversed.** The schema now has `teams (id, name, division_id)` and
+> no `user_id` at all. Everything above that depends on a team belonging to a user —
+> `getTeamsByUserId`, linking an existing team by id, rejecting another user's team — is
+> undone by that change. See Phase 3.5.
+
+### Also critical, found 2026-08-09
+
+- **Round-robin fixture generation produces nothing.** This is known bug 2.
+  `createLeagueState` writes `groups: [[teams]]` — one level too deep — so
+  `generateRoundRobinFixtures` sees a single "team" that is itself an array, pairs it
+  with a `BYE`, and skips the fixture. A League division therefore has zero fixtures and
+  an empty standings table. `createClassicState` uses `populateGroups`, which nests
+  correctly, so pool play inside a Classic division is unaffected. One-line fix; move
+  known bug 2's test into `divisions.service.test.js` with it.
+- **Logging out leaves the page stale.** `creator` is resolved server-side and held in
+  the tournament view's single request, so after logout the organiser controls stay
+  visible until something else triggers a refetch. Logout should invalidate the cached
+  tournament data, not just the session flag.
+- **Creating a tournament appears to do nothing.** `TournamentCreation` does navigate on
+  success — to `/tournaments`, which is the route that renders `Browse`, which is where
+  the creation form already lives. The navigation succeeds and nothing visibly changes.
+  Redirect to `/tournaments/view/:id` instead; the id is in `data.id` on the creation
+  response.
+
 ## Phase 2 — Settle the contracts
 
 Decisions that constrain everything after them. Mostly discussion, little code.
@@ -116,26 +140,115 @@ The largest single gain in usable product, and the reason to do Phases 1 and 2 f
   finished; this is UI wiring.
 - **Tournament lifecycle** — implement start, end and delete, with the Phase 2 ownership
   check.
-- **F3** — organiser controls in `TournamentView`. Without these, none of the above is
-  reachable. The `creator` flag already reaches the component and is currently used only
-  to change a button label.
+- ~~**F3**~~ — done 2026-08-08 by the tournament view redesign. Organiser controls exist
+  and are gated on `creator`; the endpoints behind them are the work above.
+
+Start, end and delete are the cheapest of these and unlock manual testing of everything
+else, so take them first.
+
+### Tournament view polish
+
+Small, and independent of the endpoints above.
+
+- **The fixture card's right-hand side is cramped and does not align.** Division, stage
+  and status are squeezed together, and a longer stage label shifts the division column
+  on that row. Give the trailing fields fixed columns so they line up down the list.
+- **Status should be a colour indicator, not a word** — it is the least-read text on a
+  row and the most repeated. Keep the label accessible to screen readers and to a title
+  attribute; show a dot.
+
+## Phase 3.5 — Teams
+
+Reverses B7. The schema is already changed: `teams (id, name, division_id)`, with no
+`user_id`. Do this before Phase 4, because changing a team invalidates fixtures and any
+schedule built on them.
+
+- **Rework team creation for the new schema.** `createTeam` takes a division id, not a
+  user id. `getTeamsByUserId` is impossible and goes. Selecting an existing team by id
+  goes with it — a team now belongs to exactly one division, so there is nothing to
+  select from. `getTeamsByDivisionIds`, removed with C1, becomes correct again and may
+  be worth restoring in place of resolving through `state.teams`.
+- **Decide which side owns membership.** `teams.division_id` and `state.teams` now both
+  express it. The likely split is that `state.teams` stays authoritative for *order* —
+  seeding is the whole reason it is an array — while `division_id` is the foreign key
+  that makes cascade delete and cheap lookup work. Whichever is chosen, write it into
+  `docs/division-state.md`, because two places holding the same fact will otherwise
+  drift.
+- ~~**Blast radius**~~ — **settled 2026-08-09**, recorded in `docs/decisions.md`.
+  Changing a division's teams regenerates its structure; renaming does not. Build it in
+  this order:
+
+  1. **One endpoint, `PUT /api/divisions/:divisionId`**, taking the division's full
+     intended team list plus `num_groups` and `knockout_teams`. The three 501 team stubs
+     are removed rather than implemented — teams and structure cannot be changed
+     independently, so three endpoints would be three ways to leave a division
+     inconsistent.
+  2. **The service derives intent from the data**, comparing incoming ids against
+     `state.teams`. Same set means a rename: update names, stop. Different set means
+     rebuild. The client never declares which it is doing, per the server-authority
+     decision.
+  3. **Gate on `status === 'Not Started'`**, plus no `COMPLETED` fixture in the division.
+     Note this gate is permanently open until the Phase 3 lifecycle endpoints exist,
+     since nothing currently moves a tournament off `Not Started` — ship them together
+     or the restriction is decorative.
+  4. **Rebuild** = delete the division's fixtures, regenerate `state.rounds` through
+     `generateDivisionDetails`, regenerate fixtures through `generateFixtures`, write the
+     new `state.teams`.
+  5. **Repair the schedule, do not discard it.** It spans the tournament, so remove only
+     the changed division's entries from `tournaments.schedule` and leave the rest
+     placed. Nulling the column throws away unrelated work.
+  6. **Batch on the client.** Edits accumulate and commit once, so the structural
+     confirmation is asked a single time.
+
+- **The confirmation UI reuses the creation form's division step.** Format, group count
+  and qualifier count already exist there. Default to the organiser's current values,
+  validate against the new team count, and flag rather than silently recompute.
+- **Add and remove division** as their own capability, independent of the above.
+- **B6** — the same problem from the other direction: editing groups before the
+  tournament starts does not regenerate fixtures either.
 
 ## Phase 4 — Close the loop on scheduling
 
 The generator stays in the client and the server validates on write — settled
-2026-08-08, see `docs/decisions.md`. The planned move of the generator to a backend
-service is cancelled, so this phase is smaller than it was.
+2026-08-08, see `docs/decisions.md`. The schedule now lives on `tournaments.schedule`.
 
-- **Document the shape of `divisions.schedule`.** It is currently implicit in
+### Persistence
+
+- **Document the shape of `tournaments.schedule`.** It is currently implicit in
   `scheduleUtils.js` and `ScheduleMakerModal.jsx`. This blocks the validator, which
-  cannot be specified against an undocumented payload. Either a new `docs/schedule.md`
-  or a section in `docs/division-state.md`.
-- Write the validator: fixtures belong to the division and appear once, no court clash,
+  cannot be specified against an undocumented payload. A new `docs/schedule.md`.
+- Write the validator: fixtures belong to the tournament and appear once, no court clash,
   no team in two places at once, slots within the tournament dates, no knockout fixture
   before the round that feeds it. Partial schedules are legal.
-- Implement `POST /api/divisions/updateSchedule/:divisionId` on top of it. The column and
-  the repository function already exist.
-- **B6** — editing groups before the tournament starts does not regenerate fixtures.
+- Implement `PUT /api/tournaments/:tournamentId/schedule` on top of it, replacing the 501
+  stub. The column and `tournamentRepository.updateSchedule` already exist, so this is
+  the controller and the validator only.
+
+### Generator correctness
+
+- **Rounds must not overlap in time.** The generator currently places a semifinal at 9am
+  on court 2 while pool play runs at 9am on court 1. A round cannot begin until the round
+  feeding it has finished — the same rule the validator enforces, applied at generation
+  time. This is a domain rule and belongs in `docs/tournament-rules.md`.
+
+### Schedule maker UX
+
+The modal's design is sound; these are layout and interaction defects.
+
+- **The modal is sized wrong.** Its top is hidden behind the fixed site header, and its
+  bottom behind the footer when the footer is in view, so controls are cut off.
+- **Multiple fixtures render in the same court-and-time cell.** The assignment is
+  correct; only the rendering collides.
+- **Placed fixtures cannot be moved.** Once a fixture is in a slot it is fixed, so
+  correcting a generated schedule means editing every entry individually. Make placed
+  fixtures draggable.
+- **There is no manual placement at all.** The only route to a schedule is to generate
+  one and then edit it. Allow dragging a fixture from the unscheduled list straight into
+  a slot, so generating is one option rather than the only one.
+- **PDF export should open the browser's print dialog** rather than downloading
+  immediately, so the organiser can preview before sharing. This also removes the reason
+  `scheduleExport` pulls in jsPDF and html2canvas — worth checking whether the dependency
+  can go entirely, which would take roughly 400kB out of the lazy chunk.
 
 ## Phase 5 — Correctness and consolidation
 
@@ -148,6 +261,27 @@ service is cancelled, so this phase is smaller than it was.
 - Frontend consolidation: **F5** the repetition in `requests.js`, **F6** the dead retry,
   **F8** direct DOM manipulation, **F11** the CSS.
 - **X3** CI, **X4** a linter for `api/`, **F12** frontend tests.
+- **Restore the coverage gate to 100.** `vitest.config.js` sets 95 while `CLAUDE.md`
+  claims 100 and actual coverage is 100.
+
+### Client-side caching
+
+- Cache the tournament payload in the client and refetch only when the server says it has
+  changed, keyed on `last_update`. Fetching only the changed slice would be better than
+  refetching the whole payload, but is not the point — avoiding the refetch entirely is.
+- **Every write to `divisions` must stamp `last_update`.** Several currently do not.
+- **`tournaments` has no `last_update` column.** Tournament-level changes — name, status,
+  and now `schedule` — are therefore invisible to a cache keyed on the division. Either
+  add the column or derive a tournament-level value from `max(divisions.last_update)`,
+  which does not cover a schedule edit. Decide before building the cache.
+- Interacts with the logout bug in Phase 1: whatever holds the cache has to be cleared
+  when the session changes, or a logged-out viewer keeps the organiser's payload.
+
+## Planned redesigns
+
+- **Tournament creation page.** To be redesigned in the same way the tournament view was,
+  with a specification supplied separately. Wait for it — the walkthrough is written from
+  the specification, not invented.
 
 ## Phase 6 — Decide what is real
 

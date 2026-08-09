@@ -166,7 +166,68 @@ Consequence: parallel work inside the transaction becomes sequential, because on
 client cannot run concurrent queries. Nothing is lost — the previous `Promise.all` over
 divisions opened a connection each and contended for the same pool.
 
-## Teams Are Selected Or Created, Never Duplicated
+## Changing A Division's Teams Regenerates Its Structure
+
+Decided 2026-08-09. Replaces the superseded decision below.
+
+Teams may only be changed while the tournament has not started, so nothing that is
+regenerated has ever held a result. The gate is `tournaments.status === 'Not Started'`,
+with a second check that no fixture in the division is `COMPLETED` — one extra query,
+and it protects against a status that is simply wrong.
+
+**Two kinds of change, and the server tells them apart from the data rather than being
+told.** The client sends the division's full intended team list; the service compares the
+incoming ids against `state.teams`:
+
+- **The set is unchanged** — only names differ. Update `teams.name` and stop. No
+  regeneration, no fixture changes, no schedule impact. Renaming is nearly free because
+  fixtures reference `teams.id`, `state.teams` holds ids, and the schedule references
+  fixture ids. Nothing structural depends on a name.
+- **The set differs** — a team was added or removed. The division's structure is rebuilt.
+
+Rebuilding means: delete every fixture in the division, regenerate `state.rounds` through
+`generateDivisionDetails` for the new team count, regenerate fixtures through
+`generateFixtures`, and write the new ordered `state.teams`.
+
+**Team count is a structural parameter, not a list length.** In a Classic division,
+`num_groups` and `knockout_teams` were chosen against a specific count — going from eight
+teams to seven turns two pools of four into a four and a three, and may change what the
+knockout stage should be. So the organiser **confirms group count and qualifier count as
+part of the change**, defaulted to their current values and validated against the new
+count. They are never silently recomputed.
+
+**Edits batch.** The team list is edited client-side and committed once, so the structural
+confirmation happens a single time at commit rather than on every keystroke.
+
+**The schedule is repaired, not discarded.** A schedule spans the tournament, so
+regenerating one division's fixtures must remove that division's entries from
+`tournaments.schedule` and leave every other division's placements intact. Nulling the
+column would throw away scheduling work that has nothing to do with the change.
+
+Reason:
+A team withdrawing a week before a tournament is ordinary. The alternative considered was
+to allow renaming only and require the organiser to delete and rebuild the whole division
+to change its size — but that is still delete-and-regenerate, only manual, lossier, and
+paid for by the user re-typing every remaining team. Adding and removing divisions
+remains available as its own capability, for organisers who genuinely want another age
+group; it is not the workaround for a withdrawn team.
+
+Consequence: the three 501 team stubs are superseded by one endpoint that replaces a
+division's teams and structure together, because the two cannot be changed independently.
+
+## ~~Teams Are Selected Or Created, Never Duplicated~~ — SUPERSEDED
+
+**Reversed 2026-08-09.** The schema is now `teams (id, name, division_id)` with no
+`user_id`. A team belongs to one division, so there is no library of a user's teams to
+select from and nothing to link by id — every team is created with its division. The
+reasoning below is kept because it records what was given up: a team can no longer be
+followed across tournaments, which forecloses cross-tournament statistics unless a
+separate club or team-identity concept is introduced later.
+
+Open with the reversal: `teams.division_id` and `state.teams` now both express
+membership. See `docs/roadmap.md`, Phase 3.5.
+
+The superseded decision follows.
 
 Decided 2026-08-08.
 

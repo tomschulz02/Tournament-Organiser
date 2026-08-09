@@ -165,15 +165,33 @@ need the service-level ownership check described under Security.
 | POST | `/api/tournaments/:tournamentId/save` | required | Follow a tournament |
 | DELETE | `/api/tournaments/:tournamentId/save` | required | Unfollow |
 | PUT | `/api/tournaments/:tournamentId/schedule` | required | Save the tournament schedule |
-| POST | `/api/divisions/:divisionId/teams` | required | Add a team to a division |
-| PUT | `/api/divisions/:divisionId/teams/:teamId` | required | Rename a team |
-| DELETE | `/api/divisions/:divisionId/teams/:teamId` | required | Remove a team from a division |
+| POST | `/api/divisions/:divisionId/teams` | required | Add a team — **to be removed, see below** |
+| PUT | `/api/divisions/:divisionId/teams/:teamId` | required | Rename a team — **to be removed** |
+| DELETE | `/api/divisions/:divisionId/teams/:teamId` | required | Remove a team — **to be removed** |
 
-Of these, `PUT /schedule` is the only one whose persistence already exists —
+`PUT /schedule` is the only one whose persistence already exists —
 `tournamentRepository.updateSchedule` writes `tournaments.schedule`. It stays a stub
 because the validation in `docs/decisions.md` has not been written, and an endpoint that
-accepts an unvalidated schedule is worse than one that accepts none. The team endpoints
-would edit `divisions.state.teams` rather than a join table; see `docs/division-state.md`.
+accepts an unvalidated schedule is worse than one that accepts none.
+
+**The three team stubs are superseded.** They are replaced by a single endpoint, decided
+2026-08-09:
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| PUT | `/api/divisions/:divisionId` | required + owner | Replace a division's teams and structure |
+
+Body: the division's full intended team list, plus `num_groups` and `knockout_teams`.
+The service compares the incoming team ids against `state.teams` and decides what the
+request means — an unchanged set is a rename and touches only `teams.name`; a changed set
+rebuilds the division's rounds, fixtures and `state.teams`, and removes that division's
+entries from `tournaments.schedule`.
+
+Teams and structure cannot be changed independently, which is why this is one endpoint
+rather than three: a team count change alters group sizes and may alter the knockout
+shape. Rejected with 409 unless the tournament is `Not Started` and no fixture in the
+division is `COMPLETED`. See `docs/decisions.md`, "Changing A Division's Teams
+Regenerates Its Structure".
 
 Called by the frontend but **not implemented** on the backend. `fixtures.route.js` is an
 empty router and `fixtures.controller.js` is an empty file, although the services and

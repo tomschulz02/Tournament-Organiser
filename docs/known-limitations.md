@@ -122,6 +122,12 @@ From the redesign of 2026-08-08.
   UI is correct on the payload it is given; the count comes from `state.teams` rather
   than from resolved rows. Worth deciding whether the dashboard should count resolved
   teams instead.
+
+  The same tournament also has knockout fixtures but no pool fixtures, while its
+  `currentRound` is Pool Play. Both oddities point at one cause: it was created before
+  the `createTeam` fix, under a schema the code no longer matches. **Recreate the
+  development data rather than debugging it** — nothing created through the current code
+  path can reach that state.
 - **`calculateScheduledStats` counts schedule entries, not distinct fixtures.** Those
   agree only while no fixture is placed twice, and nothing enforces that — the
   server-side rejection of a duplicate fixture id is specified in `docs/decisions.md` and

@@ -34,7 +34,7 @@ CREATE TABLE "saved_tournaments" (
 CREATE TABLE "teams" (
 	"id" uuid PRIMARY KEY,
 	"name" text NOT NULL,
-	"user_id" uuid NOT NULL
+	"division_id" uuid NOT NULL
 );
 CREATE TABLE "tournaments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -68,5 +68,5 @@ ALTER TABLE "fixtures" ADD CONSTRAINT "team1_fixture_fkey" FOREIGN KEY ("team_1"
 ALTER TABLE "fixtures" ADD CONSTRAINT "team2_fixture_fkey" FOREIGN KEY ("team_2") REFERENCES "teams"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "saved_tournaments" ADD CONSTRAINT "tournaments_saved_fkey" FOREIGN KEY ("tournament_id") REFERENCES "tournaments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "saved_tournaments" ADD CONSTRAINT "users_saved_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "teams" ADD CONSTRAINT "user_teams_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "teams" ADD CONSTRAINT "division_teams_fkey" FOREIGN KEY ("division_id") REFERENCES "divisions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "tournaments" ADD CONSTRAINT "tournament_owner" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE CASCADE;

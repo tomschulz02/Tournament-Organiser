@@ -159,9 +159,7 @@ Non-trivial work is specified in a handover document under docs/, named
 `handover-<subject>.md`, and deleted once the work is done. The durable record stays in
 the standing documents; a handover is scaffolding.
 
-Use this structure. It was arrived at through
-`docs/handover-tournament-view-redesign.md` and is the required format for all future
-handovers.
+Use this structure. It is the required format for all future handovers.
 
 1. **Risk declaration.** State the Risk Level from this file, the specific risks, and
    that the document itself is the explanation the Medium/High Risk process requires.

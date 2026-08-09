@@ -11,7 +11,6 @@ CREATE TABLE "divisions" (
 	"num_teams" integer DEFAULT 0,
 	"type" varchar(50),
 	"state" jsonb,
-	"schedule" jsonb,
 	"last_update" timestamp DEFAULT now() NOT NULL
 );
 CREATE TABLE "fixtures" (
@@ -45,7 +44,8 @@ CREATE TABLE "tournaments" (
 	"location" varchar(50) NOT NULL,
 	"description" text,
 	"created_by" uuid NOT NULL,
-	"status" tournament_status DEFAULT 'Not Started'
+	"status" tournament_status DEFAULT 'Not Started',
+	"schedule" jsonb
 );
 CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -18,15 +18,16 @@ import {
 	getDayBounds,
 	getDayEntries,
 	getEntrySlotSpan,
-	getScheduleForDivision,
+	getScheduleForTournament,
 	getUnscheduledFixtures,
-	normaliseDivisionFixtures,
+	normaliseFixtures,
 	removeScheduleEntry,
 	serialiseScheduleForSave,
 	sortScheduleEntries,
 	upsertScheduleEntry,
 	validateScheduleEntry,
 } from '../utils/scheduleUtils';
+import { flattenFixtures } from './tournament/fixtureUtils';
 
 function scheduleReducer(state, action) {
 	switch (action.type) {
@@ -61,14 +62,29 @@ function getDefaultViewMode() {
 	return window.innerWidth <= 768 ? 'list' : 'grid';
 }
 
-function getDivisionName(division, fallback = 'Division') {
-	return division?.name || division?.division_name || fallback;
-}
+// A schedule spans the tournament, not a division. Divisions share the same
+// physical courts, so scheduling them independently could double-book one; one
+// combined entry list makes that impossible to express, because every conflict
+// check runs against all of it.
+//
+// divisionName is set only when there is more than one division — with one, the
+// label is on every row and says nothing.
+function buildTournamentSchedule(tournament, divisions = []) {
+	const schedule = getScheduleForTournament(tournament || {});
+	const fixtures = normaliseFixtures(flattenFixtures(divisions));
 
-function buildDivisionSchedule(division, tournamentDetails) {
-	const schedule = getScheduleForDivision(division, tournamentDetails);
-	const fixtures = normaliseDivisionFixtures(division?.fixtures || []);
-	return { schedule, fixtures };
+	if (divisions.length < 2) {
+		return { schedule, fixtures };
+	}
+
+	return {
+		schedule,
+		fixtures: fixtures.map((fixture) => ({
+			...fixture,
+			divisionName: fixture.division_name,
+			searchText: `${fixture.searchText} ${String(fixture.division_name || '').toLowerCase()}`,
+		})),
+	};
 }
 
 function getEntryLabel(entry, fixturesById) {
@@ -88,7 +104,8 @@ function getEntrySecondary(entry, fixturesById) {
 	const fixture = fixturesById[entry.fixtureId];
 	if (!fixture) return 'Fixture not found';
 
-	return `${fixture.round} - Match ${fixture.matchNo}`;
+	const context = `${fixture.round} - Match ${fixture.matchNo}`;
+	return fixture.divisionName ? `${fixture.divisionName} - ${context}` : context;
 }
 
 function getSlotKey(day, courtId, startTime) {
@@ -106,9 +123,9 @@ function createSlotDraft(day, courtId, startTime, slotMinutes) {
 
 export default function ScheduleMakerModal({
 	isOpen,
-	division,
+	tournament,
+	divisions,
 	tournamentName,
-	tournamentDetails,
 	canEdit,
 	onClose,
 	onSave,
@@ -116,8 +133,8 @@ export default function ScheduleMakerModal({
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const { schedule: initialSchedule, fixtures } = useMemo(
-		() => buildDivisionSchedule(division, tournamentDetails),
-		[division, tournamentDetails]
+		() => buildTournamentSchedule(tournament, divisions),
+		[tournament, divisions]
 	);
 	const [saving, setSaving] = useState(false);
 	const [dirty, setDirty] = useState(false);
@@ -127,6 +144,7 @@ export default function ScheduleMakerModal({
 	const [selectedEntryId, setSelectedEntryId] = useState(null);
 	const [fixtureSearch, setFixtureSearch] = useState('');
 	const [roundFilter, setRoundFilter] = useState('all');
+	const [divisionFilter, setDivisionFilter] = useState('all');
 	const [slotDraft, setSlotDraft] = useState(null);
 	const [breakDraft, setBreakDraft] = useState(null);
 	const [courtDraft, setCourtDraft] = useState('');
@@ -167,16 +185,17 @@ export default function ScheduleMakerModal({
 		const search = deferredSearch.trim().toLowerCase();
 
 		return unscheduledFixtures.filter((fixture) => {
+			const matchesDivision = divisionFilter === 'all' || String(fixture.division_id) === divisionFilter;
 			const matchesRound = roundFilter === 'all' || fixture.round === roundFilter;
 			const matchesSearch = !search || fixture.searchText.includes(search);
-			return matchesRound && matchesSearch;
+			return matchesDivision && matchesRound && matchesSearch;
 		});
-	}, [deferredSearch, roundFilter, unscheduledFixtures]);
+	}, [deferredSearch, divisionFilter, roundFilter, unscheduledFixtures]);
 	const stats = useMemo(() => calculateScheduledStats(schedule, fixtures), [schedule, fixtures]);
 
 	if (!isOpen) return null;
 
-	const divisionName = getDivisionName(division);
+	const divisionList = divisions || [];
 
 	const markDirty = () => {
 		if (!dirty) setDirty(true);
@@ -253,7 +272,7 @@ export default function ScheduleMakerModal({
 		});
 		setCourtDraft('');
 		markDirty();
-		showMessage(`${nextName} added to this division schedule.`, 'success');
+		showMessage(`${nextName} added to the tournament schedule.`, 'success');
 	};
 
 	const handleAssignFixtureToSlot = (fixture, draft) => {
@@ -373,12 +392,8 @@ export default function ScheduleMakerModal({
 		const result = generateAutomaticSchedule({
 			baseSchedule: schedule,
 			fixtures,
-			startDate: tournamentDetails.startDate || tournamentDetails.start_date,
-			endDate:
-				tournamentDetails.endDate ||
-				tournamentDetails.end_date ||
-				tournamentDetails.startDate ||
-				tournamentDetails.start_date,
+			startDate: tournament.startDate || tournament.start_date,
+			endDate: tournament.endDate || tournament.end_date || tournament.startDate || tournament.start_date,
 			courtCount: Number(generatorDraft.courtCount),
 			dailyStartTime: generatorDraft.dailyStartTime,
 			dailyEndTime: generatorDraft.dailyEndTime,
@@ -400,7 +415,7 @@ export default function ScheduleMakerModal({
 		try {
 			await exportSchedulePdf({
 				rootElement: type === 'grid' ? exportGridRef.current : exportListRef.current,
-				filename: `${tournamentName}-${divisionName}-${type}-schedule.pdf`.replace(/\s+/g, '-').toLowerCase(),
+				filename: `${tournamentName}-${type}-schedule.pdf`.replace(/\s+/g, '-').toLowerCase(),
 				orientation: type === 'grid' ? 'landscape' : 'portrait',
 			});
 		} catch {
@@ -420,12 +435,11 @@ export default function ScheduleMakerModal({
 				<div className="schedule-maker-header">
 					<div>
 						<p className="schedule-maker-kicker">Schedule Maker</p>
-						<h2 id="schedule-maker-title">
-							{tournamentName} - {divisionName}
-						</h2>
+						<h2 id="schedule-maker-title">{tournamentName}</h2>
 						<p className="schedule-maker-subtitle">
 							{stats.scheduledFixtures} of {stats.totalFixtures} fixtures scheduled across {stats.days} day
 							{stats.days === 1 ? '' : 's'}
+							{divisionList.length > 1 && ` and ${divisionList.length} divisions`}
 						</p>
 					</div>
 					<div className="schedule-maker-header-actions">
@@ -516,6 +530,20 @@ export default function ScheduleMakerModal({
 									placeholder="Search teams or round"
 									aria-label="Search unscheduled fixtures"
 								/>
+								{/* Absent for a single division: a filter with one choice is noise. */}
+								{divisionList.length > 1 && (
+									<select
+										value={divisionFilter}
+										onChange={(event) => setDivisionFilter(event.target.value)}
+										aria-label="Filter fixtures by division">
+										<option value="all">All divisions</option>
+										{divisionList.map((entry) => (
+											<option key={entry.id} value={String(entry.id)}>
+												{entry.name}
+											</option>
+										))}
+									</select>
+								)}
 								<select value={roundFilter} onChange={(event) => setRoundFilter(event.target.value)} aria-label="Filter fixtures by round">
 									{roundOptions.map((round) => (
 										<option key={round} value={round}>
@@ -537,6 +565,7 @@ export default function ScheduleMakerModal({
 											<span>vs</span>
 											<strong>{fixture.team2}</strong>
 											<small>
+												{fixture.divisionName ? `${fixture.divisionName} - ` : ''}
 												{fixture.round} - Match {fixture.matchNo}
 											</small>
 										</button>
@@ -556,6 +585,7 @@ export default function ScheduleMakerModal({
 								schedule={schedule}
 								activeDay={activeDay}
 								fixturesById={fixturesById}
+								canEdit={canEdit}
 								onSelectEntry={openEntryEditor}
 								onOpenSlot={handleOpenSlotPicker}
 								onDropFixture={handleDropFixture}
@@ -605,22 +635,10 @@ export default function ScheduleMakerModal({
 				</div>
 
 				<div className="schedule-export-root" ref={exportGridRef}>
-					<ScheduleExportPages
-						type="grid"
-						schedule={schedule}
-						fixturesById={fixturesById}
-						tournamentName={tournamentName}
-						divisionName={divisionName}
-					/>
+					<ScheduleExportPages type="grid" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} />
 				</div>
 				<div className="schedule-export-root" ref={exportListRef}>
-					<ScheduleExportPages
-						type="list"
-						schedule={schedule}
-						fixturesById={fixturesById}
-						tournamentName={tournamentName}
-						divisionName={divisionName}
-					/>
+					<ScheduleExportPages type="list" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} />
 				</div>
 			</div>
 		</div>
@@ -833,6 +851,7 @@ function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign }) {
 							<span>vs</span>
 							<strong>{fixture.team2}</strong>
 							<small>
+								{fixture.divisionName ? `${fixture.divisionName} - ` : ''}
 								{fixture.round} - Match {fixture.matchNo}
 							</small>
 						</button>
@@ -958,6 +977,7 @@ function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onD
 						{fixture.team1} vs {fixture.team2}
 					</strong>
 					<p>
+						{fixture.divisionName ? `${fixture.divisionName} - ` : ''}
 						{fixture.round} - Match {fixture.matchNo}
 					</p>
 				</div>
@@ -1028,7 +1048,7 @@ function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onD
 	);
 }
 
-function ScheduleExportPages({ type, schedule, fixturesById, tournamentName, divisionName }) {
+function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 	return (
 		<>
 			{schedule.days.map((day) => (
@@ -1037,7 +1057,7 @@ function ScheduleExportPages({ type, schedule, fixturesById, tournamentName, div
 						<div>
 							<p>Tourganiser</p>
 							<h2>{tournamentName}</h2>
-							<h3>{divisionName}</h3>
+							<h3>Tournament Schedule</h3>
 						</div>
 						<div className="schedule-export-date">{formatDateLabel(day.date)}</div>
 					</div>

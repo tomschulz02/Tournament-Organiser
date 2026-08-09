@@ -41,10 +41,33 @@ async function fetchTournamentDetails(req, res){
     });
 }
 
+// Declared but not built. The routes exist so the paths are fixed and the UI can
+// wire to them properly; each answers 501 through the standard envelope. See
+// docs/api.md for the paths and the handover for why they are stubs rather than
+// omissions. Replace the throw with a service call when the feature lands.
+
+async function saveTournament() {
+    throw new AppError("NOT_IMPLEMENTED");
+}
+
+async function unsaveTournament() {
+    throw new AppError("NOT_IMPLEMENTED");
+}
+
+// tournamentRepository.updateSchedule already writes tournaments.schedule, so
+// this is the one stub with its persistence in place. It still needs the
+// validation described in docs/decisions.md before it can accept a payload.
+async function updateSchedule() {
+    throw new AppError("NOT_IMPLEMENTED");
+}
+
 export const tournamentController = {
     createTournament,
     fetchTournaments,
-    fetchTournamentDetails
+    fetchTournamentDetails,
+    saveTournament,
+    unsaveTournament,
+    updateSchedule
 }
 
 function isUuid(value) {

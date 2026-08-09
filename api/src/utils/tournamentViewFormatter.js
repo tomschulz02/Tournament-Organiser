@@ -52,6 +52,9 @@ function formatTournamentDetails(tournament, divisions) {
         end_date_label: tournament.end_date ? getLongDate(tournament.end_date) : null,
         startDate,
         endDate,
+        // A schedule spans the whole tournament, not one division — divisions
+        // share the same courts. Moved from divisions.schedule on 2026-08-08.
+        schedule: tournament.schedule ?? null,
         type: divisionTypes.length === 1 ? divisionTypes[0] : null,
         division_count: divisions.length
     };
@@ -67,7 +70,6 @@ function formatDivisionPayload({ division, teams, fixtures }) {
         .map((fixture) => normalizeFixture(fixture, teamLookup));
 
     const results = normalizedFixtures.filter((fixture) => isResultFixture(fixture));
-    const schedule = division.schedule ?? state.schedule ?? null;
     const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup);
     const bracket = buildDivisionBracket(state, normalizedFixtures, teamLookup);
     const finalStandings = buildFinalStandings({
@@ -82,7 +84,6 @@ function formatDivisionPayload({ division, teams, fixtures }) {
         teams: orderedTeams,
         fixtures: normalizedFixtures,
         results,
-        schedule,
         state
     });
 
@@ -99,7 +100,6 @@ function formatDivisionPayload({ division, teams, fixtures }) {
         })),
         fixtures: normalizedFixtures,
         results,
-        schedule,
         overview,
         standings,
         bracket,
@@ -124,7 +124,6 @@ function buildTournamentDashboard(tournament, divisions) {
             fixtureCount: division.overview.totalFixtures,
             completedFixtureCount: division.overview.completedFixtures,
             upcomingFixtureCount: division.overview.upcomingFixturesCount,
-            hasSchedule: division.overview.hasSchedule,
             currentRoundName: division.overview.currentRound,
             recentResults: division.overview.recentResults,
             upcomingFixtures: division.overview.upcomingFixtures
@@ -148,6 +147,9 @@ function buildTournamentDashboard(tournament, divisions) {
         completedFixtureCount,
         upcomingFixtureCount,
         currentStatus: tournament.status,
+        // One flag for the whole tournament. The schedule is not per-division,
+        // so neither is the question of whether one exists.
+        hasSchedule: Boolean(tournament.schedule),
         divisions: divisionSummaries,
         recentResults: allResults
             .sort((a, b) => (b.match_no || 0) - (a.match_no || 0))
@@ -158,7 +160,7 @@ function buildTournamentDashboard(tournament, divisions) {
     };
 }
 
-function buildDivisionOverview({ division, teams, fixtures, results, schedule, state }) {
+function buildDivisionOverview({ division, teams, fixtures, results, state }) {
     const completedFixtures = fixtures.filter((fixture) => fixture.status === "COMPLETED").length;
     const upcomingFixtures = fixtures
         .filter((fixture) => fixture.status === "UPCOMING" || fixture.status === "LIVE")
@@ -175,8 +177,7 @@ function buildDivisionOverview({ division, teams, fixtures, results, schedule, s
             .sort((a, b) => (b.match_no || 0) - (a.match_no || 0))
             .slice(0, 5),
         upcomingFixtures: upcomingFixtures.slice(0, 5),
-        currentRound: getCurrentRoundName(state),
-        hasSchedule: Boolean(schedule)
+        currentRound: getCurrentRoundName(state)
     };
 }
 
@@ -374,8 +375,7 @@ function normalizeDivisionState(state) {
     return {
         teams: Array.isArray(state.teams) ? state.teams : [],
         rounds: Array.isArray(state.rounds) ? state.rounds : [],
-        currentRound: Number.isInteger(state.currentRound) ? state.currentRound : Number(state.currentRound) || 0,
-        schedule: state.schedule ?? null
+        currentRound: Number.isInteger(state.currentRound) ? state.currentRound : Number(state.currentRound) || 0
     };
 }
 

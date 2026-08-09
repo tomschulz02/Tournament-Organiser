@@ -152,3 +152,41 @@ Additional documentation:
 - docs/git-hygiene.md
 
 Consult these only when relevant to the task.
+
+## Handover Documents
+
+Non-trivial work is specified in a handover document under docs/, named
+`handover-<subject>.md`, and deleted once the work is done. The durable record stays in
+the standing documents; a handover is scaffolding.
+
+Use this structure. It was arrived at through
+`docs/handover-tournament-view-redesign.md` and is the required format for all future
+handovers.
+
+1. **Risk declaration.** State the Risk Level from this file, the specific risks, and
+   that the document itself is the explanation the Medium/High Risk process requires.
+
+2. **How to use this document.** One step per session. Do not re-inspect anything the
+   facts section already states. Do not run the final validation after every step. Read
+   only the files a step names.
+
+3. **Established facts.** The section that earns the format its keep. Record what the
+   implementer would otherwise have to discover: payload shapes, available components,
+   design tokens, real breakpoints, what exists and what does not. An instruction to
+   "inspect the codebase thoroughly" is the single largest avoidable cost in a handover
+   — replace it with the answers. Include a table of anything the specification asks for
+   that the data cannot support.
+
+4. **Decisions already made.** Settled questions, marked not to be revisited.
+
+5. **Non-goals.** What not to touch, explicitly.
+
+6. **Numbered steps**, each independently shippable and each ending with the application
+   working. Every step carries: why it is here, the files it touches, **Do**, **Don't**,
+   and **Verify**. Write Do as intent plus constraints rather than literal code, so the
+   document is followable by hand as well as by an agent. Verify is the contract.
+
+7. **Final validation**, run once at the end.
+
+Write for both readers. A developer following it manually and an agent implementing it
+should need the same information.

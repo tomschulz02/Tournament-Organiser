@@ -11,4 +11,10 @@ divisionRouter.use(express.json());
 divisionRouter.get('/:divisionId/progression', requireAuth, divisionController.getProgression);
 divisionRouter.post('/:divisionId/progression', requireAuth, divisionController.commitProgression);
 
+// Declared, not implemented: all three answer 501. See tournaments.route.js for
+// why the stubs carry requireAuth already.
+divisionRouter.post('/:divisionId/teams', requireAuth, divisionController.addTeam);
+divisionRouter.put('/:divisionId/teams/:teamId', requireAuth, divisionController.updateTeam);
+divisionRouter.delete('/:divisionId/teams/:teamId', requireAuth, divisionController.removeTeam);
+
 export default divisionRouter;

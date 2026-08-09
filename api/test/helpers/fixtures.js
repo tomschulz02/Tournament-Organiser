@@ -112,7 +112,6 @@ export function makeDivision(overrides = {}) {
         type: "Classic",
         num_teams: null,
         state: makeState(),
-        schedule: null,
         ...overrides
     };
 }
@@ -127,6 +126,7 @@ export function makeTournament(overrides = {}) {
         start_date: new Date("2026-08-01T00:00:00.000Z"),
         end_date: new Date("2026-08-03T00:00:00.000Z"),
         created_by: "user-1",
+        schedule: null,
         ...overrides
     };
 }

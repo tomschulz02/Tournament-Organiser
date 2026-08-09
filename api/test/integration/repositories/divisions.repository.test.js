@@ -307,25 +307,8 @@ describe("getFixturesByDivisionId", () => {
     });
 });
 
-describe("updateSchedule", () => {
-    it("writes the schedule to its own column and stamps last_update", async () => {
-        expect(await divisionsRepository.updateSchedule("div-1", { slots: [] }))
-            .toEqual({ message: "Schedule updated" });
-
-        const [sql, params] = db.query.mock.calls[0];
-        expect(squash(sql)).toBe(
-            "UPDATE divisions SET schedule = $1::jsonb, last_update = now() WHERE id = $2::uuid"
-        );
-        expect(params).toEqual(['{"slots":[]}', "div-1"]);
-    });
-
-    it("throws, keeping the underlying error as cause", async () => {
-        const underlying = new Error("connection lost");
-        db.query.mockRejectedValueOnce(underlying);
-
-        await expectWrapped(divisionsRepository.updateSchedule("div-1", {}), "Failed to update schedule", underlying);
-    });
-});
+// updateSchedule moved to tournament.repository.js on 2026-08-08: a schedule
+// spans the tournament, not a division. Its tests moved with it.
 
 describe("getDivisionDetails", () => {
     it("returns each division with its fixtures attached", async () => {

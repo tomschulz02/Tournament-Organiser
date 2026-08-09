@@ -83,15 +83,21 @@ export const fetchTournamentData = (tournamentId) => request(`tournaments/${tour
 export const createTournament = (tournamentData) =>
 	request('tournaments/create', { method: 'POST', body: tournamentData });
 
-export const joinTournament = (tournamentId) => request(`tournaments/join/${tournamentId}`, { method: 'POST' });
+// Follow and unfollow. The backend routes exist but answer 501, so these throw an
+// ApiError whose message is display-ready — pass it straight to showMessage.
+export const saveTournament = (tournamentId) => request(`tournaments/${tournamentId}/save`, { method: 'POST' });
 
-export const leaveTournament = (tournamentId) => request(`tournaments/leave/${tournamentId}`, { method: 'POST' });
+export const unsaveTournament = (tournamentId) => request(`tournaments/${tournamentId}/save`, { method: 'DELETE' });
 
 export const startTournament = (tournamentId) => request(`tournaments/start/${tournamentId}`, { method: 'POST' });
 
 export const endTournament = (tournamentId) => request(`tournaments/end/${tournamentId}`, { method: 'PUT' });
 
 export const deleteTournament = (id) => request(`tournaments/delete/${id}`, { method: 'DELETE' });
+
+// A schedule spans the tournament, not a division. Returns 501 until implemented.
+export const updateTournamentSchedule = (tournamentId, schedule) =>
+	request(`tournaments/${tournamentId}/schedule`, { method: 'PUT', body: { schedule } });
 
 // Fixtures
 
@@ -109,8 +115,16 @@ export const updateRounds = (divisionId, rounds, qualifiedTeams, standings, fixt
 		body: { rounds, qualifiedTeams, standings, fixtures, currentRound },
 	});
 
-export const updateDivisionSchedule = (divisionId, schedule) =>
-	request(`divisions/updateSchedule/${divisionId}`, { method: 'POST', body: { schedule } });
+// Team management. All three return 501 until implemented; the ApiError message
+// is display-ready, so a catch can pass it straight to showMessage.
+export const addDivisionTeam = (divisionId, name) =>
+	request(`divisions/${divisionId}/teams`, { method: 'POST', body: { name } });
+
+export const updateDivisionTeam = (divisionId, teamId, name) =>
+	request(`divisions/${divisionId}/teams/${teamId}`, { method: 'PUT', body: { name } });
+
+export const removeDivisionTeam = (divisionId, teamId) =>
+	request(`divisions/${divisionId}/teams/${teamId}`, { method: 'DELETE' });
 
 // Round progression is a two step flow. This fetches the default ranking and the
 // teams that would qualify, computed by the backend. It mutates nothing.

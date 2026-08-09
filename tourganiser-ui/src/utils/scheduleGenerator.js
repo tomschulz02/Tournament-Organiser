@@ -44,12 +44,20 @@ function buildBlockedSlotChecker(entries) {
 		});
 }
 
+// Ids where the payload carries them, names only as a fallback. The fixture set
+// now spans every division, and two divisions may well both have a team called
+// "Team A" — keying rest windows on the name alone would treat them as one team.
 function getTeamKeys(fixture) {
-	return [fixture.team1, fixture.team2].filter(Boolean);
+	return [fixture.team_1_id || fixture.team1, fixture.team_2_id || fixture.team2].filter(Boolean);
 }
 
+// Scoped to the division for the same reason: "Pool A" exists in most divisions,
+// and an unscoped key would pin every division's Pool A to one court.
 function getFixtureCourtKey(fixture) {
-	return fixture.poolKey || fixture.round || null;
+	const key = fixture.poolKey || fixture.round;
+	if (!key) return null;
+
+	return `${fixture.division_id ?? ''}:${key}`;
 }
 
 function scoreSlot({

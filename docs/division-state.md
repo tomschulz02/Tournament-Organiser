@@ -69,11 +69,15 @@ options, but neither is justified yet.
 
 ## Schedule
 
-A schedule is **not** part of division state. It is stored in its own JSONB column,
-`divisions.schedule`.
+A schedule is **not** part of division state, and it is not part of a division at all.
+It is stored in its own JSONB column on the tournament, `tournaments.schedule`.
 
-`tournamentViewFormatter.js` currently reads `division.schedule ?? state.schedule` for
-backwards compatibility. New code should write to the column only.
+It moved there from `divisions.schedule` on 2026-08-08. A schedule is tournament-wide
+because divisions share the same physical courts, so scheduling them independently could
+double-book one; putting the schedule on the tournament makes that impossible to express.
+
+The `state.schedule` fallback `tournamentViewFormatter.js` used to read is gone with it.
+Nothing reads a schedule out of division state, and nothing writes one there.
 
 ## Example
 

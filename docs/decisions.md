@@ -77,7 +77,7 @@ for schedules that are good.**
 
 Impossible, rejected by the server on write:
 
-- a fixture id not belonging to the division, or appearing twice
+- a fixture id not belonging to the tournament, or appearing twice
 - two fixtures on the same court in overlapping slots
 - one team required in two places at once
 - slots outside the tournament's start and end dates, or ending before they start
@@ -93,6 +93,25 @@ Reason:
 The validator only has to detect impossibility, which is a far smaller job than
 generation. That keeps the duplication between the two tiers small enough that no shared
 module is needed.
+
+## A Schedule Belongs To The Tournament, Not To A Division
+
+Decided 2026-08-08. The schedule moved from `divisions.schedule` to
+`tournaments.schedule`, and `updateSchedule` moved from the divisions repository to the
+tournament repository with it.
+
+Divisions of one tournament share the same physical courts. Two divisions scheduled
+independently can therefore place two matches on one court at one time, and neither
+schedule is wrong on its own — the conflict only exists between them. A per-division
+column made that state representable, and made "two fixtures on the same court in
+overlapping slots" a rule no single write could check.
+
+One schedule over the whole fixture set makes the conflict impossible to express rather
+than merely invalid, which is the stronger of the two. It also matches how an organiser
+thinks about a tournament day: one timetable, several divisions running through it.
+
+The copy of the schedule that older code kept inside `divisions.state` is gone too. It
+predated the dedicated column and was only ever read as a fallback.
 
 ## Typed Errors With A Central Handler
 
@@ -246,7 +265,7 @@ The values are the `fixture_status` enum in `docs/database.md`: `UPCOMING`, `LIV
 component. `WAITING` and `ONGOING` are removed.
 
 `tournamentViewFormatter.js` currently translates the enum into `WAITING`/`ONGOING` on
-the way out, and `ViewTabs.jsx` translates it back with a `statusMap` in order to
+the way out, and the old tournament view translated it back with a `statusMap` in order to
 display it. Both translations go.
 
 **Status values and display labels are different things.** Showing a user "In progress"

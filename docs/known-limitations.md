@@ -101,16 +101,60 @@ Outstanding:
 - Round objects cannot express a match format, so the per-round best-of rule is
   undeliverable until `divisions.state` gains a key for it.
 
+## Tournament View
+
+From the redesign of 2026-08-08.
+
+- **Around 70 `App.css` classes are referenced by no source file**, left after the sweep
+  removed 1,000 lines. They are not a deletion list: `Browse.jsx` builds
+  `tournament-card-${statusVariant}`, so several appear unused while being alive. Any
+  further removal needs the same per-class proof the sweep used — a selector is dead when
+  *any* class in it is dead, not when all of them are. Largest clusters: the old
+  `overview-tab-*` block, `tournament-standings` / `pools-standings` / `round-header`,
+  `tournament-teams*` / `teams-grid` / `team-card*`, `division-schedule-summary*`,
+  `schedule-maker-launcher*`, and the `fixtures-doc` print template.
+- **`SummaryPage.jsx` (80 lines) is orphaned.** Nothing imports it. Kept because no
+  decision has been taken about it, unlike `NextRoundModal`, `ScoreUpdateModal` and
+  `Tooltip`, which are deliberately retained.
+- **A division can hold team ids that no longer exist.** The development database has a
+  division whose `state.teams` lists eight ids with no matching rows, so Overview reports
+  eight teams while Teams shows its empty state and every standings row reads `TBD`. The
+  UI is correct on the payload it is given; the count comes from `state.teams` rather
+  than from resolved rows. Worth deciding whether the dashboard should count resolved
+  teams instead.
+- **`calculateScheduledStats` counts schedule entries, not distinct fixtures.** Those
+  agree only while no fixture is placed twice, and nothing enforces that — the
+  server-side rejection of a duplicate fixture id is specified in `docs/decisions.md` and
+  unwritten. `ScheduleTab` counts the distinct set itself for its "x of y" line.
+- **The knockout bracket infers progression rather than reading it.** Nothing in the
+  payload says which match feeds which; knockout groups hold rank indices, not bracket
+  positions. Connectors are drawn only where the match counts halve exactly, and omitted
+  otherwise — an uneven round such as `Round of 9` renders with no lines rather than
+  wrong ones. A real progression link in the data is the only way to close this.
+- **`DivisionSelector`'s live pills-to-dropdown transition is unverified.** It is correct
+  at both widths when loaded fresh, but the in-app browser pane delivers neither `resize`
+  events nor `ResizeObserver` callbacks, so the transition itself has never been
+  observed. Worth one check in a real browser.
+- **The scheduled state of Fixtures & Schedule has never run against a real row.** Both
+  halves of the round trip are tested, but `PUT /tournaments/:id/schedule` answers 501,
+  so nothing can write the column through the UI. Confirming it needs a schedule inserted
+  directly into `tournaments.schedule`.
+
 ## Scheduling
 
-- The `divisions.schedule` column was added on 2026-08-07 and
-  `divisionsRepository.updateSchedule` writes to it, but no route or controller calls
-  that yet, so schedules still cannot be saved.
+- `tournamentRepository.updateSchedule` writes `tournaments.schedule`, but
+  `PUT /api/tournaments/:tournamentId/schedule` throws `NOT_IMPLEMENTED`, so schedules
+  still cannot be saved through the API. Of the stubbed routes this is the one where only
+  the controller is missing.
 - Nothing validates a schedule. Under the split settled on 2026-08-08 the server must
   reject impossible schedules on write — court clashes, a team in two places at once,
-  fixtures outside the division. None of that exists.
-- The shape of `divisions.schedule` is undocumented. It is implicit in `scheduleUtils.js`
-  and `ScheduleMakerModal.jsx`. The validator cannot be written until it is recorded.
+  fixtures outside the tournament. None of that exists.
+- The shape of `tournaments.schedule` is undocumented. It is implicit in
+  `scheduleUtils.js` and `ScheduleMakerModal.jsx`. The validator cannot be written until
+  it is recorded.
+- `ScheduleMakerModal.jsx` and `scheduleGenerator.js` still work from a single division,
+  which no longer matches where the schedule is stored. Rescoping them to the tournament
+  is step 8 of the tournament view redesign.
 - Officials assignment is described in `docs/tournament-rules.md` as optional but is not
   implemented anywhere.
 
@@ -119,6 +163,10 @@ Outstanding:
 - `tourganiser-ui/` has no tests and no test runner. `api/` has Vitest, with unit and
   integration suites gated at 100% coverage, plus the deliberately failing known-bug
   suite in `api/test/known-bugs/`.
+- **The coverage gate is set to 95, not 100.** `vitest.config.js` sets 95 for all four
+  metrics while `CLAUDE.md` and this file describe a 100% gate. Actual coverage is 100%,
+  so nothing required the reduction. Either restore the threshold or change the claim —
+  a gate five points below actual lets coverage fall silently.
 - Nothing runs the test suite automatically. There is no CI, so the coverage gate only
   binds when someone remembers to run it.
 - `api/` has no lint setup. `tourganiser-ui/` has ESLint.

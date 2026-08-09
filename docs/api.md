@@ -155,10 +155,29 @@ Implemented:
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
 | GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. |
 
-Called by the frontend but **not implemented** on the backend. `divisions.route.js` and
-`fixtures.route.js` are empty routers, and `divisions.controller.js` and
-`fixtures.controller.js` are empty files, although the services and repositories behind
-them exist:
+Declared, routed, and answering **501** in the standard envelope. Added 2026-08-08 so the
+paths are settled and the frontend can wire to them for real. `requireAuth` is already
+applied, so the auth shape does not change when they are built; each will additionally
+need the service-level ownership check described under Security.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/api/tournaments/:tournamentId/save` | required | Follow a tournament |
+| DELETE | `/api/tournaments/:tournamentId/save` | required | Unfollow |
+| PUT | `/api/tournaments/:tournamentId/schedule` | required | Save the tournament schedule |
+| POST | `/api/divisions/:divisionId/teams` | required | Add a team to a division |
+| PUT | `/api/divisions/:divisionId/teams/:teamId` | required | Rename a team |
+| DELETE | `/api/divisions/:divisionId/teams/:teamId` | required | Remove a team from a division |
+
+Of these, `PUT /schedule` is the only one whose persistence already exists —
+`tournamentRepository.updateSchedule` writes `tournaments.schedule`. It stays a stub
+because the validation in `docs/decisions.md` has not been written, and an endpoint that
+accepts an unvalidated schedule is worse than one that accepts none. The team endpoints
+would edit `divisions.state.teams` rather than a join table; see `docs/division-state.md`.
+
+Called by the frontend but **not implemented** on the backend. `fixtures.route.js` is an
+empty router and `fixtures.controller.js` is an empty file, although the services and
+repositories behind them exist:
 
 ### Round progression
 
@@ -202,14 +221,17 @@ the convention below replaced them on 2026-08-08.
 
 | Method | Path | Replaces |
 |---|---|---|
-| POST | `/api/tournaments/:tournamentId/save` | `/tournaments/join/:tournamentId` |
-| DELETE | `/api/tournaments/:tournamentId/save` | `/tournaments/leave/:tournamentId` |
 | POST | `/api/tournaments/:tournamentId/start` | `/tournaments/start/:tournamentId` |
 | POST | `/api/tournaments/:tournamentId/end` | `PUT /tournaments/end/:tournamentId` |
 | DELETE | `/api/tournaments/:tournamentId` | `/tournaments/delete/:id` |
 | PUT | `/api/fixtures/:fixtureId/result` | `POST /fixtures/result/:fixtureId` |
 | PUT | `/api/divisions/:divisionId/teams` | `/divisions/updateTeams/:divisionId` |
-| PUT | `/api/divisions/:divisionId/schedule` | `/divisions/updateSchedule/:divisionId` |
+
+The follow, schedule and team-management paths left this table on 2026-08-08 — they are
+routed now, and listed above as 501s. `PUT /api/divisions/:divisionId/schedule` is gone
+from it entirely: the schedule moved to the tournament, so the replacement is
+`PUT /api/tournaments/:tournamentId/schedule`. `PUT /:divisionId/teams` remains here and
+is separate from the per-team routes above; it reorders seeds rather than editing one team.
 
 Also renamed: `POST /api/tournaments/create` becomes `POST /api/tournaments`.
 
@@ -266,9 +288,10 @@ Cleared by that work:
 
 Implemented:
 
-- `requireAuth` middleware, applied to `POST /api/tournaments/create` and
-  `GET /api/users/profile/:id`. The other live endpoints are intentionally anonymous:
-  browsing and viewing a tournament do not need an account.
+- `requireAuth` middleware, applied to `POST /api/tournaments/create`,
+  `GET /api/users/profile/:id`, both progression endpoints and the six 501 stubs added on
+  2026-08-08. The other live endpoints are intentionally anonymous: browsing and viewing
+  a tournament do not need an account.
 - Session lifetime unified at 24 hours in `api/src/config/auth.js`.
 - CORS `allowedHeaders` corrected — it was previously spelled `headers`, which `cors()`
   ignores, and held a single comma-joined string instead of an array.

@@ -85,6 +85,36 @@ describe("POST /api/divisions/:divisionId/progression", () => {
     });
 });
 
+// Declared but not built, like the tournament stubs. Each answers 501 in the
+// standard envelope, behind requireAuth so the auth shape is already right.
+describe.each([
+    ["post", "/api/divisions/div-1/teams", "add team"],
+    ["put", "/api/divisions/div-1/teams/team-1", "edit team"],
+    ["delete", "/api/divisions/div-1/teams/team-1", "remove team"]
+])("%s %s", (method, path, purpose) => {
+    it("requires a session", async () => {
+        const response = await request(app)[method](path);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({
+            success: false,
+            message: "You must be logged in to do that",
+            data: null
+        });
+    });
+
+    it(`answers 501 for ${purpose}`, async () => {
+        const response = await request(app)[method](path).set("Cookie", authCookie());
+
+        expect(response.status).toBe(501);
+        expect(response.body).toEqual({
+            success: false,
+            message: "This feature is not available yet",
+            data: null
+        });
+    });
+});
+
 // The status codes documented in docs/api.md, driven end to end. This is the
 // table that used to be ERROR_STATUS in divisions.controller.js; the codes now
 // resolve through the catalogue in src/errors.js and the error middleware.

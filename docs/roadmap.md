@@ -88,7 +88,7 @@ Decisions that constrain everything after them. Mostly discussion, little code.
 - ~~**F7**~~ — **done 2026-08-08: the `fixture_status` enum is the only vocabulary,
   and the server derives the status.** Recorded in `docs/decisions.md` and
   `docs/tournament-rules.md`. The work: remove the translation in
-  `tournamentViewFormatter.js` and the `statusMap` in `ViewTabs.jsx`, and change that
+  `tournamentViewFormatter.js` and the `statusMap` in the old tournament view, and change that
   component's filters to the enum values. **Known bug 5 is fixed by this** — move its
   test out of the known-bug suite. Best done immediately before score entry in Phase 3,
   since that endpoint is what writes the status.

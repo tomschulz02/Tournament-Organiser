@@ -138,3 +138,34 @@ describe("GET /api/tournaments/:tournamentId", () => {
         expect((await request(app).get(`/api/tournaments/${VALID_UUID}`)).status).toBe(500);
     });
 });
+
+// Declared but not built. These exist so the paths are settled and the UI can
+// wire to them properly; each answers 501 in the standard envelope. requireAuth
+// is already on them so the auth shape does not change when they are implemented.
+describe.each([
+    ["post", `/api/tournaments/${VALID_UUID}/save`, "follow"],
+    ["delete", `/api/tournaments/${VALID_UUID}/save`, "unfollow"],
+    ["put", `/api/tournaments/${VALID_UUID}/schedule`, "save schedule"]
+])("%s %s", (method, path, purpose) => {
+    it("requires a session", async () => {
+        const response = await request(app)[method](path);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({
+            success: false,
+            message: "You must be logged in to do that",
+            data: null
+        });
+    });
+
+    it(`answers 501 for ${purpose}`, async () => {
+        const response = await request(app)[method](path).set("Cookie", authCookie());
+
+        expect(response.status).toBe(501);
+        expect(response.body).toEqual({
+            success: false,
+            message: "This feature is not available yet",
+            data: null
+        });
+    });
+});

@@ -101,6 +101,27 @@ describe("getTournamentById", () => {
     });
 });
 
+describe("updateSchedule", () => {
+    it("writes the schedule to the tournament's own column", async () => {
+        expect(await tournamentRepository.updateSchedule("tour-1", { slots: [] }))
+            .toEqual({ message: "Schedule updated" });
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe("UPDATE tournaments SET schedule = $1::jsonb WHERE id = $2::uuid");
+        expect(params).toEqual(['{"slots":[]}', "tour-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.updateSchedule("tour-1", {}).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to update schedule");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
 // startTournament, endTournament and deleteTournament share a shape: one
 // owner-scoped statement inside a transaction, returning the raw pg result and
 // throwing on failure.

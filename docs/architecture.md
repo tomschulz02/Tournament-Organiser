@@ -67,12 +67,56 @@ Pages
 → requests.js
 → Backend API
 
+The tournament view is the one part large enough to have its own structure. It lives in
+`tourganiser-ui/src/components/tournament/`, is entered through `pages/View.jsx`, and is
+styled by `src/styles/tournament-view.css` — the only stylesheet outside `App.css` that
+anything imports. Its classes are prefixed `tv-`.
+
+`pages/View.jsx` makes the single `GET /api/tournaments/:id` request that feeds the whole
+page and owns the state shared across sections: the active tab, the selected division,
+and one `reload()` that every mutation calls. `TournamentShell` renders the subheader and
+navigation immediately; only the tab content waits on the request.
+
+`components/ScheduleMakerModal.jsx` is loaded with `React.lazy`, because it pulls in the
+PDF export and with it jsPDF, html2canvas and DOMPurify — around half the application's
+JavaScript for a screen only an organiser opens.
+
 ## Conventions
 - PascalCase for files/components.
 - camelCase for variables/functions.
 - Prefer reusable CSS classes.
 - Plain CSS only.
 - DTOs/types may be introduced only when they provide clear value.
+
+### Frontend traps worth knowing before writing UI
+
+Each of these cost real time to diagnose during the tournament view redesign. All fail
+silently — the page still renders, it is just wrong.
+
+**Do not use `<header>`, `<main>` or `<img>` in new markup.** `App.css` styles them as
+bare element selectors. `header` in particular is the site's fixed top bar —
+`position: fixed; width: 100vw; height: 80px` — so a semantic `<header>` inside a card is
+torn out of its container and stretched across the viewport. It reads as a flexbox
+problem and is a specificity problem. Use a `div` with a class.
+
+**Write `minmax(min(Npx, 100%), 1fr)`, never `minmax(Npx, 1fr)`.** A grid track whose
+minimum exceeds its container does not shrink; it overflows.
+
+**A grid track that permits shrinking does not cause it.** If a cell's children are
+`white-space: nowrap`, the cell's min-content width is their sum and it overflows
+whatever the track says. `min-width: 0` does not help, because the children still cannot
+break. Give the cell its own row at that breakpoint, let it wrap, or let the children
+ellipsis.
+
+**Two ESLint rules dictate how files are split**, and both are errors rather than
+warnings. `react-refresh/only-export-components` forbids a module exporting both a
+component and a non-component — the fix is always a new plain `.js` module.
+`react-hooks/set-state-in-effect` forbids a synchronous `setState` in a `useEffect` body,
+including through a function called from it; `useLayoutEffect` is the sanctioned escape
+for measure-then-store.
+
+**`npm run lint` has 5 pre-existing errors** in `ThemeContext.jsx`, `ConfirmDialog.jsx`,
+`ScoreUpdateModal.jsx` and `main.jsx`. Judge a change by whether that count moves.
 
 ## Current State
 
@@ -93,8 +137,9 @@ Complete:
 
 Incomplete:
 - `divisions` — everything other than progression. `divisions.service.js` and
-  `divisions.repository.js` carry functions for updating teams, groups and schedules,
-  but no route or controller reaches them.
+  `divisions.repository.js` carry functions for updating teams and groups, but no route
+  or controller reaches them. The team routes exist as of 2026-08-08 and throw
+  `NOT_IMPLEMENTED`.
 - `fixtures` — `fixtures.route.js` is an empty router and `fixtures.controller.js` is an
   empty file, so no fixture endpoint exists. The service and repository do.
 - `users.controller.js` `getUserProfile` is an empty stub with a live route.
@@ -149,13 +194,18 @@ not need server authority — only its result does.
 different reason: it holds the slot and time primitives, and keeping it pure keeps it
 testable.
 
-Persistence: schedules are stored as JSONB on `divisions.schedule`. The column exists as
-of 2026-08-07; the endpoint that writes it does not yet.
-`tournamentViewFormatter.js` reads `division.schedule ?? state.schedule ?? null`, so it
-tolerates both the dedicated column and the older location inside division state. New
-code should write the column only.
+Persistence: schedules are stored as JSONB on `tournaments.schedule`, written by
+`tournamentRepository.updateSchedule`. `PUT /api/tournaments/:tournamentId/schedule`
+exists but throws `NOT_IMPLEMENTED`, so nothing can be saved through the API yet.
 
-The shape of `divisions.schedule` is not documented anywhere. It is implicit in
+The schedule was on `divisions.schedule` until 2026-08-08, with
+`tournamentViewFormatter.js` falling back to a copy inside `divisions.state`. Both are
+gone. A schedule spans the tournament because divisions share the same physical courts,
+and a per-division schedule could double-book one; the tournament-level column makes that
+impossible to express. The formatter now emits `tournament.schedule` and a single
+`dashboard.hasSchedule`, rather than a schedule and a `hasSchedule` per division.
+
+The shape of `tournaments.schedule` is not documented anywhere. It is implicit in
 `scheduleUtils.js` and `ScheduleMakerModal.jsx`, and carries a `SCHEDULE_VERSION`
 constant. Writing that contract down is a prerequisite for the validator, which cannot
 be specified against an undocumented payload.

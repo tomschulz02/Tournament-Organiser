@@ -189,6 +189,13 @@ equal and fall through as documented. `Infinity - Infinity` is `NaN`, which
 `Array.prototype.sort` silently treats as "equal" — the right outcome by accident, and
 fragile.
 
+**Consequence for any client: an undefined ratio arrives as a missing key, not as
+`null`.** The sentinel is a `Symbol`, and `JSON.stringify` drops symbol-valued properties
+entirely, so `setsRatio` or `pointsRatio` is simply absent from the payload for a team
+that has won sets and lost none. Test with `Number.isFinite(value)`. A `value !== null`
+check passes on `undefined` and renders `NaN` for exactly the team the sentinel exists
+for — which is what the old tournament view did.
+
 ## Organiser Override
 
 The default ranking is a proposal, not a verdict. Tournaments resolve ties in ways this

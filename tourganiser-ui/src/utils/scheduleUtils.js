@@ -127,7 +127,10 @@ export function sortScheduleEntries(entries = []) {
 	});
 }
 
-export function normaliseDivisionFixtures(fixtures = []) {
+// Takes any list of fixtures, not one division's. A schedule spans the
+// tournament, so the caller flattens every division's fixtures into one list
+// before normalising them.
+export function normaliseFixtures(fixtures = []) {
 	return fixtures.map((fixture, index) => {
 		const id = fixture.id || fixture.fixtureId || createScheduleId('fixture');
 		const team1 = fixture.team1 || fixture.team_1 || fixture.homeTeam || fixture.home_team || 'TBD';
@@ -247,11 +250,13 @@ export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
 	};
 }
 
-export function getScheduleForDivision(division, tournamentDetails = {}) {
-	const rawSchedule = division?.schedule || division?.state?.schedule || null;
-	return normaliseSchedule(rawSchedule, {
-		startDate: tournamentDetails.startDate || tournamentDetails.start_date,
-		endDate: tournamentDetails.endDate || tournamentDetails.end_date || tournamentDetails.startDate || tournamentDetails.start_date,
+// A schedule spans the tournament, not a division — divisions share the same
+// physical courts, so scheduling them independently could double-book one. The
+// column moved from divisions.schedule to tournaments.schedule on 2026-08-08.
+export function getScheduleForTournament(tournament = {}) {
+	return normaliseSchedule(tournament.schedule || null, {
+		startDate: tournament.startDate || tournament.start_date,
+		endDate: tournament.endDate || tournament.end_date || tournament.startDate || tournament.start_date,
 	});
 }
 

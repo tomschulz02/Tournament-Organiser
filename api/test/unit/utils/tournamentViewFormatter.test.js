@@ -527,13 +527,19 @@ describe("normalizeDivisionState", () => {
     });
 
     it("coerces the fields of an object state", () => {
-        expect(normalizeDivisionState({ teams: ["a"], rounds: [{ name: "R" }], currentRound: 1, schedule: { slots: [] } }))
-            .toEqual({ teams: ["a"], rounds: [{ name: "R" }], currentRound: 1, schedule: { slots: [] } });
+        expect(normalizeDivisionState({ teams: ["a"], rounds: [{ name: "R" }], currentRound: 1 }))
+            .toEqual({ teams: ["a"], rounds: [{ name: "R" }], currentRound: 1 });
     });
 
-    it("replaces non-array teams and rounds, defaults currentRound and schedule", () => {
+    it("replaces non-array teams and rounds and defaults currentRound", () => {
         expect(normalizeDivisionState({ teams: "nope", rounds: null }))
-            .toEqual({ teams: [], rounds: [], currentRound: 0, schedule: null });
+            .toEqual({ teams: [], rounds: [], currentRound: 0 });
+    });
+
+    // The schedule used to be carried here as a fallback for divisions.schedule.
+    // Both are gone: it lives on the tournament now, so state never yields it.
+    it("drops a schedule left over in state", () => {
+        expect(normalizeDivisionState({ schedule: { slots: [] } })).not.toHaveProperty("schedule");
     });
 
     it("coerces a numeric-string currentRound", () => {
@@ -912,7 +918,6 @@ describe("buildDivisionOverview", () => {
             teams: [makeTeam(), makeTeam()],
             fixtures,
             results: [fixtures[0]],
-            schedule: { slots: [] },
             state: makeState({ rounds: [makeRound({ name: "Pool Play" })] })
         });
 
@@ -922,8 +927,7 @@ describe("buildDivisionOverview", () => {
             totalFixtures: 3,
             completedFixtures: 1,
             upcomingFixturesCount: 2,
-            currentRound: "Pool Play",
-            hasSchedule: true
+            currentRound: "Pool Play"
         });
         // Live before upcoming.
         expect(overview.upcomingFixtures.map((fixture) => fixture.match_no)).toEqual([3, 2]);
@@ -935,9 +939,8 @@ describe("buildDivisionOverview", () => {
             teams: [],
             fixtures: [],
             results: [],
-            schedule: null,
             state: makeState()
-        })).toMatchObject({ teamCount: 6, hasSchedule: false });
+        })).toMatchObject({ teamCount: 6 });
     });
 
     it("falls back to zero when neither is available", () => {
@@ -946,7 +949,6 @@ describe("buildDivisionOverview", () => {
             teams: [],
             fixtures: [],
             results: [],
-            schedule: null,
             state: makeState()
         }).teamCount).toBe(0);
     });
@@ -964,7 +966,6 @@ describe("buildDivisionOverview", () => {
             teams: [],
             fixtures: [],
             results,
-            schedule: null,
             state: makeState()
         });
 
@@ -980,7 +981,6 @@ describe("buildDivisionOverview", () => {
             teams: [],
             fixtures: upcoming,
             results,
-            schedule: null,
             state: makeState()
         });
 
@@ -1001,7 +1001,6 @@ describe("buildTournamentDashboard", () => {
                 totalFixtures: 6,
                 completedFixtures: 2,
                 upcomingFixturesCount: 4,
-                hasSchedule: false,
                 currentRound: "Pool Play",
                 recentResults: [{ id: `${id}-r1`, match_no: 2, status: "COMPLETED" }],
                 upcomingFixtures: [{ id: `${id}-u1`, match_no: 3, status: "UPCOMING" }],
@@ -1023,10 +1022,23 @@ describe("buildTournamentDashboard", () => {
             totalFixtures: 12,
             completedFixtureCount: 4,
             upcomingFixtureCount: 8,
-            currentStatus: "LIVE"
+            currentStatus: "LIVE",
+            hasSchedule: false
         });
         expect(dashboard.recentResults[0]).toMatchObject({ division_id: "a", division_name: "Division a" });
         expect(dashboard.upcomingFixtures).toHaveLength(2);
+    });
+
+    // The schedule is tournament-wide, so the flag is read off the tournament
+    // rather than aggregated from the divisions.
+    it("reports a schedule from the tournament, not from any division", () => {
+        const dashboard = buildTournamentDashboard(
+            { id: "tour-1", status: "LIVE", schedule: { days: [] } },
+            [divisionSummary("a")]
+        );
+
+        expect(dashboard.hasSchedule).toBe(true);
+        expect(dashboard.divisions[0]).not.toHaveProperty("hasSchedule");
     });
 
     it("sorts pooled results with no match number to the back", () => {
@@ -1091,8 +1103,16 @@ describe("formatTournamentDetails", () => {
             location: "",
             status: "Not Started",
             type: null,
-            division_count: 0
+            division_count: 0,
+            schedule: null
         });
+    });
+
+    // The schedule lives here now rather than on each division.
+    it("carries the tournament's schedule", () => {
+        const schedule = { version: 1, days: [] };
+
+        expect(formatTournamentDetails(makeTournament({ schedule }), []).schedule).toEqual(schedule);
     });
 
     it("reports no type when the divisions disagree", () => {
@@ -1130,22 +1150,19 @@ describe("formatDivisionPayload", () => {
         expect(payload.fixtures.map((fixture) => fixture.id)).toEqual(["f1", "f2"]);
         expect(payload.results.map((fixture) => fixture.id)).toEqual(["f1"]);
         expect(payload.num_teams).toBe(2);
-        expect(payload.schedule).toBeNull();
     });
 
-    it("prefers the schedule column over the copy in state", () => {
+    // A division no longer carries a schedule at all, however one arrives.
+    it("never emits a schedule, even when one is left on the row or in state", () => {
         const division = makeDivision({
             schedule: { source: "column" },
             state: makeState({ schedule: { source: "state" } })
         });
 
-        expect(formatDivisionPayload({ division, teams: [], fixtures: [] }).schedule).toEqual({ source: "column" });
-    });
+        const payload = formatDivisionPayload({ division, teams: [], fixtures: [] });
 
-    it("falls back to the schedule held in state", () => {
-        const division = makeDivision({ schedule: null, state: makeState({ schedule: { source: "state" } }) });
-
-        expect(formatDivisionPayload({ division, teams: [], fixtures: [] }).schedule).toEqual({ source: "state" });
+        expect(payload).not.toHaveProperty("schedule");
+        expect(payload.overview).not.toHaveProperty("hasSchedule");
     });
 
     it("keeps the declared team count and nulls an absent type", () => {

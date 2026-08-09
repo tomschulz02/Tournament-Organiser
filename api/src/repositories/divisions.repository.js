@@ -137,7 +137,7 @@ async function updateRounds(divisionId, userId, updatedRounds, updatedFixtures, 
 async function getDivisionWithOwner(divisionId) {
     try {
         const sql = `
-            SELECT d.id, d.tournament_id, d.name, d.state, d.schedule, t.created_by
+            SELECT d.id, d.tournament_id, d.name, d.state, t.created_by
             FROM divisions d
             JOIN tournaments t ON t.id = d.tournament_id
             WHERE d.id = $1::uuid`;
@@ -175,18 +175,6 @@ async function getFixturesByDivisionId(divisionId) {
         return await db.query(sql, [divisionId]);
     } catch (error) {
         throw new Error("Failed to fetch fixtures", { cause: error });
-    }
-}
-
-// Persists a schedule to the dedicated jsonb column added 2026-08-07.
-async function updateSchedule(divisionId, schedule) {
-    try {
-        const sql = "UPDATE divisions SET schedule = $1::jsonb, last_update = now() WHERE id = $2::uuid";
-        await db.query(sql, [JSON.stringify(schedule), divisionId]);
-
-        return { message: "Schedule updated" };
-    } catch (error) {
-        throw new Error("Failed to update schedule", { cause: error });
     }
 }
 
@@ -241,7 +229,6 @@ export const divisionsRepository = {
     getDivisionWithOwner,
     getTeamsByIds,
     getFixturesByDivisionId,
-    updateSchedule,
     getDivisionsByTournamentId,
     createTeam,
     getTeamsByUserId

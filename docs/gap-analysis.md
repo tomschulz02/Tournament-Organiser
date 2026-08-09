@@ -47,6 +47,23 @@ Reviewed with the maintainer on 2026-08-08. Settled since:
   `completedGames`.
 - **F4 resolved**: Collections have been removed 
 
+Superseded by the tournament view redesign, completed 2026-08-08:
+
+- **F3 resolved.** The tournament view has organiser controls — Create/Edit Schedule, Add
+  Team, per-team Edit and Remove — all gated on `creator`. The endpoints behind team
+  management and follow answer 501 by design; the wiring is real.
+- **F1 partly resolved.** `CollectionView.jsx` and `FixturesDoc.jsx` are deleted, as are
+  `ViewTabs.jsx` and `TournamentView.jsx`. `NextRoundModal`, `ScoreUpdateModal` and
+  `Tooltip` are deliberately retained for later mounting. `SummaryPage.jsx` remains
+  orphaned and undecided — see `docs/known-limitations.md`.
+- **F8 partly resolved.** The direct DOM manipulation in `CollectionView` went with the
+  file. The unremoved `scroll` listener in `App.jsx` is untouched and still stands.
+- **F11 substantially resolved.** `styles/TournamentView.css` and `styles/Tournaments.css`
+  are deleted — both were dead, imported by nothing — along with 1,000 lines of `App.css`.
+  About 3,400 lines removed in total. Roughly 70 unreferenced `App.css` classes remain;
+  `docs/known-limitations.md` records why they were not swept with the rest.
+- **F4 resolved** earlier, when Collections was removed.
+
 Everything else below is still open. See `docs/roadmap.md` for the order of work.
 
 ---

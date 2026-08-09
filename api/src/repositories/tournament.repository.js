@@ -102,11 +102,29 @@ async function deleteTournament(tournamentId, userId) {
     }
 }
 
+// Persists a schedule to tournaments.schedule.
+//
+// A schedule is tournament-wide, not per-division: divisions share the same
+// physical courts, so scheduling them independently could double-book one.
+// This moved here from the divisions repository on 2026-08-08; there is no
+// last_update column on tournaments to stamp.
+async function updateSchedule(tournamentId, schedule) {
+    try {
+        const sql = "UPDATE tournaments SET schedule = $1::jsonb WHERE id = $2::uuid";
+        await db.query(sql, [JSON.stringify(schedule), tournamentId]);
+
+        return { message: "Schedule updated" };
+    } catch (error) {
+        throw new Error("Failed to update schedule", { cause: error });
+    }
+}
+
 export const tournamentRepository = {
     createTournament,
     getAllTournaments,
     getTournamentById,
     startTournament,
     endTournament,
-    deleteTournament
+    deleteTournament,
+    updateSchedule
 };

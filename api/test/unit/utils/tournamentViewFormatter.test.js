@@ -700,6 +700,55 @@ describe("buildDivisionBracket", () => {
         });
     });
 
+    it("shows the teams bound to the fixture, not the group's rank indices", () => {
+        // A knockout group holds positional indices into the previous round's
+        // results and keeps holding them after progression — binding happens on
+        // the fixture. Reading the group alone left the final reading
+        // "Rank 1 v Rank 2" once it had two real teams in it.
+        const state = makeState({
+            rounds: [makeRound({ name: "Finals", type: "knockout", groups: [[0, 1]] })]
+        });
+        const fixtures = [{
+            id: "f1",
+            round: "Finals",
+            status: "UPCOMING",
+            // Still set: progression never clears the placeholder columns.
+            team_1_placeholder: "Rank 1",
+            team_2_placeholder: "Rank 2",
+            teams: {
+                team_1: { id: "t1", name: "Aces", placeholder: null },
+                team_2: { id: "t2", name: "Bears", placeholder: null }
+            }
+        }];
+
+        const match = buildDivisionBracket(state, fixtures, teamLookup).rounds[0].matches[0];
+
+        expect(match.participants).toEqual([
+            { id: "t1", name: "Aces", placeholder: null },
+            { id: "t2", name: "Bears", placeholder: null }
+        ]);
+    });
+
+    it("falls back to the rank indices while only one side is bound", () => {
+        const state = makeState({
+            rounds: [makeRound({ name: "Finals", type: "knockout", groups: [[0, 1]] })]
+        });
+        const fixtures = [{
+            id: "f1",
+            round: "Finals",
+            status: "UPCOMING",
+            team_2_placeholder: "Rank 2",
+            teams: {
+                team_1: { id: "t1", name: "Aces", placeholder: null },
+                team_2: { id: null, name: "Rank 2", placeholder: "Rank 2" }
+            }
+        }];
+
+        const match = buildDivisionBracket(state, fixtures, teamLookup).rounds[0].matches[0];
+
+        expect(match.participants.map((participant) => participant.name)).toEqual(["Aces", "Rank 2"]);
+    });
+
     it("synthesises a match when the fixture does not exist yet", () => {
         const state = makeState({
             rounds: [makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3]] })]

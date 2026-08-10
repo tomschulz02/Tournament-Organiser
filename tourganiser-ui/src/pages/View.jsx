@@ -1,6 +1,7 @@
-import { useParams } from 'react-router-dom';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Suspense, lazy, useContext, useEffect, useState } from 'react';
 import { fetchTournamentData } from '../requests';
+import { AuthContext } from '../AuthContext';
 import '../App.css';
 import TournamentShell from '../components/tournament/TournamentShell';
 import { useTournamentTab } from '../components/tournament/tournamentTabs';
@@ -11,8 +12,11 @@ import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
 import TeamsTab from '../components/tournament/TeamsTab';
 import LoadingScreen from '../components/LoadingScreen';
+import ScoreUpdateModal from '../components/ScoreUpdateModal';
+import NextRoundModal from '../components/NextRoundModal';
+import { flattenFixtures } from '../components/tournament/fixtureUtils';
 import { useMessage } from '../MessageContext';
-import { updateTournamentSchedule } from '../requests';
+import { updateFixtureResult, updateTournamentSchedule } from '../requests';
 
 // Split out of the main bundle. The schedule maker pulls in the PDF export and
 // with it jsPDF and DOMPurify — around two thirds of the whole bundle — for a
@@ -23,6 +27,7 @@ export default function ViewPage() {
 	const { id } = useParams();
 	const { activeTab, selectTab } = useTournamentTab();
 	const { showMessage } = useMessage();
+	const navigate = useNavigate();
 
 	// Which division Standings and Teams are showing. Page state rather than URL
 	// state: step 3 dropped ?division=, and a division is a choice within a
@@ -34,7 +39,14 @@ export default function ViewPage() {
 
 	// Retry bumps this, which changes the request key and re-runs the effect.
 	const [attempt, setAttempt] = useState(0);
-	const requestKey = `${id}:${attempt}`;
+
+	// data.creator is resolved server-side from the session cookie, so logging
+	// in or out has to refetch for the organiser controls to be right. The
+	// version only moves on a real session change — keying on isLoggedIn would
+	// fetch twice on every load, since it is false until the mount check
+	// resolves. See AuthProvider.
+	const { sessionVersion } = useContext(AuthContext);
+	const requestKey = `${id}:${attempt}:${sessionVersion}`;
 
 	// The result is tagged with the request it answered. Loading is then derived
 	// rather than stored, which keeps every setState out of the effect body and
@@ -86,6 +98,81 @@ export default function ViewPage() {
 	// change is only visible once the request that produced it runs again.
 	const reload = () => setAttempt((count) => count + 1);
 
+	// A deleted tournament has no page left to reload, so this leaves rather than
+	// refetching into a 404. replace, so Back does not return to the dead route.
+	const handleDeleted = () => navigate('/tournaments', { replace: true });
+
+	// Score entry. The id is held rather than the fixture itself, so that after a
+	// reload the modal is handed the refetched row instead of the stale copy it
+	// was opened with — the page holds no other copy of the data.
+	const [scoringFixtureId, setScoringFixtureId] = useState(null);
+
+	const scoringFixture = scoringFixtureId
+		? flattenFixtures(result.data?.divisions ?? []).find((fixture) => fixture.id === scoringFixtureId)
+		: null;
+
+	// Both of the modal's buttons are the same call; only the intent differs.
+	// The server derives the status from that and the scores.
+	const saveResult = async (sets, finished) => {
+		try {
+			// The modal keeps sets as [{ team1, team2 }]; the endpoint takes pairs.
+			await updateFixtureResult(
+				scoringFixtureId,
+				sets.map((set) => [set.team1, set.team2]),
+				finished,
+			);
+
+			// Standings, the bracket and the round counts are all derived from the
+			// fixtures server-side, so one refetch updates every one of them.
+			reload();
+			return true;
+		} catch (apiError) {
+			// Display-ready by contract. The modal stays mounted and keeps its own
+			// state, so the scores that were rejected are still on screen.
+			showMessage(apiError.message, 'error');
+			return false;
+		}
+	};
+
+	// Save keeps the modal open — a live match is scored set by set. Ending it
+	// closes, because there is nothing left to enter.
+	const handleSaveScore = async (sets) => {
+		if (await saveResult(sets, false)) showMessage('Score saved.', 'success');
+	};
+
+	const handleEndMatch = async (sets) => {
+		if (await saveResult(sets, true)) {
+			showMessage('Match ended.', 'success');
+			setScoringFixtureId(null);
+		}
+	};
+
+	// Offered only where a result can actually be recorded. A knockout fixture
+	// still showing "Rank 1" has no teams bound, and the server rejects it with a
+	// 400 — better not to offer the action than to explain the refusal.
+	const renderFixtureAction = (fixture) => {
+		if (!fixture.team_1_id || !fixture.team_2_id) return null;
+
+		return (
+			<button type="button" className="tv-subtle-action" onClick={() => setScoringFixtureId(fixture.id)}>
+				{fixture.result?.length > 0 ? 'Edit Score' : 'Enter Score'}
+			</button>
+		);
+	};
+
+	// Round progression, opened from Standings for one division. The modal fetches
+	// its own proposal and posts its own confirmation, so the page holds only
+	// which division is being advanced.
+	const [progressingDivisionId, setProgressingDivisionId] = useState(null);
+
+	const handleRoundProgressed = () => {
+		// Knockout fixtures have just been bound to real teams, so the bracket,
+		// the standings and the fixture list all change together.
+		reload();
+		setProgressingDivisionId(null);
+		showMessage('Next round started.', 'success');
+	};
+
 	// Create Schedule and Edit Schedule are one action opening one modal. The
 	// schedule spans the tournament, so there is nothing to choose on the way in:
 	// the modal opens on whatever schedule exists, empty or not.
@@ -116,6 +203,26 @@ export default function ViewPage() {
 		<>
 			{/* Mounted only while open, so the fixture set is not rebuilt on every
 			    render of the page behind it. */}
+			{/* Organiser only, and only while a fixture is chosen. Guarded on
+			    creator as well as on the id, so a session that ends while the
+			    modal is open cannot leave a write control on screen. */}
+			{scoringFixture && result.data?.creator && (
+				<ScoreUpdateModal
+					fixture={scoringFixture}
+					onClose={() => setScoringFixtureId(null)}
+					onSave={handleSaveScore}
+					onEndMatch={handleEndMatch}
+				/>
+			)}
+
+			{progressingDivisionId && result.data?.creator && (
+				<NextRoundModal
+					divisionId={progressingDivisionId}
+					onConfirmed={handleRoundProgressed}
+					onCancel={() => setProgressingDivisionId(null)}
+				/>
+			)}
+
 			{scheduleOpen && result.data?.creator && (
 				<Suspense fallback={<LoadingScreen />}>
 					<ScheduleMakerModal
@@ -149,6 +256,9 @@ export default function ViewPage() {
 						onSelectDivision={setSelectedDivisionId}
 						onOpenSchedule={() => setScheduleOpen(true)}
 						onReload={reload}
+						onDeleted={handleDeleted}
+						renderFixtureAction={renderFixtureAction}
+						onProgressRound={setProgressingDivisionId}
 					/>
 				)}
 			</TournamentShell>
@@ -156,9 +266,29 @@ export default function ViewPage() {
 	);
 }
 
-function TabPanel({ tab, data, selectedDivisionId, onOpenDivision, onSelectDivision, onOpenSchedule, onReload }) {
+function TabPanel({
+	tab,
+	data,
+	selectedDivisionId,
+	onOpenDivision,
+	onSelectDivision,
+	onOpenSchedule,
+	onReload,
+	onDeleted,
+	renderFixtureAction,
+	onProgressRound,
+}) {
 	if (tab === 'overview') {
-		return <OverviewTab tournament={data.tournament} dashboard={data.dashboard} onOpenDivision={onOpenDivision} />;
+		return (
+			<OverviewTab
+				tournament={data.tournament}
+				dashboard={data.dashboard}
+				onOpenDivision={onOpenDivision}
+				creator={data.creator}
+				onChanged={onReload}
+				onDeleted={onDeleted}
+			/>
+		);
 	}
 
 	// One tab, two states, and the tournament decides which. There is deliberately
@@ -171,9 +301,15 @@ function TabPanel({ tab, data, selectedDivisionId, onOpenDivision, onSelectDivis
 				divisions={data.divisions ?? []}
 				creator={data.creator}
 				onEditSchedule={onOpenSchedule}
+				renderFixtureAction={renderFixtureAction}
 			/>
 		) : (
-			<FixturesTab divisions={data.divisions ?? []} creator={data.creator} onCreateSchedule={onOpenSchedule} />
+			<FixturesTab
+				divisions={data.divisions ?? []}
+				creator={data.creator}
+				onCreateSchedule={onOpenSchedule}
+				renderFixtureAction={renderFixtureAction}
+			/>
 		);
 	}
 
@@ -183,6 +319,8 @@ function TabPanel({ tab, data, selectedDivisionId, onOpenDivision, onSelectDivis
 				divisions={data.divisions ?? []}
 				selectedDivisionId={selectedDivisionId}
 				onSelectDivision={onSelectDivision}
+				creator={data.creator}
+				onProgressRound={onProgressRound}
 			/>
 		);
 	}

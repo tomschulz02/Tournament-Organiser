@@ -10,6 +10,8 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
         createTournament: vi.fn(),
         getAllTournaments: vi.fn(),
         getTournamentById: vi.fn(),
+        startTournament: vi.fn(),
+        endTournament: vi.fn(),
         deleteTournament: vi.fn()
     }
 }));
@@ -49,6 +51,8 @@ beforeEach(() => {
     vi.mocked(tournamentRepository.createTournament).mockReset();
     vi.mocked(tournamentRepository.getAllTournaments).mockReset();
     vi.mocked(tournamentRepository.getTournamentById).mockReset();
+    vi.mocked(tournamentRepository.startTournament).mockReset().mockResolvedValue(undefined);
+    vi.mocked(tournamentRepository.endTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(tournamentRepository.deleteTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(divisionsRepository.getDivisionsByTournamentId).mockReset();
     vi.mocked(divisionsRepository.getTeamsByIds).mockReset();
@@ -252,5 +256,109 @@ describe("tournamentService.fetchTournamentDetails", () => {
         tournamentRepository.getTournamentById.mockRejectedValue(failure);
 
         await expect(tournamentService.fetchTournamentDetails("tour-1")).rejects.toBe(failure);
+    });
+});
+
+// The three lifecycle actions share their ownership check, so it is asserted
+// once for each rather than once in total: getting it wrong on any one of them
+// lets a signed-in stranger mutate someone else's tournament.
+describe.each([
+    ["startTournament"],
+    ["endTournament"],
+    ["deleteTournament"]
+])("tournamentService.%s ownership", (method) => {
+    it("names the not-found condition rather than reporting zero rows affected", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(null);
+
+        await expect(tournamentService[method]("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+        expect(tournamentRepository[method]).not.toHaveBeenCalled();
+    });
+
+    it("refuses another user, distinguishably from a missing tournament", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Ongoing" }));
+
+        await expect(tournamentService[method]("tour-1", "user-2"))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(tournamentRepository[method]).not.toHaveBeenCalled();
+    });
+});
+
+describe("tournamentService.startTournament", () => {
+    it("starts a tournament that has not started", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+
+        expect(await tournamentService.startTournament("tour-1", "user-1"))
+            .toEqual({ id: "tour-1", status: "Ongoing" });
+        expect(tournamentRepository.startTournament).toHaveBeenCalledWith("tour-1");
+    });
+
+    it("treats a null status as Not Started", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: null }));
+
+        await tournamentService.startTournament("tour-1", "user-1");
+
+        expect(tournamentRepository.startTournament).toHaveBeenCalledWith("tour-1");
+    });
+
+    it("refuses a second start rather than silently succeeding", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Ongoing" }));
+
+        await expect(tournamentService.startTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+        expect(tournamentRepository.startTournament).not.toHaveBeenCalled();
+    });
+
+    it("refuses to restart a finished tournament", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Finished" }));
+
+        await expect(tournamentService.startTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_FINISHED", status: 409 });
+    });
+});
+
+describe("tournamentService.endTournament", () => {
+    it("ends a tournament that is ongoing", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Ongoing" }));
+
+        expect(await tournamentService.endTournament("tour-1", "user-1"))
+            .toEqual({ id: "tour-1", status: "Finished" });
+        expect(tournamentRepository.endTournament).toHaveBeenCalledWith("tour-1");
+    });
+
+    it("refuses to end a tournament that has not started", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+
+        await expect(tournamentService.endTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_STARTED", status: 409 });
+        expect(tournamentRepository.endTournament).not.toHaveBeenCalled();
+    });
+
+    it("refuses to end a tournament twice", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Finished" }));
+
+        await expect(tournamentService.endTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_FINISHED", status: 409 });
+    });
+});
+
+describe("tournamentService.deleteTournament", () => {
+    // Deliberately permitted from every status, including Ongoing — an organiser
+    // whose tournament collapsed halfway through still has to be able to remove
+    // it. The client is what makes it deliberate rather than silent.
+    it.each(["Not Started", "Ongoing", "Finished"])("deletes a %s tournament", async (status) => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status }));
+
+        expect(await tournamentService.deleteTournament("tour-1", "user-1")).toEqual({ id: "tour-1" });
+        expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith("tour-1");
     });
 });

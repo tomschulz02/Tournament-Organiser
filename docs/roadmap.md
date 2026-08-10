@@ -31,16 +31,19 @@ Complete.
 
 Nothing else can be exercised end to end until a tournament can be created.
 
-- ~~**C1**~~ — **done 2026-08-08: team creation works.** `createTeam` inserts
-  `(id, name, user_id)` with the organiser's id, on the caller's client.
-  `divisions.service.js` links a team the organiser already owns by id, or inserts a
-  typed name, and rejects an id belonging to another user, a team entered twice, and an
-  entry carrying neither an id nor a name.
-- ~~**B7**~~ — **settled 2026-08-08: `teams.user_id` holds the id of the organiser who
-  created the tournament.** No schema change, and it matches how teams are actually
-  entered — the organiser types the names in. `createTeam` therefore needs the creating
-  user's id passed down from `createTournament`. Leaves room to reassign a team to a
-  captain account later without forcing that decision now.
+- ~~**C1**~~ — **done 2026-08-09: team creation works.** `createTeam` takes an id and
+  inserts `(id, name, division_id)`, on the caller's client. `divisions.service.js`
+  generates the ids up front, writes the division row first — teams carry a foreign key
+  to it — then the teams, then the fixtures, and rejects a team entered twice or an entry
+  carrying no name. First done on 2026-08-08 against `user_id`, which the schema does not
+  have; see B7.
+- ~~**B7**~~ — **reversed 2026-08-09: there is no `teams.user_id`.** The 2026-08-08
+  settlement had `createTeam` insert the organiser's id, which no column could hold, so
+  every tournament creation returned a 500. The reversal took the code down to the schema
+  rather than migrating the schema up to the code: a team belongs to exactly one
+  division, `getTeamsByUserId` is gone, and selecting an existing team by id is gone with
+  it. What that gives up is recorded in `docs/decisions.md` — a team can no longer be
+  followed across tournaments.
 - ~~**C2**~~ — **done 2026-08-08: creating a tournament is one transaction.** A
   `withTransaction` helper on the connection in `api/src/config/db.js` owns the client;
   `createTournament` opens the boundary and threads it through every division, team and
@@ -57,15 +60,11 @@ Nothing else can be exercised end to end until a tournament can be created.
 
 The related drift is fixed with C1: `getTeamsByDivisionIds` is gone, with
 `tournaments.service.js` resolving each division's teams from `state.teams` through
-`getTeamsByIds`; `getTeamNames` is now `getTeamsByUserId`, listing the teams a user owns;
-and the `RETURNING num_groups` in `updateTeams` is dropped.
+`getTeamsByIds`, which stays the way teams are resolved because `state.teams` owns seed
+order; `getTeamNames` is gone entirely; and the `RETURNING num_groups` in `updateTeams`
+is dropped.
 
-> **B7 has since been reversed.** The schema now has `teams (id, name, division_id)` and
-> no `user_id` at all. Everything above that depends on a team belonging to a user —
-> `getTeamsByUserId`, linking an existing team by id, rejecting another user's team — is
-> undone by that change. See Phase 3.5.
-
-### Also critical, found 2026-08-09
+### Also critical, found 2026-08-09 — all three fixed 2026-08-09
 
 - **Round-robin fixture generation produces nothing.** This is known bug 2.
   `createLeagueState` writes `groups: [[teams]]` — one level too deep — so
@@ -130,21 +129,27 @@ Phase 2 is complete. Everything below is implementation.
 
 ## Phase 3 — Make the tournament runnable
 
-The largest single gain in usable product, and the reason to do Phases 1 and 2 first.
+**Complete 2026-08-09.** A tournament can now be created, started, scored, progressed and
+finished from the UI, which had never been possible end to end before.
 
-- **Score entry** — implement `fixtures.controller.js` and
-  `POST /api/fixtures/result/:fixtureId`, and mount `ScoreUpdateModal`. The payload is
-  `(fixtureId, sets, finished)`; the server derives the status per the F7 decision, and
-  maintains `round.completedGames` in the same transaction, which settles **B5**.
-- **Round progression** — mount `NextRoundModal` and give it a trigger. The backend is
-  finished; this is UI wiring.
-- **Tournament lifecycle** — implement start, end and delete, with the Phase 2 ownership
-  check.
-- ~~**F3**~~ — done 2026-08-08 by the tournament view redesign. Organiser controls exist
-  and are gated on `creator`; the endpoints behind them are the work above.
+- ~~**Score entry**~~ — `PUT /api/fixtures/:fixtureId/result` takes `{ sets, finished }`
+  and derives the status per the F7 decision, maintaining `round.completedGames` in the
+  same transaction, which settles **B5**. `ScoreUpdateModal` is mounted from `View.jsx`
+  and offered only on fixtures whose teams are bound.
+- ~~**Round progression**~~ — `NextRoundModal` is mounted, triggered from the Standings
+  tab once the current round is complete and another follows.
+- ~~**Tournament lifecycle**~~ — start, end and delete are live on the resource-first
+  paths, each checking ownership in the service so that "no such tournament" and "not
+  yours" are distinguishable.
+- ~~**X5's fixture resolver**~~ — `fixturesRepository.getFixtureWithOwner` joins fixtures
+  to divisions to tournaments. The tournament-level one is `getTournamentById`, which
+  already returned `created_by`.
+- ~~**F3**~~ — done 2026-08-08 by the tournament view redesign.
 
-Start, end and delete are the cheapest of these and unlock manual testing of everything
-else, so take them first.
+Two things outside the plan had to be fixed to get here, both recorded in
+`docs/known-limitations.md`: a trigger on `divisions` that made **every** UPDATE to that
+table fail, and a bracket that read rank placeholders instead of the teams progression
+had bound.
 
 ### Tournament view polish
 
@@ -163,17 +168,13 @@ Reverses B7. The schema is already changed: `teams (id, name, division_id)`, wit
 `user_id`. Do this before Phase 4, because changing a team invalidates fixtures and any
 schedule built on them.
 
-- **Rework team creation for the new schema.** `createTeam` takes a division id, not a
-  user id. `getTeamsByUserId` is impossible and goes. Selecting an existing team by id
-  goes with it — a team now belongs to exactly one division, so there is nothing to
-  select from. `getTeamsByDivisionIds`, removed with C1, becomes correct again and may
-  be worth restoring in place of resolving through `state.teams`.
-- **Decide which side owns membership.** `teams.division_id` and `state.teams` now both
-  express it. The likely split is that `state.teams` stays authoritative for *order* —
-  seeding is the whole reason it is an array — while `division_id` is the foreign key
-  that makes cascade delete and cheap lookup work. Whichever is chosen, write it into
-  `docs/division-state.md`, because two places holding the same fact will otherwise
-  drift.
+- ~~**Rework team creation for the new schema**~~ — **done 2026-08-09.** `createTeam`
+  takes a team id and a division id. `getTeamsByUserId` is gone, and selecting an
+  existing team by id with it, along with `TEAM_NOT_OWNED`. `getTeamsByDivisionIds` was
+  **not** restored: a query by division cannot preserve seed order.
+- ~~**Decide which side owns membership**~~ — **settled 2026-08-09**, recorded in
+  `docs/division-state.md`. `state.teams` is authoritative for order; `teams.division_id`
+  is the foreign key, carrying cascade delete and cheap lookup.
 - ~~**Blast radius**~~ — **settled 2026-08-09**, recorded in `docs/decisions.md`.
   Changing a division's teams regenerates its structure; renaming does not. Build it in
   this order:

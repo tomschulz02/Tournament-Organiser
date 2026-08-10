@@ -70,10 +70,83 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
     };
 }
 
+// --- lifecycle --------------------------------------------------------------
+//
+// Not Started -> Ongoing -> Finished, one way. Each transition loads the
+// tournament so that "no such tournament" and "not yours" stay distinguishable;
+// the repository used to conflate them by filtering on created_by and reporting
+// zero rows affected for both.
+
+async function startTournament(tournamentId, userId) {
+    const tournament = await loadOwnedTournament(tournamentId, userId);
+
+    if (statusOf(tournament) === "Ongoing") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+    if (statusOf(tournament) === "Finished") {
+        throw new AppError("TOURNAMENT_FINISHED");
+    }
+
+    await tournamentRepository.startTournament(tournamentId);
+
+    return { id: tournamentId, status: "Ongoing" };
+}
+
+async function endTournament(tournamentId, userId) {
+    const tournament = await loadOwnedTournament(tournamentId, userId);
+
+    if (statusOf(tournament) === "Not Started") {
+        throw new AppError("TOURNAMENT_NOT_STARTED");
+    }
+    if (statusOf(tournament) === "Finished") {
+        throw new AppError("TOURNAMENT_FINISHED");
+    }
+
+    await tournamentRepository.endTournament(tournamentId);
+
+    return { id: tournamentId, status: "Finished" };
+}
+
+// Deletion is permitted from any status, including Ongoing. An organiser whose
+// tournament collapsed halfway through still has to be able to remove it, and
+// there is no state a half-played tournament could otherwise be left in. It is
+// not silent: the client confirms first, naming what the cascade takes with it.
+async function deleteTournament(tournamentId, userId) {
+    await loadOwnedTournament(tournamentId, userId);
+
+    await tournamentRepository.deleteTournament(tournamentId);
+
+    return { id: tournamentId };
+}
+
+// requireAuth proves the caller is logged in. This proves the tournament is
+// theirs, and is the tournament-level counterpart of progression's loadDivision.
+async function loadOwnedTournament(tournamentId, userId) {
+    const tournament = await tournamentRepository.getTournamentById(tournamentId);
+    if (!tournament) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    if (tournament.created_by !== userId) {
+        throw new AppError("NOT_TOURNAMENT_OWNER");
+    }
+
+    return tournament;
+}
+
+// A row created before status had a default carries null, which is the same
+// thing as Not Started everywhere else in the code.
+function statusOf(tournament) {
+    return tournament.status || "Not Started";
+}
+
 export const tournamentService = {
     createTournament,
     fetchTournaments,
-    fetchTournamentDetails
+    fetchTournamentDetails,
+    startTournament,
+    endTournament,
+    deleteTournament
 }
 
 

@@ -224,8 +224,10 @@ reasoning below is kept because it records what was given up: a team can no long
 followed across tournaments, which forecloses cross-tournament statistics unless a
 separate club or team-identity concept is introduced later.
 
-Open with the reversal: `teams.division_id` and `state.teams` now both express
-membership. See `docs/roadmap.md`, Phase 3.5.
+Closed 2026-08-09: `teams.division_id` and `state.teams` both express membership, and
+`docs/division-state.md` records which owns what — `state.teams` for order,
+`division_id` for the foreign key. The code came down to the schema the same day;
+`TEAM_NOT_OWNED` is gone, as there is no longer a client-supplied team id to authorise.
 
 The superseded decision follows.
 

@@ -10,7 +10,10 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
     tournamentService: {
         createTournament: vi.fn(),
         fetchTournaments: vi.fn(),
-        fetchTournamentDetails: vi.fn()
+        fetchTournamentDetails: vi.fn(),
+        startTournament: vi.fn(),
+        endTournament: vi.fn(),
+        deleteTournament: vi.fn()
     }
 }));
 
@@ -25,6 +28,9 @@ beforeEach(() => {
     vi.mocked(tournamentService.createTournament).mockReset();
     vi.mocked(tournamentService.fetchTournaments).mockReset();
     vi.mocked(tournamentService.fetchTournamentDetails).mockReset();
+    vi.mocked(tournamentService.startTournament).mockReset();
+    vi.mocked(tournamentService.endTournament).mockReset();
+    vi.mocked(tournamentService.deleteTournament).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -136,6 +142,80 @@ describe("GET /api/tournaments/:tournamentId", () => {
         tournamentService.fetchTournamentDetails.mockRejectedValue(new Error("connection lost"));
 
         expect((await request(app).get(`/api/tournaments/${VALID_UUID}`)).status).toBe(500);
+    });
+});
+
+// The lifecycle routes. Resource-first paths per docs/api.md; the verb-first
+// forms these replaced no longer exist.
+describe.each([
+    ["post", `/api/tournaments/${VALID_UUID}/start`, "startTournament", "Tournament started"],
+    ["post", `/api/tournaments/${VALID_UUID}/end`, "endTournament", "Tournament ended"],
+    ["delete", `/api/tournaments/${VALID_UUID}`, "deleteTournament", "Tournament deleted"]
+])("%s %s", (method, path, serviceMethod, message) => {
+    it("requires a session", async () => {
+        const response = await request(app)[method](path);
+
+        expect(response.status).toBe(401);
+        expect(tournamentService[serviceMethod]).not.toHaveBeenCalled();
+    });
+
+    it("performs the transition for the signed-in owner", async () => {
+        tournamentService[serviceMethod].mockResolvedValue({ id: VALID_UUID });
+
+        const response = await request(app)[method](path).set("Cookie", authCookie({ id: "user-1", username: "tom" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message, data: { id: VALID_UUID } });
+        expect(tournamentService[serviceMethod]).toHaveBeenCalledWith(VALID_UUID, "user-1");
+    });
+
+    it("answers 403 for a signed-in user who does not own it", async () => {
+        tournamentService[serviceMethod].mockRejectedValue(new AppError("NOT_TOURNAMENT_OWNER"));
+
+        const response = await request(app)[method](path).set("Cookie", authCookie({ id: "user-2" }));
+
+        expect(response.status).toBe(403);
+        expect(response.body).toEqual({
+            success: false,
+            message: "You do not own this tournament",
+            data: null
+        });
+    });
+
+    it("answers 404 when the tournament does not exist", async () => {
+        tournamentService[serviceMethod].mockRejectedValue(new AppError("TOURNAMENT_NOT_FOUND"));
+
+        const response = await request(app)[method](path).set("Cookie", authCookie());
+
+        expect(response.status).toBe(404);
+    });
+});
+
+describe("lifecycle transitions the tournament is not in", () => {
+    it("answers 409 rather than 500 when a tournament is started twice", async () => {
+        tournamentService.startTournament.mockRejectedValue(new AppError("TOURNAMENT_ALREADY_STARTED"));
+
+        const response = await request(app)
+            .post(`/api/tournaments/${VALID_UUID}/start`)
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(409);
+        expect(response.body).toEqual({
+            success: false,
+            message: "This tournament has already started",
+            data: null
+        });
+    });
+
+    it("answers 409 when a tournament that has not started is ended", async () => {
+        tournamentService.endTournament.mockRejectedValue(new AppError("TOURNAMENT_NOT_STARTED"));
+
+        const response = await request(app)
+            .post(`/api/tournaments/${VALID_UUID}/end`)
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(409);
+        expect(response.body.message).toBe("This tournament has not started yet");
     });
 });
 

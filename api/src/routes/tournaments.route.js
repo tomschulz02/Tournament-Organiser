@@ -6,9 +6,13 @@ const tournamentRouter = express.Router();
 tournamentRouter.use(express.json());
 
 tournamentRouter.post('/create', requireAuth, tournamentController.createTournament);
-// tournamentRouter.post('/start/:tournamentId',);
-// tournamentRouter.post('/end/:tournamentId',);
-// tournamentRouter.delete('/delete/:tournamentId',);
+
+// Lifecycle. Resource-first paths per docs/api.md, replacing the verb-first
+// forms these routes were once sketched with. requireAuth proves identity; the
+// service proves the tournament is the caller's.
+tournamentRouter.post('/:tournamentId/start', requireAuth, tournamentController.startTournament);
+tournamentRouter.post('/:tournamentId/end', requireAuth, tournamentController.endTournament);
+tournamentRouter.delete('/:tournamentId', requireAuth, tournamentController.deleteTournament);
 
 // Declared, not implemented: all three answer 501. The routes exist so the paths
 // are settled and the frontend can wire to them for real. requireAuth is on them

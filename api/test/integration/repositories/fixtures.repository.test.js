@@ -90,45 +90,95 @@ describe("getFixturesByDivisionIds", () => {
     });
 });
 
-describe("updateResult", () => {
-    it("commits the scores and the new status", async () => {
-        client.query.mockResolvedValue({ rows: [{ division_id: "div-1" }], rowCount: 1 });
+describe("getFixtureWithOwner", () => {
+    it("joins the fixture to its division and that division's tournament owner", async () => {
+        db.query.mockResolvedValueOnce([{ id: "f1", division_id: "div-1", tournament_id: "tour-1", created_by: "user-1" }]);
 
-        expect(await fixturesRepository.updateResult("f1", [[21, 18], [15, 21]], "COMPLETED", null))
+        expect(await fixturesRepository.getFixtureWithOwner("f1"))
+            .toEqual({ id: "f1", division_id: "div-1", tournament_id: "tour-1", created_by: "user-1" });
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "SELECT f.*, d.tournament_id, t.created_by FROM fixtures f " +
+            "JOIN divisions d ON d.id = f.division_id " +
+            "JOIN tournaments t ON t.id = d.tournament_id " +
+            "WHERE f.id = $1::uuid"
+        );
+        expect(params).toEqual(["f1"]);
+    });
+
+    it("returns null for a fixture that does not exist, rather than undefined", async () => {
+        db.query.mockResolvedValueOnce([]);
+
+        expect(await fixturesRepository.getFixtureWithOwner("missing")).toBeNull();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await failureFrom(fixturesRepository.getFixtureWithOwner("f1"));
+
+        expect(failure.message).toBe("Failed to fetch fixture");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+// One statement on the caller's client. The transaction belongs to the service,
+// which commits this together with the division's completedGames count.
+describe("updateResult", () => {
+    it("writes the scores and the status on the client it is given", async () => {
+        expect(await fixturesRepository.updateResult("f1", [[21, 15], [18, 21]], "COMPLETED", client))
             .toEqual({ message: "Fixture updated" });
 
-        expect(clientSql().map(squash)).toEqual([
-            "BEGIN",
-            "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3 WHERE id = $4 RETURNING division_id",
-            "COMMIT"
-        ]);
-        expect(client.query.mock.calls[1][1]).toEqual([[21, 18], [15, 21], "COMPLETED", "f1"]);
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3 WHERE id = $4::uuid"
+        );
+        expect(params).toEqual([[21, 15], [18, 21], "COMPLETED", "f1"]);
+        // No transaction of its own, and no BEGIN/COMMIT to conflict with the
+        // caller's.
+        expect(clientSql().map(squash)).not.toContain("BEGIN");
+        expect(db.query).not.toHaveBeenCalled();
     });
 
-    it("returns null and closes the transaction when no row matched", async () => {
-        client.query.mockResolvedValue({ rows: [], rowCount: 0 });
-
-        expect(await fixturesRepository.updateResult("missing", [[], []], "COMPLETED", null)).toBeNull();
-
-        // This path used to return without a COMMIT or a ROLLBACK, leaving the
-        // transaction open until the client was released.
-        expect(clientSql()).toContain("ROLLBACK");
-        expect(clientSql()).not.toContain("COMMIT");
-        expect(client.release).toHaveBeenCalledOnce();
-    });
-
-    it("rolls back and throws, keeping the underlying error as cause", async () => {
+    it("throws, keeping the underlying error as cause, and leaves the rollback to the caller", async () => {
         const underlying = new Error("invalid input syntax");
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw underlying;
-            return { rows: [] };
-        });
+        client.query.mockRejectedValueOnce(underlying);
 
-        const failure = await failureFrom(fixturesRepository.updateResult("f1", [[], []], "COMPLETED", null));
+        const failure = await failureFrom(fixturesRepository.updateResult("f1", [[], []], "COMPLETED", client));
 
         expect(failure.message).toBe("Failed to update fixture");
         expect(failure.cause).toBe(underlying);
-        expect(clientSql()).toContain("ROLLBACK");
+        expect(clientSql()).not.toContain("ROLLBACK");
+    });
+});
+
+describe("countCompletedInRounds", () => {
+    it("counts only the finished fixtures of the named rounds", async () => {
+        client.query.mockResolvedValueOnce({ rows: [{ completed: 3 }], rowCount: 1 });
+
+        expect(await fixturesRepository.countCompletedInRounds("div-1", ["Finals", "3rd Place Playoff"], client))
+            .toBe(3);
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "SELECT count(*)::int AS completed FROM fixtures " +
+            "WHERE division_id = $1::uuid AND round = ANY($2::text[]) AND status = 'COMPLETED'"
+        );
+        expect(params).toEqual(["div-1", ["Finals", "3rd Place Playoff"]]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        const failure = await failureFrom(
+            fixturesRepository.countCompletedInRounds("div-1", ["Pool Play"], client)
+        );
+
+        expect(failure.message).toBe("Failed to count completed fixtures");
+        expect(failure.cause).toBe(underlying);
     });
 });
 

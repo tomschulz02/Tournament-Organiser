@@ -163,9 +163,14 @@ disagrees, the code is wrong. Known cases:
 - `users.repository.js` references a `friends` table. It does not exist. It is reserved
   for a future social feature and the code is ahead of the schema.
 
-The `teams.division_id` writes and reads, and the `RETURNING num_groups` in
-`updateTeams`, were fixed on 2026-08-08. Division membership lives in `state.teams`, not
-on the team row, and group count is derived from `state.rounds[].groups`.
+The `RETURNING num_groups` in `updateTeams` was fixed on 2026-08-08; group count is
+derived from `state.rounds[].groups`.
+
+The `teams` drift is closed as of 2026-08-09, in favour of the schema. `createTeam`
+inserts `(id, name, division_id)`, a team belongs to exactly one division, and the
+`user_id` design the code briefly carried is gone. Both `teams.division_id` and
+`state.teams` express membership; which owns what is recorded in
+`docs/division-state.md`.
 
 Do not fix these as a batch. Fix each one when working on the feature that touches it.
 

@@ -78,17 +78,20 @@ describe("createDivision", () => {
 });
 
 describe("createTeam", () => {
-    it("inserts a team owned by the organiser and returns the generated id", async () => {
-        expect(await divisionsRepository.createTeam("Aces", "user-1")).toBe("uuid-1");
+    // The id is supplied, not generated here: the service needs every team id
+    // before it can build state.teams, but the rows themselves cannot be written
+    // until the division exists.
+    it("inserts a team into its division and returns the id it was given", async () => {
+        expect(await divisionsRepository.createTeam("team-1", "Aces", "div-1")).toBe("team-1");
 
         expect(db.query).toHaveBeenCalledWith(
-            "INSERT INTO teams (id, name, user_id) VALUES ($1, $2, $3);",
-            ["uuid-1", "Aces", "user-1"]
+            "INSERT INTO teams (id, name, division_id) VALUES ($1, $2, $3);",
+            ["team-1", "Aces", "div-1"]
         );
     });
 
     it("joins the caller's transaction when given a client", async () => {
-        await divisionsRepository.createTeam("Aces", "user-1", client);
+        await divisionsRepository.createTeam("team-1", "Aces", "div-1", client);
 
         expect(client.query).toHaveBeenCalledOnce();
         expect(db.query).not.toHaveBeenCalled();
@@ -98,26 +101,11 @@ describe("createTeam", () => {
         const underlying = new Error("relation does not exist");
         db.query.mockRejectedValueOnce(underlying);
 
-        await expectWrapped(divisionsRepository.createTeam("Aces", "user-1"), "Failed to create team", underlying);
-    });
-});
-
-describe("getTeamsByUserId", () => {
-    it("returns the teams the user owns, by name", async () => {
-        db.query.mockResolvedValueOnce([{ id: "t1", name: "Aces" }]);
-
-        expect(await divisionsRepository.getTeamsByUserId("user-1")).toEqual([{ id: "t1", name: "Aces" }]);
-        expect(db.query).toHaveBeenCalledWith(
-            "SELECT id, name FROM teams WHERE user_id = $1 ORDER BY name ASC;",
-            ["user-1"]
+        await expectWrapped(
+            divisionsRepository.createTeam("team-1", "Aces", "div-1"),
+            "Failed to create team",
+            underlying
         );
-    });
-
-    it("throws, keeping the underlying error as cause", async () => {
-        const underlying = new Error("connection lost");
-        db.query.mockRejectedValueOnce(underlying);
-
-        await expectWrapped(divisionsRepository.getTeamsByUserId("user-1"), "Failed to fetch teams", underlying);
     });
 });
 
@@ -258,14 +246,76 @@ describe("getDivisionWithOwner", () => {
     });
 });
 
+// Both take the client rather than defaulting to the pool: they are the two
+// halves of a read-modify-write that only means anything inside one transaction.
+describe("getStateForUpdate", () => {
+    it("reads the state and locks the row", async () => {
+        client.query.mockResolvedValueOnce({ rows: [{ state: { rounds: [] } }], rowCount: 1 });
+
+        expect(await divisionsRepository.getStateForUpdate("div-1", client)).toEqual({ rounds: [] });
+
+        const [sql, params] = client.query.mock.calls[0];
+        // FOR UPDATE, so two results recorded at once cannot each overwrite the
+        // other's completedGames.
+        expect(squash(sql)).toBe("SELECT state FROM divisions WHERE id = $1::uuid FOR UPDATE");
+        expect(params).toEqual(["div-1"]);
+    });
+
+    it("returns null when the division does not exist", async () => {
+        client.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+        expect(await divisionsRepository.getStateForUpdate("missing", client)).toBeNull();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.getStateForUpdate("div-1", client),
+            "Failed to fetch division state",
+            underlying
+        );
+    });
+});
+
+describe("updateStateRounds", () => {
+    it("replaces state.rounds and stamps last_update, without touching currentRound", async () => {
+        const rounds = [{ name: "Pool Play", completedGames: 2 }];
+
+        expect(await divisionsRepository.updateStateRounds("div-1", rounds, client))
+            .toEqual({ message: "Rounds updated" });
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = jsonb_set(state, '{rounds}', $1::jsonb), last_update = now() WHERE id = $2::uuid"
+        );
+        expect(params).toEqual([JSON.stringify(rounds), "div-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.updateStateRounds("div-1", [], client),
+            "Failed to update rounds",
+            underlying
+        );
+    });
+});
+
 describe("getTeamsByIds", () => {
-    it("looks the teams up by id array, with the owner for the caller to check", async () => {
-        db.query.mockResolvedValueOnce([{ id: "t1", name: "Aces", user_id: "user-1" }]);
+    // By id rather than by division_id, even though the column now exists:
+    // state.teams is authoritative for seed order and a query by division would
+    // come back in none. See docs/division-state.md.
+    it("looks the teams up by id array", async () => {
+        db.query.mockResolvedValueOnce([{ id: "t1", name: "Aces", division_id: "div-1" }]);
 
         expect(await divisionsRepository.getTeamsByIds(["t1"]))
-            .toEqual([{ id: "t1", name: "Aces", user_id: "user-1" }]);
+            .toEqual([{ id: "t1", name: "Aces", division_id: "div-1" }]);
         expect(db.query).toHaveBeenCalledWith(
-            "SELECT id, name, user_id FROM teams WHERE id = ANY($1::uuid[]);",
+            "SELECT id, name, division_id FROM teams WHERE id = ANY($1::uuid[]);",
             [["t1"]]
         );
     });

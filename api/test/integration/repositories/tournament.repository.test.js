@@ -123,35 +123,31 @@ describe("updateSchedule", () => {
 });
 
 // startTournament, endTournament and deleteTournament share a shape: one
-// owner-scoped statement inside a transaction, returning the raw pg result and
-// throwing on failure.
+// statement, no transaction, and no created_by filter. Ownership is checked in
+// the service, so that a missing tournament and someone else's tournament can
+// produce different statuses rather than the same zero rows affected.
 describe.each([
-    ["startTournament", "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1 AND created_by = $2", "Failed to start tournament"],
-    ["endTournament", "UPDATE tournaments SET status = 'Finished' WHERE id = $1 AND created_by = $2", "Failed to end tournament"],
-    ["deleteTournament", "DELETE FROM tournaments WHERE id = $1 AND created_by = $2", "Failed to delete tournament"]
-])("%s", (method, expectedSql, expectedMessage) => {
-    it("commits a statement scoped to the owner", async () => {
-        client.query.mockResolvedValue({ rows: [], rowCount: 1 });
+    ["startTournament", "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1", "Failed to start tournament", "Tournament started"],
+    ["endTournament", "UPDATE tournaments SET status = 'Finished' WHERE id = $1", "Failed to end tournament", "Tournament ended"],
+    ["deleteTournament", "DELETE FROM tournaments WHERE id = $1", "Failed to delete tournament", "Tournament deleted"]
+])("%s", (method, expectedSql, expectedMessage, successMessage) => {
+    it("runs one statement keyed on the id alone", async () => {
+        expect(await tournamentRepository[method]("tour-1")).toEqual({ message: successMessage });
 
-        expect(await tournamentRepository[method]("tour-1", "user-1")).toEqual({ rows: [], rowCount: 1 });
-
-        expect(clientSql().map(squash)).toEqual(["BEGIN", expectedSql, "COMMIT"]);
-        expect(client.query.mock.calls[1][1]).toEqual(["tour-1", "user-1"]);
-        expect(client.release).toHaveBeenCalledOnce();
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe(expectedSql);
+        expect(params).toEqual(["tour-1"]);
+        // No transaction: a single statement is already atomic.
+        expect(clientSql()).toEqual([]);
     });
 
-    it("rolls back and throws, keeping the underlying error as cause", async () => {
+    it("throws, keeping the underlying error as cause", async () => {
         const underlying = new Error("connection lost");
-        client.query.mockImplementation(async (sql) => {
-            if (sql === expectedSql) throw underlying;
-            return { rows: [] };
-        });
+        db.query.mockRejectedValueOnce(underlying);
 
-        const failure = await tournamentRepository[method]("tour-1", "user-1").catch((err) => err);
+        const failure = await tournamentRepository[method]("tour-1").catch((err) => err);
 
         expect(failure.message).toBe(expectedMessage);
         expect(failure.cause).toBe(underlying);
-        expect(clientSql()).toContain("ROLLBACK");
-        expect(client.release).toHaveBeenCalledOnce();
     });
 });

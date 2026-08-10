@@ -167,6 +167,17 @@ order they carried into the round.
 For a semifinal round this gives `[winner1, winner2, loser1, loser2]`, so the following
 round expresses the bronze match as `[2, 3]` and the final as `[0, 1]`.
 
+### A two-team knockout still consumes four ranks
+
+A knockout stage of two teams generates a bronze match as well as a final, so the Finals
+round holds `groups: [[2, 3], [0, 1]]` — the playoff first, as `createClassicState`
+unshifts it onto the front. Its `qualifyingTeams` is therefore **4, not 2**, for a
+division configured with `knockout_teams: 2`.
+
+Anything reasoning about how many teams a knockout round needs must read
+`qualifyingTeams` rather than inferring it from the round's name or from the configured
+knockout size.
+
 ### Qualification
 
 The number of teams advancing is the round's `qualifyingTeams`. When it is not a

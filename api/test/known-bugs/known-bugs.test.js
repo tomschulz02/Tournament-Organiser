@@ -47,7 +47,6 @@ vi.mock("../../src/services/divisions.service.js", async (importOriginal) => awa
 
 const { computeRoundResults, hasPlayedFixtures, normalizeFixtureResult, progressionService } =
     await import("../../src/services/progression.service.js");
-const { createLeagueState } = await import("../../src/services/divisions.service.js");
 const { generateFixtures } = await import("../../src/services/fixtures.service.js");
 const { tournamentService } = await import("../../src/services/tournaments.service.js");
 const { buildFinalStandings } = await import("../../src/utils/tournamentViewFormatter.js");
@@ -99,14 +98,9 @@ describe("bug 1: head-to-head never applies during round progression", () => {
     });
 });
 
-describe("bug 2: a League division produces no standings", () => {
-    // api/src/services/divisions.service.js:89 writes groups: [[teams]].
-    // Every consumer filters group entries to strings, so the inner array is
-    // discarded and a League division shows an empty table.
-    it("puts the team ids one level deep, as a single pool", () => {
-        expect(createLeagueState(["t1", "t2"], 2).rounds[0].groups).toEqual([["t1", "t2"]]);
-    });
-});
+// bug 2, a League division producing no fixtures or standings, is fixed. Its
+// regression guard now lives in test/unit/services/divisions.service.test.js,
+// asserting the pool shape and the generated game count.
 
 // bug 3, every team created with no name, is fixed. Its regression guard now
 // lives in test/unit/services/divisions.service.test.js, asserting the team name

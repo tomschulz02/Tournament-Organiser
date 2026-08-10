@@ -89,11 +89,14 @@ export const saveTournament = (tournamentId) => request(`tournaments/${tournamen
 
 export const unsaveTournament = (tournamentId) => request(`tournaments/${tournamentId}/save`, { method: 'DELETE' });
 
-export const startTournament = (tournamentId) => request(`tournaments/start/${tournamentId}`, { method: 'POST' });
+// Lifecycle. Not Started -> Ongoing -> Finished, one way. Each refuses a
+// transition the tournament is not in with a 409 whose message is display-ready.
+export const startTournament = (tournamentId) => request(`tournaments/${tournamentId}/start`, { method: 'POST' });
 
-export const endTournament = (tournamentId) => request(`tournaments/end/${tournamentId}`, { method: 'PUT' });
+export const endTournament = (tournamentId) => request(`tournaments/${tournamentId}/end`, { method: 'POST' });
 
-export const deleteTournament = (id) => request(`tournaments/delete/${id}`, { method: 'DELETE' });
+// Cascades to the tournament's divisions, fixtures and saved rows. There is no undo.
+export const deleteTournament = (tournamentId) => request(`tournaments/${tournamentId}`, { method: 'DELETE' });
 
 // A schedule spans the tournament, not a division. Returns 501 until implemented.
 export const updateTournamentSchedule = (tournamentId, schedule) =>
@@ -101,8 +104,14 @@ export const updateTournamentSchedule = (tournamentId, schedule) =>
 
 // Fixtures
 
-export const updateScore = (fixtureId, scores, status, hashId, rounds) =>
-	request(`fixtures/result/${fixtureId}`, { method: 'POST', body: { scores, status, hashId, rounds } });
+// Records a result. `sets` is [[teamOneScore, teamTwoScore], ...] and `finished`
+// says whether the organiser is ending the match.
+//
+// There is deliberately no status parameter. The server derives it from the
+// scores and the intent — an empty `sets` reopens the fixture, and a single 0-0
+// on a finished match records it as cancelled. See docs/tournament-rules.md.
+export const updateFixtureResult = (fixtureId, sets, finished) =>
+	request(`fixtures/${fixtureId}/result`, { method: 'PUT', body: { sets, finished } });
 
 // Divisions
 

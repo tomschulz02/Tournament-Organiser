@@ -16,6 +16,25 @@ with it, the code is wrong.
 `teams` holds ID strings only, never team objects. Names are resolved by joining to the
 `teams` table.
 
+### Who owns membership
+
+Both `state.teams` and `teams.division_id` express which teams are in a division. Settled
+2026-08-09, when team creation came down to the `division_id` schema:
+
+- **`state.teams` is authoritative for order.** Seeding is the whole reason it is an
+  array, and nothing on the team row can carry a seed. Anything that presents teams in
+  order reads this.
+- **`teams.division_id` is the foreign key.** It carries the cascade delete and makes a
+  division's rows cheap to find. It says nothing about order.
+
+So a division's teams are resolved by passing `state.teams` to
+`divisionsRepository.getTeamsByIds`, never by querying on `division_id` — that would come
+back in no particular order. `getTeamsByDivisionIds` is deliberately not restored.
+
+The two can drift: a `teams` row whose `division_id` points at a division that does not
+list it in `state.teams` is invisible, and an id in `state.teams` with no row resolves to
+nothing. Nothing enforces agreement. Write both together, inside the same transaction.
+
 ## Round Object
 
 | Key | Type | Description |

@@ -4,7 +4,10 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
     tournamentService: {
         createTournament: vi.fn(),
         fetchTournaments: vi.fn(),
-        fetchTournamentDetails: vi.fn()
+        fetchTournamentDetails: vi.fn(),
+        startTournament: vi.fn(),
+        endTournament: vi.fn(),
+        deleteTournament: vi.fn()
     }
 }));
 
@@ -18,6 +21,9 @@ beforeEach(() => {
     vi.mocked(tournamentService.createTournament).mockReset();
     vi.mocked(tournamentService.fetchTournaments).mockReset();
     vi.mocked(tournamentService.fetchTournamentDetails).mockReset();
+    vi.mocked(tournamentService.startTournament).mockReset();
+    vi.mocked(tournamentService.endTournament).mockReset();
+    vi.mocked(tournamentService.deleteTournament).mockReset();
 });
 
 // The controllers no longer catch. A rejected service call propagates to the
@@ -147,5 +153,54 @@ describe("tournamentController.fetchTournamentDetails", () => {
         await expect(
             tournamentController.fetchTournamentDetails(makeReq({ params: { tournamentId: VALID_UUID } }), makeRes())
         ).rejects.toBe(failure);
+    });
+});
+
+// The three lifecycle controllers are the same shape: guard the id, hand the id
+// and the session user to the service, answer 200 with whatever it returned.
+describe.each([
+    ["startTournament", "Tournament started"],
+    ["endTournament", "Tournament ended"],
+    ["deleteTournament", "Tournament deleted"]
+])("tournamentController.%s", (method, message) => {
+    it("passes the id and the session user to the service", async () => {
+        const data = { id: VALID_UUID };
+        tournamentService[method].mockResolvedValue(data);
+        const res = makeRes();
+
+        await tournamentController[method](
+            makeReq({ params: { tournamentId: VALID_UUID }, user: { id: "user-1" } }),
+            res
+        );
+
+        expect(tournamentService[method]).toHaveBeenCalledWith(VALID_UUID, "user-1");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ success: true, message, data });
+    });
+
+    it("rejects an id that is not a UUID without calling the service", async () => {
+        const res = makeRes();
+
+        await expect(
+            tournamentController[method](makeReq({ params: { tournamentId: "12345" }, user: { id: "user-1" } }), res)
+        ).rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+
+        expect(tournamentService[method]).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it("lets the service's refusal propagate", async () => {
+        const failure = Object.assign(new Error("You do not own this tournament"), { code: "NOT_TOURNAMENT_OWNER" });
+        tournamentService[method].mockRejectedValue(failure);
+        const res = makeRes();
+
+        await expect(
+            tournamentController[method](
+                makeReq({ params: { tournamentId: VALID_UUID }, user: { id: "user-2" } }),
+                res
+            )
+        ).rejects.toBe(failure);
+
+        expect(res.json).not.toHaveBeenCalled();
     });
 });

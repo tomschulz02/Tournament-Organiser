@@ -8,13 +8,15 @@ items are identified, and remove them as they are fixed.
 - `divisions` has a route and controller for round progression only. Every other
   division endpoint is missing, though the service and repository functions behind them
   exist.
-- `fixtures` has a working service and repository, but an empty router and an empty
-  controller file. The router is still mounted, so calls return 404.
-- The frontend calls eleven endpoints that do not exist. `docs/api.md` lists them.
+- `fixtures` has one route as of 2026-08-09: `PUT /api/fixtures/:fixtureId/result`
+  records a result and maintains the round's `completedGames`. The rest of the router is
+  still empty.
+- The frontend calls endpoints that do not exist. `docs/api.md` lists them; start, end,
+  delete and score entry came off that list on 2026-08-09.
 - `users.controller.js` `getUserProfile` is not implemented. It now returns 501 rather
   than hanging.
-- Join, leave, start, end and delete tournament are commented out in
-  `tournaments.route.js`.
+- Join and leave tournament are still stubs answering 501. Start, end and delete were
+  built on 2026-08-09 and are live on the resource-first paths in `docs/api.md`.
 
 ## Code and Schema Drift
 
@@ -23,11 +25,16 @@ The schema in `docs/database.md` is correct; the code below is not.
 - `users.repository.js` queries a `friends` table that does not exist. Reserved for a
   future social feature.
 
-The `teams.division_id` drift is gone as of 2026-08-08. `createTeam` inserts
-`(id, name, user_id)` with the organiser's id, `getTeamNames` is now `getTeamsByUserId`,
-`getTeamsByDivisionIds` has been removed in favour of resolving `state.teams` through
-`getTeamsByIds`, and `updateTeams` no longer asks for a `num_groups` column that does not
-exist.
+The `teams` drift is gone as of 2026-08-09, closed in favour of the schema rather than
+against it. The code briefly inserted `(id, name, user_id)` against a table that has
+`division_id`, which broke tournament creation outright; B7 was reversed and the code
+brought down to the schema instead. `createTeam` now takes an id and inserts
+`(id, name, division_id)`, `getTeamsByUserId` is gone, and selecting an existing team by
+id is gone with it — a team belongs to exactly one division. `updateTeams` no longer asks
+for a `num_groups` column that does not exist.
+
+`getTeamsByDivisionIds` stays removed: `state.teams` is authoritative for seed order, so
+resolution goes through `getTeamsByIds`. See `docs/division-state.md`.
 
 ## API Contract
 
@@ -84,9 +91,18 @@ branches, and missing environment variables failing at request time instead of b
   bound once the previous round's `results` are populated.
 - Standings are recomputed on every tournament detail fetch rather than stored. Correct
   but unoptimised.
-- `round.completedGames` is stored but nothing ever increments it, so the round progress
-  bar in the UI sits at zero. `isRoundComplete` works around this by recomputing from
-  the fixture rows. Fixed by the score-entry endpoint, per the F7 decision.
+- ~~`round.completedGames` is stored but nothing ever increments it~~ — **fixed
+  2026-08-09.** The score-entry endpoint recounts the round's `COMPLETED` fixtures from
+  the rows and writes the count back in the same transaction as the result, so an edited
+  result cannot double-count and a reopened one drops the count again.
+
+  Correcting a claim repeated in `gap-analysis.md` (B5) and the Phase 3 handover: **no
+  UI reads `completedGames`**, so the progress bar was never sitting at zero because of
+  it. The Overview card shows `dashboard.completedFixtureCount`, which
+  `tournamentViewFormatter` recomputes from the fixture rows, and the formatter does not
+  surface `completedGames` at all. The field is now correct because
+  `docs/division-state.md` defines it and `isRoundComplete` would otherwise be the only
+  thing keeping the contract — not because anything on screen changed.
 - Nothing enforces the shape of `divisions.state`. A malformed write only surfaces on
   read.
 
@@ -95,11 +111,39 @@ Ranking now matches `docs/tournament-rules.md` and is computed only in the backe
 
 Outstanding:
 
-- **`NextRoundModal` is not rendered anywhere.** It was already orphaned before being
-  rewritten — nothing imports it. Round progression is therefore unreachable from the
-  UI until the modal is mounted and given a trigger.
+- ~~**`NextRoundModal` is not rendered anywhere.**~~ — **fixed 2026-08-09.** `View.jsx`
+  mounts it, triggered from the Standings tab by a Start Next Round button that appears
+  for the organiser once the division's current round is complete and another round
+  follows. The check is a deliberate mirror of `isRoundComplete` in
+  `progression.service.js`; the server revalidates regardless.
+- **`commit`'s re-progression guard is unreachable.** `NEXT_ROUND_ALREADY_STARTED` fires
+  only when `state.rounds[currentRound].results` is already populated, but committing
+  advances `currentRound` past that round in the same write. A second commit therefore
+  fails earlier, with `ROUND_NOT_COMPLETE`, because the round now under examination is
+  the unplayed next one. Correcting a progression is consequently not possible through
+  the API at all. Left alone: `progression.service.js` was out of scope for Phase 3.
 - Round objects cannot express a match format, so the per-round best-of rule is
   undeliverable until `divisions.state` gains a key for it.
+
+## Phase 3
+
+From making the tournament runnable, 2026-08-09.
+
+- **`round.completedGames` is now maintained, and nothing reads it.** The field is
+  recounted from the fixture rows on every result, which is what
+  `docs/division-state.md` specifies. But no part of the UI uses it — the Overview card
+  shows `dashboard.completedFixtureCount`, which `tournamentViewFormatter.js` recomputes
+  from the fixtures on every read. Keep the field correct because the contract says so,
+  but do not expect a screen to change when it does, and do not delete it as dead.
+- **Round completeness is expressed in two places.** `canProgress` in `StandingsTab.jsx`
+  mirrors `isRoundComplete` in `progression.service.js` to decide whether to offer the
+  progression trigger. It is presentation only — the server revalidates and answers 409 —
+  but the two must be changed together.
+- **Two verification items still need a signed-in session.** The lifecycle Verify list
+  was checked against the test suite rather than by hand, because the database had no
+  usable tournament at the time; and the full end-to-end walk, plus the second-user 403
+  check, have not been done in a browser. The backend paths for both are covered by
+  integration tests.
 
 ## Tournament View
 
@@ -114,8 +158,9 @@ From the redesign of 2026-08-08.
   `tournament-teams*` / `teams-grid` / `team-card*`, `division-schedule-summary*`,
   `schedule-maker-launcher*`, and the `fixtures-doc` print template.
 - **`SummaryPage.jsx` (80 lines) is orphaned.** Nothing imports it. Kept because no
-  decision has been taken about it, unlike `NextRoundModal`, `ScoreUpdateModal` and
-  `Tooltip`, which are deliberately retained.
+  decision has been taken about it, unlike `NextRoundModal` and `Tooltip`, which are
+  deliberately retained. `ScoreUpdateModal` is no longer in this list — `View.jsx` mounts
+  it as of 2026-08-09.
 - **A division can hold team ids that no longer exist.** The development database has a
   division whose `state.teams` lists eight ids with no matching rows, so Overview reports
   eight teams while Teams shows its empty state and every standings row reads `TBD`. The
@@ -132,6 +177,10 @@ From the redesign of 2026-08-08.
   agree only while no fixture is placed twice, and nothing enforces that — the
   server-side rejection of a duplicate fixture id is specified in `docs/decisions.md` and
   unwritten. `ScheduleTab` counts the distinct set itself for its "x of y" line.
+- ~~**The bracket showed rank placeholders after progression.**~~ — **fixed 2026-08-09.**
+  `buildDivisionBracket` resolved participants from `round.groups`, which hold positional
+  indices permanently; progression binds teams to the fixture instead. The bracket now
+  prefers the fixture's bound teams. Separate from the connector problem below.
 - **The knockout bracket infers progression rather than reading it.** Nothing in the
   payload says which match feeds which; knockout groups hold rank indices, not bracket
   positions. Connectors are drawn only where the match counts halve exactly, and omitted

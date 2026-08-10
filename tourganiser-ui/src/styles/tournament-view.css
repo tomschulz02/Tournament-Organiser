@@ -392,6 +392,18 @@ body.dark {
 	margin-bottom: 12px;
 }
 
+/* The organiser's lifecycle controls, at the foot of the info card. Separated
+   by a rule because they act on the tournament rather than describe it. */
+.tv-info-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 18px;
+	padding-top: 16px;
+	border-top: 1px solid var(--tv-border);
+}
+
 .tv-status-pill {
 	padding: 4px 12px;
 	border-radius: 999px;

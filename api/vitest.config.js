@@ -28,9 +28,7 @@ export default defineConfig({
                 "src/server.js",
                 // Opens a real pg Pool on construction. Mocked in every test, so it
                 // is never executed; see test/helpers/dbMock.js.
-                "src/config/db.js",
-                // Empty file (0 bytes). Nothing imports it.
-                "src/controllers/fixtures.controller.js"
+                "src/config/db.js"
             ],
             // A note on the `/* v8 ignore next */` markers above `} finally {`
             // in src/: v8 emits a single-path, always-zero "branch" spanning the

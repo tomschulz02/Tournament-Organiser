@@ -43,24 +43,18 @@ async function updateTeams(divisionId, userId, teams) {
 }
 
 // used to create a new team
-async function createTeam(name, userId, client = db){
+//
+// Takes the id rather than generating one, like createFixture. The service has
+// to know every team id before it can build state.teams, but a team row cannot
+// be written until its division exists — division_teams_fkey. Generating the id
+// here would force those two facts into conflict.
+async function createTeam(teamId, name, divisionId, client = db){
     try {
-        const teamId = uuidv4();
-        await client.query('INSERT INTO teams (id, name, user_id) VALUES ($1, $2, $3);', [teamId, name, userId]);
+        await client.query('INSERT INTO teams (id, name, division_id) VALUES ($1, $2, $3);', [teamId, name, divisionId]);
 
         return teamId;
     } catch (error) {
         throw new Error("Failed to create team", { cause: error });
-    }
-}
-
-// The teams a user owns. Populates the team dropdown in tournament creation;
-// GET /api/teams will expose it.
-async function getTeamsByUserId(userId){
-    try {
-        return await db.query('SELECT id, name FROM teams WHERE user_id = $1 ORDER BY name ASC;', [userId]);
-    } catch (error){
-        throw new Error("Failed to fetch teams", { cause: error });
     }
 }
 
@@ -132,6 +126,35 @@ async function updateRounds(divisionId, userId, updatedRounds, updatedFixtures, 
     }
 }
 
+// Reads divisions.state for a read-modify-write, taking a row lock so two
+// results recorded at once cannot each overwrite the other's completedGames.
+//
+// `client` is required: locking outside the transaction that does the write
+// would release the lock immediately and achieve nothing.
+async function getStateForUpdate(divisionId, client) {
+    try {
+        const sql = "SELECT state FROM divisions WHERE id = $1::uuid FOR UPDATE";
+        const result = await client.query(sql, [divisionId]);
+
+        return result.rows.length > 0 ? result.rows[0].state : null;
+    } catch (error) {
+        throw new Error("Failed to fetch division state", { cause: error });
+    }
+}
+
+// Replaces state.rounds wholesale. Narrower than updateRounds, which also moves
+// currentRound — recording a result advances no rounds.
+async function updateStateRounds(divisionId, rounds, client) {
+    try {
+        const sql = "UPDATE divisions SET state = jsonb_set(state, '{rounds}', $1::jsonb), last_update = now() WHERE id = $2::uuid";
+        await client.query(sql, [JSON.stringify(rounds), divisionId]);
+
+        return { message: "Rounds updated" };
+    } catch (error) {
+        throw new Error("Failed to update rounds", { cause: error });
+    }
+}
+
 // Fetches a division together with the id of the user who owns its tournament,
 // so the service can authorise before mutating anything.
 async function getDivisionWithOwner(divisionId) {
@@ -151,18 +174,18 @@ async function getDivisionWithOwner(divisionId) {
 
 // Looks up teams by their ids, taken from state.teams.
 //
-// The teams table has no division_id column — division membership lives in
-// divisions.state.teams, so this is the only way to resolve a division's teams.
-//
-// user_id is selected so the service can confirm ownership of ids supplied by a
-// client; see docs/decisions.md, "Ownership Is Checked In The Service".
+// Both teams.division_id and state.teams express membership. state.teams is
+// authoritative for order — seeding is the whole reason it is an array — so
+// resolution goes through the ids it holds rather than through division_id.
+// A query by division_id would come back in no particular order. See
+// docs/division-state.md.
 async function getTeamsByIds(teamIds) {
     if (!Array.isArray(teamIds) || teamIds.length === 0) {
         return [];
     }
 
     try {
-        const sql = "SELECT id, name, user_id FROM teams WHERE id = ANY($1::uuid[]);";
+        const sql = "SELECT id, name, division_id FROM teams WHERE id = ANY($1::uuid[]);";
         return await db.query(sql, [teamIds]);
     } catch (error) {
         throw new Error("Failed to fetch teams", { cause: error });
@@ -225,11 +248,12 @@ export const divisionsRepository = {
     updateTeam,
     updateGroups,
     updateRounds,
+    getStateForUpdate,
+    updateStateRounds,
     getDivisionDetails,
     getDivisionWithOwner,
     getTeamsByIds,
     getFixturesByDivisionId,
     getDivisionsByTournamentId,
-    createTeam,
-    getTeamsByUserId
+    createTeam
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate } from 'react-router-dom';
 import { useMessage } from '../MessageContext';
 import { getTournaments } from '../requests';
@@ -146,7 +146,6 @@ function BrowseTournaments() {
 	});
 	const [isLoading, setIsLoading] = useState(true);
 	const { showMessage } = useMessage();
-	const hasFetchedTournaments = useRef(false);
 	const [filter, setFilter] = useState({
 		format: 'all',
 		search: '',
@@ -172,24 +171,41 @@ function BrowseTournaments() {
 		}),
 	}));
 
+	// Refetched every time the list comes back on screen, not once per mount.
+	//
+	// This component renders the Outlet that holds the tournament view, so it
+	// stays mounted the whole time a tournament is open and coming back to the
+	// list is not a remount. A one-shot guard therefore left the list showing
+	// whatever it held on first load — a tournament started, finished or deleted
+	// in the view still appeared under its original status.
 	useEffect(() => {
+		// The list is only on screen when no tournament is open.
+		if (id) return;
+
+		let active = true;
+
 		const fetchTournaments = async () => {
 			try {
 				const response = await getTournaments();
 
-				setTournaments(normaliseTournamentGroups(response?.data));
+				if (active) setTournaments(normaliseTournamentGroups(response?.data));
 			} catch (error) {
+				if (!active) return;
+
 				setTournaments(EMPTY_TOURNAMENT_GROUPS);
 				showMessage(error.message, 'error');
 			} finally {
-				setIsLoading(false);
+				if (active) setIsLoading(false);
 			}
 		};
-		if (!hasFetchedTournaments.current) {
-			hasFetchedTournaments.current = true;
-			fetchTournaments();
-		}
-	}, [showMessage]);
+
+		fetchTournaments();
+
+		// A slower request must not overwrite a newer one's result.
+		return () => {
+			active = false;
+		};
+	}, [id, showMessage]);
 
 	const handlefilterChange = (e) => {
 		if (e.target.id === 'searchTournaments') {
@@ -208,7 +224,9 @@ function BrowseTournaments() {
 
 	return (
 		<>
-			{isLoading && <LoadingScreen />}
+			{/* The list's loading state, so it cannot overlay the tournament
+			    view — the fetch above is skipped entirely while one is open. */}
+			{isLoading && !id && <LoadingScreen />}
 			{id ? (
 				<Outlet />
 			) : (

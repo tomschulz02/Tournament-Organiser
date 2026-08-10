@@ -60,9 +60,17 @@ export const ERRORS = {
 
 	// Tournaments.
 	TOURNAMENT_NOT_FOUND: [404, "Tournament not found"],
-	// One code for both an unknown team id and one belonging to another user, so
-	// the response cannot be used to discover which teams exist.
-	TEAM_NOT_OWNED: [403, "You do not own one of the selected teams"],
+	// Lifecycle transitions. Each names the state the caller is in, not the one
+	// they asked for, so the message tells them why the transition was refused.
+	TOURNAMENT_ALREADY_STARTED: [409, "This tournament has already started"],
+	TOURNAMENT_NOT_STARTED: [409, "This tournament has not started yet"],
+	TOURNAMENT_FINISHED: [409, "This tournament has already finished"],
+
+	// Fixtures. A status is never one of these: it is derived from the scores
+	// and the organiser's intent, never sent. See docs/decisions.md.
+	FIXTURE_NOT_FOUND: [404, "Fixture not found"],
+	INVALID_SCORE: [400, "Scores must be whole numbers of zero or more"],
+	FIXTURE_NOT_READY: [400, "This match does not have both teams yet"],
 
 	// Generic.
 	MALFORMED_JSON: [400, "Request body is not valid JSON"],

@@ -42,63 +42,46 @@ async function getTournamentById(tournamentId) {
     }
 }
 
-// starts the tournament
-async function startTournament(tournamentId, userId) {
-    const client = await db.pool.connect();
-    try {
-        await client.query("BEGIN");
+// The three lifecycle statements. Each is a single statement, so none of them
+// needs a transaction of its own, and none of them filters on created_by:
+// ownership is the service's to decide, because a repository that returns zero
+// rows cannot say whether the tournament was missing or simply someone else's.
+// See docs/decisions.md.
 
-        const sql = "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1 AND created_by = $2";
-        const result = await client.query(sql, [tournamentId, userId]);
-        
-        await client.query("COMMIT");
-        return result;
+// starts the tournament
+async function startTournament(tournamentId) {
+    try {
+        const sql = "UPDATE tournaments SET status = 'Ongoing' WHERE id = $1";
+        await db.query(sql, [tournamentId]);
+
+        return { message: "Tournament started" };
     } catch (err) {
-        await client.query("ROLLBACK");
         throw new Error("Failed to start tournament", { cause: err });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
     }
 }
 
 // used to end the tournament and stop any further updates to the tournament
-async function endTournament(tournamentId, userId) {
-    const client = await db.pool.connect();
+async function endTournament(tournamentId) {
     try {
-        await client.query("BEGIN");
+        const sql = "UPDATE tournaments SET status = 'Finished' WHERE id = $1";
+        await db.query(sql, [tournamentId]);
 
-        const sql = "UPDATE tournaments SET status = 'Finished' WHERE id = $1 AND created_by = $2";
-        const result = await client.query(sql, [tournamentId, userId]);
-
-        await client.query("COMMIT");
-        return result;
+        return { message: "Tournament ended" };
     } catch (err) {
-        await client.query("ROLLBACK");
         throw new Error("Failed to end tournament", { cause: err });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
     }
 }
 
-// used to delete the tournament
-async function deleteTournament(tournamentId, userId) {
-    const client = await db.pool.connect();
+// used to delete the tournament. Divisions, fixtures and saved rows go with it
+// through the schema's cascades — see docs/database.md.
+async function deleteTournament(tournamentId) {
     try {
-        await client.query("BEGIN");
+        const sql = "DELETE FROM tournaments WHERE id = $1";
+        await db.query(sql, [tournamentId]);
 
-        const sql = "DELETE FROM tournaments WHERE id = $1 AND created_by = $2";
-        const result = await client.query(sql, [tournamentId, userId]);
-
-        await client.query("COMMIT");
-        return result;
+        return { message: "Tournament deleted" };
     } catch (err) {
-        await client.query("ROLLBACK");
         throw new Error("Failed to delete tournament", { cause: err });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
     }
 }
 

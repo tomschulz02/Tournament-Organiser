@@ -115,7 +115,7 @@ function Footer() {
 function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 	const { theme, toggleTheme } = useTheme();
 	const { showMessage } = useMessage();
-	// const { username, setUsername } = useContext(AuthContext);
+	const { setUsername } = useContext(AuthContext);
 	const [loading, setLoading] = useState(false);
 
 	const handleClickOutside = (e) => {
@@ -129,10 +129,12 @@ function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 		setLoading(true);
 		try {
 			await logoutUser();
+			// Bumps the session version, which is what makes pages holding
+			// server-resolved data — the tournament view and its organiser
+			// controls — refetch without a reload.
 			setLoggedIn(false);
+			setUsername('Guest');
 			showMessage('Successfully logged out!', 'success');
-			// setUsername('Guest');
-			// window.location.reload();
 		} catch (error) {
 			showMessage(error.message, 'error');
 		} finally {

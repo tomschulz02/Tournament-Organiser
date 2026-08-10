@@ -4,8 +4,12 @@ import '../App.css';
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
 
+	// Hydrate from the recorded result, but only when there is one. An unplayed
+	// fixture arrives with result: [], which is truthy — testing it directly
+	// replaced the default empty set with nothing, so the modal opened with no
+	// score inputs at all for exactly the case it exists to serve.
 	useEffect(() => {
-		if (fixture.result) {
+		if (fixture.result?.length) {
 			const result = fixture.result.map((set) => ({
 				team1: set[0] || 0,
 				team2: set[1] || 0,

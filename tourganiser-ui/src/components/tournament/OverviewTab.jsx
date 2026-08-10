@@ -1,5 +1,9 @@
+import { useState } from 'react';
 import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
+import { useConfirm } from '../ConfirmDialog';
+import { useMessage } from '../../MessageContext';
+import { deleteTournament, endTournament, startTournament } from '../../requests';
 
 // The tournament dashboard. Three bands: what this tournament is, what its
 // divisions are, and what has just happened or is about to.
@@ -7,12 +11,25 @@ import SectionState from './SectionState';
 // Deliberately not a list of everything. Fixture lists, standings tables and
 // team lists each have their own tab; reproducing them here would make Overview
 // the only page anyone uses and the other three redundant.
-export default function OverviewTab({ tournament = {}, dashboard = {}, onOpenDivision }) {
+export default function OverviewTab({
+	tournament = {},
+	dashboard = {},
+	onOpenDivision,
+	creator = false,
+	onChanged,
+	onDeleted,
+}) {
 	const divisions = dashboard.divisions ?? [];
 
 	return (
 		<div className="tv-overview">
-			<TournamentInformation tournament={tournament} dashboard={dashboard} />
+			<TournamentInformation
+				tournament={tournament}
+				dashboard={dashboard}
+				creator={creator}
+				onChanged={onChanged}
+				onDeleted={onDeleted}
+			/>
 			<DivisionsBand divisions={divisions} onOpenDivision={onOpenDivision} />
 			<ActivityBand dashboard={dashboard} />
 		</div>
@@ -22,7 +39,7 @@ export default function OverviewTab({ tournament = {}, dashboard = {}, onOpenDiv
 // The only place the tournament's own metadata appears. The subheader carries
 // the name and nothing else, so this band is where a reader finds out what they
 // are looking at.
-function TournamentInformation({ tournament, dashboard }) {
+function TournamentInformation({ tournament, dashboard, creator, onChanged, onDeleted }) {
 	// Both labels are pre-formatted by the backend ('1 August 2026'). Do not
 	// reformat them here — the server owns date presentation.
 	const start = tournament.start_date_label;
@@ -45,8 +62,93 @@ function TournamentInformation({ tournament, dashboard }) {
 					<InfoItem label="Divisions" value={dashboard.divisionCount ?? 0} />
 					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} />
 				</dl>
+
+				{creator && (
+					<LifecycleActions
+						tournamentId={tournament.id}
+						status={tournament.status}
+						name={tournament.name}
+						onChanged={onChanged}
+						onDeleted={onDeleted}
+					/>
+				)}
 			</div>
 		</section>
+	);
+}
+
+// The organiser's control over the tournament as a whole. Absent entirely for a
+// viewer, rather than shown disabled.
+//
+// Only the transition the tournament is actually in is offered: a finished
+// tournament has neither. The server refuses the others with a 409 regardless —
+// this is presentation, not enforcement.
+function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) {
+	const confirm = useConfirm();
+	const { showMessage } = useMessage();
+	const [busy, setBusy] = useState(false);
+
+	const current = status || 'Not Started';
+
+	const run = async (action, successMessage, after) => {
+		setBusy(true);
+		try {
+			await action();
+			showMessage(successMessage, 'success');
+			after();
+		} catch (apiError) {
+			// Display-ready by contract, including the 409s.
+			showMessage(apiError.message, 'error');
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const handleStart = () =>
+		run(() => startTournament(tournamentId), 'Tournament started.', () => onChanged?.());
+
+	const handleEnd = async () => {
+		const confirmed = await confirm('End this tournament? No further results can be recorded.');
+		if (!confirmed) return;
+
+		await run(() => endTournament(tournamentId), 'Tournament finished.', () => onChanged?.());
+	};
+
+	// Deletion is permitted at every status, including part-way through. The
+	// cascade is named here because that is what makes it a decision rather than
+	// a surprise — the divisions, fixtures and results all go with it.
+	const handleDelete = async () => {
+		const ongoing = current === 'Ongoing' ? ' It is currently in progress.' : '';
+		const confirmed = await confirm(
+			`Delete ${name || 'this tournament'}?${ongoing} Its divisions, fixtures and results are deleted too. This cannot be undone.`,
+		);
+		if (!confirmed) return;
+
+		await run(() => deleteTournament(tournamentId), 'Tournament deleted.', () => onDeleted?.());
+	};
+
+	return (
+		<div className="tv-info-actions">
+			{current === 'Not Started' && (
+				<button type="button" className="tv-primary-action" disabled={busy} onClick={handleStart}>
+					Start Tournament
+				</button>
+			)}
+
+			{current === 'Ongoing' && (
+				<button type="button" className="tv-primary-action" disabled={busy} onClick={handleEnd}>
+					End Tournament
+				</button>
+			)}
+
+			<button
+				type="button"
+				className="tv-subtle-action tv-subtle-action--danger"
+				disabled={busy}
+				onClick={handleDelete}>
+				Delete Tournament
+			</button>
+		</div>
 	);
 }
 

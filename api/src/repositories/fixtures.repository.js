@@ -42,32 +42,61 @@ async function getFixturesByDivisionIds(divisionIds) {
     }
 }
 
-// updates the result of a fixture, used to update the result of a fixture in the frontend and for round progression
-async function updateResult(fixtureId, score, status, rounds) {
-    const client = await db.pool.connect();
+// Fetches a fixture together with the tournament it belongs to and that
+// tournament's owner, so the service can authorise before mutating anything.
+// The tournament-level counterpart is tournamentRepository.getTournamentById;
+// this is the fixture-level one, joining fixtures to divisions to tournaments.
+async function getFixtureWithOwner(fixtureId) {
     try {
-        await client.query("BEGIN");
+        const sql = `
+            SELECT f.*, d.tournament_id, t.created_by
+            FROM fixtures f
+            JOIN divisions d ON d.id = f.division_id
+            JOIN tournaments t ON t.id = d.tournament_id
+            WHERE f.id = $1::uuid`;
+        const rows = await db.query(sql, [fixtureId]);
 
-        const updateRes = await client.query(
-            "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3 WHERE id = $4 RETURNING division_id",
-            [score[0], score[1], status, fixtureId]
-        );
+        return rows[0] || null;
+    } catch (error) {
+        throw new Error("Failed to fetch fixture", { cause: error });
+    }
+}
 
-        // No such fixture. Returning here without a COMMIT or ROLLBACK left the
-        // transaction open until the client was released; it now rolls back.
-        if (updateRes.rows.length === 0) {
-            await client.query("ROLLBACK");
-            return null;
-        }
+// Writes a result. The status is decided by the service from the scores and the
+// organiser's intent — it is never taken from the client.
+//
+// `client` is required, not defaulted: a result is only ever written alongside
+// the division's completedGames count, and the two have to commit together. The
+// service owns that transaction, as it does for tournament creation.
+async function updateResult(fixtureId, score, status, client) {
+    try {
+        const sql = "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3 WHERE id = $4::uuid";
+        await client.query(sql, [score[0], score[1], status, fixtureId]);
 
-        await client.query("COMMIT");
         return { message: "Fixture updated" };
     } catch (error) {
-        await client.query("ROLLBACK");
         throw new Error("Failed to update fixture", { cause: error });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
+    }
+}
+
+// Counts the finished fixtures of one round, for divisions.state's
+// completedGames. Recounted rather than incremented: an increment is wrong the
+// moment a result is edited rather than added.
+//
+// Takes round names rather than one name because the Finals round holds the
+// third-place playoff as well, under its own name. Requires the client so the
+// count sees the result written earlier in the same transaction.
+async function countCompletedInRounds(divisionId, roundNames, client) {
+    try {
+        const sql = `
+            SELECT count(*)::int AS completed
+            FROM fixtures
+            WHERE division_id = $1::uuid AND round = ANY($2::text[]) AND status = 'COMPLETED'`;
+        const result = await client.query(sql, [divisionId, roundNames]);
+
+        return result.rows[0].completed;
+    } catch (error) {
+        throw new Error("Failed to count completed fixtures", { cause: error });
     }
 }
 
@@ -109,7 +138,9 @@ export const fixturesRepository = {
     getFixtures,
     getResults,
     getFixturesByDivisionIds,
+    getFixtureWithOwner,
     updateResult,
+    countCompletedInRounds,
     createFixture,
     updateFixtures
 };

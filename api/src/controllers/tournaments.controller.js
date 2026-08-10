@@ -1,5 +1,6 @@
 import { tournamentService } from "../services/tournaments.service.js";
 import { AppError } from "../errors.js";
+import { isUuid } from "../utils/validation.js";
 
 // Controllers do not catch. Express 5 forwards a rejected promise from an async
 // handler to the error middleware, which owns every status and message.
@@ -41,6 +42,43 @@ async function fetchTournamentDetails(req, res){
     });
 }
 
+// The three lifecycle actions. Each takes only the id and the session; the
+// transition itself is not a parameter, so there is no body to validate. The
+// service owns both ownership and whether the transition is legal.
+
+async function startTournament(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const data = await tournamentService.startTournament(tournamentId, req.user.id);
+
+    res.status(200).json({ success: true, message: "Tournament started", data });
+}
+
+async function endTournament(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const data = await tournamentService.endTournament(tournamentId, req.user.id);
+
+    res.status(200).json({ success: true, message: "Tournament ended", data });
+}
+
+async function deleteTournament(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const data = await tournamentService.deleteTournament(tournamentId, req.user.id);
+
+    res.status(200).json({ success: true, message: "Tournament deleted", data });
+}
+
 // Declared but not built. The routes exist so the paths are fixed and the UI can
 // wire to them properly; each answers 501 through the standard envelope. See
 // docs/api.md for the paths and the handover for why they are stubs rather than
@@ -65,11 +103,10 @@ export const tournamentController = {
     createTournament,
     fetchTournaments,
     fetchTournamentDetails,
+    startTournament,
+    endTournament,
+    deleteTournament,
     saveTournament,
     unsaveTournament,
     updateSchedule
-}
-
-function isUuid(value) {
-    return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

@@ -12,8 +12,7 @@ vi.mock("../../../src/config/db.js", async () => {
 vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     divisionsRepository: {
         createTeam: vi.fn(),
-        createDivision: vi.fn(),
-        getTeamsByIds: vi.fn()
+        createDivision: vi.fn()
     }
 }));
 
@@ -28,6 +27,7 @@ const {
     createClassicState,
     populateGroups
 } = await import("../../../src/services/divisions.service.js");
+const { generateFixtures } = await import("../../../src/services/fixtures.service.js");
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
@@ -37,7 +37,6 @@ beforeEach(() => {
     resetDbMock();
     divisionsRepository.createTeam.mockReset();
     divisionsRepository.createDivision.mockReset();
-    divisionsRepository.getTeamsByIds.mockReset().mockResolvedValue([]);
     fixturesRepository.createFixture.mockReset();
 });
 
@@ -65,7 +64,7 @@ describe("populateGroups", () => {
 });
 
 describe("createLeagueState", () => {
-    it("builds a single round-robin round sized n(n-1)/2", () => {
+    it("builds a single round-robin round with every team in one pool", () => {
         const state = createLeagueState(["a", "b", "c", "d"], 4);
 
         expect(state.teams).toEqual(["a", "b", "c", "d"]);
@@ -74,18 +73,26 @@ describe("createLeagueState", () => {
         expect(state.rounds[0]).toMatchObject({
             name: "Round robin",
             type: "roundRobin",
+            groups: [["a", "b", "c", "d"]],
             results: [],
-            totalGames: 6,
+            totalGames: 0,
             completedGames: 0,
             fixtures: []
         });
     });
 
-    it("wraps the team list in an extra array level", () => {
-        // groups should be [teams] — one pool holding the team ids. It is
-        // currently [[teams]], which downstream code filters away to nothing.
-        // test/known-bugs asserts the intended shape.
-        expect(createLeagueState(["a", "b"], 2).rounds[0].groups).toEqual([[["a", "b"]]]);
+    it("generates the whole round robin from that pool, counted once", () => {
+        // Regression guard, previously known bug 2: groups was [[teams]], so the
+        // pool's only member was an array, was paired with the BYE and produced
+        // no fixtures at all. totalGames was seeded with n(n-1)/2 underneath
+        // that, and generateFixtures adds to the seed — six games would have
+        // been reported as twelve.
+        const state = createLeagueState(["t1", "t2", "t3", "t4"], 4);
+        const { rounds, fixtures } = generateFixtures(state.rounds);
+
+        expect(fixtures).toHaveLength(6);
+        expect(rounds[0].fixtures).toHaveLength(6);
+        expect(rounds[0].totalGames).toBe(6);
     });
 });
 
@@ -171,8 +178,9 @@ describe("generateDivisionDetails", () => {
 });
 
 describe("divisionService.createDivision", () => {
-    // Teams arrive as objects: a new team carries a name and no id key at all,
-    // an existing one carries the id. See TournamentCreation.jsx.
+    // Teams arrive as objects carrying a name and nothing else. A team belongs
+    // to exactly one division, so there is no existing team to reference by id.
+    // See TournamentCreation.jsx.
     const details = () => ({
         name: "Division A",
         type: "classic",
@@ -182,13 +190,9 @@ describe("divisionService.createDivision", () => {
         knockout_teams: 2
     });
 
-    beforeEach(() => {
-        divisionsRepository.createTeam
-            .mockResolvedValueOnce("team-1")
-            .mockResolvedValueOnce("team-2")
-            .mockResolvedValueOnce("team-3")
-            .mockResolvedValueOnce("team-4");
-    });
+    // uuid-1 is the division. The four teams take uuid-2 to uuid-5, and the
+    // fixtures continue from there.
+    const TEAM_IDS = ["uuid-2", "uuid-3", "uuid-4", "uuid-5"];
 
     it("returns the new division id without owning a transaction of its own", async () => {
         // The caller's transaction is the only one. createTournament opens it and
@@ -216,7 +220,7 @@ describe("divisionService.createDivision", () => {
         });
         expect(client).toBe(dbMock.client);
         expect(division).toMatchObject({ name: "Division A", num_teams: 4, type: "Classic" });
-        expect(division.state.teams).toEqual(["team-1", "team-2", "team-3", "team-4"]);
+        expect(division.state.teams).toEqual(TEAM_IDS);
 
         // Two pools of two teams (one fixture each), plus the final and the
         // third-place playoff that createClassicState always unshifts in front
@@ -224,67 +228,50 @@ describe("divisionService.createDivision", () => {
         expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
     });
 
-    it("creates each new team with its name and the organiser's id, on the caller's client", async () => {
+    it("creates each team with its name and its division, on the caller's client", async () => {
         // Regression guard, previously known bug 3: createTeam was called with
         // no arguments at all, inserting a row per team with an undefined name.
         await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
         expect(divisionsRepository.createTeam).toHaveBeenCalledTimes(4);
         expect(divisionsRepository.createTeam)
-            .toHaveBeenNthCalledWith(1, "Aces", "user-1", dbMock.client);
+            .toHaveBeenNthCalledWith(1, TEAM_IDS[0], "Aces", "uuid-1", dbMock.client);
         expect(divisionsRepository.createTeam)
-            .toHaveBeenNthCalledWith(2, "Bears", "user-1", dbMock.client);
+            .toHaveBeenNthCalledWith(2, TEAM_IDS[1], "Bears", "uuid-1", dbMock.client);
     });
 
-    it("links an existing team by id rather than inserting it again", async () => {
-        // The id key is absent for a new team, so the branch tests for a missing
-        // id rather than for null — undefined would otherwise be treated as an
-        // existing team and pushed straight into state.teams.
-        divisionsRepository.getTeamsByIds.mockResolvedValue([
-            { id: "team-9", name: "Eagles", user_id: "user-1" }
-        ]);
+    it("stores the division before any of its teams, which reference it", async () => {
+        // division_teams_fkey: a team row cannot exist before its division. The
+        // teams used to be inserted first, which the mocks here cannot notice —
+        // only the ordering can, so it is asserted directly.
+        const order = [];
+        divisionsRepository.createDivision.mockImplementation(async () => order.push("division"));
+        divisionsRepository.createTeam.mockImplementation(async () => order.push("team"));
+        fixturesRepository.createFixture.mockImplementation(async () => order.push("fixture"));
 
-        await divisionService.createDivision(
-            { ...details(), teams: [{ id: "team-9", name: "Eagles" }, { name: "Bears" }], num_teams: 2 },
-            "tour-1",
-            "user-1",
-            dbMock.client
-        );
+        await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
-        expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledWith(["team-9"]);
-        expect(divisionsRepository.createTeam).toHaveBeenCalledOnce();
-        expect(divisionsRepository.createTeam).toHaveBeenCalledWith("Bears", "user-1", dbMock.client);
-        expect(divisionsRepository.createDivision.mock.calls[0][2].state.teams)
-            .toEqual(["team-9", "team-1"]);
+        expect(order[0]).toBe("division");
+        // And the fixtures last: fixtures.team_1 and team_2 point at teams.
+        expect(order.indexOf("fixture")).toBeGreaterThan(order.lastIndexOf("team"));
     });
 
-    it("rejects a team id that does not belong to the organiser", async () => {
-        divisionsRepository.getTeamsByIds.mockResolvedValue([
-            { id: "team-9", name: "Eagles", user_id: "user-2" }
-        ]);
+    it("creates the teams one at a time, since a single client cannot run concurrent queries", async () => {
+        let inFlight = 0;
+        let overlapped = false;
+        divisionsRepository.createTeam.mockImplementation(async () => {
+            inFlight += 1;
+            if (inFlight > 1) overlapped = true;
+            await Promise.resolve();
+            inFlight -= 1;
+        });
 
-        await expect(divisionService.createDivision(
-            { ...details(), teams: [{ id: "team-9" }, { name: "Bears" }], num_teams: 2 },
-            "tour-1",
-            "user-1",
-            dbMock.client
-        )).rejects.toMatchObject({ code: "TEAM_NOT_OWNED", status: 403 });
+        await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
-        expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
+        expect(overlapped).toBe(false);
     });
 
-    it("rejects a team id that does not exist, without saying which", async () => {
-        divisionsRepository.getTeamsByIds.mockResolvedValue([]);
-
-        await expect(divisionService.createDivision(
-            { ...details(), teams: [{ id: "team-9" }, { name: "Bears" }], num_teams: 2 },
-            "tour-1",
-            "user-1",
-            dbMock.client
-        )).rejects.toMatchObject({ code: "TEAM_NOT_OWNED", status: 403 });
-    });
-
-    it("rejects an entry that is neither an id nor a name", async () => {
+    it("rejects an entry carrying no name", async () => {
         // teams.name is NOT NULL, so this would otherwise surface as a 500.
         await expect(divisionService.createDivision(
             { ...details(), teams: [{ name: "Bears" }, { name: "   " }], num_teams: 2 },
@@ -303,20 +290,8 @@ describe("divisionService.createDivision", () => {
         expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
     });
 
-    it("rejects the same team twice, whether by id or by name", async () => {
-        divisionsRepository.getTeamsByIds.mockResolvedValue([
-            { id: "team-9", name: "Eagles", user_id: "user-1" }
-        ]);
-
+    it("rejects the same team name twice, trimmed and case-insensitively", async () => {
         // Two entries resolving to one team would corrupt standings and fixtures.
-        await expect(divisionService.createDivision(
-            { ...details(), teams: [{ id: "team-9" }, { id: "team-9" }], num_teams: 2 },
-            "tour-1",
-            "user-1",
-            dbMock.client
-        )).rejects.toMatchObject({ code: "DUPLICATE_TEAM", status: 400 });
-
-        // Names are compared trimmed and case-insensitively.
         await expect(divisionService.createDivision(
             { ...details(), teams: [{ name: "Bears" }, { name: " bears " }], num_teams: 2 },
             "tour-1",

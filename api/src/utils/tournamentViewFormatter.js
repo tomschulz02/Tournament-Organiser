@@ -254,8 +254,19 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
             }
 
             const fixture = roundFixtures[fixtureIndex++] || null;
-            const participantOne = resolveParticipant(group[0], teamLookup, fixture?.team_1_placeholder);
-            const participantTwo = resolveParticipant(group[1], teamLookup, fixture?.team_2_placeholder);
+            // The fixture first, the group second. A knockout group holds
+            // positional indices into the previous round's results and keeps
+            // holding them forever — progression binds teams to the fixture, not
+            // to the group. Reading the group alone therefore showed "Rank 1"
+            // even after the final had two real teams in it.
+            const participantOne =
+                fixture?.teams?.team_1?.id
+                    ? fixture.teams.team_1
+                    : resolveParticipant(group[0], teamLookup, fixture?.team_1_placeholder);
+            const participantTwo =
+                fixture?.teams?.team_2?.id
+                    ? fixture.teams.team_2
+                    : resolveParticipant(group[1], teamLookup, fixture?.team_2_placeholder);
 
             matches.push({
                 id: fixture?.id || `${round.name}-${groupIndex}`,

@@ -70,3 +70,24 @@ ALTER TABLE "saved_tournaments" ADD CONSTRAINT "tournaments_saved_fkey" FOREIGN 
 ALTER TABLE "saved_tournaments" ADD CONSTRAINT "users_saved_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "teams" ADD CONSTRAINT "division_teams_fkey" FOREIGN KEY ("division_id") REFERENCES "divisions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "tournaments" ADD CONSTRAINT "tournament_owner" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE CASCADE;
+
+CREATE FUNCTION "update_last_updated"() RETURNS trigger AS $$
+BEGIN
+  IF row(NEW.*) IS DISTINCT FROM row(OLD.*) THEN
+    NEW.last_update = now();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER "trg_divisions_last_updated" BEFORE UPDATE ON "divisions" FOR EACH ROW EXECUTE FUNCTION "update_last_updated"();
+
+## Notes
+
+`trg_divisions_last_updated` stamps `divisions.last_update` on any UPDATE that
+actually changes the row, so no query needs to set that column itself.
+
+It went unrecorded here until 2026-08-09, and the function assigned `NEW.last_updated`
+— a column that has never existed — so **every** UPDATE to `divisions` failed with
+`record "new" has no field "last_updated"`. Nothing noticed because no working code
+path updated a division row: creation inserts, and deletion cascades. Round
+progression and score entry both would have. The typo was corrected on 2026-08-09.

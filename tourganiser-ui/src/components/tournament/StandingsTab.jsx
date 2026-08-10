@@ -16,7 +16,13 @@ const STAGE_KNOCKOUT = 'knockout';
 //
 // There is no points column. Tourganiser ranks by matches won; no points system
 // exists to have a column for.
-export default function StandingsTab({ divisions = [], selectedDivisionId, onSelectDivision }) {
+export default function StandingsTab({
+	divisions = [],
+	selectedDivisionId,
+	onSelectDivision,
+	creator = false,
+	onProgressRound,
+}) {
 	// Which stage the reader asked for, which is not necessarily one the current
 	// division has. Resolved against what is actually available during render.
 	const [requestedStage, setRequestedStage] = useState(null);
@@ -69,6 +75,17 @@ export default function StandingsTab({ divisions = [], selectedDivisionId, onSel
 						<input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
 						<span>Advanced statistics</span>
 					</label>
+				)}
+
+				{/* Progression is division-scoped, and this is where an organiser
+				    looks at who qualified — so it belongs here rather than on a
+				    fixture row. Organiser only, and only once the round can actually
+				    advance. The server revalidates and answers 409 either way; this
+				    is presentation, not enforcement. */}
+				{creator && onProgressRound && canProgress(division) && (
+					<button type="button" className="tv-primary-action" onClick={() => onProgressRound(division.id)}>
+						Start Next Round
+					</button>
 				)}
 			</div>
 
@@ -132,6 +149,32 @@ export default function StandingsTab({ divisions = [], selectedDivisionId, onSel
 			{activeStage === STAGE_KNOCKOUT && <BracketView rounds={bracketRounds} />}
 		</div>
 	);
+}
+
+// Whether the division's current round can advance to another one.
+//
+// Deliberately a mirror of isRoundComplete in progression.service.js, down to
+// matching fixtures on `round === round.name` with no third-place special case
+// and treating a round with no fixtures as incomplete. The client's job is to
+// predict the server, not to out-think it: any rule here that the server does
+// not share would show a trigger that 409s, or hide one that would have worked.
+//
+// This computes nothing about rankings or qualifiers. Those are the backend's,
+// per docs/tournament-rules.md, and the modal fetches them.
+function canProgress(division) {
+	const rounds = division.state?.rounds;
+	if (!Array.isArray(rounds)) return false;
+
+	const index = division.state?.currentRound ?? 0;
+	const round = rounds[index];
+	// The last round has nothing to advance to — the server answers NO_NEXT_ROUND.
+	if (!round || !rounds[index + 1]) return false;
+
+	const roundFixtures = (division.fixtures ?? []).filter((fixture) => fixture.round === round.name);
+	if (roundFixtures.length === 0) return false;
+
+	// A cancelled match never happened, so it does not hold the round open.
+	return roundFixtures.every((fixture) => fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED');
 }
 
 // One table per group. A league is a round with a single group, which is why

@@ -9,52 +9,32 @@ import { v4 as uuidv4 } from "uuid";
 async function createDivision(details, tournamentId, userId, client){
     const divisionId = uuidv4();
 
-    // A team is either an existing one, carrying an id, or a new one carrying a
-    // name. An id from the client is untrusted and must be confirmed to belong
-    // to the organiser before it is linked; see docs/decisions.md.
-    const suppliedIds = details.teams.filter((team) => team.id).map((team) => team.id);
-    const ownedById = new Map();
-
-    if (suppliedIds.length > 0) {
-        const supplied = await divisionsRepository.getTeamsByIds(suppliedIds);
-        for (const team of supplied) {
-            if (team.user_id === userId) ownedById.set(team.id, team);
-        }
-
-        if (suppliedIds.some((id) => !ownedById.has(id))) {
-            throw new AppError("TEAM_NOT_OWNED");
-        }
-    }
-
-    // A new team is nothing but its name, so an entry carrying neither is not a
-    // team. teams.name is NOT NULL; without this it is a 500.
-    if (details.teams.some((team) => !team.id && !team.name?.trim())) {
+    // Every team is new and belongs to this division. A team carries a name and
+    // nothing else — teams.division_id means a team belongs to exactly one
+    // division, so there is no library of a user's teams to select from and no
+    // client-supplied id to authorise. See docs/decisions.md, where the
+    // select-or-create decision is recorded as superseded.
+    //
+    // teams.name is NOT NULL, so an entry with no name is a 400 rather than a 500.
+    if (details.teams.some((team) => !team.name?.trim())) {
         throw new AppError("MISSING_FIELDS");
     }
 
     // The same team twice in one division would corrupt standings and fixture
-    // generation, whether it repeats as an id or as a name.
-    const names = details.teams.map((team) =>
-        (team.id ? ownedById.get(team.id).name : team.name).trim().toLowerCase()
-    );
-
-    if (new Set(suppliedIds).size !== suppliedIds.length || new Set(names).size !== names.length) {
+    // generation. Compared trimmed and case-insensitively.
+    const teamNames = details.teams.map((team) => team.name.trim());
+    const compared = teamNames.map((name) => name.toLowerCase());
+    if (new Set(compared).size !== compared.length) {
         throw new AppError("DUPLICATE_TEAM");
     }
 
-    // insert teams into DB, returns team ids for rounds and fixtures
-    const teamIds = [];
-    for (let team of details.teams) {
-        // Absent, not null: TournamentCreation.jsx omits the key entirely for a
-        // new team, so a === null test would take the existing-team branch and
-        // push undefined into state.teams.
-        if (!team.id){
-            teamIds.push(await divisionsRepository.createTeam(team.name, userId, client));
-        } else {
-            teamIds.push(team.id);
-        }
-    }
-
+    // Ids are generated here, before anything is written, because state.teams
+    // has to hold them before the division row can be stored — and the team
+    // rows cannot be stored until after it. See createTeam.
+    //
+    // details.teams stops being a list of objects and becomes the list of ids
+    // that generateDivisionDetails expects, so the names are kept separately.
+    const teamIds = teamNames.map(() => uuidv4());
     details.teams = teamIds;
 
     //generate division details
@@ -67,11 +47,19 @@ async function createDivision(details, tournamentId, userId, client){
     division.state.rounds = generatedFixtures.rounds;
 
     //store division in database
+    // First of the three writes: teams and fixtures both carry a division_id
+    // foreign key, so neither can exist before this row does.
     await divisionsRepository.createDivision(divisionId, tournamentId, division, userId, client);
 
-    //store fixtures in database
+    //store teams in database
     // Sequential and awaited, for the same reason as the divisions loop in
     // createTournament: one pg client cannot run concurrent queries.
+    for (const [index, teamId] of teamIds.entries()) {
+        await divisionsRepository.createTeam(teamId, teamNames[index], divisionId, client);
+    }
+
+    //store fixtures in database
+    // After the teams: fixtures.team_1 and team_2 are foreign keys into teams.
     for (const fixture of generatedFixtures.fixtures) {
         await fixtureService.createFixture(divisionId, fixture, client);
     }
@@ -118,11 +106,15 @@ function createLeagueState(teams, num_teams){
             {
                 name: "Round robin",
                 type: "roundRobin",
-                groups: [
-                    [teams]
-                ],
+                // One pool holding the team ids. Wrapping `teams` again made the
+                // pool's single member an array, which fixture generation pairs
+                // with a BYE and every other consumer filters away.
+                groups: [teams],
                 results: [],
-                totalGames: (num_teams*(num_teams-1))/2,
+                // The generated fixture count, which generateFixtures adds to —
+                // seeding it with n(n-1)/2 double-counted every game. See
+                // docs/division-state.md.
+                totalGames: 0,
                 completedGames: 0,
                 fixtures: []
             }

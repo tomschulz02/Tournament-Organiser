@@ -297,12 +297,16 @@ function CreateTournamentForm() {
 		setLoading(true);
 		try {
 			const payload = generatePayload();
-			await createTournament(payload);
+			// 201 with data: { id }. request throws on failure, so reaching this
+			// line is the success case — there is no result.success to test.
+			const { data } = await createTournament(payload);
 
 			showMessage('Tournament created successfully', 'success');
-			setTimeout(() => {
-				navigate('/tournaments', { replace: true });
-			}, 1500);
+			// Straight to the new tournament, the same route Browse uses. No
+			// delay: the toast outlives the route change on its own, and landing
+			// on the tournament is the confirmation. Replacing the entry keeps
+			// the back button off the filled-in form.
+			navigate(`/tournaments/view/${data.id}`, { replace: true });
 		} catch (error) {
 			showMessage(error.message, 'error');
 		} finally {

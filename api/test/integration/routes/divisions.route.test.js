@@ -10,16 +10,23 @@ vi.mock("../../../src/services/progression.service.js", () => ({
     progressionService: { getProposal: vi.fn(), commit: vi.fn() }
 }));
 
+vi.mock("../../../src/services/divisions.service.js", () => ({
+    divisionService: { updateDivision: vi.fn() }
+}));
+
 const app = (await import("../../../src/app.js")).default;
 const { progressionService } = await import("../../../src/services/progression.service.js");
+const { divisionService } = await import("../../../src/services/divisions.service.js");
 const { AppError } = await import("../../../src/errors.js");
 const { authCookie } = await import("../../helpers/auth.js");
 
 const PROGRESSION_URL = "/api/divisions/div-1/progression";
+const DIVISION_URL = "/api/divisions/div-1";
 
 beforeEach(() => {
     vi.mocked(progressionService.getProposal).mockReset();
     vi.mocked(progressionService.commit).mockReset();
+    vi.mocked(divisionService.updateDivision).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -85,15 +92,15 @@ describe("POST /api/divisions/:divisionId/progression", () => {
     });
 });
 
-// Declared but not built, like the tournament stubs. Each answers 501 in the
-// standard envelope, behind requireAuth so the auth shape is already right.
-describe.each([
-    ["post", "/api/divisions/div-1/teams", "add team"],
-    ["put", "/api/divisions/div-1/teams/team-1", "edit team"],
-    ["delete", "/api/divisions/div-1/teams/team-1", "remove team"]
-])("%s %s", (method, path, purpose) => {
+describe("PUT /api/divisions/:divisionId", () => {
+    const payload = {
+        teams: [{ id: "t1", name: "Aces" }, { name: "Bears" }],
+        num_groups: 1,
+        knockout_teams: 0
+    };
+
     it("requires a session", async () => {
-        const response = await request(app)[method](path);
+        const response = await request(app).put(DIVISION_URL).send(payload);
 
         expect(response.status).toBe(401);
         expect(response.body).toEqual({
@@ -101,17 +108,60 @@ describe.each([
             message: "You must be logged in to do that",
             data: null
         });
+        expect(divisionService.updateDivision).not.toHaveBeenCalled();
     });
 
-    it(`answers 501 for ${purpose}`, async () => {
+    it("passes the submitted list through and answers in the documented envelope", async () => {
+        const result = { divisionId: "div-1", rebuilt: true, teams: [], fixtures: 6, scheduleEntriesRemoved: 2 };
+        divisionService.updateDivision.mockResolvedValue(result);
+
+        const response = await request(app)
+            .put(DIVISION_URL)
+            .set("Cookie", authCookie({ id: "user-1", username: "tom" }))
+            .send(payload);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Division updated", data: result });
+        expect(divisionService.updateDivision).toHaveBeenCalledWith("div-1", "user-1", payload);
+    });
+});
+
+// The conditions this endpoint adds to the catalogue, driven end to end.
+describe.each([
+    ["TEAM_NOT_IN_DIVISION", 400, "A team does not belong to this division"],
+    ["INVALID_STRUCTURE", 400, "The group and qualifier counts do not fit the number of teams"],
+    ["MISSING_FIELDS", 400, "Missing required fields"],
+    ["DUPLICATE_TEAM", 400, "A team appears more than once"],
+    ["NOT_TOURNAMENT_OWNER", 403, "You do not own this tournament"],
+    ["DIVISION_NOT_FOUND", 404, "Division not found"],
+    ["TOURNAMENT_ALREADY_STARTED", 409, "This tournament has already started"],
+    ["DIVISION_HAS_RESULTS", 409, "This division already has results"]
+])("division update error %s", (code, status, message) => {
+    it(`returns ${status}`, async () => {
+        divisionService.updateDivision.mockRejectedValue(new AppError(code));
+
+        const response = await request(app)
+            .put(DIVISION_URL)
+            .set("Cookie", authCookie())
+            .send({ teams: [] });
+
+        expect(response.status).toBe(status);
+        expect(response.body).toEqual({ success: false, message, data: null });
+    });
+});
+
+// The three 501 team stubs were removed on 2026-08-10, superseded by the single
+// PUT above. Their paths are gone, not merely unimplemented.
+describe.each([
+    ["post", "/api/divisions/div-1/teams"],
+    ["put", "/api/divisions/div-1/teams/team-1"],
+    ["delete", "/api/divisions/div-1/teams/team-1"]
+])("%s %s", (method, path) => {
+    it("is no longer routed", async () => {
         const response = await request(app)[method](path).set("Cookie", authCookie());
 
-        expect(response.status).toBe(501);
-        expect(response.body).toEqual({
-            success: false,
-            message: "This feature is not available yet",
-            data: null
-        });
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual({ success: false, message: "Not found", data: null });
     });
 });
 

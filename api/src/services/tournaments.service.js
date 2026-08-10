@@ -5,6 +5,7 @@ import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { divisionService } from "./divisions.service.js";
 import { getISODate, getLongDate } from "../utils/DateHandler.js";
 import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
+import { validateSchedule } from "../utils/scheduleValidator.js";
 import { AppError } from "../errors.js";
 
 const db = DatabaseConnection();
@@ -119,6 +120,49 @@ async function deleteTournament(tournamentId, userId) {
     return { id: tournamentId };
 }
 
+// --- schedule ---------------------------------------------------------------
+
+// PUT /api/tournaments/:tournamentId/schedule.
+//
+// The generator stays in the client and the server validates on write, per
+// docs/decisions.md. The whole schedule is replaced, not merged: the client
+// holds the entire object and a partial save has no meaning.
+//
+// The ordering inside the transaction is the point of it. The lock is taken
+// FIRST, before the fixtures are read, because a division rebuild takes the same
+// lock to repair this column:
+//
+//   - a rebuild that committed before the lock was granted is visible to the
+//     read that follows, so its deleted fixtures are refused here;
+//   - a rebuild that has not reached its own lock yet cannot commit until this
+//     write is done, and repairs whatever this wrote afterwards.
+//
+// Reading the fixtures before taking the lock would leave a window where both
+// orders lose. See docs/schedule.md, "Who writes this column".
+async function updateSchedule(tournamentId, userId, schedule) {
+    const tournament = await loadOwnedTournament(tournamentId, userId);
+
+    return await db.withTransaction(async (client) => {
+        await tournamentRepository.getScheduleForUpdate(tournamentId, client);
+
+        const divisions = await divisionsRepository.getDivisionsByTournamentId(tournamentId);
+        const fixtures = await fixturesRepository.getFixturesByDivisionIds(
+            divisions.map((division) => division.id)
+        );
+
+        validateSchedule(schedule, {
+            startDate: tournament.start_date,
+            endDate: tournament.end_date,
+            divisions,
+            fixtures
+        });
+
+        await tournamentRepository.updateSchedule(tournamentId, schedule, client);
+
+        return { id: tournamentId, entries: schedule.entries?.length ?? 0 };
+    });
+}
+
 // requireAuth proves the caller is logged in. This proves the tournament is
 // theirs, and is the tournament-level counterpart of progression's loadDivision.
 async function loadOwnedTournament(tournamentId, userId) {
@@ -146,7 +190,8 @@ export const tournamentService = {
     fetchTournamentDetails,
     startTournament,
     endTournament,
-    deleteTournament
+    deleteTournament,
+    updateSchedule
 }
 
 

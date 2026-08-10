@@ -12,12 +12,28 @@ vi.mock("../../../src/config/db.js", async () => {
 vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     divisionsRepository: {
         createTeam: vi.fn(),
-        createDivision: vi.fn()
+        createDivision: vi.fn(),
+        getDivisionWithOwner: vi.fn(),
+        getTeamsByIds: vi.fn(),
+        updateTeam: vi.fn(),
+        deleteTeamsByIds: vi.fn(),
+        replaceState: vi.fn()
     }
 }));
 
 vi.mock("../../../src/repositories/fixtures.repository.js", () => ({
-    fixturesRepository: { createFixture: vi.fn() }
+    fixturesRepository: {
+        createFixture: vi.fn(),
+        getResults: vi.fn(),
+        deleteByDivisionId: vi.fn()
+    }
+}));
+
+vi.mock("../../../src/repositories/tournament.repository.js", () => ({
+    tournamentRepository: {
+        getScheduleForUpdate: vi.fn(),
+        updateSchedule: vi.fn()
+    }
 }));
 
 const {
@@ -25,11 +41,17 @@ const {
     generateDivisionDetails,
     createLeagueState,
     createClassicState,
-    populateGroups
+    populateGroups,
+    validateTeamNames,
+    readTeamEntries,
+    formatOf,
+    toCount,
+    validateStructure
 } = await import("../../../src/services/divisions.service.js");
 const { generateFixtures } = await import("../../../src/services/fixtures.service.js");
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
+const { tournamentRepository } = await import("../../../src/repositories/tournament.repository.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
 
 beforeEach(() => {
@@ -37,7 +59,19 @@ beforeEach(() => {
     resetDbMock();
     divisionsRepository.createTeam.mockReset();
     divisionsRepository.createDivision.mockReset();
+    divisionsRepository.getDivisionWithOwner.mockReset();
+    divisionsRepository.getTeamsByIds.mockReset();
+    divisionsRepository.updateTeam.mockReset();
+    divisionsRepository.deleteTeamsByIds.mockReset();
+    divisionsRepository.replaceState.mockReset();
     fixturesRepository.createFixture.mockReset();
+    fixturesRepository.getResults.mockReset();
+    fixturesRepository.getResults.mockResolvedValue([]);
+    fixturesRepository.deleteByDivisionId.mockReset();
+    fixturesRepository.deleteByDivisionId.mockResolvedValue([]);
+    tournamentRepository.getScheduleForUpdate.mockReset();
+    tournamentRepository.getScheduleForUpdate.mockResolvedValue(null);
+    tournamentRepository.updateSchedule.mockReset();
 });
 
 describe("populateGroups", () => {
@@ -343,5 +377,481 @@ describe("divisionService.createDivision", () => {
         await expect(
             divisionService.createDivision({ ...details(), type: "swiss" }, "tour-1", "user-1", dbMock.client)
         ).rejects.toThrow("This format is not supported");
+    });
+});
+
+// The submission rules, shared by creation and editing so the two cannot drift
+// apart on what a valid team list is.
+describe("validateTeamNames", () => {
+    it("returns the trimmed names", () => {
+        expect(validateTeamNames([{ name: " Aces " }, { name: "Bears" }])).toEqual(["Aces", "Bears"]);
+    });
+
+    it("rejects anything that is not a list", () => {
+        expect(() => validateTeamNames(undefined)).toThrow("Missing required fields");
+        expect(() => validateTeamNames("Aces")).toThrow("Missing required fields");
+    });
+
+    it("rejects an entry carrying no name", () => {
+        expect(() => validateTeamNames([{ name: "Aces" }, { name: "  " }])).toThrow("Missing required fields");
+        expect(() => validateTeamNames([{ name: "Aces" }, {}])).toThrow("Missing required fields");
+        expect(() => validateTeamNames([{ name: "Aces" }, null])).toThrow("Missing required fields");
+    });
+
+    it("rejects the same name twice, trimmed and case-insensitively", () => {
+        expect(() => validateTeamNames([{ name: "Aces" }, { name: " aces " }]))
+            .toThrow("A team appears more than once");
+    });
+
+    it("accepts an empty list, which is a division with no teams yet", () => {
+        expect(validateTeamNames([])).toEqual([]);
+    });
+});
+
+describe("readTeamEntries", () => {
+    it("marks a team with no id as new and keeps the rest by id", () => {
+        expect(readTeamEntries([{ id: "t1", name: "Aces" }, { name: "Bears" }], ["t1"]))
+            .toEqual([{ id: "t1", name: "Aces" }, { id: null, name: "Bears" }]);
+    });
+
+    it("refuses an id the division does not already hold", () => {
+        // Otherwise the request could name a team out of somebody else's division.
+        expect(() => readTeamEntries([{ id: "other", name: "Aces" }], ["t1"]))
+            .toThrow("A team does not belong to this division");
+    });
+
+    it("refuses the same id twice", () => {
+        expect(() => readTeamEntries([{ id: "t1", name: "Aces" }, { id: "t1", name: "Bears" }], ["t1"]))
+            .toThrow("A team appears more than once");
+    });
+});
+
+describe("formatOf", () => {
+    it("maps the stored display name back to the generation key", () => {
+        expect(formatOf("Classic")).toBe("classic");
+        expect(formatOf("League")).toBe("league");
+    });
+
+    it("refuses a type generation cannot rebuild", () => {
+        expect(() => formatOf("Single Elimination")).toThrow("This format is not supported");
+    });
+});
+
+describe("toCount", () => {
+    it("accepts an integer or its decimal string", () => {
+        expect(toCount(2)).toBe(2);
+        expect(toCount("2")).toBe(2);
+        expect(toCount(" 0 ")).toBe(0);
+    });
+
+    it("treats anything else as absent", () => {
+        expect(toCount(undefined)).toBeNull();
+        expect(toCount(null)).toBeNull();
+        expect(toCount(1.5)).toBeNull();
+        expect(toCount("two")).toBeNull();
+        expect(toCount("-1")).toBeNull();
+    });
+});
+
+describe("validateStructure", () => {
+    it("accepts a group count the teams can fill and a qualifier count they can supply", () => {
+        expect(() => validateStructure(2, 4, 8)).not.toThrow();
+        expect(() => validateStructure(8, 0, 8)).not.toThrow();
+    });
+
+    it("refuses a missing or impossible group count", () => {
+        expect(() => validateStructure(null, 0, 8)).toThrow("The group and qualifier counts do not fit");
+        expect(() => validateStructure(0, 0, 8)).toThrow("The group and qualifier counts do not fit");
+        expect(() => validateStructure(9, 0, 8)).toThrow("The group and qualifier counts do not fit");
+    });
+
+    it("refuses a missing qualifier count, or more qualifiers than teams", () => {
+        expect(() => validateStructure(2, null, 8)).toThrow("The group and qualifier counts do not fit");
+        expect(() => validateStructure(2, 9, 8)).toThrow("The group and qualifier counts do not fit");
+    });
+});
+
+describe("divisionService.updateDivision", () => {
+    const STORED = ["t1", "t2", "t3", "t4"];
+
+    const division = (overrides = {}) => ({
+        id: "div-1",
+        tournament_id: "tour-1",
+        name: "Division A",
+        type: "Classic",
+        state: { teams: [...STORED], rounds: [], currentRound: 0 },
+        created_by: "user-1",
+        tournament_status: "Not Started",
+        ...overrides
+    });
+
+    const storedTeams = () => [
+        { id: "t1", name: "Aces" },
+        { id: "t2", name: "Bears" },
+        { id: "t3", name: "Cubs" },
+        { id: "t4", name: "Ducks" }
+    ];
+
+    // The same four teams, sent back unchanged.
+    const unchanged = () => storedTeams().map((team) => ({ id: team.id, name: team.name }));
+
+    const body = (teams, overrides = {}) => ({ teams, num_groups: 2, knockout_teams: 2, ...overrides });
+
+    beforeEach(() => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(division());
+        divisionsRepository.getTeamsByIds.mockResolvedValue(storedTeams());
+    });
+
+    describe("authorisation", () => {
+        it("reports a division that does not exist", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(null);
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(unchanged())))
+                .rejects.toMatchObject({ code: "DIVISION_NOT_FOUND", status: 404 });
+        });
+
+        it("refuses somebody else's division", async () => {
+            await expect(divisionService.updateDivision("div-1", "user-2", body(unchanged())))
+                .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+
+            expect(divisionsRepository.updateTeam).not.toHaveBeenCalled();
+        });
+
+        it("validates the submitted list before deciding what to do with it", async () => {
+            await expect(divisionService.updateDivision("div-1", "user-1", body([{ id: "t1", name: " " }])))
+                .rejects.toMatchObject({ code: "MISSING_FIELDS", status: 400 });
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body([
+                { id: "t1", name: "Aces" },
+                { id: "t2", name: "aces" }
+            ]))).rejects.toMatchObject({ code: "DUPLICATE_TEAM", status: 400 });
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+        });
+
+        it("treats a missing body as a missing team list", async () => {
+            await expect(divisionService.updateDivision("div-1", "user-1"))
+                .rejects.toMatchObject({ code: "MISSING_FIELDS", status: 400 });
+        });
+    });
+
+    describe("the rename path", () => {
+        it("writes only the names that moved, in one transaction", async () => {
+            const teams = unchanged();
+            teams[1].name = "Bulls";
+            teams[3].name = "Drakes";
+
+            const result = await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(divisionsRepository.updateTeam).toHaveBeenCalledTimes(2);
+            expect(divisionsRepository.updateTeam)
+                .toHaveBeenNthCalledWith(1, "t2", "Bulls", dbMock.client);
+            expect(divisionsRepository.updateTeam)
+                .toHaveBeenNthCalledWith(2, "t4", "Drakes", dbMock.client);
+            expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+
+            expect(result).toMatchObject({ divisionId: "div-1", rebuilt: false, renamed: 2 });
+        });
+
+        it("leaves fixtures, state and the schedule alone", async () => {
+            const teams = unchanged();
+            teams[0].name = "Angels";
+
+            await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+            expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+            expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+        });
+
+        it("writes nothing at all when the list comes back unchanged", async () => {
+            const result = await divisionService.updateDivision("div-1", "user-1", body(unchanged()));
+
+            expect(divisionsRepository.updateTeam).not.toHaveBeenCalled();
+            expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ rebuilt: false, renamed: 0 });
+        });
+
+        it("trims the submitted name before comparing it", async () => {
+            const teams = unchanged();
+            teams[0].name = "  Aces  ";
+
+            const result = await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(result.renamed).toBe(0);
+        });
+
+        it("is allowed once the tournament is under way", async () => {
+            // A name has no bearing on results, so there is no reason to forbid
+            // fixing a typo mid-tournament.
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ tournament_status: "Ongoing" }));
+
+            const teams = unchanged();
+            teams[0].name = "Angels";
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(teams))).resolves.toMatchObject({
+                rebuilt: false,
+                renamed: 1
+            });
+            expect(fixturesRepository.getResults).not.toHaveBeenCalled();
+        });
+
+        it("reorders without rebuilding, since the set is unchanged", async () => {
+            const teams = unchanged().reverse();
+
+            const result = await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(result.rebuilt).toBe(false);
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("the rebuild gate", () => {
+        const removed = () => unchanged().slice(0, 3);
+
+        it("refuses a tournament that has already started", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ tournament_status: "Ongoing" }));
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(removed(), { num_groups: 1 })))
+                .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+        });
+
+        it("refuses a division that already holds a result", async () => {
+            // Two checks, because a status can simply be wrong and a completed
+            // fixture cannot.
+            fixturesRepository.getResults.mockResolvedValue([{ id: "f1" }]);
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(removed(), { num_groups: 1 })))
+                .rejects.toMatchObject({ code: "DIVISION_HAS_RESULTS", status: 409 });
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+        });
+
+        it("treats a null status as Not Started", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ tournament_status: null }));
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(removed(), { num_groups: 1 })))
+                .resolves.toMatchObject({ rebuilt: true });
+        });
+
+        it("refuses a structure the new team count cannot support", async () => {
+            await expect(divisionService.updateDivision("div-1", "user-1", body(removed(), { num_groups: 4 })))
+                .rejects.toMatchObject({ code: "INVALID_STRUCTURE", status: 400 });
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(removed(), { knockout_teams: 4 })))
+                .rejects.toMatchObject({ code: "INVALID_STRUCTURE", status: 400 });
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+        });
+
+        it("refuses a division whose stored format it cannot regenerate", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ type: "Single Elimination" }));
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(removed(), { num_groups: 1 })))
+                .rejects.toMatchObject({ code: "UNSUPPORTED_FORMAT", status: 400 });
+        });
+    });
+
+    describe("the rebuild path", () => {
+        it("removes a team and regenerates the division around the rest", async () => {
+            const teams = unchanged().slice(0, 3);
+            fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1", "f2"]);
+
+            const result = await divisionService.updateDivision("div-1", "user-1", body(teams, { num_groups: 1 }));
+
+            // Fixtures first: they reference the team rows the next step removes.
+            expect(fixturesRepository.deleteByDivisionId).toHaveBeenCalledWith("div-1", dbMock.client);
+            expect(divisionsRepository.deleteTeamsByIds).toHaveBeenCalledWith(["t4"], dbMock.client);
+            expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
+
+            const [, state, numTeams] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.teams).toEqual(["t1", "t2", "t3"]);
+            expect(state.currentRound).toBe(0);
+            expect(numTeams).toBe(3);
+
+            expect(fixturesRepository.createFixture).toHaveBeenCalled();
+            expect(result).toMatchObject({
+                divisionId: "div-1",
+                rebuilt: true,
+                teams: [
+                    { id: "t1", name: "Aces" },
+                    { id: "t2", name: "Bears" },
+                    { id: "t3", name: "Cubs" }
+                ]
+            });
+        });
+
+        it("adds a team, giving it a new id and putting it in the pool", async () => {
+            const teams = [...unchanged(), { name: "Eagles" }];
+
+            const result = await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(divisionsRepository.createTeam)
+                .toHaveBeenCalledWith("uuid-1", "Eagles", "div-1", dbMock.client);
+            expect(divisionsRepository.deleteTeamsByIds).toHaveBeenCalledWith([], dbMock.client);
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.teams).toEqual(["t1", "t2", "t3", "t4", "uuid-1"]);
+            expect(state.rounds[0].groups.flat()).toContain("uuid-1");
+            expect(result.teams.at(-1)).toEqual({ id: "uuid-1", name: "Eagles" });
+        });
+
+        it("applies a rename among the surviving teams", async () => {
+            const teams = unchanged().slice(0, 3);
+            teams[0].name = "Angels";
+
+            await divisionService.updateDivision("div-1", "user-1", body(teams, { num_groups: 1 }));
+
+            expect(divisionsRepository.updateTeam)
+                .toHaveBeenCalledWith("t1", "Angels", dbMock.client);
+        });
+
+        it("does the whole thing in one transaction", async () => {
+            await divisionService.updateDivision(
+                "div-1",
+                "user-1",
+                body(unchanged().slice(0, 3), { num_groups: 1 })
+            );
+
+            expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+            expect(dbMock.client.release).toHaveBeenCalledOnce();
+        });
+
+        it("rolls the whole thing back when any part of it fails", async () => {
+            const failure = new Error("Failed to replace division state");
+            divisionsRepository.replaceState.mockRejectedValueOnce(failure);
+
+            await expect(divisionService.updateDivision(
+                "div-1",
+                "user-1",
+                body(unchanged().slice(0, 3), { num_groups: 1 })
+            )).rejects.toBe(failure);
+
+            expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+        });
+
+        it("treats a division whose state holds no team list as having none", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ state: null }));
+
+            const result = await divisionService.updateDivision(
+                "div-1",
+                "user-1",
+                body([{ name: "Eagles" }], { num_groups: 1, knockout_teams: 0 })
+            );
+
+            expect(divisionsRepository.deleteTeamsByIds).toHaveBeenCalledWith([], dbMock.client);
+            expect(result.teams).toEqual([{ id: "uuid-1", name: "Eagles" }]);
+        });
+
+        it("generates the structure before opening the transaction", async () => {
+            // An unsupported qualifier count is a rejection, not something the
+            // database should have to undo.
+            await expect(divisionService.updateDivision(
+                "div-1",
+                "user-1",
+                body(unchanged().slice(0, 3), { num_groups: 1, knockout_teams: 99 })
+            )).rejects.toMatchObject({ code: "INVALID_STRUCTURE" });
+
+            expect(clientSql()).toEqual([]);
+        });
+    });
+
+    describe("the schedule repair", () => {
+        // The full stored shape, per docs/handover-phase4-scheduling.md and
+        // scheduleUtils.js. Written out rather than reduced to the two fields the
+        // repair reads, because the client's normaliseSchedule silently drops any
+        // entry missing id, day, startTime or endTime — an entry this code
+        // mangled would vanish on the next load with nothing reporting it.
+        const entry = (id, fixtureId, overrides = {}) => ({
+            id,
+            type: fixtureId === null ? "break" : "fixture",
+            day: "2026-08-01",
+            courtId: "court-1",
+            startTime: "09:00",
+            endTime: "09:30",
+            fixtureId,
+            title: "",
+            officials: "",
+            notes: "",
+            ...overrides
+        });
+
+        const schedule = () => ({
+            version: 1,
+            days: [{ id: "day-1", date: "2026-08-01", label: "Day 1" }],
+            courts: [{ id: "court-1", name: "Court 1" }],
+            entries: [
+                entry("e1", "f1"),
+                // A break carries fixtureId: null, and courtId: null means it
+                // spans every court.
+                entry("e2", null, { courtId: null, startTime: "12:00", endTime: "13:00", title: "Lunch" }),
+                entry("e3", "other-division", { startTime: "13:00", endTime: "13:30" })
+            ],
+            settings: { dayStartTime: "09:00", dayEndTime: "18:00", slotMinutes: 30 }
+        });
+
+        const rebuild = () =>
+            divisionService.updateDivision(
+                "div-1",
+                "user-1",
+                body(unchanged().slice(0, 3), { num_groups: 1 })
+            );
+
+        it("drops the entries for deleted fixtures and keeps everything else", async () => {
+            fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1", "f2"]);
+            tournamentRepository.getScheduleForUpdate.mockResolvedValue(schedule());
+
+            const result = await rebuild();
+
+            const [tournamentId, written, client] = tournamentRepository.updateSchedule.mock.calls[0];
+            expect(tournamentId).toBe("tour-1");
+            expect(client).toBe(dbMock.client);
+
+            // The break survives, and so does the other division's placement —
+            // each one whole, not merely present. An entry that came back
+            // without its day or times would be dropped on the next read.
+            expect(written.entries).toEqual([schedule().entries[1], schedule().entries[2]]);
+
+            // Repaired, never nulled: everything outside entries is carried
+            // across untouched, including the courts and slot settings the grid
+            // positions against.
+            expect(written).toMatchObject({
+                version: 1,
+                days: schedule().days,
+                courts: schedule().courts,
+                settings: schedule().settings
+            });
+
+            expect(result.scheduleEntriesRemoved).toBe(1);
+        });
+
+        it("writes nothing when no entry pointed at a deleted fixture", async () => {
+            fixturesRepository.deleteByDivisionId.mockResolvedValue(["f9"]);
+            tournamentRepository.getScheduleForUpdate.mockResolvedValue(schedule());
+
+            expect((await rebuild()).scheduleEntriesRemoved).toBe(0);
+            expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+        });
+
+        it("skips the read entirely when the division had no fixtures", async () => {
+            fixturesRepository.deleteByDivisionId.mockResolvedValue([]);
+
+            expect((await rebuild()).scheduleEntriesRemoved).toBe(0);
+            expect(tournamentRepository.getScheduleForUpdate).not.toHaveBeenCalled();
+        });
+
+        it("does nothing when the tournament has no schedule, or an empty one", async () => {
+            fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1"]);
+
+            tournamentRepository.getScheduleForUpdate.mockResolvedValue(null);
+            expect((await rebuild()).scheduleEntriesRemoved).toBe(0);
+
+            tournamentRepository.getScheduleForUpdate.mockResolvedValue({ entries: [] });
+            expect((await rebuild()).scheduleEntriesRemoved).toBe(0);
+
+            expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+        });
     });
 });

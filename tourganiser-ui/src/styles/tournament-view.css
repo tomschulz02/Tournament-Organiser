@@ -1309,6 +1309,52 @@ body.dark {
 	margin-bottom: 0;
 }
 
+/* Edits accumulate and are saved as one request, so there has to be somewhere
+   that says so. Tinted rather than bordered: it is a state the section is in,
+   not another card in the list. */
+.tv-teams-pending {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface-alt);
+}
+
+.tv-teams-pending-note {
+	margin: 0;
+	min-width: 0;
+	color: var(--tv-muted);
+	font-size: 0.85rem;
+}
+
+.tv-structure-modal {
+	text-align: left;
+}
+
+.tv-structure-title {
+	margin: 0 0 8px;
+	font-size: 1.05rem;
+}
+
+/* Side by side while there is room. They are one decision — how the division is
+   shaped — and reading them apart invites setting one without the other. */
+.tv-structure-fields {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.tv-structure-fields .form-group {
+	flex: 1 1 140px;
+	min-width: 0;
+}
+
 /* --- skeletons ---------------------------------------------------------- */
 
 /* Skeletons rather than a spinner: the shell is already on screen, and a

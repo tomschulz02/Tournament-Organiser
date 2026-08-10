@@ -81,8 +81,8 @@ async function deleteTournament(req, res) {
 
 // Declared but not built. The routes exist so the paths are fixed and the UI can
 // wire to them properly; each answers 501 through the standard envelope. See
-// docs/api.md for the paths and the handover for why they are stubs rather than
-// omissions. Replace the throw with a service call when the feature lands.
+// docs/api.md for the paths and why they are stubs rather than omissions.
+// Replace the throw with a service call when the feature lands.
 
 async function saveTournament() {
     throw new AppError("NOT_IMPLEMENTED");
@@ -92,11 +92,19 @@ async function unsaveTournament() {
     throw new AppError("NOT_IMPLEMENTED");
 }
 
-// tournamentRepository.updateSchedule already writes tournaments.schedule, so
-// this is the one stub with its persistence in place. It still needs the
-// validation described in docs/decisions.md before it can accept a payload.
-async function updateSchedule() {
-    throw new AppError("NOT_IMPLEMENTED");
+// The schedule is sent whole, under `schedule`, exactly as the client holds it.
+// The controller reads the id and the body and nothing else: what a valid
+// schedule is belongs to api/src/utils/scheduleValidator.js, and whether this
+// tournament is the caller's belongs to the service.
+async function updateSchedule(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const data = await tournamentService.updateSchedule(tournamentId, req.user.id, req.body?.schedule);
+
+    res.status(200).json({ success: true, message: "Schedule saved", data });
 }
 
 export const tournamentController = {

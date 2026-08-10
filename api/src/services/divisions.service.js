@@ -1,7 +1,12 @@
 import { AppError } from "../errors.js";
+import DatabaseConnection from "../config/db.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
+import { fixturesRepository } from "../repositories/fixtures.repository.js";
+import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { generateFixtures, fixtureService } from "./fixtures.service.js";
 import { v4 as uuidv4 } from "uuid";
+
+const db = DatabaseConnection();
 
 // `client` is required, not defaulted: a division is only ever created as part
 // of creating a tournament, inside that transaction. createTournament owns the
@@ -14,37 +19,22 @@ async function createDivision(details, tournamentId, userId, client){
     // division, so there is no library of a user's teams to select from and no
     // client-supplied id to authorise. See docs/decisions.md, where the
     // select-or-create decision is recorded as superseded.
-    //
-    // teams.name is NOT NULL, so an entry with no name is a 400 rather than a 500.
-    if (details.teams.some((team) => !team.name?.trim())) {
-        throw new AppError("MISSING_FIELDS");
-    }
-
-    // The same team twice in one division would corrupt standings and fixture
-    // generation. Compared trimmed and case-insensitively.
-    const teamNames = details.teams.map((team) => team.name.trim());
-    const compared = teamNames.map((name) => name.toLowerCase());
-    if (new Set(compared).size !== compared.length) {
-        throw new AppError("DUPLICATE_TEAM");
-    }
+    const teamNames = validateTeamNames(details.teams);
 
     // Ids are generated here, before anything is written, because state.teams
     // has to hold them before the division row can be stored — and the team
     // rows cannot be stored until after it. See createTeam.
-    //
-    // details.teams stops being a list of objects and becomes the list of ids
-    // that generateDivisionDetails expects, so the names are kept separately.
     const teamIds = teamNames.map(() => uuidv4());
-    details.teams = teamIds;
 
-    //generate division details
-    const division = generateDivisionDetails(details.type, details.teams, details.num_teams, details.num_groups, details.knockout_teams)
+    const { division, fixtures } = buildDivision(
+        details.type,
+        teamIds,
+        details.num_teams,
+        details.num_groups,
+        details.knockout_teams
+    );
     division.name = details.name;
     division.num_teams = details.num_teams;
-
-    // generate fixture details
-    const generatedFixtures = generateFixtures(division.state.rounds);
-    division.state.rounds = generatedFixtures.rounds;
 
     //store division in database
     // First of the three writes: teams and fixtures both carry a division_id
@@ -60,20 +50,304 @@ async function createDivision(details, tournamentId, userId, client){
 
     //store fixtures in database
     // After the teams: fixtures.team_1 and team_2 are foreign keys into teams.
-    for (const fixture of generatedFixtures.fixtures) {
-        await fixtureService.createFixture(divisionId, fixture, client);
-    }
+    await createFixtures(divisionId, fixtures, client);
 
     return divisionId;
 }
 
+// PUT /api/divisions/:divisionId — the division's full intended team list.
+//
+// One endpoint rather than three, because teams and structure cannot change
+// independently and three endpoints would be three ways to leave a division
+// inconsistent. The client never declares what it is doing: the incoming ids are
+// compared against state.teams and the intent follows from the data.
+//
+//   same set      — a rename. Names are written and nothing else moves, because
+//                   fixtures reference teams.id and the schedule references
+//                   fixture ids, so nothing structural depends on a name.
+//   different set — the division is rebuilt from scratch.
+//
+// A team arriving with no id is new; one in state.teams and absent from the body
+// is removed.
+async function updateDivision(divisionId, userId, payload = {}) {
+    const division = await divisionsRepository.getDivisionWithOwner(divisionId);
+    if (!division) {
+        throw new AppError("DIVISION_NOT_FOUND");
+    }
+
+    // requireAuth proves the caller is logged in. This proves the tournament is
+    // theirs, the same check progression's loadDivision makes.
+    if (division.created_by !== userId) {
+        throw new AppError("NOT_TOURNAMENT_OWNER");
+    }
+
+    const existingIds = teamIdsOf(division.state);
+    const entries = readTeamEntries(payload.teams, existingIds);
+
+    // Every entry carries an id this division already holds, and no id twice, so
+    // matching the stored count is enough to prove the sets are equal.
+    const sameSet = entries.length === existingIds.length && entries.every((entry) => entry.id !== null);
+
+    return sameSet
+        ? await renameTeams(divisionId, entries, existingIds)
+        : await rebuildDivision(division, entries, payload);
+}
+
+// The rename path. No gate: a name has no bearing on results, so there is no
+// reason to forbid fixing a typo once the tournament is under way.
+async function renameTeams(divisionId, entries, existingIds) {
+    const stored = await divisionsRepository.getTeamsByIds(existingIds);
+    const namesById = new Map(stored.map((team) => [team.id, team.name]));
+
+    // A team whose name has not moved is not written. Nothing would change and
+    // the row would be touched for no reason.
+    const changed = entries.filter((entry) => namesById.get(entry.id) !== entry.name);
+
+    if (changed.length > 0) {
+        // One transaction, so a list of renames cannot half-apply.
+        await db.withTransaction(async (client) => {
+            for (const entry of changed) {
+                await divisionsRepository.updateTeam(entry.id, entry.name, client);
+            }
+        });
+    }
+
+    return { divisionId, rebuilt: false, renamed: changed.length, teams: entries };
+}
+
+// The rebuild path. Delete-all-and-recreate for the division, not a diff of
+// which fixtures survive: the rebuild is only safe because nothing has been
+// played, and if nothing has been played there is nothing to preserve. See
+// docs/decisions.md.
+async function rebuildDivision(division, entries, payload) {
+    // The gate. Two checks, because a status can simply be wrong and a completed
+    // fixture cannot.
+    if ((division.tournament_status || "Not Started") !== "Not Started") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    const played = await fixturesRepository.getResults(division.id);
+    if (played.length > 0) {
+        throw new AppError("DIVISION_HAS_RESULTS");
+    }
+
+    const numGroups = toCount(payload.num_groups);
+    const knockoutTeams = toCount(payload.knockout_teams);
+    validateStructure(numGroups, knockoutTeams, entries.length);
+
+    // Ids for the new teams, and the whole regenerated structure, before the
+    // transaction opens. Generation is pure and can fail on its own terms; there
+    // is no reason for a rejected structure to have had anything to roll back.
+    const teams = entries.map((entry) => ({
+        id: entry.id ?? uuidv4(),
+        name: entry.name,
+        isNew: entry.id === null
+    }));
+
+    const { division: generated, fixtures } = buildDivision(
+        formatOf(division.type),
+        teams.map((team) => team.id),
+        teams.length,
+        numGroups,
+        knockoutTeams
+    );
+
+    const kept = new Set(teams.map((team) => team.id));
+    const removedIds = teamIdsOf(division.state).filter((id) => !kept.has(id));
+
+    // One transaction: fixtures deleted, teams reconciled, state rewritten and
+    // the schedule repaired together, or none of it.
+    return await db.withTransaction(async (client) => {
+        // First, because fixtures reference the team rows the next step removes.
+        // The ids come back because the schedule references them.
+        const deletedFixtureIds = await fixturesRepository.deleteByDivisionId(division.id, client);
+
+        await divisionsRepository.deleteTeamsByIds(removedIds, client);
+
+        for (const team of teams) {
+            if (team.isNew) {
+                await divisionsRepository.createTeam(team.id, team.name, division.id, client);
+            } else {
+                // Written unconditionally. Every other row in the division is
+                // being replaced, so comparing first to save one UPDATE buys
+                // nothing here — unlike the rename path, which writes nothing else.
+                await divisionsRepository.updateTeam(team.id, team.name, client);
+            }
+        }
+
+        await divisionsRepository.replaceState(division.id, generated.state, teams.length, client);
+        await createFixtures(division.id, fixtures, client);
+
+        const scheduleEntriesRemoved = await repairSchedule(
+            division.tournament_id,
+            deletedFixtureIds,
+            client
+        );
+
+        return {
+            divisionId: division.id,
+            rebuilt: true,
+            teams: teams.map((team) => ({ id: team.id, name: team.name })),
+            fixtures: fixtures.length,
+            scheduleEntriesRemoved
+        };
+    });
+}
+
+// Drops the schedule entries that pointed at fixtures which no longer exist, and
+// leaves everything else alone — breaks, and every other division's placements.
+// The column is repaired, never nulled.
+async function repairSchedule(tournamentId, deletedFixtureIds, client) {
+    if (deletedFixtureIds.length === 0) {
+        return 0;
+    }
+
+    const schedule = await tournamentRepository.getScheduleForUpdate(tournamentId, client);
+    const entries = Array.isArray(schedule?.entries) ? schedule.entries : [];
+    if (entries.length === 0) {
+        return 0;
+    }
+
+    const deleted = new Set(deletedFixtureIds);
+    // A break carries fixtureId: null and is never a candidate.
+    const remaining = entries.filter((entry) => !(entry.fixtureId && deleted.has(entry.fixtureId)));
+
+    const removed = entries.length - remaining.length;
+    if (removed > 0) {
+        await tournamentRepository.updateSchedule(tournamentId, { ...schedule, entries: remaining }, client);
+    }
+
+    return removed;
+}
+
 export const divisionService = {
-    createDivision
+    createDivision,
+    updateDivision
 }
 
 
 
 // Helper Functions
+
+// The one place a submitted team list is checked, so creation and editing cannot
+// drift apart on what a valid list is.
+//
+// teams.name is NOT NULL, so an entry with no name is a 400 rather than a 500,
+// and the same team twice in one division would corrupt standings and fixture
+// generation. Names are compared trimmed and case-insensitively.
+function validateTeamNames(teams) {
+    if (!Array.isArray(teams)) {
+        throw new AppError("MISSING_FIELDS");
+    }
+
+    if (teams.some((team) => !team?.name?.trim())) {
+        throw new AppError("MISSING_FIELDS");
+    }
+
+    const teamNames = teams.map((team) => team.name.trim());
+    const compared = teamNames.map((name) => name.toLowerCase());
+    if (new Set(compared).size !== compared.length) {
+        throw new AppError("DUPLICATE_TEAM");
+    }
+
+    return teamNames;
+}
+
+// Turns the submitted list into { id, name } entries, with id null for a team
+// that is new. An id the division does not already hold is refused rather than
+// reinterpreted: it either names a team belonging to someone else's division or
+// the request is confused, and neither should be guessed at.
+function readTeamEntries(teams, existingIds) {
+    const teamNames = validateTeamNames(teams);
+    const existing = new Set(existingIds);
+    const seen = new Set();
+
+    return teams.map((team, index) => {
+        const id = team.id ?? null;
+        if (id === null) {
+            return { id: null, name: teamNames[index] };
+        }
+
+        if (!existing.has(id)) {
+            throw new AppError("TEAM_NOT_IN_DIVISION");
+        }
+        if (seen.has(id)) {
+            throw new AppError("DUPLICATE_TEAM");
+        }
+        seen.add(id);
+
+        return { id, name: teamNames[index] };
+    });
+}
+
+// The generation sequence, shared so a rebuilt division is indistinguishable
+// from a freshly created one. generateFixtures mutates the rounds it is given
+// and hands them back, which is why the state's rounds are reassigned from it.
+function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams) {
+    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams);
+
+    const generated = generateFixtures(division.state.rounds);
+    division.state.rounds = generated.rounds;
+
+    return { division, fixtures: generated.fixtures };
+}
+
+// Sequential and awaited: one pg client cannot run concurrent queries.
+async function createFixtures(divisionId, fixtures, client) {
+    for (const fixture of fixtures) {
+        await fixtureService.createFixture(divisionId, fixture, client);
+    }
+}
+
+// divisions.state is jsonb, so pg hands it back already parsed. The guard covers
+// a division stored before the column carried anything.
+function teamIdsOf(state) {
+    return Array.isArray(state?.teams) ? state.teams : [];
+}
+
+// divisions.type holds the display name; generation takes the format key the
+// creation form sends. Only the two implemented formats can have been stored,
+// so anything else is a division this endpoint cannot rebuild.
+const FORMAT_BY_TYPE = {
+    Classic: "classic",
+    League: "league"
+};
+
+function formatOf(type) {
+    const format = FORMAT_BY_TYPE[type];
+    if (!format) {
+        throw new AppError("UNSUPPORTED_FORMAT");
+    }
+
+    return format;
+}
+
+// A count from a form arrives as either a number or its decimal string.
+// Anything else is absent as far as this is concerned.
+function toCount(value) {
+    if (Number.isInteger(value)) {
+        return value;
+    }
+
+    if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+        return Number(value.trim());
+    }
+
+    return null;
+}
+
+// Both counts are required on a rebuild and neither is adjusted to fit. The
+// organiser confirms them against the new team count in the client, and
+// correcting their choice without saying so is worse than refusing it.
+function validateStructure(numGroups, knockoutTeams, teamCount) {
+    if (numGroups === null || numGroups < 1 || numGroups > teamCount) {
+        throw new AppError("INVALID_STRUCTURE");
+    }
+
+    if (knockoutTeams === null || knockoutTeams > teamCount) {
+        throw new AppError("INVALID_STRUCTURE");
+    }
+}
 
 function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0){
     let division = {};
@@ -238,7 +512,12 @@ export {
     generateDivisionDetails,
     createLeagueState,
     createClassicState,
-    populateGroups
+    populateGroups,
+    validateTeamNames,
+    readTeamEntries,
+    formatOf,
+    toCount,
+    validateStructure
 };
 
 // const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8","team9"], 9, 2, 6);

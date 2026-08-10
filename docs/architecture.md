@@ -77,9 +77,16 @@ page and owns the state shared across sections: the active tab, the selected div
 and one `reload()` that every mutation calls. `TournamentShell` renders the subheader and
 navigation immediately; only the tab content waits on the request.
 
-`components/ScheduleMakerModal.jsx` is loaded with `React.lazy`, because it pulls in the
-PDF export and with it jsPDF, html2canvas and DOMPurify — around half the application's
-JavaScript for a screen only an organiser opens.
+`components/ScheduleMakerModal.jsx` is loaded with `React.lazy`. It used to pull in jsPDF,
+html2canvas and DOMPurify with the PDF export — around half the application's JavaScript
+for a screen only an organiser opens. Printing through the browser replaced that on
+2026-08-10 and all three dependencies are gone, taking the chunk from roughly 427kB to
+30kB. It stays lazy because it is still the largest single screen: a grid, a list, an
+inspector, a generator and two print layouts.
+
+It is also the only component rendered through a portal. `createPortal` puts it on
+`document.body` so that neither `<main>`'s layout nor the header's and footer's
+`z-index` can clip it. See the frontend traps below.
 
 ## Conventions
 - PascalCase for files/components.
@@ -117,6 +124,26 @@ for measure-then-store.
 
 **`npm run lint` has 5 pre-existing errors** in `ThemeContext.jsx`, `ConfirmDialog.jsx`,
 `ScoreUpdateModal.jsx` and `main.jsx`. Judge a change by whether that count moves.
+
+**The site header outranks most overlays.** `header` carries `z-index: 1000` and
+`.site-footer` carries `10`, both in the root stacking context, so an overlay has to
+clear 1000 to sit over the whole viewport. The scale as it stands:
+
+| Layer | `z-index` | Class |
+|---|---|---|
+| Score modal, next-round modal | 5 | `.modal-overlay`, `.modal-backdrop` |
+| Site footer | 10 | `.site-footer` |
+| Site header | 1000 | `header` |
+| Schedule maker | 1100 | `.schedule-maker-backdrop` |
+| Confirmation dialog | 1200 | `.confirm-backdrop` |
+| Tooltip | 1000000 | `.tooltip-box` |
+| Loading screen | 10<sup>15</sup> | `.loading-container` |
+
+The confirmation dialog is above every modal on purpose: it is always asked on behalf of
+one, and the schedule maker's Discard prompt is asked from inside a backdrop at 1100.
+
+**The first two rows are a known bug**, recorded in `docs/known-limitations.md`: at 5,
+those two modals render underneath the header and the footer.
 
 ## Current State
 

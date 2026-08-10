@@ -12,7 +12,8 @@ items are identified, and remove them as they are fixed.
   records a result and maintains the round's `completedGames`. The rest of the router is
   still empty.
 - The frontend calls endpoints that do not exist. `docs/api.md` lists them; start, end,
-  delete and score entry came off that list on 2026-08-09.
+  delete and score entry came off that list on 2026-08-09, and team editing on
+  2026-08-10.
 - `users.controller.js` `getUserProfile` is not implemented. It now returns 501 rather
   than hanging.
 - Join and leave tournament are still stubs answering 501. Start, end and delete were
@@ -35,6 +36,12 @@ for a `num_groups` column that does not exist.
 
 `getTeamsByDivisionIds` stays removed: `state.teams` is authoritative for seed order, so
 resolution goes through `getTeamsByIds`. See `docs/division-state.md`.
+
+`updateTeams` and `updateGroups` are gone entirely as of 2026-08-10. Both wrote part of
+`divisions.state` directly, neither was called, and `updateGroups` was B6 — it changed
+pool composition without regenerating the fixtures those pools no longer matched. Both
+are replaced by `PUT /api/divisions/:divisionId`, which regenerates and writes `state` in
+full.
 
 ## API Contract
 
@@ -125,6 +132,18 @@ Outstanding:
 - Round objects cannot express a match format, so the per-round best-of rule is
   undeliverable until `divisions.state` gains a key for it.
 
+## Teams
+
+- **A division's group and qualifier counts are not stored.** `divisions` has no
+  `num_groups` or `knockout_teams` column — the organiser's choices are consumed by
+  `generateDivisionDetails` and survive only as the shape of `state.rounds`. The
+  structural confirmation in `TeamsTab` therefore reverse-engineers them: group count
+  from the pool round's group count, qualifier count from the flattened first knockout
+  round, with a special case for a Finals round that carries four ranks because of the
+  bronze match. It works, but it is inference rather than recall, and it will need
+  revisiting if generation ever changes shape. Storing both on the division would remove
+  the guesswork.
+
 ## Phase 3
 
 From making the tournament runnable, 2026-08-09.
@@ -174,9 +193,10 @@ From the redesign of 2026-08-08.
   development data rather than debugging it** — nothing created through the current code
   path can reach that state.
 - **`calculateScheduledStats` counts schedule entries, not distinct fixtures.** Those
-  agree only while no fixture is placed twice, and nothing enforces that — the
-  server-side rejection of a duplicate fixture id is specified in `docs/decisions.md` and
-  unwritten. `ScheduleTab` counts the distinct set itself for its "x of y" line.
+  agree only while no fixture is placed twice. Since 2026-08-10 the server rejects a
+  duplicate fixture id on write, so a saved schedule cannot disagree — but an unsaved one
+  in the modal still can, which is where this count is read. `ScheduleTab` counts the
+  distinct set itself for its "x of y" line.
 - ~~**The bracket showed rank placeholders after progression.**~~ — **fixed 2026-08-09.**
   `buildDivisionBracket` resolved participants from `round.groups`, which hold positional
   indices permanently; progression binds teams to the fixture instead. The bracket now
@@ -190,28 +210,53 @@ From the redesign of 2026-08-08.
   at both widths when loaded fresh, but the in-app browser pane delivers neither `resize`
   events nor `ResizeObserver` callbacks, so the transition itself has never been
   observed. Worth one check in a real browser.
-- **The scheduled state of Fixtures & Schedule has never run against a real row.** Both
-  halves of the round trip are tested, but `PUT /tournaments/:id/schedule` answers 501,
-  so nothing can write the column through the UI. Confirming it needs a schedule inserted
-  directly into `tournaments.schedule`.
+- ~~**The scheduled state of Fixtures & Schedule has never run against a real row.**~~ —
+  **closed 2026-08-10.** `PUT /tournaments/:id/schedule` is implemented, and the state was
+  exercised end to end against the development database: generated, saved, reloaded, and
+  read back with its fixtures and a break intact.
 
 ## Scheduling
 
-- `tournamentRepository.updateSchedule` writes `tournaments.schedule`, but
-  `PUT /api/tournaments/:tournamentId/schedule` throws `NOT_IMPLEMENTED`, so schedules
-  still cannot be saved through the API. Of the stubbed routes this is the one where only
-  the controller is missing.
-- Nothing validates a schedule. Under the split settled on 2026-08-08 the server must
-  reject impossible schedules on write — court clashes, a team in two places at once,
-  fixtures outside the tournament. None of that exists.
-- The shape of `tournaments.schedule` is undocumented. It is implicit in
-  `scheduleUtils.js` and `ScheduleMakerModal.jsx`. The validator cannot be written until
-  it is recorded.
-- `ScheduleMakerModal.jsx` and `scheduleGenerator.js` still work from a single division,
-  which no longer matches where the schedule is stored. Rescoping them to the tournament
-  is step 8 of the tournament view redesign.
-- Officials assignment is described in `docs/tournament-rules.md` as optional but is not
-  implemented anywhere.
+Phase 4 closed most of this section on 2026-08-10. What it settled — the endpoint, the
+validator, the documented payload, round order in the generator, and the schedule maker's
+layout and interaction defects — is recorded in `docs/roadmap.md` and is not repeated
+here. What is left:
+
+- **Officials assignment** is described in `docs/tournament-rules.md` as optional but is
+  not implemented anywhere. An entry carries an `officials` string, it is stored and
+  displayed, and nothing assigns or validates it.
+- **A fixture whose round name is not in its division's `state.rounds` is exempt from the
+  round-order rule**, in both the generator and the validator. It constrains nothing and
+  nothing constrains it. That is drift rather than an impossible schedule, and refusing
+  the save over it would strand the organiser, but it does mean the rule has a hole that
+  bad data can fall through.
+- **`getEntrySlotSpan` in `scheduleUtils.js` is now called by nothing.** The grid derives
+  a span from exact row indices instead. Left in place rather than deleted — deleting
+  code is High Risk under `CLAUDE.md`.
+- **A schedule is stored as it is sent, beyond the structural checks.** There is no cap
+  on entry count or on the length of `title`, `notes` and `officials`, so the column will
+  hold whatever an authenticated organiser sends. That belongs with **B9** input
+  validation in Phase 5 rather than with the schedule rules.
+- **There is no `tournaments.last_update`**, so a schedule write stamps nothing and is
+  invisible to a cache keyed on `divisions.last_update`. Phase 5 has to decide this
+  before building the client-side cache.
+
+## Overlays and stacking
+
+- **`.modal-overlay` and `.modal-backdrop` sit at `z-index: 5`, below the site header's
+  `1000` and the footer's `10`.** So `ScoreUpdateModal` and `NextRoundModal` render
+  *underneath* both. Reproduced 2026-08-10 at 900×420, where the score modal's top edge
+  falls inside the header band and `elementFromPoint` at that point returns the site
+  title rather than the modal — the header is not merely drawn over it, it takes the
+  clicks. At a tall viewport the modals happen to sit clear of the band and the fault is
+  invisible, which is why it has survived.
+
+  Phase 4 fixed exactly this for the schedule maker, by portalling it onto
+  `document.body` and raising it to `1100`. The same two-line fix applies here, but the
+  portal is the part that matters: `z-index` alone leaves the modal at the mercy of any
+  ancestor that creates a containing block.
+
+  The full scale is tabulated in `docs/architecture.md` under frontend traps.
 
 ## Project
 

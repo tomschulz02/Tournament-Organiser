@@ -131,6 +131,7 @@ No lint setup exists for api/.
 
 docs/database.md is correct where the code disagrees with it.
 docs/division-state.md is correct for the shape of divisions.state.
+docs/schedule.md is correct for the shape of tournaments.schedule.
 docs/api.md defines the target response contract; parts of the code do not yet match it.
 
 Known drift is recorded in docs/known-limitations.md. Do not fix drift as a batch —
@@ -141,6 +142,7 @@ Additional documentation:
 - docs/architecture.md
 - docs/database.md
 - docs/division-state.md
+- docs/schedule.md
 - docs/tournament-rules.md
 - docs/api.md
 - docs/project-philosophy.md

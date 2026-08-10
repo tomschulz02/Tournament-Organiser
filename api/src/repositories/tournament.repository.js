@@ -91,14 +91,33 @@ async function deleteTournament(tournamentId) {
 // physical courts, so scheduling them independently could double-book one.
 // This moved here from the divisions repository on 2026-08-08; there is no
 // last_update column on tournaments to stamp.
-async function updateSchedule(tournamentId, schedule) {
+//
+// Takes an optional client so a division rebuild can repair the schedule inside
+// the transaction that deleted the fixtures it referenced.
+async function updateSchedule(tournamentId, schedule, client = db) {
     try {
         const sql = "UPDATE tournaments SET schedule = $1::jsonb WHERE id = $2::uuid";
-        await db.query(sql, [JSON.stringify(schedule), tournamentId]);
+        await client.query(sql, [JSON.stringify(schedule), tournamentId]);
 
         return { message: "Schedule updated" };
     } catch (error) {
         throw new Error("Failed to update schedule", { cause: error });
+    }
+}
+
+// Reads tournaments.schedule for a read-modify-write, taking a row lock so a
+// rebuild repairing the schedule cannot lose a placement saved alongside it.
+//
+// `client` is required, for the same reason as getStateForUpdate: locking
+// outside the transaction that does the write achieves nothing.
+async function getScheduleForUpdate(tournamentId, client) {
+    try {
+        const sql = "SELECT schedule FROM tournaments WHERE id = $1::uuid FOR UPDATE";
+        const result = await client.query(sql, [tournamentId]);
+
+        return result.rows.length > 0 ? result.rows[0].schedule : null;
+    } catch (error) {
+        throw new Error("Failed to fetch schedule", { cause: error });
     }
 }
 
@@ -109,5 +128,6 @@ export const tournamentRepository = {
     startTournament,
     endTournament,
     deleteTournament,
-    updateSchedule
+    updateSchedule,
+    getScheduleForUpdate
 };

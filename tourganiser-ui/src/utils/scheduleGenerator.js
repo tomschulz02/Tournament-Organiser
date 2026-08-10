@@ -35,6 +35,85 @@ function buildCandidateSlots(days, courts, startTime, endTime, durationMinutes) 
 	return slots.sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 }
 
+// A round cannot begin until the round feeding it has finished. Nothing in the
+// scoring model expressed that, so a semifinal would take an early slot on a
+// later court while pool play was still running — plausible-looking and
+// unplayable. See docs/tournament-rules.md; the server enforces the same rule on
+// write.
+//
+// The constraint is per division. Two divisions running in parallel is correct
+// and desirable, so this must never become a tournament-wide barrier.
+
+// A fixture's round name is not always a round name in state.rounds: the
+// third-place playoff carries its own while belonging to the Finals round.
+const THIRD_PLACE_ROUND = '3rd Place Playoff';
+const FINALS_ROUND = 'Finals';
+
+function buildRoundOrder(divisions = []) {
+	const byDivision = new Map();
+
+	divisions.forEach((division) => {
+		const rounds = Array.isArray(division?.state?.rounds) ? division.state.rounds : [];
+		const positions = new Map();
+
+		rounds.forEach((round, position) => {
+			if (round?.name && !positions.has(round.name)) {
+				positions.set(round.name, position);
+			}
+		});
+
+		byDivision.set(division.id, positions);
+	});
+
+	return byDivision;
+}
+
+// null means "unordered": a fixture whose round is not in its division's
+// state.rounds, or whose division was not supplied. It constrains nothing and
+// nothing constrains it, which is the same treatment the server's validator
+// gives it.
+function getRoundIndex(fixture, roundOrder) {
+	const name = fixture.round === THIRD_PLACE_ROUND ? FINALS_ROUND : fixture.round;
+	const position = roundOrder.get(fixture.division_id)?.get(name);
+
+	return position === undefined ? null : position;
+}
+
+// Day and time are both fixed width and zero padded, so string order is
+// chronological order.
+function toInstant(day, time) {
+	return `${day}T${time}`;
+}
+
+// The latest any earlier round of this division finishes. A fixture of this
+// round may not start before it.
+function findRoundBarrier(roundEndByDivision, divisionId, roundIndex) {
+	if (roundIndex === null) return null;
+
+	const rounds = roundEndByDivision.get(divisionId);
+	if (!rounds) return null;
+
+	let latest = null;
+	rounds.forEach((end, index) => {
+		if (index < roundIndex && (latest === null || end > latest)) {
+			latest = end;
+		}
+	});
+
+	return latest;
+}
+
+function recordRoundEnd(roundEndByDivision, divisionId, roundIndex, end) {
+	if (roundIndex === null) return;
+
+	const rounds = roundEndByDivision.get(divisionId) || new Map();
+	if (!rounds.has(roundIndex) || end > rounds.get(roundIndex)) {
+		rounds.set(roundIndex, end);
+	}
+
+	roundEndByDivision.set(divisionId, rounds);
+}
+
 function buildBlockedSlotChecker(entries) {
 	return (slot) =>
 		entries.some((entry) => {
@@ -139,6 +218,7 @@ function chooseBestSlot({ slots, fixture, teamLastPlayed, courtAffinity, courtLo
 export function generateAutomaticSchedule({
 	baseSchedule,
 	fixtures,
+	divisions,
 	startDate,
 	endDate,
 	courtCount,
@@ -154,9 +234,15 @@ export function generateAutomaticSchedule({
 		How it works:
 		1. Build a flat list of candidate slots across every day and court.
 		2. Preserve existing break entries and treat them as blocked time.
-		3. Iterate fixtures in their existing generated order.
-		4. Score every currently available slot for the current fixture.
-		5. Pick the highest-scoring slot, assign the fixture, and update scheduling history.
+		3. Iterate fixtures in their existing generated order, round by round.
+		4. Discard slots that would start a round before its division's earlier
+		   rounds have finished.
+		5. Score every remaining available slot for the current fixture.
+		6. Pick the highest-scoring slot, assign the fixture, and update scheduling history.
+
+		Round order is a hard constraint rather than a score: a schedule that puts
+		a semifinal before pool play is not a worse schedule, it is an unplayable
+		one, and the server refuses to store it.
 
 		The scoring model tries to balance three practical tournament concerns:
 		- Keep group/pool matches on the same court where possible.
@@ -200,11 +286,26 @@ export function generateAutomaticSchedule({
 	const courtLoad = {};
 	const occupiedSlotKeys = new Set();
 	const scheduledFixtureIds = getScheduledFixtureIds(schedule);
-	const fixturesToSchedule = fixtures.filter((fixture) => !scheduledFixtureIds.has(fixture.id));
+	const roundOrder = buildRoundOrder(divisions);
+	const roundEndByDivision = new Map();
+	// Round by round, so that every earlier round of a division has been placed
+	// before anything is measured against it. The sort is stable, so fixtures
+	// within one round keep their generated order and two runs over the same
+	// input still produce the same schedule. An unordered fixture sorts with the
+	// first round, which is where it already sat.
+	const fixturesToSchedule = fixtures
+		.filter((fixture) => !scheduledFixtureIds.has(fixture.id))
+		.map((fixture) => ({ fixture, roundIndex: getRoundIndex(fixture, roundOrder) }))
+		.sort((left, right) => (left.roundIndex ?? 0) - (right.roundIndex ?? 0));
 	const unscheduledFixtures = [];
 
-	for (const fixture of fixturesToSchedule) {
+	for (const { fixture, roundIndex } of fixturesToSchedule) {
+		const barrier = findRoundBarrier(roundEndByDivision, fixture.division_id, roundIndex);
 		const availableSlots = candidateSlots.filter((slot) => {
+			if (barrier !== null && toInstant(slot.day, slot.startTime) < barrier) {
+				return false;
+			}
+
 			if (occupiedSlotKeys.has(`${slot.day}_${slot.courtId}_${slot.startTime}`)) {
 				return false;
 			}
@@ -241,6 +342,12 @@ export function generateAutomaticSchedule({
 		schedule.entries.push(entry);
 		occupiedSlotKeys.add(`${bestSlot.day}_${bestSlot.courtId}_${bestSlot.startTime}`);
 		courtLoad[bestSlot.courtId] = (courtLoad[bestSlot.courtId] || 0) + 1;
+		recordRoundEnd(
+			roundEndByDivision,
+			fixture.division_id,
+			roundIndex,
+			toInstant(bestSlot.day, bestSlot.endTime)
+		);
 
 		const courtKey = getFixtureCourtKey(fixture);
 		if (courtKey && !courtAffinity[courtKey]) {

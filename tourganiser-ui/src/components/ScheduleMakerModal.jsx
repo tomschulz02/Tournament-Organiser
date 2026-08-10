@@ -1,14 +1,15 @@
 import React, { startTransition, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
-import { exportSchedulePdf } from '../utils/scheduleExport';
+import { printSchedule } from '../utils/scheduleExport';
 import { generateAutomaticSchedule } from '../utils/scheduleGenerator';
 import {
 	addMinutesToTime,
 	buildFixtureIndex,
-	buildTimeSlots,
+	buildGridRowTimes,
 	calculateScheduledStats,
 	compareTimes,
 	createBreakEntry,
@@ -17,13 +18,13 @@ import {
 	getCourtName,
 	getDayBounds,
 	getDayEntries,
-	getEntrySlotSpan,
 	getScheduleForTournament,
 	getUnscheduledFixtures,
 	normaliseFixtures,
 	removeScheduleEntry,
 	serialiseScheduleForSave,
 	sortScheduleEntries,
+	timeToMinutes,
 	upsertScheduleEntry,
 	validateScheduleEntry,
 } from '../utils/scheduleUtils';
@@ -112,6 +113,32 @@ function getSlotKey(day, courtId, startTime) {
 	return `${day}_${courtId}_${startTime}`;
 }
 
+// Two things can be dropped on a cell and they mean different things: a fixture
+// from the sidebar creates an entry, an entry already on the grid moves one. The
+// payload is prefixed so the drop handler can tell them apart — a bare id could
+// be either.
+const FIXTURE_DRAG = 'fixture:';
+const ENTRY_DRAG = 'entry:';
+
+function readDragPayload(event) {
+	const payload = event.dataTransfer.getData('text/plain') || '';
+
+	if (payload.startsWith(ENTRY_DRAG)) {
+		return { kind: 'entry', id: payload.slice(ENTRY_DRAG.length) };
+	}
+
+	if (payload.startsWith(FIXTURE_DRAG)) {
+		return { kind: 'fixture', id: payload.slice(FIXTURE_DRAG.length) };
+	}
+
+	return { kind: 'none', id: '' };
+}
+
+// Everything inside the modal that can take focus. Used to keep Tab inside it,
+// which aria-modal="true" claims and only a focus trap delivers.
+const FOCUSABLE =
+	'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function createSlotDraft(day, courtId, startTime, slotMinutes) {
 	return {
 		day,
@@ -146,6 +173,10 @@ export default function ScheduleMakerModal({
 	const [roundFilter, setRoundFilter] = useState('all');
 	const [divisionFilter, setDivisionFilter] = useState('all');
 	const [slotDraft, setSlotDraft] = useState(null);
+	// Which placed entry is mid-drag, so the cells it currently occupies stay
+	// droppable. Without it a nudge from 09:00 to 09:30 is refused by the entry's
+	// own occupancy.
+	const [draggingEntryId, setDraggingEntryId] = useState(null);
 	const [breakDraft, setBreakDraft] = useState(null);
 	const [courtDraft, setCourtDraft] = useState('');
 	const [generatorDraft, setGeneratorDraft] = useState(() => ({
@@ -155,9 +186,8 @@ export default function ScheduleMakerModal({
 		fixtureDurationMinutes: initialSchedule.settings.slotMinutes,
 	}));
 	const [entryForm, setEntryForm] = useState(null);
-	const exportGridRef = useRef(null);
-	const exportListRef = useRef(null);
 	const initialScheduleRef = useRef(null);
+	const modalRef = useRef(null);
 	const [schedule, dispatch] = useReducer(scheduleReducer, initialSchedule);
 	const deferredSearch = useDeferredValue(fixtureSearch);
 
@@ -166,6 +196,22 @@ export default function ScheduleMakerModal({
 
 		document.body.classList.add('noscroll');
 		return () => document.body.classList.remove('noscroll');
+	}, [isOpen]);
+
+	// Focus moves into the modal on open and back to whatever opened it on close.
+	// Without this, Tab from an unfocused dialog walks the page behind it, which
+	// aria-modal="true" says it will not.
+	useEffect(() => {
+		if (!isOpen) return;
+
+		const previouslyFocused = document.activeElement;
+		modalRef.current?.focus();
+
+		return () => {
+			if (previouslyFocused instanceof HTMLElement) {
+				previouslyFocused.focus();
+			}
+		};
 	}, [isOpen]);
 
 	useEffect(() => {
@@ -219,6 +265,36 @@ export default function ScheduleMakerModal({
 		}
 
 		onClose();
+	};
+
+	// Escape closes; Tab cycles within the modal. Handled here rather than on
+	// window, because focus is already trapped inside and a document-level
+	// listener would also fire for anything else that happens to be open.
+	const handleKeyDown = (event) => {
+		if (event.key === 'Escape') {
+			event.stopPropagation();
+			handleClose();
+			return;
+		}
+
+		if (event.key !== 'Tab' || !modalRef.current) return;
+
+		// offsetParent is null for anything display:none, which is how the hidden
+		// export roots stay out of the cycle.
+		const items = [...modalRef.current.querySelectorAll(FOCUSABLE)].filter((node) => node.offsetParent !== null);
+		if (items.length === 0) return;
+
+		const first = items[0];
+		const last = items[items.length - 1];
+		const active = document.activeElement;
+
+		if (event.shiftKey && (active === first || active === modalRef.current)) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && active === last) {
+			event.preventDefault();
+			first.focus();
+		}
 	};
 
 	const handleSave = async () => {
@@ -304,10 +380,44 @@ export default function ScheduleMakerModal({
 		showMessage(`${fixture.team1} vs ${fixture.team2} scheduled.`, 'success');
 	};
 
-	const handleDropFixture = (event, day, courtId, startTime) => {
+	// A move keeps the entry's duration and changes only where it sits. It is
+	// validated the same way a new placement is — validateScheduleEntry takes an
+	// ignoreEntryId, which exists for exactly this: the entry must not be found to
+	// conflict with itself.
+	const handleMoveEntry = (entryId, day, courtId, startTime) => {
+		const entry = schedule.entries.find((item) => item.id === entryId);
+		if (!entry) return;
+
+		const durationMinutes = timeToMinutes(entry.endTime) - timeToMinutes(entry.startTime);
+		const candidate = {
+			...entry,
+			day,
+			courtId,
+			startTime,
+			endTime: addMinutesToTime(startTime, durationMinutes),
+		};
+
+		const validationError = validateScheduleEntry(schedule, candidate, entry.id);
+		if (validationError) {
+			showMessage(validationError, 'error');
+			return;
+		}
+
+		dispatch({ type: 'upsertEntry', payload: candidate });
+		markDirty();
+		showMessage(`Moved to ${candidate.startTime} on ${getCourtName(schedule, candidate.courtId)}.`, 'success');
+	};
+
+	const handleDropOnSlot = (event, day, courtId, startTime) => {
 		event.preventDefault();
-		const fixtureId = event.dataTransfer.getData('text/plain');
-		const fixture = fixturesById[fixtureId];
+		const payload = readDragPayload(event);
+
+		if (payload.kind === 'entry') {
+			handleMoveEntry(payload.id, day, courtId, startTime);
+			return;
+		}
+
+		const fixture = fixturesById[payload.id];
 		if (!fixture) return;
 
 		handleAssignFixtureToSlot(
@@ -392,6 +502,10 @@ export default function ScheduleMakerModal({
 		const result = generateAutomaticSchedule({
 			baseSchedule: schedule,
 			fixtures,
+			// For round order only: a round cannot begin until the round feeding
+			// it has finished, and that order lives in each division's
+			// state.rounds rather than on a fixture.
+			divisions: divisionList,
 			startDate: tournament.startDate || tournament.start_date,
 			endDate: tournament.endDate || tournament.end_date || tournament.startDate || tournament.start_date,
 			courtCount: Number(generatorDraft.courtCount),
@@ -411,26 +525,37 @@ export default function ScheduleMakerModal({
 		}
 	};
 
-	const handleExport = async (type) => {
+	// Opens the browser's print dialog on the chosen layout. Save as PDF from
+	// there is what replaced the immediate download.
+	const handlePrint = (type) => {
 		try {
-			await exportSchedulePdf({
-				rootElement: type === 'grid' ? exportGridRef.current : exportListRef.current,
-				filename: `${tournamentName}-${type}-schedule.pdf`.replace(/\s+/g, '-').toLowerCase(),
-				orientation: type === 'grid' ? 'landscape' : 'portrait',
-			});
+			printSchedule(type);
 		} catch {
-			showMessage('Failed to export the schedule PDF.', 'error');
+			showMessage('Could not open the print dialog.', 'error');
 		}
 	};
 
-	return (
-		<div className="modal-backdrop schedule-maker-backdrop" role="presentation" onClick={handleClose}>
+	// Portalled onto document.body. The modal is rendered inline from View.jsx,
+	// inside <main id="app">, whose padding-top clears the fixed site header —
+	// and the header and footer both sit in the same stacking context with a
+	// higher z-index than .modal-backdrop, so they painted over the modal's top
+	// and bottom. Leaving the tree removes the whole class of problem: no
+	// ancestor can create a containing block for it and no sibling can be raised
+	// above it by accident.
+	return createPortal(
+		<div
+			className="modal-backdrop schedule-maker-backdrop"
+			role="presentation"
+			onClick={handleClose}
+			onKeyDown={handleKeyDown}>
 			{saving && <LoadingScreen />}
 			<div
 				className="schedule-maker-modal"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="schedule-maker-title"
+				ref={modalRef}
+				tabIndex={-1}
 				onClick={(event) => event.stopPropagation()}>
 				<div className="schedule-maker-header">
 					<div>
@@ -443,11 +568,11 @@ export default function ScheduleMakerModal({
 						</p>
 					</div>
 					<div className="schedule-maker-header-actions">
-						<button type="button" onClick={() => handleExport('grid')}>
-							Export Grid PDF
+						<button type="button" onClick={() => handlePrint('grid')}>
+							Print Grid
 						</button>
-						<button type="button" onClick={() => handleExport('list')}>
-							Export List PDF
+						<button type="button" onClick={() => handlePrint('list')}>
+							Print List
 						</button>
 						<button type="button" className="schedule-maker-close" onClick={handleClose} aria-label="Close schedule maker">
 							<Icon name="exit" />
@@ -560,7 +685,7 @@ export default function ScheduleMakerModal({
 											type="button"
 											draggable
 											className="schedule-fixture-pill"
-											onDragStart={(event) => event.dataTransfer.setData('text/plain', fixture.id)}>
+											onDragStart={(event) => event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`)}>
 											<strong>{fixture.team1}</strong>
 											<span>vs</span>
 											<strong>{fixture.team2}</strong>
@@ -586,9 +711,11 @@ export default function ScheduleMakerModal({
 								activeDay={activeDay}
 								fixturesById={fixturesById}
 								canEdit={canEdit}
+								draggingEntryId={draggingEntryId}
 								onSelectEntry={openEntryEditor}
 								onOpenSlot={handleOpenSlotPicker}
-								onDropFixture={handleDropFixture}
+								onDropOnSlot={handleDropOnSlot}
+								onDragEntry={setDraggingEntryId}
 							/>
 						) : (
 							<ScheduleListView
@@ -634,36 +761,80 @@ export default function ScheduleMakerModal({
 					</aside>
 				</div>
 
-				<div className="schedule-export-root" ref={exportGridRef}>
+				{/* Off screen until printed. The print stylesheet shows exactly one of
+				    these, chosen by the attribute printSchedule sets on the body. */}
+				<div className="schedule-export-root" data-export-view="grid">
 					<ScheduleExportPages type="grid" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} />
 				</div>
-				<div className="schedule-export-root" ref={exportListRef}>
+				<div className="schedule-export-root" data-export-view="list">
 					<ScheduleExportPages type="list" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} />
 				</div>
 			</div>
-		</div>
+		</div>,
+		document.body
 	);
 }
 
-function ScheduleGridView({ schedule, activeDay, fixturesById, canEdit, onSelectEntry, onOpenSlot, onDropFixture }) {
-	const dayBounds = getDayBounds(schedule, activeDay);
-	const slotMinutes = schedule.settings.slotMinutes;
-	const timeSlots = buildTimeSlots(dayBounds.start, dayBounds.end, slotMinutes);
-	const dayEntries = getDayEntries(schedule, activeDay);
-	const occupiedSlots = new Set();
+// Where one entry sits on the grid. rowStart and rowEnd are 1-based grid lines,
+// so an entry occupies rows rowStart to rowEnd - 1.
+//
+// courtIndex is -1 when the entry names a court that is no longer in the schedule
+// — which happens the moment the court count is reduced below it. That entry has
+// no column to be drawn in, and drawing it in the first one moves it silently.
+// It is listed beneath the grid instead.
+function locateEntry(entry, rowTimes, courts) {
+	const rowStart = rowTimes.indexOf(entry.startTime) + 1;
+	const rowEnd = rowTimes.indexOf(entry.endTime) + 1;
+	const courtIndex = entry.courtId === null ? null : courts.findIndex((court) => court.id === entry.courtId);
 
-	dayEntries.forEach((entry) => {
+	return {
+		entry,
+		rowStart,
+		rowSpan: Math.max(1, rowEnd - rowStart),
+		courtIndex,
+		placeable: rowStart > 0 && rowEnd > rowStart && courtIndex !== -1,
+	};
+}
+
+function ScheduleGridView({
+	schedule,
+	activeDay,
+	fixturesById,
+	canEdit,
+	draggingEntryId,
+	onSelectEntry,
+	onOpenSlot,
+	onDropOnSlot,
+	onDragEntry,
+}) {
+	const dayBounds = getDayBounds(schedule, activeDay);
+	// One more time than there are rows: the last is the day's closing boundary.
+	const rowTimes = buildGridRowTimes(schedule, activeDay, dayBounds);
+	const timeSlots = rowTimes.slice(0, -1);
+	const dayEntries = getDayEntries(schedule, activeDay);
+	const located = dayEntries.map((entry) => locateEntry(entry, rowTimes, schedule.courts));
+	const placedEntries = located.filter((item) => item.placeable);
+	const unplaceableEntries = located.filter((item) => !item.placeable).map((item) => item.entry);
+	const occupiedSlots = new Set();
+	// The same set minus the entry being dragged. A drop must respect occupancy,
+	// but an entry does not block itself — otherwise a placed entry could only
+	// ever be moved somewhere it does not already overlap.
+	const dropBlockedSlots = new Set();
+
+	// Still row by row and still spanning multi-row entries; only the row list it
+	// walks has changed, and every placed entry now has an exact range in it.
+	placedEntries.forEach(({ entry, rowStart, rowSpan }) => {
 		if (entry.courtId === null) {
 			return;
 		}
 
-		const startIndex = timeSlots.findIndex((slot) => slot === entry.startTime);
-		const span = getEntrySlotSpan(entry, slotMinutes);
-
-		for (let offset = 0; offset < span; offset += 1) {
-			const slot = timeSlots[startIndex + offset];
+		for (let offset = 0; offset < rowSpan; offset += 1) {
+			const slot = timeSlots[rowStart - 1 + offset];
 			if (slot) {
 				occupiedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
+				if (entry.id !== draggingEntryId) {
+					dropBlockedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
+				}
 			}
 		}
 	});
@@ -701,45 +872,70 @@ function ScheduleGridView({ schedule, activeDay, fixturesById, canEdit, onSelect
 							{schedule.courts.map((court) => {
 								const slotKey = getSlotKey(activeDay, court.id, time);
 								const isOccupied = occupiedSlots.has(slotKey);
+								const acceptsDrop = canEdit && !dropBlockedSlots.has(slotKey);
 
 								return (
 									<div
 										key={slotKey}
 										className={`schedule-grid-cell ${isOccupied ? 'occupied' : 'open'}`}
 										onClick={() => !isOccupied && canEdit && onOpenSlot(activeDay, court.id, time)}
-										onDragOver={(event) => !isOccupied && event.preventDefault()}
-										onDrop={(event) => !isOccupied && onDropFixture(event, activeDay, court.id, time)}
+										onDragOver={(event) => acceptsDrop && event.preventDefault()}
+										onDrop={(event) => acceptsDrop && onDropOnSlot(event, activeDay, court.id, time)}
 									/>
 								);
 							})}
 						</React.Fragment>
 					))}
 
-					{dayEntries.map((entry) => {
-						const rowStart = Math.max(1, timeSlots.findIndex((slot) => slot === entry.startTime) + 1);
-						const rowSpan = getEntrySlotSpan(entry, slotMinutes);
-						const courtIndex = entry.courtId === null ? 1 : Math.max(1, schedule.courts.findIndex((court) => court.id === entry.courtId) + 1);
-
-						return (
-							<button
-								key={entry.id}
-								type="button"
-								className={`schedule-grid-entry ${entry.type}`}
-								style={{
-									gridColumn: entry.courtId === null ? `2 / span ${schedule.courts.length}` : `${courtIndex + 1}`,
-									gridRow: `${rowStart} / span ${rowSpan}`,
-								}}
-								onClick={() => onSelectEntry(entry)}>
-								<div className="schedule-grid-entry-time">
-									{entry.startTime} - {entry.endTime}
-								</div>
-								<div className="schedule-grid-entry-title">{getEntryLabel(entry, fixturesById)}</div>
-								<div className="schedule-grid-entry-subtitle">{getEntrySecondary(entry, fixturesById)}</div>
-							</button>
-						);
-					})}
+					{placedEntries.map(({ entry, rowStart, rowSpan, courtIndex }) => (
+						// Draggable and clickable at once: dragging moves the entry, clicking
+						// opens the inspector. The payload is the entry id rather than the
+						// fixture id, which is how the cell tells a move from a placement.
+						<button
+							key={entry.id}
+							type="button"
+							className={`schedule-grid-entry ${entry.type}`}
+							draggable={canEdit}
+							onDragStart={(event) => {
+								event.dataTransfer.setData('text/plain', `${ENTRY_DRAG}${entry.id}`);
+								onDragEntry(entry.id);
+							}}
+							onDragEnd={() => onDragEntry(null)}
+							style={{
+								gridColumn: entry.courtId === null ? `2 / span ${schedule.courts.length}` : `${courtIndex + 2}`,
+								gridRow: `${rowStart} / span ${rowSpan}`,
+							}}
+							onClick={() => onSelectEntry(entry)}>
+							<div className="schedule-grid-entry-time">
+								{entry.startTime} - {entry.endTime}
+							</div>
+							<div className="schedule-grid-entry-title">{getEntryLabel(entry, fixturesById)}</div>
+							<div className="schedule-grid-entry-subtitle">{getEntrySecondary(entry, fixturesById)}</div>
+						</button>
+					))}
 				</div>
 			</div>
+
+			{unplaceableEntries.length > 0 && (
+				<div className="schedule-grid-unplaceable">
+					<h4>Not shown on the grid</h4>
+					<p>
+						{unplaceableEntries.length === 1 ? 'This entry is' : 'These entries are'} on a court that is no longer in
+						the schedule. Open {unplaceableEntries.length === 1 ? 'it' : 'each one'} to move or remove{' '}
+						{unplaceableEntries.length === 1 ? 'it' : 'them'}.
+					</p>
+					<div className="schedule-grid-unplaceable-list">
+						{unplaceableEntries.map((entry) => (
+							<button key={entry.id} type="button" className="schedule-fixture-pill" onClick={() => onSelectEntry(entry)}>
+								<strong>{getEntryLabel(entry, fixturesById)}</strong>
+								<small>
+									{entry.startTime} - {entry.endTime} - {getCourtName(schedule, entry.courtId)}
+								</small>
+							</button>
+						))}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -924,7 +1120,11 @@ function GeneratorPanel({ draft, onChange, onGenerate }) {
 	return (
 		<div className="schedule-panel">
 			<h3>Generate Schedule</h3>
-			<p>Fixtures will be placed in their current generated order, with group affinity and team rest preferences applied.</p>
+			<p>
+				Fixtures are placed round by round, so a division's knockout matches never start before its pool play
+				finishes. Within a round they keep their generated order, with group affinity and team rest preferences
+				applied. Divisions still run alongside each other.
+			</p>
 			<div className="schedule-form-grid">
 				<label>
 					<span>Number of Courts</span>
@@ -1074,7 +1274,10 @@ function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 
 function ScheduleExportGridDay({ schedule, day, fixturesById }) {
 	const dayBounds = getDayBounds(schedule, day);
-	const slots = buildTimeSlots(dayBounds.start, dayBounds.end, schedule.settings.slotMinutes);
+	// The same row boundaries the on-screen grid uses, so an entry that does not
+	// land on a slot boundary appears on the printed page rather than being
+	// dropped from it.
+	const slots = buildGridRowTimes(schedule, day, dayBounds).slice(0, -1);
 	const entries = getDayEntries(schedule, day);
 
 	return (

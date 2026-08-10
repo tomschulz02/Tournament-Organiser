@@ -18,9 +18,11 @@ import { flattenFixtures } from '../components/tournament/fixtureUtils';
 import { useMessage } from '../MessageContext';
 import { updateFixtureResult, updateTournamentSchedule } from '../requests';
 
-// Split out of the main bundle. The schedule maker pulls in the PDF export and
-// with it jsPDF and DOMPurify — around two thirds of the whole bundle — for a
-// screen only an organiser opens, and only deliberately.
+// Split out of the main bundle. It is a large screen — a grid, a list, an
+// inspector, a generator and two print layouts — that only an organiser opens,
+// and only deliberately. It used to also drag in jsPDF and html2canvas; printing
+// through the browser removed that, so the chunk is much smaller than it was,
+// but the component is still worth deferring.
 const ScheduleMakerModal = lazy(() => import('../components/ScheduleMakerModal'));
 
 export default function ViewPage() {
@@ -178,10 +180,9 @@ export default function ViewPage() {
 	// the modal opens on whatever schedule exists, empty or not.
 	const [scheduleOpen, setScheduleOpen] = useState(false);
 
-	// PUT /tournaments/:id/schedule answers 501 until it is implemented, so this
-	// path currently ends in a toast. That is deliberate — per A2 the UI wires to
-	// the real endpoint and surfaces the real message rather than special-casing
-	// it. The returned shape is what ScheduleMakerModal reads to decide whether to
+	// The server validates the whole schedule before writing it and names the rule
+	// it broke, so a rejection is shown as it arrives rather than reworded here.
+	// The returned shape is what ScheduleMakerModal reads to decide whether to
 	// stay open on a failed save.
 	const handleSaveSchedule = async (schedule) => {
 		try {

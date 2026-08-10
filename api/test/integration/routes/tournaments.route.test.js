@@ -13,7 +13,8 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         fetchTournamentDetails: vi.fn(),
         startTournament: vi.fn(),
         endTournament: vi.fn(),
-        deleteTournament: vi.fn()
+        deleteTournament: vi.fn(),
+        updateSchedule: vi.fn()
     }
 }));
 
@@ -31,6 +32,7 @@ beforeEach(() => {
     vi.mocked(tournamentService.startTournament).mockReset();
     vi.mocked(tournamentService.endTournament).mockReset();
     vi.mocked(tournamentService.deleteTournament).mockReset();
+    vi.mocked(tournamentService.updateSchedule).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -224,8 +226,7 @@ describe("lifecycle transitions the tournament is not in", () => {
 // is already on them so the auth shape does not change when they are implemented.
 describe.each([
     ["post", `/api/tournaments/${VALID_UUID}/save`, "follow"],
-    ["delete", `/api/tournaments/${VALID_UUID}/save`, "unfollow"],
-    ["put", `/api/tournaments/${VALID_UUID}/schedule`, "save schedule"]
+    ["delete", `/api/tournaments/${VALID_UUID}/save`, "unfollow"]
 ])("%s %s", (method, path, purpose) => {
     it("requires a session", async () => {
         const response = await request(app)[method](path);
@@ -247,5 +248,78 @@ describe.each([
             message: "This feature is not available yet",
             data: null
         });
+    });
+});
+
+describe("PUT /api/tournaments/:tournamentId/schedule", () => {
+    const path = `/api/tournaments/${VALID_UUID}/schedule`;
+    const schedule = { version: 1, days: [], courts: [], entries: [], settings: {} };
+
+    it("requires a session", async () => {
+        const response = await request(app).put(path).send({ schedule });
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.updateSchedule).not.toHaveBeenCalled();
+    });
+
+    it("saves the schedule for the owner", async () => {
+        tournamentService.updateSchedule.mockResolvedValue({ id: VALID_UUID, entries: 0 });
+
+        const response = await request(app)
+            .put(path)
+            .set("Cookie", authCookie({ id: "user-1", username: "tom" }))
+            .send({ schedule });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Schedule saved",
+            data: { id: VALID_UUID, entries: 0 }
+        });
+        expect(tournamentService.updateSchedule).toHaveBeenCalledWith(VALID_UUID, "user-1", schedule);
+    });
+
+    it("answers 404 for a tournament id that is not a UUID", async () => {
+        const response = await request(app)
+            .put("/api/tournaments/12345/schedule")
+            .set("Cookie", authCookie())
+            .send({ schedule });
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Tournament not found");
+        expect(tournamentService.updateSchedule).not.toHaveBeenCalled();
+    });
+
+    it("answers 403 when the tournament belongs to someone else", async () => {
+        tournamentService.updateSchedule.mockRejectedValue(new AppError("NOT_TOURNAMENT_OWNER"));
+
+        const response = await request(app).put(path).set("Cookie", authCookie()).send({ schedule });
+
+        expect(response.status).toBe(403);
+        expect(response.body.message).toBe("You do not own this tournament");
+    });
+
+    // Each rule has its own code and its own message, so the organiser is told
+    // which one they broke. The rules themselves are covered in the validator's
+    // unit suite; this asserts they survive the trip through the middleware,
+    // details and all.
+    it.each([
+        ["SCHEDULE_MALFORMED", 400, "The schedule is not in a recognised format"],
+        ["SCHEDULE_TIME_INVALID", 400, "An entry ends before it starts"],
+        ["SCHEDULE_DAY_OUT_OF_RANGE", 400, "An entry falls outside the tournament dates"],
+        ["SCHEDULE_FIXTURE_UNKNOWN", 400, "A scheduled match does not belong to this tournament"],
+        ["SCHEDULE_FIXTURE_REPEATED", 400, "A match is scheduled more than once"],
+        ["SCHEDULE_COURT_CLASH", 409, "Two entries use the same court at the same time"],
+        ["SCHEDULE_TEAM_CLASH", 409, "A team is scheduled in two places at once"],
+        ["SCHEDULE_ROUND_ORDER", 409, "A match is scheduled before the round feeding it has finished"]
+    ])("reports %s as its own %i with its own message", async (code, status, message) => {
+        tournamentService.updateSchedule.mockRejectedValue(
+            new AppError(code, { details: { entryId: "entry-1" } })
+        );
+
+        const response = await request(app).put(path).set("Cookie", authCookie()).send({ schedule });
+
+        expect(response.status).toBe(status);
+        expect(response.body).toEqual({ success: false, message, data: { entryId: "entry-1" } });
     });
 });

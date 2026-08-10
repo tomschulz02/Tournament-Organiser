@@ -411,6 +411,37 @@ export function buildTimeSlots(startTime, endTime, slotMinutes) {
 	return slots;
 }
 
+// The row boundaries a day's grid is drawn on, ascending, including the closing
+// boundary — so a grid of n rows gets n + 1 times back.
+//
+// buildTimeSlots alone is not enough. An entry only lands on a slot boundary
+// while slotMinutes and dayStartTime are unchanged, and the moment either moves,
+// an existing entry sits between two rows with no row to occupy. Looking its
+// start time up in the ladder then returns "not found", which used to be read as
+// row 1 — so several entries stacked in the same cell at the top of the grid.
+//
+// Adding each entry's own start and end as boundaries gives every entry an exact
+// row range instead. The grid gains a row wherever an entry needs one, which is
+// visible and correct, rather than drawing it somewhere it is not.
+export function buildGridRowTimes(schedule, day, bounds) {
+	const times = new Set(buildTimeSlots(bounds.start, bounds.end, schedule.settings.slotMinutes));
+	times.add(bounds.start);
+	times.add(bounds.end);
+
+	getDayEntries(schedule, day).forEach((entry) => {
+		// getDayBounds already widens the day to contain its entries, so this
+		// only discards a time the bounds could not cover.
+		if (compareTimes(entry.startTime, bounds.start) >= 0 && compareTimes(entry.startTime, bounds.end) <= 0) {
+			times.add(entry.startTime);
+		}
+		if (compareTimes(entry.endTime, bounds.start) >= 0 && compareTimes(entry.endTime, bounds.end) <= 0) {
+			times.add(entry.endTime);
+		}
+	});
+
+	return [...times].sort(compareTimes);
+}
+
 export function getEntrySlotSpan(entry, slotMinutes) {
 	return Math.max(1, Math.ceil((timeToMinutes(entry.endTime) - timeToMinutes(entry.startTime)) / slotMinutes));
 }

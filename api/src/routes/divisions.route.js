@@ -11,10 +11,13 @@ divisionRouter.use(express.json());
 divisionRouter.get('/:divisionId/progression', requireAuth, divisionController.getProgression);
 divisionRouter.post('/:divisionId/progression', requireAuth, divisionController.commitProgression);
 
-// Declared, not implemented: all three answer 501. See tournaments.route.js for
-// why the stubs carry requireAuth already.
-divisionRouter.post('/:divisionId/teams', requireAuth, divisionController.addTeam);
-divisionRouter.put('/:divisionId/teams/:teamId', requireAuth, divisionController.updateTeam);
-divisionRouter.delete('/:divisionId/teams/:teamId', requireAuth, divisionController.removeTeam);
+// The division's teams and structure, edited as one list. The service decides
+// from the submitted ids whether this is a rename or a rebuild, and additionally
+// checks that the caller owns the tournament.
+divisionRouter.put('/:divisionId', requireAuth, divisionController.updateDivision);
+
+// The per-team add, rename and remove routes were removed on 2026-08-10. Teams
+// and structure cannot change independently, so three routes were three ways to
+// leave a division inconsistent — see docs/api.md.
 
 export default divisionRouter;

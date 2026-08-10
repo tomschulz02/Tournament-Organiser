@@ -111,6 +111,15 @@ describe("updateSchedule", () => {
         expect(params).toEqual(['{"slots":[]}', "tour-1"]);
     });
 
+    // A division rebuild repairs the schedule inside the transaction that
+    // deleted the fixtures it referenced.
+    it("joins the caller's transaction when given a client", async () => {
+        await tournamentRepository.updateSchedule("tour-1", { slots: [] }, client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
     it("throws, keeping the underlying error as cause", async () => {
         const underlying = new Error("connection lost");
         db.query.mockRejectedValueOnce(underlying);
@@ -118,6 +127,37 @@ describe("updateSchedule", () => {
         const failure = await tournamentRepository.updateSchedule("tour-1", {}).catch((err) => err);
 
         expect(failure.message).toBe("Failed to update schedule");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+// The read half of the schedule repair. Takes the client rather than defaulting
+// to the pool, for the same reason as divisions' getStateForUpdate: a lock taken
+// outside the transaction that does the write achieves nothing.
+describe("getScheduleForUpdate", () => {
+    it("reads the schedule and locks the row", async () => {
+        client.query.mockResolvedValueOnce({ rows: [{ schedule: { entries: [] } }], rowCount: 1 });
+
+        expect(await tournamentRepository.getScheduleForUpdate("tour-1", client)).toEqual({ entries: [] });
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe("SELECT schedule FROM tournaments WHERE id = $1::uuid FOR UPDATE");
+        expect(params).toEqual(["tour-1"]);
+    });
+
+    it("returns null when the tournament does not exist", async () => {
+        client.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+        expect(await tournamentRepository.getScheduleForUpdate("missing", client)).toBeNull();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.getScheduleForUpdate("tour-1", client).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch schedule");
         expect(failure.cause).toBe(underlying);
     });
 });

@@ -1315,7 +1315,7 @@ Loading Screen styles
 	}
 }
 
-/* 
+/*
 Confirmation Dialog styles
 */
 .confirm-backdrop {
@@ -1328,7 +1328,11 @@ Confirmation Dialog styles
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	z-index: 1000;
+	/* Above every modal, because a confirmation is always asked ON BEHALF of one:
+	   the schedule maker's own Discard and close-with-unsaved-changes prompts are
+	   asked from inside a backdrop at 1100, and at 1000 this sat underneath it,
+	   leaving that modal looking frozen. Below the toast and the loading screen. */
+	z-index: 1200;
 }
 
 .confirm-modal {
@@ -4024,6 +4028,11 @@ body.dark {
 	align-items: stretch;
 	padding: 18px;
 	background: rgba(0, 0, 0, 0.58);
+	/* Above the fixed header (1000) and the footer (10). .modal-backdrop's own
+	   z-index of 5 sits under both, which is what cut the modal off at the top and
+	   the bottom; the modal is portalled onto document.body so this is the only
+	   thing deciding the order. Still under the tooltip and the loading screen. */
+	z-index: 1100;
 }
 
 .schedule-maker-modal {
@@ -4266,7 +4275,39 @@ body.dark {
 .schedule-grid-shell {
 	height: 100%;
 	display: grid;
-	grid-template-rows: auto minmax(0, 1fr);
+	/* The third row is the unplaceable list, which is absent unless an entry
+	   names a court the schedule no longer has. */
+	grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.schedule-grid-unplaceable {
+	margin-top: 12px;
+	padding: 14px 16px;
+	border: 1px dashed var(--schedule-danger);
+	border-radius: 16px;
+	background: rgb(from var(--schedule-danger) r g b / 0.08);
+}
+
+.schedule-grid-unplaceable h4 {
+	font-size: 0.95rem;
+	margin-bottom: 4px;
+}
+
+.schedule-grid-unplaceable p {
+	color: var(--schedule-muted);
+	font-size: 0.85rem;
+	margin-bottom: 10px;
+}
+
+.schedule-grid-unplaceable-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+/* These are not draggable — there is nowhere to drag them from. */
+.schedule-grid-unplaceable-list .schedule-fixture-pill {
+	cursor: pointer;
 }
 
 .schedule-grid-header,
@@ -4336,6 +4377,16 @@ body.dark {
 	cursor: pointer;
 	z-index: 2;
 	box-shadow: 0 12px 20px rgba(0, 0, 0, 0.14);
+}
+
+/* An organiser can drag a placed entry to another slot; a click still opens the
+   inspector. A viewer can only click. */
+.schedule-grid-entry[draggable='true'] {
+	cursor: grab;
+}
+
+.schedule-grid-entry[draggable='true']:active {
+	cursor: grabbing;
 }
 
 .schedule-grid-entry.fixture {
@@ -4512,6 +4563,111 @@ body.dark {
 	top: 0;
 	width: 1200px;
 	pointer-events: none;
+}
+
+/*
+Printing the schedule.
+
+printSchedule() in utils/scheduleExport.js sets data-print-schedule on the body
+and calls window.print(); everything else is here. The two export roots are
+already rendered off screen, so printing is a matter of hiding the application
+around one of them rather than building a second document.
+
+Named pages give each layout its own orientation. A browser without support for
+them falls back to the user's choice in the print dialog, which is a preview,
+which is the whole point of printing rather than downloading.
+*/
+
+@media print {
+	@page grid-schedule {
+		size: A4 landscape;
+		margin: 10mm;
+	}
+
+	@page list-schedule {
+		size: A4 portrait;
+		margin: 12mm;
+	}
+
+	/* body.noscroll is on while the modal is open. Its position: fixed and
+	   overflow-y: scroll clip a printed document to a single sheet, so both are
+	   unwound here — including the !important, which needs one of its own. */
+	body[data-print-schedule],
+	body.noscroll[data-print-schedule] {
+		position: static;
+		background: #fff;
+		overflow: visible !important;
+	}
+
+	/* The application itself, and the modal's own chrome. None of it belongs on
+	   a page an organiser pins to a wall. */
+	body[data-print-schedule] #root,
+	body[data-print-schedule] .schedule-maker-header,
+	body[data-print-schedule] .schedule-maker-toolbar,
+	body[data-print-schedule] .schedule-maker-layout {
+		display: none !important;
+	}
+
+	/* The modal is portalled onto the body, so the path from the body down to the
+	   export root has to be unwound rather than escaped. */
+	body[data-print-schedule] .schedule-maker-backdrop {
+		position: static;
+		display: block;
+		padding: 0;
+		background: none;
+	}
+
+	body[data-print-schedule] .schedule-maker-modal {
+		display: block;
+		width: auto;
+		height: auto;
+		margin: 0;
+		border: none;
+		border-radius: 0;
+		box-shadow: none;
+		overflow: visible;
+		background: #fff;
+	}
+
+	body[data-print-schedule] .schedule-export-root {
+		display: none;
+	}
+
+	body[data-print-schedule='grid'] .schedule-export-root[data-export-view='grid'],
+	body[data-print-schedule='list'] .schedule-export-root[data-export-view='list'] {
+		display: block;
+		position: static;
+		width: auto;
+	}
+
+	body[data-print-schedule='grid'] .schedule-export-page {
+		page: grid-schedule;
+	}
+
+	body[data-print-schedule='list'] .schedule-export-page {
+		page: list-schedule;
+	}
+
+	/* One day per sheet. min-height is dropped so a short day does not pad itself
+	   out to a screen-sized page. */
+	.schedule-export-page {
+		min-height: 0;
+		padding: 0;
+		break-after: page;
+		page-break-after: always;
+	}
+
+	.schedule-export-page:last-child {
+		break-after: auto;
+		page-break-after: auto;
+	}
+
+	/* A row split across a page boundary is unreadable. */
+	.schedule-export-list-row,
+	.schedule-export-header {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
 }
 
 .schedule-export-page {

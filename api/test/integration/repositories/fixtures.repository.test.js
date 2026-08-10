@@ -215,6 +215,38 @@ describe("createFixture", () => {
     });
 });
 
+describe("deleteByDivisionId", () => {
+    // The ids come back because tournaments.schedule references them and the
+    // caller has to know which entries to drop. Requires the client: the delete,
+    // the team reconciliation and the schedule repair are one transaction.
+    it("deletes the division's fixtures and returns the ids that went", async () => {
+        client.query.mockResolvedValueOnce({ rows: [{ id: "f1" }, { id: "f2" }], rowCount: 2 });
+
+        expect(await fixturesRepository.deleteByDivisionId("div-1", client)).toEqual(["f1", "f2"]);
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe("DELETE FROM fixtures WHERE division_id = $1::uuid RETURNING id;");
+        expect(params).toEqual(["div-1"]);
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("returns an empty list when the division had no fixtures", async () => {
+        client.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+        expect(await fixturesRepository.deleteByDivisionId("div-1", client)).toEqual([]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("foreign key violation");
+        client.query.mockRejectedValueOnce(underlying);
+
+        const failure = await failureFrom(fixturesRepository.deleteByDivisionId("div-1", client));
+
+        expect(failure.message).toBe("Failed to delete fixtures");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
 describe("updateFixtures", () => {
     it("updates every fixture inside one transaction", async () => {
         const fixtures = [

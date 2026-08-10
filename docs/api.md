@@ -152,6 +152,8 @@ Implemented:
 | POST | `/api/tournaments/create` | required | Create tournament and divisions |
 | GET | `/api/divisions/:divisionId/progression` | required + owner | Proposed ranking and qualifiers for the current round. Read only. |
 | POST | `/api/divisions/:divisionId/progression` | required + owner | Commit the confirmed ranking and advance the round |
+| PUT | `/api/divisions/:divisionId` | required + owner | Replace a division's teams and structure |
+| PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
 | GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. |
 
@@ -164,34 +166,99 @@ need the service-level ownership check described under Security.
 |---|---|---|---|
 | POST | `/api/tournaments/:tournamentId/save` | required | Follow a tournament |
 | DELETE | `/api/tournaments/:tournamentId/save` | required | Unfollow |
-| PUT | `/api/tournaments/:tournamentId/schedule` | required | Save the tournament schedule |
-| POST | `/api/divisions/:divisionId/teams` | required | Add a team — **to be removed, see below** |
-| PUT | `/api/divisions/:divisionId/teams/:teamId` | required | Rename a team — **to be removed** |
-| DELETE | `/api/divisions/:divisionId/teams/:teamId` | required | Remove a team — **to be removed** |
 
-`PUT /schedule` is the only one whose persistence already exists —
-`tournamentRepository.updateSchedule` writes `tournaments.schedule`. It stays a stub
-because the validation in `docs/decisions.md` has not been written, and an endpoint that
-accepts an unvalidated schedule is worse than one that accepts none.
+`PUT /:tournamentId/schedule` left this table on 2026-08-10 and is described below. It
+was a stub only because the validation had not been written, and an endpoint that accepts
+an unvalidated schedule is worse than one that accepts none.
 
-**The three team stubs are superseded.** They are replaced by a single endpoint, decided
-2026-08-09:
+The three per-team stubs — `POST /:divisionId/teams`, `PUT /:divisionId/teams/:teamId`
+and `DELETE /:divisionId/teams/:teamId` — were **removed** on 2026-08-10, superseded by
+`PUT /api/divisions/:divisionId`. Their paths are gone rather than unimplemented, and now
+answer 404.
 
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| PUT | `/api/divisions/:divisionId` | required + owner | Replace a division's teams and structure |
+### Editing a division's teams
 
-Body: the division's full intended team list, plus `num_groups` and `knockout_teams`.
-The service compares the incoming team ids against `state.teams` and decides what the
-request means — an unchanged set is a rename and touches only `teams.name`; a changed set
-rebuilds the division's rounds, fixtures and `state.teams`, and removes that division's
-entries from `tournaments.schedule`.
+`PUT /api/divisions/:divisionId`. Body: the division's full intended team list, plus
+`num_groups` and `knockout_teams`.
+
+```json
+{
+  "teams": [{ "id": "<teamId>", "name": "Aces" }, { "name": "Eagles" }],
+  "num_groups": 2,
+  "knockout_teams": 4
+}
+```
+
+A team with no `id` is new; a team in `state.teams` and absent from the list is removed.
+The client never declares which it is doing. The service compares the incoming ids
+against `state.teams` and decides:
+
+- **Same set** — a rename. Only the names that moved are written. Nothing structural
+  depends on a name, so fixtures and the schedule are untouched and this is permitted at
+  any point in the tournament.
+- **Different set** — the division is rebuilt: fixtures deleted and regenerated, teams
+  reconciled, `state` rewritten in full, and that division's entries removed from
+  `tournaments.schedule`. Breaks and every other division's placements survive; the
+  column is repaired, never nulled.
 
 Teams and structure cannot be changed independently, which is why this is one endpoint
 rather than three: a team count change alters group sizes and may alter the knockout
-shape. Rejected with 409 unless the tournament is `Not Started` and no fixture in the
-division is `COMPLETED`. See `docs/decisions.md`, "Changing A Division's Teams
-Regenerates Its Structure".
+shape. See `docs/decisions.md`, "Changing A Division's Teams Regenerates Its Structure".
+
+Rejections:
+
+| Status | Meaning |
+|---|---|
+| 400 | Missing or nameless team list, a duplicate name or id, an id the division does not hold, or a group/qualifier count the team count cannot support |
+| 403 | Caller does not own the tournament |
+| 404 | No such division |
+| 409 | Rebuild only — the tournament has started, or the division already holds a completed fixture |
+
+The gate is two checks rather than one because a status can simply be wrong and a
+completed fixture cannot. `num_groups` and `knockout_teams` are required on a rebuild and
+neither is adjusted to fit: the organiser confirms them against the new team count in the
+client, and correcting their choice without saying so is worse than refusing it.
+
+Success returns `rebuilt`, the resulting team list in seed order, and — for a rebuild —
+the fixture count and how many schedule entries were dropped.
+
+### Saving a schedule
+
+`PUT /api/tournaments/:tournamentId/schedule`. Body: `{ "schedule": { … } }`, the whole
+schedule exactly as the client holds it. `docs/schedule.md` is the source of truth for
+that object's shape; the payload is what `serialiseScheduleForSave` produces.
+
+The schedule is replaced, never merged — the client holds the entire object, so a partial
+save has no meaning. Success returns `{ id, entries }`, the number of entries stored.
+
+The generator stays in the client and the server validates on write, settled 2026-08-08
+in `docs/decisions.md`. The server rejects the **impossible**; it does not judge whether a
+schedule is **good**. A partial schedule is legal and one that places nothing is legal.
+
+Rejections. One code per rule rather than one `INVALID_SCHEDULE`, because the message is
+display-ready by contract and "that schedule is invalid" does not tell the organiser
+which rule they broke. Each carries the offending entry ids in `data`.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `SCHEDULE_MALFORMED` | Not the documented shape — a missing id, day or time, a duplicate entry id, an unrecognised `type`, a fixture entry with no `fixtureId` |
+| 400 | `SCHEDULE_TIME_INVALID` | `endTime` is not after `startTime` |
+| 400 | `SCHEDULE_DAY_OUT_OF_RANGE` | An entry's `day` falls outside the tournament's dates |
+| 400 | `SCHEDULE_FIXTURE_UNKNOWN` | An entry names a fixture that is not this tournament's |
+| 400 | `SCHEDULE_FIXTURE_REPEATED` | The same fixture is placed twice |
+| 409 | `SCHEDULE_COURT_CLASH` | Two entries overlap on the same court. `courtId: null` spans every court that day, so an all-courts break clashes with everything |
+| 409 | `SCHEDULE_TEAM_CLASH` | A team is required in two places at once |
+| 409 | `SCHEDULE_ROUND_ORDER` | A fixture starts before an earlier round of its own division has finished |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 404 | `TOURNAMENT_NOT_FOUND` | No such tournament |
+
+`title`, `notes` and `officials` are free text and are stored without inspection, as are
+`days`, `courts` and `settings`.
+
+The write takes a `SELECT … FOR UPDATE` on the tournament row before reading the fixtures
+it validates against, because a division rebuild repairs the same column under the same
+lock. Taking the lock first is what makes both interleavings safe — see
+`docs/schedule.md`.
 
 Called by the frontend but **not implemented** on the backend. `fixtures.route.js` is an
 empty router and `fixtures.controller.js` is an empty file, although the services and
@@ -243,13 +310,14 @@ the convention below replaced them on 2026-08-08.
 | POST | `/api/tournaments/:tournamentId/end` | `PUT /tournaments/end/:tournamentId` |
 | DELETE | `/api/tournaments/:tournamentId` | `/tournaments/delete/:id` |
 | PUT | `/api/fixtures/:fixtureId/result` | `POST /fixtures/result/:fixtureId` |
-| PUT | `/api/divisions/:divisionId/teams` | `/divisions/updateTeams/:divisionId` |
 
 The follow, schedule and team-management paths left this table on 2026-08-08 — they are
 routed now, and listed above as 501s. `PUT /api/divisions/:divisionId/schedule` is gone
 from it entirely: the schedule moved to the tournament, so the replacement is
-`PUT /api/tournaments/:tournamentId/schedule`. `PUT /:divisionId/teams` remains here and
-is separate from the per-team routes above; it reorders seeds rather than editing one team.
+`PUT /api/tournaments/:tournamentId/schedule`. `PUT /:divisionId/teams` left it on
+2026-08-10: reordering seeds is part of submitting the whole list, so
+`PUT /api/divisions/:divisionId` is the replacement for `/divisions/updateTeams/:divisionId`
+as well.
 
 Also renamed: `POST /api/tournaments/create` becomes `POST /api/tournaments`.
 
@@ -307,9 +375,9 @@ Cleared by that work:
 Implemented:
 
 - `requireAuth` middleware, applied to `POST /api/tournaments/create`,
-  `GET /api/users/profile/:id`, both progression endpoints and the six 501 stubs added on
-  2026-08-08. The other live endpoints are intentionally anonymous: browsing and viewing
-  a tournament do not need an account.
+  `GET /api/users/profile/:id`, both progression endpoints, `PUT /api/divisions/:divisionId`
+  and the three 501 stubs remaining from 2026-08-08. The other live endpoints are
+  intentionally anonymous: browsing and viewing a tournament do not need an account.
 - Session lifetime unified at 24 hours in `api/src/config/auth.js`.
 - CORS `allowedHeaders` corrected — it was previously spelled `headers`, which `cors()`
   ignores, and held a single comma-joined string instead of an array.

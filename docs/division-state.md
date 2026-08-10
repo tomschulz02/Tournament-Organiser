@@ -98,6 +98,8 @@ double-book one; putting the schedule on the tournament makes that impossible to
 The `state.schedule` fallback `tournamentViewFormatter.js` used to read is gone with it.
 Nothing reads a schedule out of division state, and nothing writes one there.
 
+`docs/schedule.md` is the source of truth for that column's shape.
+
 ## Example
 
 Taken directly from the database. An eight-team division: one round-robin pool stage

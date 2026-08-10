@@ -207,6 +207,39 @@ that has won sets and lost none. Test with `Number.isFinite(value)`. A `value !=
 check passes on `undefined` and renders `NaN` for exactly the team the sentinel exists
 for — which is what the old tournament view did.
 
+## Scheduling
+
+### A round cannot begin until the round feeding it has finished
+
+Within a division, a fixture in round *n* may not start before the last fixture of every
+round before it has ended. A semifinal at 09:00 on court 2 while pool play runs at 09:00
+on court 1 is not a poor schedule; it is an unplayable one, because the semifinal's teams
+are not known until pool play is over.
+
+**The constraint is per division.** Two divisions running in parallel is correct and
+desirable, and nothing here says a whole tournament has to be serialised onto one court.
+Within a round, fixtures may still run concurrently.
+
+Rounds are ordered by their position in `state.rounds` — see `docs/division-state.md`.
+The third-place playoff is the exception the rest of the codebase already carries: its
+fixture round name is `3rd Place Playoff`, but it belongs to the `Finals` round in
+`state.rounds` and is therefore ordered with the final rather than before it.
+
+The rule is enforced twice, deliberately. `tourganiser-ui/src/utils/scheduleGenerator.js`
+applies it at generation time, as a hard constraint rather than a score, so a generated
+schedule never breaks it. `api/src/utils/scheduleValidator.js` applies it again on write,
+because a schedule can also be built and edited by hand. See `docs/schedule.md`.
+
+A partial schedule is legal, so an earlier round may be entirely unplaced. The constraint
+is measured against every earlier round that *has* been placed, not only the immediately
+preceding one.
+
+### Officials are not assigned
+
+A schedule entry carries an `officials` string and it is stored and displayed, but
+nothing assigns officials, checks their availability, or validates the field. It is free
+text. See `docs/future-features.md`.
+
 ## Organiser Override
 
 The default ranking is a proposal, not a verdict. Tournaments resolve ties in ways this

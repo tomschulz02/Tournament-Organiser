@@ -98,7 +98,9 @@ export const endTournament = (tournamentId) => request(`tournaments/${tournament
 // Cascades to the tournament's divisions, fixtures and saved rows. There is no undo.
 export const deleteTournament = (tournamentId) => request(`tournaments/${tournamentId}`, { method: 'DELETE' });
 
-// A schedule spans the tournament, not a division. Returns 501 until implemented.
+// A schedule spans the tournament, not a division. Sent whole: the server
+// replaces the column rather than merging, and validates before it writes, so a
+// rejection names the rule that was broken. See docs/schedule.md.
 export const updateTournamentSchedule = (tournamentId, schedule) =>
 	request(`tournaments/${tournamentId}/schedule`, { method: 'PUT', body: { schedule } });
 
@@ -124,16 +126,19 @@ export const updateRounds = (divisionId, rounds, qualifiedTeams, standings, fixt
 		body: { rounds, qualifiedTeams, standings, fixtures, currentRound },
 	});
 
-// Team management. All three return 501 until implemented; the ApiError message
-// is display-ready, so a catch can pass it straight to showMessage.
-export const addDivisionTeam = (divisionId, name) =>
-	request(`divisions/${divisionId}/teams`, { method: 'POST', body: { name } });
+// The division's full intended team list, sent as one request.
+//
+// `teams` is [{ id, name }], with id omitted for a team being added; a team left
+// out of the list is being removed. The server compares the ids against the ones
+// it already holds and decides for itself whether this is a rename or a rebuild,
+// so there is nothing here to declare which it is.
+export const updateDivisionTeams = (divisionId, { teams, num_groups, knockout_teams }) =>
+	request(`divisions/${divisionId}`, { method: 'PUT', body: { teams, num_groups, knockout_teams } });
 
-export const updateDivisionTeam = (divisionId, teamId, name) =>
-	request(`divisions/${divisionId}/teams/${teamId}`, { method: 'PUT', body: { name } });
-
-export const removeDivisionTeam = (divisionId, teamId) =>
-	request(`divisions/${divisionId}/teams/${teamId}`, { method: 'DELETE' });
+// The per-team add, rename and remove requests were removed on 2026-08-10.
+// updateDivisionTeams above replaces all three: a team can only be added or
+// removed alongside the structure the division is rebuilt around, so sending one
+// change at a time was three ways to leave a division inconsistent.
 
 // Round progression is a two step flow. This fetches the default ranking and the
 // teams that would qualify, computed by the backend. It mutates nothing.

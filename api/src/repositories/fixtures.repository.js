@@ -112,6 +112,23 @@ async function createFixture(fixtureId, divisionId, matchNo, team1, team2, team1
     }
 }
 
+// Deletes every fixture of one division and returns the ids that went, because
+// tournaments.schedule references them and the caller has to know which entries
+// to drop.
+//
+// Requires the client: the deletion, the team reconciliation that follows it and
+// the schedule repair are one transaction. See divisionService.updateDivision.
+async function deleteByDivisionId(divisionId, client) {
+    try {
+        const sql = "DELETE FROM fixtures WHERE division_id = $1::uuid RETURNING id;";
+        const result = await client.query(sql, [divisionId]);
+
+        return result.rows.map((row) => row.id);
+    } catch (error) {
+        throw new Error("Failed to delete fixtures", { cause: error });
+    }
+}
+
 // used to update the team names in fixtures after a round has been completed
 async function updateFixtures(divisionId, fixtures) {
     const client = await db.pool.connect();
@@ -142,5 +159,6 @@ export const fixturesRepository = {
     updateResult,
     countCompletedInRounds,
     createFixture,
+    deleteByDivisionId,
     updateFixtures
 };

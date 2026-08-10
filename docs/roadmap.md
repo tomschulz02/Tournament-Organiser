@@ -6,7 +6,7 @@ application in a better state than it found it.
 Item codes (`C1`, `B7`, `F3`…) refer to `docs/gap-analysis.md`, which describes each one
 in full. This document says what to do and in what order; that one says why.
 
-Last reviewed 2026-08-08.
+Last reviewed 2026-08-10.
 
 ---
 
@@ -164,6 +164,21 @@ Small, and independent of the endpoints above.
 
 ## Phase 3.5 — Teams
 
+**Complete 2026-08-10.** `PUT /api/divisions/:divisionId` takes a division's full team
+list plus `num_groups` and `knockout_teams`, and decides from the submitted ids whether
+it is renaming or rebuilding. A rename writes names only. A rebuild is gated on
+`Not Started` **and** no completed fixture, validates the structure against the new team
+count before opening a transaction, then deletes the division's fixtures, reconciles the
+team rows, rewrites `state`, regenerates, and repairs `tournaments.schedule` by dropping
+only the entries pointing at deleted fixtures — under a `SELECT ... FOR UPDATE` on the
+tournament row so a concurrent save cannot clobber it.
+
+The three per-team stubs are gone, and `updateGroups` and `updateTeams` went with them,
+closing **B6**. Team edits batch on the client and commit once; a changed team set opens
+a structural confirmation first.
+
+The original scope follows.
+
 Reverses B7. The schema is already changed: `teams (id, name, division_id)`, with no
 `user_id`. Do this before Phase 4, because changing a team invalidates fixtures and any
 schedule built on them.
@@ -175,81 +190,98 @@ schedule built on them.
 - ~~**Decide which side owns membership**~~ — **settled 2026-08-09**, recorded in
   `docs/division-state.md`. `state.teams` is authoritative for order; `teams.division_id`
   is the foreign key, carrying cascade delete and cheap lookup.
-- ~~**Blast radius**~~ — **settled 2026-08-09**, recorded in `docs/decisions.md`.
-  Changing a division's teams regenerates its structure; renaming does not. Build it in
-  this order:
+- ~~**Blast radius**~~ — **settled 2026-08-09**, recorded in `docs/decisions.md`, and
+  ~~**built 2026-08-10**~~. Changing a division's teams regenerates its structure;
+  renaming does not.
 
-  1. **One endpoint, `PUT /api/divisions/:divisionId`**, taking the division's full
+  1. ~~**One endpoint, `PUT /api/divisions/:divisionId`**~~, taking the division's full
      intended team list plus `num_groups` and `knockout_teams`. The three 501 team stubs
-     are removed rather than implemented — teams and structure cannot be changed
+     were removed rather than implemented — teams and structure cannot be changed
      independently, so three endpoints would be three ways to leave a division
      inconsistent.
-  2. **The service derives intent from the data**, comparing incoming ids against
+  2. ~~**The service derives intent from the data**~~, comparing incoming ids against
      `state.teams`. Same set means a rename: update names, stop. Different set means
      rebuild. The client never declares which it is doing, per the server-authority
      decision.
-  3. **Gate on `status === 'Not Started'`**, plus no `COMPLETED` fixture in the division.
-     Note this gate is permanently open until the Phase 3 lifecycle endpoints exist,
-     since nothing currently moves a tournament off `Not Started` — ship them together
-     or the restriction is decorative.
-  4. **Rebuild** = delete the division's fixtures, regenerate `state.rounds` through
+  3. ~~**Gate on `status === 'Not Started'`**~~, plus no `COMPLETED` fixture in the
+     division. Real rather than decorative, because Phase 3 shipped the lifecycle
+     endpoints first.
+  4. ~~**Rebuild**~~ = delete the division's fixtures, regenerate `state.rounds` through
      `generateDivisionDetails`, regenerate fixtures through `generateFixtures`, write the
-     new `state.teams`.
-  5. **Repair the schedule, do not discard it.** It spans the tournament, so remove only
-     the changed division's entries from `tournaments.schedule` and leave the rest
-     placed. Nulling the column throws away unrelated work.
-  6. **Batch on the client.** Edits accumulate and commit once, so the structural
-     confirmation is asked a single time.
+     new `state.teams`. Creation and rebuild share one generation path, so a rebuilt
+     division is indistinguishable from a freshly created one.
+  5. ~~**Repair the schedule, do not discard it.**~~ Only the changed division's entries
+     leave `tournaments.schedule`; breaks and every other division's placements stay.
+  6. ~~**Batch on the client.**~~ Edits accumulate in `TeamsTab` and commit once, so the
+     structural confirmation is asked a single time.
 
-- **The confirmation UI reuses the creation form's division step.** Format, group count
-  and qualifier count already exist there. Default to the organiser's current values,
-  validate against the new team count, and flag rather than silently recompute.
-- **Add and remove division** as their own capability, independent of the above.
-- **B6** — the same problem from the other direction: editing groups before the
-  tournament starts does not regenerate fixtures either.
+- ~~**The confirmation UI**~~ — **done 2026-08-10.** The creation form's division step
+  could not be lifted cleanly: it is bound to that form's error-key scheme and its own
+  team list, so its shape was copied into a dialog in `TeamsTab` instead. It opens on the
+  division's current group and qualifier counts, read back out of `state.rounds`,
+  validates against the new team count, and flags an impossible combination rather than
+  correcting it.
+- ~~**B6**~~ — **closed 2026-08-10.** `divisionsRepository.updateGroups` was deleted
+  rather than fixed. It rewrote `state.rounds[0].groups` without regenerating anything and
+  nothing called it; group composition now moves only through a rebuild.
+- **Add and remove division** as their own capability, independent of the above. Still
+  outstanding.
 
 ## Phase 4 — Close the loop on scheduling
 
+**Complete 2026-08-10.** A schedule can now be built by hand or generated, corrected by
+dragging, saved to the server against real validation, and previewed before printing.
+
 The generator stays in the client and the server validates on write — settled
-2026-08-08, see `docs/decisions.md`. The schedule now lives on `tournaments.schedule`.
+2026-08-08, see `docs/decisions.md`. The schedule lives on `tournaments.schedule`.
 
 ### Persistence
 
-- **Document the shape of `tournaments.schedule`.** It is currently implicit in
-  `scheduleUtils.js` and `ScheduleMakerModal.jsx`. This blocks the validator, which
-  cannot be specified against an undocumented payload. A new `docs/schedule.md`.
-- Write the validator: fixtures belong to the tournament and appear once, no court clash,
-  no team in two places at once, slots within the tournament dates, no knockout fixture
-  before the round that feeds it. Partial schedules are legal.
-- Implement `PUT /api/tournaments/:tournamentId/schedule` on top of it, replacing the 501
-  stub. The column and `tournamentRepository.updateSchedule` already exist, so this is
-  the controller and the validator only.
+- ~~**Document the shape of `tournaments.schedule`**~~ — **done 2026-08-10.**
+  `docs/schedule.md` is the contract, and is now listed under Source of Truth in
+  `CLAUDE.md`. It records the two surprises the validator had to account for: an entry
+  missing `id`, `day`, `startTime` or `endTime` is silently dropped by the client, and
+  `days` is regenerated from the tournament's dates on every read.
+- ~~**The validator**~~ — **done 2026-08-10.** `api/src/utils/scheduleValidator.js`, one
+  error code per rule rather than one `INVALID_SCHEDULE`, with the offending entry ids in
+  `data`. Partial schedules are legal and an empty one is legal.
+- ~~**`PUT /api/tournaments/:tournamentId/schedule`**~~ — **done 2026-08-10**, replacing
+  the 501. The write takes the tournament row lock **before** reading the fixtures it
+  validates against, so it cannot race a division rebuild repairing the same column in
+  either direction. Rejections are listed in `docs/api.md`.
 
 ### Generator correctness
 
-- **Rounds must not overlap in time.** The generator currently places a semifinal at 9am
-  on court 2 while pool play runs at 9am on court 1. A round cannot begin until the round
-  feeding it has finished — the same rule the validator enforces, applied at generation
-  time. This is a domain rule and belongs in `docs/tournament-rules.md`.
+- ~~**Rounds must not overlap in time**~~ — **done 2026-08-10.** Fixtures are placed
+  round by round and a slot is discarded outright if it would start a round before an
+  earlier round of the same division has finished — a hard constraint, not a score. The
+  rule is in `docs/tournament-rules.md` under Scheduling. Divisions still run in
+  parallel; only within a division is the order enforced.
 
 ### Schedule maker UX
 
-The modal's design is sound; these are layout and interaction defects.
-
-- **The modal is sized wrong.** Its top is hidden behind the fixed site header, and its
-  bottom behind the footer when the footer is in view, so controls are cut off.
-- **Multiple fixtures render in the same court-and-time cell.** The assignment is
-  correct; only the rendering collides.
-- **Placed fixtures cannot be moved.** Once a fixture is in a slot it is fixed, so
-  correcting a generated schedule means editing every entry individually. Make placed
-  fixtures draggable.
-- **There is no manual placement at all.** The only route to a schedule is to generate
-  one and then edit it. Allow dragging a fixture from the unscheduled list straight into
-  a slot, so generating is one option rather than the only one.
-- **PDF export should open the browser's print dialog** rather than downloading
-  immediately, so the organiser can preview before sharing. This also removes the reason
-  `scheduleExport` pulls in jsPDF and html2canvas — worth checking whether the dependency
-  can go entirely, which would take roughly 400kB out of the lazy chunk.
+- ~~**The modal is sized wrong**~~ — **done 2026-08-10.** It is portalled onto
+  `document.body` and raised above the header's `z-index: 1000` and the footer's `10`;
+  `.modal-backdrop`'s own `5` was what cut it off. It now also traps focus and closes on
+  Escape, which `aria-modal="true"` had been claiming without delivering.
+- ~~**Multiple fixtures render in the same court-and-time cell**~~ — **done 2026-08-10.**
+  The grid's rows are built from the union of the slot ladder and every entry's own start
+  and end, so an entry that does not land on a slot boundary gets an exact row instead of
+  falling through `findIndex`'s −1 to row 1. An entry naming a court the schedule no
+  longer has is listed beneath the grid rather than silently drawn on court 1.
+- ~~**Placed fixtures cannot be moved**~~ — **done 2026-08-10.** A placed entry is
+  draggable and carries its entry id; a cell's drop handler tells a move from a
+  placement by the payload's prefix. A move keeps the entry's duration, is validated the
+  same way a new placement is, and is refused onto a cell occupied by anything other than
+  itself.
+- ~~**There is no manual placement at all**~~ — this already worked; the sidebar pill was
+  `draggable` and the cells took the drop. Confirmed 2026-08-10.
+- ~~**PDF export should open the browser's print dialog**~~ — **done 2026-08-10.** The
+  immediate download is gone, replaced by `window.print()` and an `@media print` block
+  keyed on a body attribute, with named pages giving the grid landscape and the list
+  portrait. **The lazy chunk went from roughly 427kB to 30kB.** `jspdf` and `html2canvas`
+  were removed from `package.json` on 2026-08-10, with approval, taking `dompurify` with
+  them as a transitive dependency. Nothing imports them and nothing replaced them.
 
 ## Phase 5 — Correctness and consolidation
 

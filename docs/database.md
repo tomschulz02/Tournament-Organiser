@@ -45,7 +45,8 @@ CREATE TABLE "tournaments" (
 	"description" text,
 	"created_by" uuid NOT NULL,
 	"status" tournament_status DEFAULT 'Not Started',
-	"schedule" jsonb
+	"schedule" jsonb,
+	"last_update" timestamp DEFAULT now() NOT NULL
 );
 CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),

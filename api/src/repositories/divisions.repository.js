@@ -19,28 +19,9 @@ async function createDivision(divisionId, tournamentId, details, userId, client 
     }
 }
 
-// updates the order of the teams stored in the list of the state column of the division
-// to update team names use function updateTeam
-async function updateTeams(divisionId, userId, teams) {
-    const client = await db.pool.connect();
-    try {
-        await client.query("BEGIN");
-        
-        // No RETURNING: divisions has no num_groups column — group count is
-        // derived from state.rounds[].groups.
-        const sql = "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2";
-        await client.query(sql, [JSON.stringify(teams), divisionId]);
-
-        await client.query("COMMIT");
-        return { message: "Teams updated" };
-    } catch (err) {
-        await client.query("ROLLBACK");
-        throw new Error("Failed to update teams", { cause: err });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
-    }
-}
+// updateTeams was removed on 2026-08-10. It wrote state.teams directly, and
+// nothing called it: seed order now moves only through updateDivision, which
+// rewrites state in full through replaceState.
 
 // used to create a new team
 //
@@ -59,47 +40,62 @@ async function createTeam(teamId, name, divisionId, client = db){
 }
 
 // used to update the name of a specific team
-async function updateTeam(teamId, newTeamName) {
-    const client = await db.pool.connect();
+//
+// One statement, so it needs no transaction of its own — the same reasoning as
+// the lifecycle statements in tournament.repository.js. It takes an optional
+// client instead, because a rename is rarely alone: several arrive together from
+// PUT /divisions/:divisionId, and during a rebuild they commit with the fixtures
+// and the new state.
+async function updateTeam(teamId, newTeamName, client = db) {
     try {
-        await client.query("BEGIN");
-
         const sql = "UPDATE teams SET name = $1 WHERE id = $2";
         await client.query(sql, [newTeamName, teamId]);
 
-        await client.query("COMMIT");
         return { message: "Team updated" };
     } catch (error) {
-        await client.query("ROLLBACK");
         throw new Error("Failed to update team", { cause: error });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
     }
 }
 
-// updates the groups for the division, which are stored in the state column of the division as a json object
-// this update will only trigger before the tournament has started when the user changes the teams of the division
-async function updateGroups(divisionId, userId, groups, fixtures) {
-    const client = await db.pool.connect();
+// Removes teams by id, for the reconciliation half of a division rebuild.
+//
+// Requires the client: the rows the fixtures referenced have to go in the same
+// transaction that deleted those fixtures, or the foreign key stops the delete.
+async function deleteTeamsByIds(teamIds, client) {
+    if (!Array.isArray(teamIds) || teamIds.length === 0) {
+        return { message: "No teams removed" };
+    }
+
     try {
-        await client.query("BEGIN");
+        const sql = "DELETE FROM teams WHERE id = ANY($1::uuid[]);";
+        await client.query(sql, [teamIds]);
 
-        await client.query(
-            "UPDATE divisions SET state = jsonb_set(state, '{rounds,0,groups}', $1::jsonb) WHERE id=$2;",
-            [JSON.stringify(groups), divisionId]
-        );        
-
-        await client.query("COMMIT");
-        return { message: "Updated groups" };
+        return { message: "Teams removed" };
     } catch (error) {
-        await client.query("ROLLBACK");
-        throw new Error("Failed to update groups", { cause: error });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
+        throw new Error("Failed to remove teams", { cause: error });
     }
 }
+
+// Replaces divisions.state outright, together with the stored team count.
+//
+// Wider than updateStateRounds and updateRounds, which patch parts of state. A
+// rebuild regenerates every round from a different set of teams, so there is
+// nothing in the old object worth merging into.
+async function replaceState(divisionId, state, numTeams, client) {
+    try {
+        const sql = "UPDATE divisions SET state = $1::jsonb, num_teams = $2, last_update = now() WHERE id = $3::uuid";
+        await client.query(sql, [JSON.stringify(state), numTeams, divisionId]);
+
+        return { message: "Division rebuilt" };
+    } catch (error) {
+        throw new Error("Failed to replace division state", { cause: error });
+    }
+}
+
+// updateGroups was removed on 2026-08-10 — known bug B6. It took a `fixtures`
+// parameter it ignored and rewrote state.rounds[0].groups without regenerating
+// the fixtures those groups no longer matched, and nothing called it. Group
+// composition now changes only through updateDivision, which regenerates.
 
 // used for round progression, updates the rounds and currentRound values in the state object of the division
 // also used for updating number of completed games in a round when fixtures are updated
@@ -157,10 +153,14 @@ async function updateStateRounds(divisionId, rounds, client) {
 
 // Fetches a division together with the id of the user who owns its tournament,
 // so the service can authorise before mutating anything.
+//
+// The tournament's status comes back as tournament_status rather than status,
+// because divisions carry no status of their own and a bare `status` here would
+// read as though they did. It is the first half of the rebuild gate.
 async function getDivisionWithOwner(divisionId) {
     try {
         const sql = `
-            SELECT d.id, d.tournament_id, d.name, d.state, t.created_by
+            SELECT d.id, d.tournament_id, d.name, d.type, d.state, t.created_by, t.status AS tournament_status
             FROM divisions d
             JOIN tournaments t ON t.id = d.tournament_id
             WHERE d.id = $1::uuid`;
@@ -244,9 +244,9 @@ async function getDivisionsByTournamentId(tournamentId) {
 
 export const divisionsRepository = {
     createDivision,
-    updateTeams,
     updateTeam,
-    updateGroups,
+    deleteTeamsByIds,
+    replaceState,
     updateRounds,
     getStateForUpdate,
     updateStateRounds,

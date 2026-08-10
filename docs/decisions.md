@@ -94,6 +94,15 @@ The validator only has to detect impossibility, which is a far smaller job than
 generation. That keeps the duplication between the two tiers small enough that no shared
 module is needed.
 
+Built 2026-08-10. `api/src/utils/scheduleValidator.js` enforces the list above on
+`PUT /api/tournaments/:tournamentId/schedule`, one error code per rule so the organiser
+is told which one they broke. `docs/schedule.md` is the payload contract it validates
+against, and `docs/api.md` lists the rejections.
+
+The two tiers stayed separate as intended: the client's `validateScheduleEntry` checks
+one entry against what the browser holds, the server checks the whole schedule against
+the fixtures it can see, and neither imports the other.
+
 ## A Schedule Belongs To The Tournament, Not To A Division
 
 Decided 2026-08-08. The schedule moved from `divisions.schedule` to
@@ -214,6 +223,17 @@ group; it is not the workaround for a withdrawn team.
 
 Consequence: the three 501 team stubs are superseded by one endpoint that replaces a
 division's teams and structure together, because the two cannot be changed independently.
+
+Built 2026-08-10 as `PUT /api/divisions/:divisionId`; the three stubs, their routes and
+their client request functions are gone. Two details settled during the build:
+
+- **A submitted team id must already belong to the division.** Anything else is refused
+  with `TEAM_NOT_IN_DIVISION` rather than reinterpreted as a new team, so a request
+  cannot reach into another division's teams.
+- **`num_groups` and `knockout_teams` are required on a rebuild**, not defaulted. A
+  client that forgets to send `num_groups` would otherwise silently collapse a
+  two-pool division into one, which is exactly the silent recomputation this decision
+  rules out.
 
 ## ~~Teams Are Selected Or Created, Never Duplicated~~ — SUPERSEDED
 

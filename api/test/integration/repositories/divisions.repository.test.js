@@ -109,87 +109,94 @@ describe("createTeam", () => {
     });
 });
 
-describe("updateTeams", () => {
-    it("commits the new team order", async () => {
-        client.query.mockResolvedValue({ rows: [], rowCount: 1 });
-
-        // No RETURNING clause: divisions has no num_groups column.
-        const result = await divisionsRepository.updateTeams("div-1", "user-1", ["t2", "t1"]);
-
-        expect(clientSql().map(squash)).toEqual([
-            "BEGIN",
-            "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb) WHERE id = $2",
-            "COMMIT"
-        ]);
-        expect(client.query.mock.calls[1][1]).toEqual(['["t2","t1"]', "div-1"]);
-        expect(result).toEqual({ message: "Teams updated" });
-        expect(client.release).toHaveBeenCalledOnce();
-    });
-
-    it("rolls back and throws rather than returning an error string", async () => {
-        const underlying = new Error("connection lost");
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw underlying;
-            return { rows: [] };
-        });
-
-        await expectWrapped(
-            divisionsRepository.updateTeams("div-1", "user-1", []),
-            "Failed to update teams",
-            underlying
-        );
-        expect(clientSql()).toContain("ROLLBACK");
-        expect(client.release).toHaveBeenCalledOnce();
-    });
-});
+// updateTeams and updateGroups were removed on 2026-08-10 along with their
+// tests. Both wrote part of state directly and neither was called: seed order
+// and group composition now move only through divisionService.updateDivision,
+// which regenerates the division and writes state in full.
 
 describe("updateTeam", () => {
-    it("commits the new team name", async () => {
+    // One statement, so no transaction of its own — several renames arrive
+    // together from PUT /divisions/:divisionId and the caller owns the boundary.
+    it("writes the new name on the pool", async () => {
         expect(await divisionsRepository.updateTeam("t1", "Aces")).toEqual({ message: "Team updated" });
 
-        expect(clientSql()).toEqual(["BEGIN", "UPDATE teams SET name = $1 WHERE id = $2", "COMMIT"]);
-        expect(client.query.mock.calls[1][1]).toEqual(["Aces", "t1"]);
+        expect(db.query).toHaveBeenCalledWith("UPDATE teams SET name = $1 WHERE id = $2", ["Aces", "t1"]);
+        expect(clientSql()).toEqual([]);
+        expect(db.pool.connect).not.toHaveBeenCalled();
     });
 
-    it("rolls back and throws rather than returning an error string", async () => {
+    it("joins the caller's transaction when given a client", async () => {
+        await divisionsRepository.updateTeam("t1", "Aces", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws rather than returning an error string", async () => {
         const underlying = new Error("no such team");
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw underlying;
-            return { rows: [] };
-        });
+        db.query.mockRejectedValueOnce(underlying);
 
         await expectWrapped(divisionsRepository.updateTeam("t1", "Aces"), "Failed to update team", underlying);
-        expect(clientSql()).toContain("ROLLBACK");
     });
 });
 
-describe("updateGroups", () => {
-    it("commits the new pool composition", async () => {
-        expect(await divisionsRepository.updateGroups("div-1", "user-1", [["t1"]], null))
-            .toEqual({ message: "Updated groups" });
+describe("deleteTeamsByIds", () => {
+    // Requires the client: the rows the fixtures referenced have to go in the
+    // same transaction that deleted those fixtures.
+    it("removes the teams by id array", async () => {
+        expect(await divisionsRepository.deleteTeamsByIds(["t1", "t2"], client))
+            .toEqual({ message: "Teams removed" });
 
-        expect(clientSql().map(squash)).toEqual([
-            "BEGIN",
-            "UPDATE divisions SET state = jsonb_set(state, '{rounds,0,groups}', $1::jsonb) WHERE id=$2;",
-            "COMMIT"
-        ]);
-        expect(client.query.mock.calls[1][1]).toEqual(['[["t1"]]', "div-1"]);
+        expect(client.query).toHaveBeenCalledWith(
+            "DELETE FROM teams WHERE id = ANY($1::uuid[]);",
+            [["t1", "t2"]]
+        );
     });
 
-    it("rolls back and throws on failure, keeping the underlying error as cause", async () => {
-        const underlying = new Error("invalid jsonb");
-        client.query.mockImplementation(async (sql) => {
-            if (sql.startsWith("UPDATE")) throw underlying;
-            return { rows: [] };
-        });
+    it("does not query at all for an empty or missing list", async () => {
+        expect(await divisionsRepository.deleteTeamsByIds([], client)).toEqual({ message: "No teams removed" });
+        expect(await divisionsRepository.deleteTeamsByIds(null, client)).toEqual({ message: "No teams removed" });
+        expect(client.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("foreign key violation");
+        client.query.mockRejectedValueOnce(underlying);
 
         await expectWrapped(
-            divisionsRepository.updateGroups("div-1", "user-1", [], null),
-            "Failed to update groups",
+            divisionsRepository.deleteTeamsByIds(["t1"], client),
+            "Failed to remove teams",
             underlying
         );
-        expect(clientSql()).toContain("ROLLBACK");
-        expect(client.release).toHaveBeenCalledOnce();
+    });
+});
+
+describe("replaceState", () => {
+    // Wider than updateStateRounds, which patches part of state. A rebuild
+    // regenerates every round from a different set of teams, so there is nothing
+    // in the old object worth merging into — and num_teams moves with it.
+    it("writes the whole state object and the new team count", async () => {
+        const state = { teams: ["t1"], rounds: [], currentRound: 0 };
+
+        expect(await divisionsRepository.replaceState("div-1", state, 1, client))
+            .toEqual({ message: "Division rebuilt" });
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = $1::jsonb, num_teams = $2, last_update = now() WHERE id = $3::uuid"
+        );
+        expect(params).toEqual([JSON.stringify(state), 1, "div-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid jsonb");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.replaceState("div-1", {}, 0, client),
+            "Failed to replace division state",
+            underlying
+        );
     });
 });
 
@@ -230,6 +237,18 @@ describe("getDivisionWithOwner", () => {
 
         expect(await divisionsRepository.getDivisionWithOwner("div-1")).toEqual({ id: "div-1", created_by: "user-1" });
         expect(squash(db.query.mock.calls[0][0])).toContain("JOIN tournaments t ON t.id = d.tournament_id");
+    });
+
+    // The rebuild gate reads the tournament's status, and the format the
+    // division is regenerated in comes from its type. Aliased, because a bare
+    // `status` here would read as though a division had one.
+    it("carries the tournament's status and the division's type", async () => {
+        db.query.mockResolvedValueOnce([{ id: "div-1" }]);
+
+        await divisionsRepository.getDivisionWithOwner("div-1");
+
+        expect(squash(db.query.mock.calls[0][0]))
+            .toContain("d.type, d.state, t.created_by, t.status AS tournament_status");
     });
 
     it("returns null when there is no such division", async () => {

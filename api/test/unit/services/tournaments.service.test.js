@@ -12,8 +12,16 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
         getTournamentById: vi.fn(),
         startTournament: vi.fn(),
         endTournament: vi.fn(),
-        deleteTournament: vi.fn()
+        deleteTournament: vi.fn(),
+        updateSchedule: vi.fn(),
+        getScheduleForUpdate: vi.fn()
     }
+}));
+
+// The validator has its own suite, which owns every rejection rule. Here we only
+// care that it is handed the right context and that a rejection stops the write.
+vi.mock("../../../src/utils/scheduleValidator.js", () => ({
+    validateSchedule: vi.fn()
 }));
 
 vi.mock("../../../src/repositories/divisions.repository.js", () => ({
@@ -43,6 +51,8 @@ const { divisionsRepository } = await import("../../../src/repositories/division
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { divisionService } = await import("../../../src/services/divisions.service.js");
 const { formatTournamentViewPayload } = await import("../../../src/utils/tournamentViewFormatter.js");
+const { validateSchedule } = await import("../../../src/utils/scheduleValidator.js");
+const { AppError } = await import("../../../src/errors.js");
 const { makeDivision, makeState, makeTournament } = await import("../../helpers/fixtures.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
 
@@ -59,6 +69,9 @@ beforeEach(() => {
     vi.mocked(fixturesRepository.getFixturesByDivisionIds).mockReset();
     vi.mocked(divisionService.createDivision).mockReset();
     vi.mocked(formatTournamentViewPayload).mockReset().mockReturnValue({ formatted: true });
+    vi.mocked(tournamentRepository.updateSchedule).mockReset().mockResolvedValue(undefined);
+    vi.mocked(tournamentRepository.getScheduleForUpdate).mockReset().mockResolvedValue(null);
+    vi.mocked(validateSchedule).mockReset();
 });
 
 describe("tournamentService.createTournament", () => {
@@ -347,6 +360,87 @@ describe("tournamentService.endTournament", () => {
 
         await expect(tournamentService.endTournament("tour-1", "user-1"))
             .rejects.toMatchObject({ code: "TOURNAMENT_FINISHED", status: 409 });
+    });
+});
+
+describe("tournamentService.updateSchedule", () => {
+    const schedule = { version: 1, entries: [{ id: "entry-1" }, { id: "entry-2" }] };
+
+    function owned() {
+        tournamentRepository.getTournamentById.mockResolvedValue(
+            makeTournament({ created_by: "user-1", start_date: "2026-08-01", end_date: "2026-08-03" })
+        );
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([makeDivision({ id: "div-1" })]);
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-1" }]);
+    }
+
+    it("names the not-found condition rather than reporting zero rows affected", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(null);
+
+        await expect(tournamentService.updateSchedule("tour-1", "user-1", schedule))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+        expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+    });
+
+    it("refuses another user, distinguishably from a missing tournament", async () => {
+        owned();
+
+        await expect(tournamentService.updateSchedule("tour-1", "user-2", schedule))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
+        expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+    });
+
+    it("validates against the tournament's dates, divisions and fixtures, then writes", async () => {
+        owned();
+
+        expect(await tournamentService.updateSchedule("tour-1", "user-1", schedule))
+            .toEqual({ id: "tour-1", entries: 2 });
+
+        expect(validateSchedule).toHaveBeenCalledWith(schedule, {
+            startDate: "2026-08-01",
+            endDate: "2026-08-03",
+            divisions: [makeDivision({ id: "div-1" })],
+            fixtures: [{ id: "f1", division_id: "div-1" }]
+        });
+        expect(fixturesRepository.getFixturesByDivisionIds).toHaveBeenCalledWith(["div-1"]);
+        expect(tournamentRepository.updateSchedule).toHaveBeenCalledWith("tour-1", schedule, dbMock.client);
+        expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    // The lock comes first on purpose. A division rebuild repairs this column
+    // under the same lock, and reading the fixtures before taking it leaves a
+    // window where a committed rebuild is invisible to the validation.
+    it("takes the row lock before reading the fixtures it validates against", async () => {
+        owned();
+
+        await tournamentService.updateSchedule("tour-1", "user-1", schedule);
+
+        expect(tournamentRepository.getScheduleForUpdate).toHaveBeenCalledWith("tour-1", dbMock.client);
+        expect(vi.mocked(tournamentRepository.getScheduleForUpdate).mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(fixturesRepository.getFixturesByDivisionIds).mock.invocationCallOrder[0]);
+        expect(vi.mocked(validateSchedule).mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(tournamentRepository.updateSchedule).mock.invocationCallOrder[0]);
+    });
+
+    it("rolls back and writes nothing when the validator refuses", async () => {
+        owned();
+        const refusal = new AppError("SCHEDULE_COURT_CLASH");
+        vi.mocked(validateSchedule).mockImplementation(() => { throw refusal; });
+
+        await expect(tournamentService.updateSchedule("tour-1", "user-1", schedule)).rejects.toBe(refusal);
+
+        expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    it("counts nothing when the schedule carries no entries", async () => {
+        owned();
+
+        expect(await tournamentService.updateSchedule("tour-1", "user-1", { version: 1 }))
+            .toEqual({ id: "tour-1", entries: 0 });
     });
 });
 

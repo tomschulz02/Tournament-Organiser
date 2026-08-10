@@ -1,5 +1,5 @@
 import { progressionService } from "../services/progression.service.js";
-import { AppError } from "../errors.js";
+import { divisionService } from "../services/divisions.service.js";
 
 // Controllers do not catch. The code-to-status-and-message table that used to
 // live here is now the catalogue in src/errors.js, and the error middleware
@@ -24,27 +24,22 @@ async function commitProgression(req, res) {
     res.status(200).json({ success: true, message: "Round progressed", data: result });
 }
 
-// Declared but not built, like the tournament stubs. The paths are fixed and the
-// UI wires to them; each answers 501 through the standard envelope. Team
-// membership lives in divisions.state.teams, so implementing these means editing
-// state, not a teams table — see docs/division-state.md.
+// The division's full intended team list, plus the structure it should be built
+// around. The body is passed through untouched: which of a rename and a rebuild
+// this is follows from the data, and that derivation is the service's.
+async function updateDivision(req, res) {
+    const { divisionId } = req.params;
 
-async function addTeam() {
-    throw new AppError("NOT_IMPLEMENTED");
+    const result = await divisionService.updateDivision(divisionId, req.user.id, req.body);
+
+    res.status(200).json({ success: true, message: "Division updated", data: result });
 }
 
-async function updateTeam() {
-    throw new AppError("NOT_IMPLEMENTED");
-}
-
-async function removeTeam() {
-    throw new AppError("NOT_IMPLEMENTED");
-}
+// The addTeam, updateTeam and removeTeam stubs were removed on 2026-08-10.
+// updateDivision replaces all three — see docs/api.md.
 
 export const divisionController = {
     getProgression,
     commitProgression,
-    addTeam,
-    updateTeam,
-    removeTeam
+    updateDivision
 };

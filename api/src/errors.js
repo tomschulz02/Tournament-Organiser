@@ -45,6 +45,17 @@ export const ERRORS = {
 	WRONG_QUALIFIER_COUNT: [400, "Wrong number of qualifying teams"],
 	DUPLICATE_TEAM: [400, "A team appears more than once"],
 	TEAM_NOT_IN_ROUND: [400, "A team did not play in this round"],
+	// Editing a division's teams. A team id the caller sends has to be one this
+	// division already holds — otherwise the request either names a team from
+	// somewhere else or is simply confused, and both are refusals rather than a
+	// silent reinterpretation.
+	TEAM_NOT_IN_DIVISION: [400, "A team does not belong to this division"],
+	// The second half of the rebuild gate. The status check can be wrong; a
+	// completed fixture cannot.
+	DIVISION_HAS_RESULTS: [409, "This division already has results"],
+	// A group or qualifier count the new team count cannot support. Refused
+	// rather than corrected — the organiser chose these numbers.
+	INVALID_STRUCTURE: [400, "The group and qualifier counts do not fit the number of teams"],
 	FORMAT_NOT_IMPLEMENTED: [400, "This format is not available yet"],
 	UNSUPPORTED_FORMAT: [400, "This format is not supported"],
 
@@ -65,6 +76,22 @@ export const ERRORS = {
 	TOURNAMENT_ALREADY_STARTED: [409, "This tournament has already started"],
 	TOURNAMENT_NOT_STARTED: [409, "This tournament has not started yet"],
 	TOURNAMENT_FINISHED: [409, "This tournament has already finished"],
+
+	// Saving a schedule. One code per rule rather than one INVALID_SCHEDULE: the
+	// message is display-ready by contract, and "that schedule is invalid" tells
+	// the organiser nothing about which rule they broke. `details` carries the
+	// offending entry ids so the client can point at them.
+	//
+	// The server rejects the impossible and nothing else — court balance and rest
+	// between matches are the organiser's judgement. See docs/schedule.md.
+	SCHEDULE_MALFORMED: [400, "The schedule is not in a recognised format"],
+	SCHEDULE_TIME_INVALID: [400, "An entry ends before it starts"],
+	SCHEDULE_DAY_OUT_OF_RANGE: [400, "An entry falls outside the tournament dates"],
+	SCHEDULE_FIXTURE_UNKNOWN: [400, "A scheduled match does not belong to this tournament"],
+	SCHEDULE_FIXTURE_REPEATED: [400, "A match is scheduled more than once"],
+	SCHEDULE_COURT_CLASH: [409, "Two entries use the same court at the same time"],
+	SCHEDULE_TEAM_CLASH: [409, "A team is scheduled in two places at once"],
+	SCHEDULE_ROUND_ORDER: [409, "A match is scheduled before the round feeding it has finished"],
 
 	// Fixtures. A status is never one of these: it is derived from the scores
 	// and the organiser's intent, never sent. See docs/decisions.md.

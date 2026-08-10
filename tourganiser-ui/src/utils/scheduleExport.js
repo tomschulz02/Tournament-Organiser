@@ -1,54 +1,44 @@
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+// Printing the schedule.
+//
+// This used to rasterise the hidden export roots with html2canvas and assemble a
+// PDF with jsPDF, downloading it immediately. The organiser never saw the
+// document before it landed in their downloads folder, and a screenshot of a web
+// page makes a poor printed page — the text was an image, so it could not be
+// searched, selected or scaled.
+//
+// The browser's own print dialog is a preview, and its "Save as PDF" still
+// covers the download case. There is deliberately only one path: two ways to
+// produce the same document is two things to maintain and a choice the organiser
+// should not have to make.
+//
+// All this does is say which of the two hidden export roots is being printed.
+// The rest is a print stylesheet in App.css, keyed on the same attribute, which
+// hides everything else and lets each [data-export-page] break onto its own
+// sheet.
 
-function sanitiseComputedColors(element) {
-	const nodes = [element, ...element.querySelectorAll('*')];
+const PRINT_ATTRIBUTE = 'printSchedule';
 
-	nodes.forEach((node) => {
-		const computed = getComputedStyle(node);
-		node.style.color = computed.color;
-		node.style.backgroundColor = computed.backgroundColor;
-		node.style.borderColor = computed.borderColor;
-	});
-}
-
-export async function exportSchedulePdf({
-	rootElement,
-	filename,
-	orientation = 'portrait',
-}) {
-	if (!rootElement) {
-		throw new Error('Export root element was not found.');
+export function printSchedule(view) {
+	if (view !== 'grid' && view !== 'list') {
+		throw new Error(`Unknown schedule print view: ${view}`);
 	}
 
-	const pages = Array.from(rootElement.querySelectorAll('[data-export-page]'));
-	const targets = pages.length > 0 ? pages : [rootElement];
-	const pdf = new jsPDF(orientation === 'landscape' ? 'l' : 'p', 'mm', 'a4');
-	const pageWidth = pdf.internal.pageSize.getWidth();
-	const pageHeight = pdf.internal.pageSize.getHeight();
+	document.body.dataset[PRINT_ATTRIBUTE] = view;
 
-	for (let index = 0; index < targets.length; index += 1) {
-		const page = targets[index];
-		sanitiseComputedColors(page);
+	// window.print blocks until the dialog closes in most browsers, but not in
+	// all of them, so the attribute is cleared on the event rather than on the
+	// next line.
+	const clear = () => {
+		delete document.body.dataset[PRINT_ATTRIBUTE];
+		window.removeEventListener('afterprint', clear);
+	};
 
-		const canvas = await html2canvas(page, {
-			scale: 2,
-			useCORS: true,
-			backgroundColor: '#ffffff',
-		});
+	window.addEventListener('afterprint', clear);
 
-		const imageData = canvas.toDataURL('image/png');
-		const imageWidth = pageWidth;
-		const imageHeight = (canvas.height * imageWidth) / canvas.width;
-		const renderHeight = Math.min(pageHeight, imageHeight);
-		const yOffset = Math.max(0, (pageHeight - renderHeight) / 2);
-
-		if (index > 0) {
-			pdf.addPage();
-		}
-
-		pdf.addImage(imageData, 'PNG', 0, yOffset, imageWidth, renderHeight);
+	try {
+		window.print();
+	} catch (error) {
+		clear();
+		throw error;
 	}
-
-	pdf.save(filename);
 }

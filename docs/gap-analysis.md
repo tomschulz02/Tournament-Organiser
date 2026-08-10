@@ -209,6 +209,11 @@ written. Currently it is neither.
 `state.rounds[0].groups`. Changing pool composition leaves the previously generated
 fixtures in place, now describing matchups that no longer exist.
 
+*Closed 2026-08-10 by deleting `updateGroups` rather than fixing it. Nothing called it,
+and group composition now moves only through `PUT /api/divisions/:divisionId`, which
+deletes the division's fixtures and regenerates them from the new team list in one
+transaction.*
+
 **B7 — Team ownership is undefined.** `teams.user_id` is `NOT NULL` with a foreign key
 to `users`, and `createTeam` never sets it. Even once the `division_id` drift is fixed,
 there is no answer to "who owns a team". Options: the organiser who created it, a

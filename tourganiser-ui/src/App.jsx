@@ -201,10 +201,12 @@ function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 					</div>
 					<div className="menu-section">
 						<h2>Tournaments</h2>
-						<Link to="/tournaments#browse" className="menu-item" onClick={onClose}>
+						{/* Real routes, not hashes. Browse no longer reads the hash to
+						    decide which of two pages it is. */}
+						<Link to="/tournaments" className="menu-item" onClick={onClose}>
 							Discover
 						</Link>
-						<Link to="/tournaments#create" className="menu-item" onClick={onClose}>
+						<Link to="/tournaments/create" className="menu-item" onClick={onClose}>
 							Create
 						</Link>
 					</div>

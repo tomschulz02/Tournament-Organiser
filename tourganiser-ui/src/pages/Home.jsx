@@ -16,11 +16,11 @@ export default function Home() {
 					track of fixtures, results and more all in one place.
 				</p>
 				<p>Get started by browsing through other tournaments, or sign in and create your own.</p>
-				<Link to={'/tournaments#browse'} className="cta-button">
+				<Link to={'/tournaments'} className="cta-button">
 					Discover
 				</Link>
 				{isLoggedIn ? (
-					<Link to={'/tournaments#create'} className="cta-button">
+					<Link to={'/tournaments/create'} className="cta-button">
 						Create
 					</Link>
 				) : (

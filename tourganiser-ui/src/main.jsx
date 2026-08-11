@@ -6,6 +6,7 @@ import './index.css';
 import App from './App';
 import Home from './pages/Home';
 import Browse from './pages/Browse';
+import CreateTournament from './pages/CreateTournament';
 import ViewPage from './pages/View';
 import About from './pages/About';
 import Login from './pages/Login';
@@ -29,6 +30,11 @@ function RoutesComponent() {
 					<Route path="/tournaments" element={<Browse />}>
 						<Route path="/tournaments/view/:id" element={<ViewPage />} />
 					</Route>
+					{/* A page in its own right, not a nested view of Browse. The two
+					    share nothing but a URL prefix, and creation living inside
+					    Browse behind a hash is why the post-creation redirect
+					    appeared to do nothing. */}
+					<Route path="/tournaments/create" element={<CreateTournament />} />
 					<Route path="/about" element={<About />} />
 					<Route path="/terms" element={<LegalPage />} />
 					<Route path="*" element={<NotFound />} />

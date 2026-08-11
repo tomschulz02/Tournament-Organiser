@@ -4,7 +4,6 @@ import { useMessage } from '../MessageContext';
 import { getTournaments } from '../requests';
 import LoadingScreen from '../components/LoadingScreen';
 import '../App.css';
-import TournamentCreation from '../components/TournamentCreation';
 import Icon from '../components/Icons';
 
 const TOURNAMENT_GROUPS = [
@@ -101,37 +100,15 @@ function getTournamentDateRange(details) {
 	};
 }
 
+// Browsing only. Creation moved to its own route, /tournaments/create — it was
+// never a tab of this page in anything but layout, and switching to it on a URL
+// hash meant the browser's own history and the post-creation redirect disagreed
+// about where the user was.
 export default function Browse() {
-	const [currentPage, setCurrentPage] = useState(() => window.location.hash.replace('#', '') || 'browse');
-	const { id } = useParams();
-
-	useEffect(() => {
-		const section = window.location.hash.replace('#', '');
-		if (section) {
-			window.history.replaceState(null, '', window.location.pathname + window.location.search);
-		}
-	}, []);
-
 	return (
 		<div className="tournament-tabs-container">
-			{(!id || id.startsWith('c')) && (
-				<div className="tournament-tab-buttons">
-					<div
-						className={`tournament-tab-btn ${currentPage === 'browse' ? 'active' : ''}`}
-						data-tab="browse"
-						onClick={() => setCurrentPage('browse')}>
-						Browse Tournaments
-					</div>
-					<div
-						className={`tournament-tab-btn ${currentPage === 'create' ? 'active' : ''}`}
-						data-tab="create"
-						onClick={() => setCurrentPage('create')}>
-						Create Tournament
-					</div>
-				</div>
-			)}
 			<div className="tournament-tab-content active">
-				{currentPage === 'browse' ? <BrowseTournaments /> : <TournamentCreation />}
+				<BrowseTournaments />
 			</div>
 		</div>
 	);

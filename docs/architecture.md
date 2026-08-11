@@ -67,10 +67,22 @@ Pages
 → requests.js
 → Backend API
 
-The tournament view is the one part large enough to have its own structure. It lives in
-`tourganiser-ui/src/components/tournament/`, is entered through `pages/View.jsx`, and is
-styled by `src/styles/tournament-view.css` — the only stylesheet outside `App.css` that
-anything imports. Its classes are prefixed `tv-`.
+Two parts are large enough to have their own structure, and each owns a stylesheet
+outside `App.css` with its own class prefix. The prefixes are what make either one's
+cleanup sweep safe: a rule can be deleted on the evidence of one page's markup only if no
+other page can be using it.
+
+The tournament view lives in `tourganiser-ui/src/components/tournament/`, is entered
+through `pages/View.jsx`, and is styled by `src/styles/tournament-view.css`. Its classes
+are prefixed `tv-`.
+
+Tournament creation lives in `tourganiser-ui/src/components/create/`, is entered through
+`pages/CreateTournament.jsx` at `/tournaments/create`, and is styled by
+`src/styles/create-tournament.css`. Its classes are prefixed `ct-`. The page holds the
+whole creation state — details, divisions and their teams — and sends it in the single
+`POST /api/tournaments/create` request. Divisions are built in a modal rather than on the
+page, and the draft is autosaved to `localStorage` by `src/utils/createDraft.js`, which
+discards anything malformed or of an older version rather than risking a throw on mount.
 
 `pages/View.jsx` makes the single `GET /api/tournaments/:id` request that feeds the whole
 page and owns the state shared across sections: the active tab, the selected division,
@@ -84,9 +96,10 @@ for a screen only an organiser opens. Printing through the browser replaced that
 30kB. It stays lazy because it is still the largest single screen: a grid, a list, an
 inspector, a generator and two print layouts.
 
-It is also the only component rendered through a portal. `createPortal` puts it on
-`document.body` so that neither `<main>`'s layout nor the header's and footer's
-`z-index` can clip it. See the frontend traps below.
+It was the first component rendered through a portal, and the creation page's modals now
+follow the same pattern through `components/create/CreateModal.jsx`. `createPortal` puts
+them on `document.body` so that neither `<main>`'s layout nor the header's and footer's
+`z-index` can clip them. See the frontend traps below.
 
 ## Conventions
 - PascalCase for files/components.

@@ -18,22 +18,26 @@ export class ApiError extends Error {
 	}
 }
 
-// The one request helper. Every exported function below is a call to it.
+// The one request implementation. Every exported function below reaches it,
+// almost all of them through `request`, which discards the metadata.
 //
 // It always throws on failure — callers handle errors in a catch and never by
 // inspecting the returned value.
-async function request(path, { method = 'GET', body } = {}, retries = MAX_RETRIES) {
+async function requestWithMeta(path, { method = 'GET', body, headers } = {}, retries = MAX_RETRIES) {
 	let response;
 	try {
 		response = await fetch(API_URL + path, {
 			method,
 			credentials: 'include', // needed for the session cookie
-			...(body === undefined
+			...(body === undefined && !headers
 				? {}
 				: {
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify(body),
+						headers: {
+							...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+							...headers,
+						},
 					}),
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		});
 	} catch {
 		// fetch rejects only when the request never completed. An HTTP error
@@ -42,10 +46,17 @@ async function request(path, { method = 'GET', body } = {}, retries = MAX_RETRIE
 		// matches Chrome's 'Failed to fetch', so it never retried at all.
 		if (retries > 0) {
 			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-			return request(path, { method, body }, retries - 1);
+			return requestWithMeta(path, { method, body, headers }, retries - 1);
 		}
 
 		throw new ApiError('Unable to reach the server. Please try again.', { isConnectionError: true });
+	}
+
+	// 304 is not a failure and carries no body: it says the copy the caller
+	// already holds is still current. response.ok is false for it, so it has to
+	// be answered before the error branch below.
+	if (response.status === 304) {
+		return { notModified: true, payload: null, etag: response.headers.get('ETag') };
 	}
 
 	const payload = await response.json().catch(() => null);
@@ -60,6 +71,11 @@ async function request(path, { method = 'GET', body } = {}, retries = MAX_RETRIE
 		);
 	}
 
+	return { notModified: false, payload, etag: response.headers.get('ETag') };
+}
+
+async function request(path, options, retries) {
+	const { payload } = await requestWithMeta(path, options, retries);
 	return payload;
 }
 
@@ -78,7 +94,60 @@ export const logoutUser = () => request('users/logout', { method: 'POST' });
 
 export const getTournaments = () => request('tournaments/');
 
-export const fetchTournamentData = (tournamentId) => request(`tournaments/${tournamentId}`);
+// The tournament view is the one cached response.
+//
+// In memory only, deliberately not localStorage: a stale organiser payload
+// surviving a browser restart is worse than no cache at all.
+//
+// Safety here does not rest on this map. The server's ETag covers the viewer as
+// well as the data, so a stale entry from another session can never be answered
+// with a 304 — it simply misses and a correct payload comes back. Keying on the
+// session and clearing on a change is the second line, not the first, because
+// the cost of being wrong is showing organiser controls to the wrong person.
+const tournamentCache = new Map();
+let cachedSessionKey = null;
+
+export function clearTournamentCache() {
+	tournamentCache.clear();
+	cachedSessionKey = null;
+}
+
+export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous') {
+	const key = String(sessionKey);
+
+	// A session change invalidates everything held, rather than leaving the
+	// previous viewer's payloads to accumulate under old keys.
+	if (cachedSessionKey !== key) {
+		tournamentCache.clear();
+		cachedSessionKey = key;
+	}
+
+	const cached = tournamentCache.get(tournamentId);
+	const { notModified, payload, etag } = await requestWithMeta(`tournaments/${tournamentId}`, {
+		headers: cached?.etag ? { 'If-None-Match': cached.etag } : undefined,
+	});
+
+	if (notModified) {
+		if (cached) return cached.payload;
+
+		// Nothing here to validate, so the 304 answered a header this function
+		// did not send — a browser cache revalidating on its own. There is no
+		// body to fall back on, so ask again unconditionally rather than
+		// returning nothing to the page.
+		tournamentCache.delete(tournamentId);
+		return await request(`tournaments/${tournamentId}`);
+	}
+
+	// An ETag-less response is still served; it simply cannot be revalidated
+	// next time, so it is not worth storing.
+	if (etag && payload) {
+		tournamentCache.set(tournamentId, { etag, payload });
+	} else {
+		tournamentCache.delete(tournamentId);
+	}
+
+	return payload;
+}
 
 export const createTournament = (tournamentData) =>
 	request('tournaments/create', { method: 'POST', body: tournamentData });

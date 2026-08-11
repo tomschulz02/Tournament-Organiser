@@ -89,8 +89,11 @@ async function deleteTournament(tournamentId) {
 //
 // A schedule is tournament-wide, not per-division: divisions share the same
 // physical courts, so scheduling them independently could double-book one.
-// This moved here from the divisions repository on 2026-08-08; there is no
-// last_update column on tournaments to stamp.
+// This moved here from the divisions repository on 2026-08-08. It stamps no
+// column itself: trg_tournaments_last_updated moves tournaments.last_update on
+// any UPDATE that changes the row, which is the whole reason to prefer a
+// trigger over stamping by hand — this statement was the one that used to move
+// nothing at all. See docs/database.md.
 //
 // Takes an optional client so a division rebuild can repair the schedule inside
 // the transaction that deleted the fixtures it referenced.

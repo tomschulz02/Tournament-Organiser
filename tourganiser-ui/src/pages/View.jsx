@@ -64,7 +64,10 @@ export default function ViewPage() {
 
 		const load = async () => {
 			try {
-				const response = await fetchTournamentData(id);
+				// The session is part of the cache key as well as the request
+				// key: the payload's `creator` depends on who is asking, so a
+				// cached copy must never outlive the session it was fetched for.
+				const response = await fetchTournamentData(id, sessionVersion);
 
 				if (active) setResult({ key: requestKey, data: response.data, error: null });
 			} catch (apiError) {
@@ -79,7 +82,9 @@ export default function ViewPage() {
 		return () => {
 			active = false;
 		};
-	}, [id, requestKey]);
+		// sessionVersion is already inside requestKey, so listing it adds no
+		// extra runs — it is here because the effect now reads it directly.
+	}, [id, requestKey, sessionVersion]);
 
 	const loading = result.key !== requestKey;
 

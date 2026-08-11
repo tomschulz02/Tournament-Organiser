@@ -57,6 +57,25 @@ async function updateTeam(teamId, newTeamName, client = db) {
     }
 }
 
+// Moves divisions.last_update without changing anything else.
+//
+// The tournament view's ETag is the greatest last_update across the tournament
+// and its divisions, so a change the reader can see has to move one of them.
+// Two writes affect the payload without touching a stamped row: a team rename
+// writes only to `teams`, which has no such column, and recording a result on a
+// fixture whose round is missing from state skips the state write. Both call
+// this so the cached page does not keep showing the old data.
+async function touchDivision(divisionId, client = db) {
+    try {
+        const sql = "UPDATE divisions SET last_update = now() WHERE id = $1::uuid";
+        await client.query(sql, [divisionId]);
+
+        return { message: "Division touched" };
+    } catch (error) {
+        throw new Error("Failed to touch division", { cause: error });
+    }
+}
+
 // Removes teams by id, for the reconciliation half of a division rebuild.
 //
 // Requires the client: the rows the fixtures referenced have to go in the same
@@ -201,37 +220,11 @@ async function getFixturesByDivisionId(divisionId) {
     }
 }
 
-async function getDivisionDetails(tournamentId) {
-    const client = await db.pool.connect();
-    try {
-        const details = {};
-
-        const divisionsRes = await client.query("SELECT * FROM divisions WHERE tournament_id = $1", [tournamentId]);
-        // A tournament with no divisions is an empty collection, not a missing
-        // one. The caller decides whether that is a problem; the repository
-        // assigns no meaning to it, the same as getDivisionsByTournamentId.
-        if (divisionsRes.rows.length === 0) {
-            return { divisions: [] };
-        }
-
-        details.divisions = divisionsRes.rows.map(division => ({
-            ...division,
-            fixtures: []
-        }));
-
-        for (let i = 0; i < details.divisions.length; i++) {
-            const fixturesRes = await client.query("SELECT * FROM fixtures WHERE division_id = $1 ORDER BY match_no", [details.divisions[i].id]);
-            details.divisions[i].fixtures = fixturesRes.rows;
-        }
-
-        return details;
-    } catch (err) {
-        throw new Error("Failed to fetch division details", { cause: err });
-        /* v8 ignore next -- finally-block coverage artifact; see vitest.config.js */
-    } finally {
-        client.release();
-    }
-}
+// getDivisionDetails was removed on 2026-08-10, the last of the dead repository
+// functions. Nothing called it, and what it did — divisions for a tournament,
+// each with its fixtures — is getDivisionsByTournamentId plus
+// getFixturesByDivisionIds, which is how the view actually assembles it. Its
+// per-division fixture loop was also a query per division on its own client.
 
 async function getDivisionsByTournamentId(tournamentId) {
     try {
@@ -245,12 +238,12 @@ async function getDivisionsByTournamentId(tournamentId) {
 export const divisionsRepository = {
     createDivision,
     updateTeam,
+    touchDivision,
     deleteTeamsByIds,
     replaceState,
     updateRounds,
     getStateForUpdate,
     updateStateRounds,
-    getDivisionDetails,
     getDivisionWithOwner,
     getTeamsByIds,
     getFixturesByDivisionId,

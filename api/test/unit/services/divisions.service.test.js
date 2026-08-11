@@ -16,6 +16,7 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
         getDivisionWithOwner: vi.fn(),
         getTeamsByIds: vi.fn(),
         updateTeam: vi.fn(),
+        touchDivision: vi.fn(),
         deleteTeamsByIds: vi.fn(),
         replaceState: vi.fn()
     }
@@ -551,6 +552,26 @@ describe("divisionService.updateDivision", () => {
             expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
 
             expect(result).toMatchObject({ divisionId: "div-1", rebuilt: false, renamed: 2 });
+        });
+
+        // A rename writes only to `teams`, which carries no last_update and has
+        // no trigger. Without this stamp the tournament view's ETag would not
+        // move and every reader would keep being served the old names from
+        // cache. See src/utils/etag.js.
+        it("stamps the division so the cached tournament view is invalidated", async () => {
+            const teams = unchanged();
+            teams[0].name = "Angels";
+
+            await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(divisionsRepository.touchDivision).toHaveBeenCalledWith("div-1", dbMock.client);
+        });
+
+        it("does not stamp the division when no name actually moved", async () => {
+            await divisionService.updateDivision("div-1", "user-1", body(unchanged()));
+
+            expect(divisionsRepository.touchDivision).not.toHaveBeenCalled();
+            expect(divisionsRepository.updateTeam).not.toHaveBeenCalled();
         });
 
         it("leaves fixtures, state and the schedule alone", async () => {

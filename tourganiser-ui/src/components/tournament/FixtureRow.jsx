@@ -14,9 +14,26 @@ import { formatResult } from './fixtureUtils';
 // mounting ScoreUpdateModal later is a change to the caller, not to this row.
 export default function FixtureRow({ fixture, showDivision = false, court = null, action = null }) {
 	const score = formatResult(fixture.result);
+	const status = (fixture.status || 'upcoming').toLowerCase();
 
+	// The row's slots are placed into the list's columns by class rather than by
+	// order, so a fixture with no court, no division or no score simply leaves
+	// that column empty instead of shifting everything after it leftwards.
 	return (
-		<li className={`tv-fixture-row tv-fixture-row--${(fixture.status || 'upcoming').toLowerCase()}`}>
+		<li className={`tv-fixture-row tv-fixture-row--${status}`}>
+			{/* Status is a colour, not a word: it is the least-read text on a row and
+			    the most repeated one. The label stays reachable as a tooltip and as
+			    hidden text, so nothing depends on being able to tell the colours
+			    apart. The dot is hidden from the accessibility tree and the text
+			    sits beside it, so the status is announced exactly once — a title on
+			    the row or on the dot is announced on top of it, not instead. */}
+			<span
+				className={`tv-status-dot tv-status-dot--${status}`}
+				title={fixture.statusLabel}
+				aria-hidden="true"
+			/>
+			<span className="tv-visually-hidden">{fixture.statusLabel}</span>
+
 			<span className="tv-match-no">#{fixture.match_no ?? '—'}</span>
 
 			<span className="tv-fixture-row-teams">
@@ -31,9 +48,7 @@ export default function FixtureRow({ fixture, showDivision = false, court = null
 				{fixture.round && <span className="tv-round-label">{fixture.round}</span>}
 			</span>
 
-			<span className={`tv-fixture-row-outcome ${score ? '' : 'tv-fixture-row-outcome--status'}`}>
-				{score || fixture.statusLabel}
-			</span>
+			{score && <span className="tv-fixture-row-outcome">{score}</span>}
 
 			{action && <span className="tv-fixture-row-action">{action}</span>}
 		</li>

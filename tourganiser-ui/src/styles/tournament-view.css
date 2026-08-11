@@ -33,6 +33,21 @@ body.dark {
 	--tv-skeleton-sheen: rgba(245, 245, 245, 0.05);
 }
 
+/* For text that only a screen reader needs — a status carried visually by a
+   colour, for instance. Off-screen rather than display: none, which would take
+   it out of the accessibility tree along with everything else. */
+.tv-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	border: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 .tv-shell {
 	width: 100%;
 	max-width: 1200px;
@@ -697,22 +712,28 @@ body.dark {
 	color: var(--tv-muted);
 }
 
+/* The list owns the columns and each row is a subgrid of them, so a division
+   badge lines up with the one above it however long the round label beside it
+   happens to be. Subgrid rather than display: contents because the row has to
+   keep its own box — its surface, border and radius are the row. */
 .tv-fixture-rows {
 	list-style: none;
 	margin: 0;
 	padding: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
+	min-width: 0;
+	display: grid;
+	/* status | no | teams | court | division | round | outcome | action */
+	grid-template-columns: auto auto minmax(0, 1fr) repeat(5, auto);
+	row-gap: 6px;
 }
 
 /* High information density, low visual density: a single line per fixture, with
    the teams taking whatever width is left over. */
 .tv-fixture-row {
+	grid-column: 1 / -1;
 	display: grid;
-	grid-template-columns: auto minmax(0, 1fr) auto auto;
+	grid-template-columns: subgrid;
 	align-items: center;
-	gap: 14px;
 	padding: 9px 14px;
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
@@ -720,21 +741,74 @@ body.dark {
 	border-radius: 10px;
 }
 
-/* A quiet status cue on the edge, so a long list can be skimmed without reading
-   the outcome column on every row. */
-.tv-fixture-row--live {
-	border-left-color: var(--error-color);
+/* The space between columns rides on the cells rather than on the grid, because
+   a grid gap is charged whether or not anything fills the column. A list with no
+   courts and no division badges would otherwise pay for both. */
+.tv-fixture-row > * + *,
+.tv-fixture-row-meta > * {
+	margin-left: 14px;
 }
 
-.tv-fixture-row--completed {
-	border-left-color: var(--success-color);
+/* Placement by class, not by order: a row missing a slot leaves the column empty
+   rather than pulling the next one into it. */
+.tv-fixture-row > .tv-status-dot {
+	grid-column: 1;
+}
+
+.tv-fixture-row > .tv-match-no {
+	grid-column: 2;
+}
+
+.tv-fixture-row-meta > .tv-court-chip {
+	grid-column: 4;
+}
+
+.tv-fixture-row-meta > .tv-division-badge {
+	grid-column: 5;
+}
+
+.tv-fixture-row-meta > .tv-round-label {
+	grid-column: 6;
+}
+
+.tv-fixture-row-action {
+	grid-column: 8;
 }
 
 .tv-fixture-row--cancelled {
 	opacity: 0.65;
 }
 
+/* One dot per row, in the first column, so the statuses read straight down the
+   list. Blue upcoming, green live, red completed, muted cancelled. The row's
+   left edge stays the neutral border on every status: this is the only place a
+   status is encoded, so there is nothing for it to disagree with. */
+.tv-status-dot {
+	display: block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--tv-muted);
+}
+
+.tv-status-dot--upcoming {
+	background: var(--main-color);
+}
+
+.tv-status-dot--live {
+	background: var(--success-color);
+}
+
+.tv-status-dot--completed {
+	background: var(--error-color);
+}
+
+.tv-status-dot--cancelled {
+	background: var(--tv-muted);
+}
+
 .tv-fixture-row-teams {
+	grid-column: 3;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -748,10 +822,12 @@ body.dark {
 	white-space: nowrap;
 }
 
+/* Court, division and round are three columns, not one blob in a single cell —
+   sharing a cell was what let a long round name push the division badge out of
+   line with the row above. The wrapper stays in the DOM because the mobile
+   layout still stacks them as one block. */
 .tv-fixture-row-meta {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+	display: contents;
 }
 
 .tv-round-label {
@@ -761,6 +837,7 @@ body.dark {
 }
 
 .tv-fixture-row-outcome {
+	grid-column: 7;
 	font-size: 0.84rem;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -1488,26 +1565,49 @@ body.dark {
 		grid-column: 1 / -1;
 	}
 
-	/* The fixture row folds into stacked full-width lines: match number and
-	   outcome, then the teams, then the division and stage. Nothing is dropped.
+	/* The fixture row folds into stacked full-width lines: status, match number
+	   and outcome, then the teams, then the division and stage. Nothing is
+	   dropped.
 
 	   The division badge and the stage label are both nowrap, so the meta cell
 	   cannot shrink — squeezing it beside the other two pushed it off the page at
 	   320px. Giving it the full width and letting it wrap is what fixes that. */
+
+	/* Stacked, every row spans the whole list and nothing sits in the list's
+	   columns, so the list goes back to being a plain column. Left as a grid, its
+	   eight now-empty tracks would still take their share of the width. */
+	.tv-fixture-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
 	.tv-fixture-row {
-		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-columns: auto auto minmax(0, 1fr);
 		gap: 6px 10px;
 		padding: 10px 12px;
 	}
 
-	.tv-fixture-row .tv-match-no {
+	/* The cell margins that carry the column spacing on a wide viewport would be
+	   indentation here; the row's own gap does the job instead. */
+	.tv-fixture-row > * + *,
+	.tv-fixture-row-meta > * {
+		margin-left: 0;
+	}
+
+	.tv-fixture-row > .tv-status-dot {
 		grid-row: 1;
 		grid-column: 1;
 	}
 
-	.tv-fixture-row-outcome {
+	.tv-fixture-row .tv-match-no {
 		grid-row: 1;
 		grid-column: 2;
+	}
+
+	.tv-fixture-row-outcome {
+		grid-row: 1;
+		grid-column: 3;
 		justify-self: end;
 	}
 
@@ -1517,6 +1617,9 @@ body.dark {
 	}
 
 	.tv-fixture-row-meta {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 		grid-row: 3;
 		grid-column: 1 / -1;
 		flex-wrap: wrap;

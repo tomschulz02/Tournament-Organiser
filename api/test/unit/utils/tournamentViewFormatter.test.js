@@ -55,7 +55,7 @@ describe("toISODate", () => {
     });
 
     it("delegates to getISODate otherwise", () => {
-        expect(toISODate(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-02");
+        expect(toISODate(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-01");
     });
 });
 
@@ -610,6 +610,33 @@ describe("buildDivisionStandings", () => {
             .toEqual([["Aces", 1, 2], ["Bears", 0, 0]]);
     });
 
+    // The other half of bug 1's contract. Progression and the standings table
+    // must agree on who is ahead, so the head-to-head criterion has to reach
+    // this table too, not just computeRoundResults.
+    it("ranks the winner of a head-to-head above the loser when nothing else separates them", () => {
+        const fourTeams = lookupOf([
+            makeTeam({ id: "t1", name: "Aces" }),
+            makeTeam({ id: "t2", name: "Bears" }),
+            makeTeam({ id: "t3", name: "Cubs" }),
+            makeTeam({ id: "t4", name: "Ducks" })
+        ]);
+        const state = makeState({
+            teams: ["t1", "t2", "t3", "t4"],
+            rounds: [makeRound({ groups: [["t1", "t2", "t3", "t4"]] })]
+        });
+
+        // t1 and t2 finish level on wins, set ratio and point ratio.
+        // t2 beat t1, so t2 places above it despite t1 being the better seed.
+        const fixtures = [
+            completedPoolFixture({ team_1_id: "t2", team_2_id: "t1", result: [[21, 15]] }),
+            completedPoolFixture({ team_1_id: "t1", team_2_id: "t3", result: [[21, 15]] }),
+            completedPoolFixture({ team_1_id: "t4", team_2_id: "t2", result: [[21, 15]] })
+        ];
+
+        expect(buildDivisionStandings(state, fixtures, fourTeams)[0].groups[0].standings.map((row) => row.id))
+            .toEqual(["t4", "t2", "t1", "t3"]);
+    });
+
     it("names a round by its index when it has none", () => {
         const state = makeState({ rounds: [makeRound({ name: undefined, groups: [[]] })] });
 
@@ -866,7 +893,10 @@ describe("buildFinalStandings", () => {
             .toEqual([]);
     });
 
-    it("uses the last bracket round when none is named Finals", () => {
+    // Was bug 6. The fallback selected the last bracket round and then did
+    // nothing with it, because the loop beneath re-tested each match's own name
+    // against "Finals". A branch that cannot fire is worse than no branch.
+    it("ranks the winner and loser of the last bracket round when none is named Finals", () => {
         const bracket = {
             rounds: [{
                 name: "Semifinals",
@@ -878,8 +908,34 @@ describe("buildFinalStandings", () => {
             }]
         };
 
-        // The fallback finds a round but nothing inside it is named "Finals" or
-        // "3rd Place Playoff", so it contributes nothing and the next tier runs.
+        expect(buildFinalStandings({ division, fixtures: completeFixtures, standings: [], bracket, teams: [] }))
+            .toEqual([
+                { rank: 1, team_id: "t1", name: "Aces", note: "Champion" },
+                { rank: 2, team_id: "t2", name: "Bears", note: "Runner-up" }
+            ]);
+    });
+
+    // The other half of the rule: a concluding round holding several undecided
+    // matches settles no title, so the tier below it runs instead.
+    it("declines to crown anyone when the last bracket round holds more than one match", () => {
+        const bracket = {
+            rounds: [{
+                name: "Semifinals",
+                matches: [
+                    {
+                        round: "Semifinals",
+                        participants: [{ id: "t1", name: "Aces" }, { id: "t2", name: "Bears" }],
+                        winner: { id: "t1", name: "Aces" }
+                    },
+                    {
+                        round: "Semifinals",
+                        participants: [{ id: "t3", name: "Cubs" }, { id: "t4", name: "Ducks" }],
+                        winner: { id: "t3", name: "Cubs" }
+                    }
+                ]
+            }]
+        };
+
         expect(buildFinalStandings({ division, fixtures: completeFixtures, standings: [], bracket, teams: [] }))
             .toEqual([]);
     });
@@ -1137,8 +1193,10 @@ describe("formatTournamentDetails", () => {
             description: "Open",
             location: "Hall",
             status: "LIVE",
-            start_date: "2026-08-02",
-            startDate: "2026-08-02",
+            // The ISO fields and the labels describe the same day. They used to
+            // be a day apart — bug 7.
+            start_date: "2026-08-01",
+            startDate: "2026-08-01",
             start_date_label: "1 August 2026",
             end_date_label: "3 August 2026",
             type: "Classic",

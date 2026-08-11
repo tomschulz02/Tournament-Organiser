@@ -7,6 +7,14 @@ export function makeRes() {
         status: vi.fn(() => res),
         json: vi.fn(() => res),
         send: vi.fn(() => res),
+        end: vi.fn(() => res),
+        // Records what was set so a test can assert ETag, Vary and Cache-Control
+        // without reaching into the mock's call list.
+        headers: {},
+        set: vi.fn((name, value) => {
+            res.headers[name] = value;
+            return res;
+        }),
         cookie: vi.fn(() => res),
         clearCookie: vi.fn(() => res)
     };
@@ -19,6 +27,7 @@ export function makeReq(overrides = {}) {
         body: {},
         query: {},
         cookies: {},
+        headers: {},
         user: null,
         ...overrides
     };

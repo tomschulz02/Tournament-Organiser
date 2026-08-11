@@ -306,23 +306,33 @@ function buildFinalStandings({ division, fixtures, standings, bracket, teams }) 
            here, so at(-1) always yields an element, and a rounds array holding an
            undefined element would already have thrown inside find() above */
         if (finalRound) {
-            finalRound.matches.forEach((match) => {
-                if (!Array.isArray(match.participants) || match.participants.length < 2) {
-                    return;
-                }
+            // Which matches decide the title is a question about the round that
+            // concludes the bracket, not about what that round is called. Testing
+            // each match's own name against "Finals" made the fallback above inert:
+            // a bracket ending in a round named anything else selected a round and
+            // then did nothing with it.
+            //
+            // The bronze match is still identified by name, because it is the
+            // fixture's own round rather than the containing round's — a Classic
+            // "Finals" round holds both the final and the playoff.
+            const decidable = finalRound.matches.filter(
+                (match) => Array.isArray(match.participants) && match.participants.length >= 2
+            );
+            const playoffs = decidable.filter((match) => match.round === "3rd Place Playoff");
+            const deciders = decidable.filter((match) => match.round !== "3rd Place Playoff");
 
-                const winner = match.winner;
-                const loser = getFixtureLoser(match);
+            // Exactly one. A concluding round holding several undecided matches —
+            // a semifinal pair, say — settles no title, and crowning both winners
+            // champion would be worse than leaving it to the tier below.
+            if (deciders.length === 1) {
+                const final = deciders[0];
+                pushFinalStanding(rankedTeams, seenTeams, final.winner, 1, "Champion");
+                pushFinalStanding(rankedTeams, seenTeams, getFixtureLoser(final), 2, "Runner-up");
+            }
 
-                if (match.round === "Finals") {
-                    pushFinalStanding(rankedTeams, seenTeams, winner, 1, "Champion");
-                    pushFinalStanding(rankedTeams, seenTeams, loser, 2, "Runner-up");
-                }
-
-                if (match.round === "3rd Place Playoff") {
-                    pushFinalStanding(rankedTeams, seenTeams, winner, 3, "Third Place");
-                    pushFinalStanding(rankedTeams, seenTeams, loser, 4, "Fourth Place");
-                }
+            playoffs.forEach((match) => {
+                pushFinalStanding(rankedTeams, seenTeams, match.winner, 3, "Third Place");
+                pushFinalStanding(rankedTeams, seenTeams, getFixtureLoser(match), 4, "Fourth Place");
             });
         }
     }

@@ -260,15 +260,21 @@ here. What is left:
 
 ## Project
 
-- `tourganiser-ui/` has no tests and no test runner. `api/` has Vitest, with unit and
-  integration suites gated at 100% coverage, plus the deliberately failing known-bug
-  suite in `api/test/known-bugs/`.
-- **The coverage gate is set to 95, not 100.** `vitest.config.js` sets 95 for all four
-  metrics while `CLAUDE.md` and this file describe a 100% gate. Actual coverage is 100%,
-  so nothing required the reduction. Either restore the threshold or change the claim —
-  a gate five points below actual lets coverage fall silently.
-- Nothing runs the test suite automatically. There is no CI, so the coverage gate only
-  binds when someone remembers to run it.
+- `api/` has Vitest, with unit and integration suites gated at 100% coverage, plus the
+  deliberately failing known-bug suite in `api/test/known-bugs/`. `tourganiser-ui/` has
+  Vitest too as of 2026-08-11, but it covers the **pure modules only** — `scheduleUtils`,
+  `scheduleGenerator`, `fixtureUtils`, `requests` and the tournament cache. No component
+  renders under test, and there is deliberately no coverage threshold: a gate over five
+  files out of forty would be theatre. Add one when the suite covers enough to mean
+  something.
+- CI runs both packages on every push — `.github/workflows/api-tests.yml` and
+  `ui-checks.yml`.
+- **The UI lint step asserts the error count has not grown, rather than that it is zero.**
+  `tourganiser-ui/` carries a baseline of 5 pre-existing ESLint errors — three
+  `react-refresh/only-export-components` and two `react-hooks/set-state-in-effect` —
+  because clearing them means moving exports into new files and reworking two effects.
+  A red lint build therefore means a **new** error. When the five are fixed, drop
+  `LINT_BASELINE` to 0 in the workflow and it becomes an ordinary gate.
 - `api/` has no lint setup. `tourganiser-ui/` has ESLint.
 - Single environment. No staging, and no migration tooling — schema changes are applied
   by hand against Neon and `docs/database.md` is updated by hand to match. This is a

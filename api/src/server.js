@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import app from "./app.js";
+import DatabaseConnection from "./config/db.js";
+import { registerShutdownHandlers } from "./lifecycle.js";
 
 dotenv.config();
 
@@ -15,6 +17,11 @@ if (missing.length > 0) {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Render sends SIGTERM on every deploy. The logic lives in ./lifecycle.js so it
+// can be tested without a listener; this file only supplies the real server and
+// the real pool.
+registerShutdownHandlers({ server, pool: DatabaseConnection().pool });

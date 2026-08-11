@@ -2,25 +2,31 @@ import { describe, it, expect } from "vitest";
 import { getISODate, getLongDate } from "../../../src/utils/DateHandler.js";
 
 // test/setup.js pins TZ to UTC. Without that these assertions shift by a day
-// depending on where the suite runs.
+// depending on where the suite runs — which is exactly why getLongDate is
+// derived from getISODate rather than formatting the Date directly, and why
+// these tests cannot prove that part on their own.
 
 describe("getISODate", () => {
-    it("adds one UTC day and returns the date part only", () => {
-        // The +1 is deliberate in the source, compensating for a shift applied
-        // elsewhere. Locked here so it cannot change silently.
-        expect(getISODate("2026-08-01")).toBe("2026-08-02");
+    it("returns the UTC date part, unshifted", () => {
+        // Was bug 7: this added a UTC day, so every date the helper produced was
+        // one ahead of the date it was given.
+        expect(getISODate("2026-08-01")).toBe("2026-08-01");
     });
 
     it("accepts a Date object", () => {
-        expect(getISODate(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-02");
+        expect(getISODate(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-01");
     });
 
-    it("rolls over the end of a month", () => {
-        expect(getISODate("2026-01-31")).toBe("2026-02-01");
+    it("keeps the last day of a month", () => {
+        expect(getISODate("2026-01-31")).toBe("2026-01-31");
     });
 
-    it("rolls over the end of a year", () => {
-        expect(getISODate("2026-12-31")).toBe("2027-01-01");
+    it("keeps the last day of a year", () => {
+        expect(getISODate("2026-12-31")).toBe("2026-12-31");
+    });
+
+    it("takes the UTC day, not the local one, from a mid-day timestamp", () => {
+        expect(getISODate(new Date("2026-08-01T23:30:00.000Z"))).toBe("2026-08-01");
     });
 
     it("throws on a value that is not a date", () => {
@@ -33,15 +39,29 @@ describe("getLongDate", () => {
         expect(getLongDate(new Date("2026-08-01T00:00:00.000Z"))).toBe("1 August 2026");
     });
 
-    it("does not apply the day shift that getISODate applies", () => {
+    // Was bug 7. The two helpers described the same tournament as two different
+    // days, so anything showing both — a card and its detail page — disagreed.
+    it("describes the same day as getISODate", () => {
         const date = new Date("2026-08-01T00:00:00.000Z");
 
+        expect(getISODate(date)).toBe("2026-08-01");
         expect(getLongDate(date)).toBe("1 August 2026");
-        expect(getISODate(date)).toBe("2026-08-02");
     });
 
-    it("requires a Date and throws on an ISO string", () => {
-        // Unlike getISODate, which accepts anything new Date() accepts.
-        expect(() => getLongDate("2026-08-01")).toThrow(TypeError);
+    it("agrees with getISODate at the end of a month", () => {
+        const date = new Date("2026-01-31T00:00:00.000Z");
+
+        expect(getISODate(date)).toBe("2026-01-31");
+        expect(getLongDate(date)).toBe("31 January 2026");
+    });
+
+    // It used to throw here, because it called toLocaleDateString on whatever it
+    // was handed. Both helpers now take anything new Date() takes.
+    it("accepts an ISO string, as getISODate does", () => {
+        expect(getLongDate("2026-08-01")).toBe("1 August 2026");
+    });
+
+    it("throws on a value that is not a date", () => {
+        expect(() => getLongDate("not a date")).toThrow(RangeError);
     });
 });

@@ -102,6 +102,14 @@ function compareHeadToHead(a, b, headToHead) {
 }
 
 // Builds a map of "winnerId|loserId" -> matches won, from completed fixtures.
+//
+// Takes normalised fixtures: team ids on team_1_id / team_2_id, scores as set
+// pairs on result. That is the one shape these helpers accept — see
+// makeNormalisedFixture in test/helpers/fixtures.js. Callers holding raw rows
+// from the fixtures table, which name those columns team_1 / team_2, adapt
+// before calling. Do not teach this function to read both: accepting either
+// shape hides the mismatch instead of fixing it, and the mismatch is what made
+// this return an empty map — killing head-to-head — throughout progression.
 export function buildHeadToHeadMap(fixtures) {
     const map = new Map();
 

@@ -81,6 +81,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 CREATE TRIGGER "trg_divisions_last_updated" BEFORE UPDATE ON "divisions" FOR EACH ROW EXECUTE FUNCTION "update_last_updated"();
+CREATE TRIGGER "trg_tournaments_last_updated" BEFORE UPDATE ON "tournaments" FOR EACH ROW EXECUTE FUNCTION "update_last_updated"();
 
 ## Notes
 
@@ -92,3 +93,54 @@ It went unrecorded here until 2026-08-09, and the function assigned `NEW.last_up
 `record "new" has no field "last_updated"`. Nothing noticed because no working code
 path updated a division row: creation inserts, and deletion cascades. Round
 progression and score entry both would have. The typo was corrected on 2026-08-09.
+
+`trg_tournaments_last_updated` was added on 2026-08-11 and reuses the same function
+unchanged. It is what makes `tournamentRepository.updateSchedule` stamp anything at
+all — that statement previously moved no timestamp, and the two lifecycle statements
+(`startTournament`, `endTournament`) did not either. A trigger covers all three
+without any of them naming the column, which is the reason to prefer one here.
+
+Both triggers only fire when `row(NEW.*) IS DISTINCT FROM row(OLD.*)`, so an UPDATE
+that changes nothing does not move the stamp. Queries that set `last_update = now()`
+themselves — `replaceState`, `updateRounds`, `updateStateRounds`, `touchDivision` —
+are unaffected by that guard, because assigning the column is itself a change.
+
+### What the stamps are for
+
+`GET /api/tournaments/:tournamentId` builds an ETag from the greatest `last_update`
+across the tournament row and its divisions. A change a reader can see therefore has
+to move one of those two columns, or the client is told its cached copy is current.
+
+`teams` and `fixtures` carry no `last_update` and no trigger, and two writes reach
+them without touching a stamped row:
+
+- a team rename, which writes only to `teams`;
+- recording a result on a fixture whose round is absent from `divisions.state`, which
+  skips the state write.
+
+Both call `divisionsRepository.touchDivision` so the division's stamp moves anyway.
+Every other write already stamps: progression and score entry go through the state
+queries above, and the tournament's own writes go through the trigger.
+
+### Outstanding check on `tournaments.last_update`
+
+The column is recorded above as `DEFAULT now() NOT NULL`, matching `divisions`. The
+Phase 5 handover described it as nullable. One of the two is wrong and it has not been
+confirmed against the live database. It matters because a null stamp is treated as
+"unknown, always refetch" — correct but never cached. To settle it:
+
+```sql
+SELECT column_name, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'tournaments' AND column_name = 'last_update';
+
+SELECT count(*) FROM tournaments WHERE last_update IS NULL;
+```
+
+If it is nullable, backfill and constrain rather than teaching the reader to cope:
+
+```sql
+UPDATE tournaments SET last_update = now() WHERE last_update IS NULL;
+ALTER TABLE tournaments ALTER COLUMN last_update SET DEFAULT now();
+ALTER TABLE tournaments ALTER COLUMN last_update SET NOT NULL;
+```

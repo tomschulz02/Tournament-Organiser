@@ -58,6 +58,10 @@ export const ERRORS = {
 	INVALID_STRUCTURE: [400, "The group and qualifier counts do not fit the number of teams"],
 	FORMAT_NOT_IMPLEMENTED: [400, "This format is not available yet"],
 	UNSUPPORTED_FORMAT: [400, "This format is not supported"],
+	// A round whose type no fixture generator handles. Distinct from
+	// UNSUPPORTED_FORMAT, which is about the division's format: this is one round
+	// inside an otherwise valid structure.
+	UNSUPPORTED_ROUND_TYPE: [400, "This round type is not supported"],
 
 	// Accounts and sessions.
 	MISSING_FIELDS: [400, "Missing required fields"],
@@ -98,6 +102,24 @@ export const ERRORS = {
 	FIXTURE_NOT_FOUND: [404, "Fixture not found"],
 	INVALID_SCORE: [400, "Scores must be whole numbers of zero or more"],
 	FIXTURE_NOT_READY: [400, "This match does not have both teams yet"],
+
+	// Field-level input failures, raised by assertText in utils/validation.js
+	// before a value reaches Postgres, where an over-length varchar would
+	// otherwise become a 500 that names nothing. The messages stay static like
+	// every other one here; `details` carries the field, its limit and the
+	// length that was sent, so the client can point at the offending input.
+	FIELD_TOO_LONG: [400, "One of the fields is too long"],
+	FIELD_INVALID: [400, "One of the fields is not valid"],
+
+	// Raised by the auth rate limiter, not by a service. It goes through the
+	// catalogue like everything else so the 429 arrives in the standard envelope;
+	// a bare rejection from the middleware would be the only response in the
+	// application that does not.
+	TOO_MANY_REQUESTS: [429, "Too many attempts. Please wait a minute and try again"],
+
+	// The health endpoint reporting that the database did not answer. An expected
+	// condition rather than a fault: reporting it is the endpoint's whole job.
+	SERVICE_UNAVAILABLE: [503, "The service is not ready"],
 
 	// Generic.
 	MALFORMED_JSON: [400, "Request body is not valid JSON"],

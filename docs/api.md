@@ -49,11 +49,15 @@ Status codes in use:
 
 - 200 OK — successful read or update
 - 201 Created — resource created
+- 304 Not Modified — the client's `If-None-Match` matched; no body. Only
+  `GET /api/tournaments/:tournamentId` returns it
 - 400 Bad Request — validation failure
 - 401 Unauthorized — missing or invalid token
 - 403 Forbidden — authenticated but not permitted
 - 404 Not Found — resource does not exist, or invalid UUID in path
 - 409 Conflict — the request is valid but the resource is in a state that forbids it
+- 429 Too Many Requests — the auth rate limit was exceeded; only `POST /api/users/login`
+  and `POST /api/users/signup` can return it
 - 500 Internal Server Error — unexpected failure
 - 501 Not Implemented — the route exists but the feature does not yet
 
@@ -144,6 +148,7 @@ Implemented:
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
+| GET | `/api/health` | public | Liveness and readiness. See below. |
 | POST | `/api/users/signup` | public | Create account, set cookie |
 | POST | `/api/users/login` | public | Authenticate, set cookie |
 | POST | `/api/users/logout` | any | Clear cookie |
@@ -155,7 +160,7 @@ Implemented:
 | PUT | `/api/divisions/:divisionId` | required + owner | Replace a division's teams and structure |
 | PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
-| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. |
+| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. Cached — see below. |
 
 Declared, routed, and answering **501** in the standard envelope. Added 2026-08-08 so the
 paths are settled and the frontend can wire to them for real. `requireAuth` is already
@@ -175,6 +180,73 @@ The three per-team stubs — `POST /:divisionId/teams`, `PUT /:divisionId/teams/
 and `DELETE /:divisionId/teams/:teamId` — were **removed** on 2026-08-10, superseded by
 `PUT /api/divisions/:divisionId`. Their paths are gone rather than unimplemented, and now
 answer 404.
+
+### Health
+
+`GET /api/health` is mounted in `app.js` above the session middleware, so it needs no
+cookie and pays for no JWT verification. It runs `SELECT 1` through the pool, because
+"the process is up" would report healthy while every real request returned a 500.
+
+| Status | Body |
+|---|---|
+| 200 | `{ success: true, message: "OK", data: { database: "up" } }` |
+| 503 | `SERVICE_UNAVAILABLE` in the standard envelope, when the pool does not answer |
+
+The 503 is an `AppError` like any other, so it is not logged as a fault — reporting a
+database that is down is what the endpoint is for, not a surprise.
+
+### Caching the tournament view
+
+`GET /api/tournaments/:tournamentId` is the one cached response. Added 2026-08-11.
+
+The server sends an `ETag`, plus `Vary: Cookie` and `Cache-Control: no-cache`. A
+client may store the body but must revalidate before reusing it. Send the stored
+value back as `If-None-Match`; an unchanged tournament answers **304** with no body.
+
+The validator is built from two things, and both matter:
+
+| Half | What it is |
+|---|---|
+| Data | The greatest `last_update` across the tournament row and its divisions |
+| Viewer | The requesting user's id, or anonymous |
+
+**The viewer half is not optional.** The payload carries `creator` and `loggedIn`,
+which depend on who is asking rather than on when anything changed. An ETag built
+from the timestamp alone would give one value to two genuinely different
+representations, and a signed-out reader presenting the organiser's validator would
+get a 304 — then render the organiser's cached page, management controls included.
+Hashing the viewer in means a different reader never matches. `Vary: Cookie` is the
+same guarantee for any shared cache in between.
+
+The id is hashed, not embedded: an ETag is echoed by clients and stored by caches,
+and there is no reason to put an identifier in either.
+
+A tournament whose change key cannot be determined is sent with no `ETag` at all and
+is never answered with a 304. Unknown means refetch.
+
+Express's own automatic ETag is **disabled** (`app.set("etag", false)`). It content-
+hashes every JSON response, which would both override the decision above and make the
+validator a hash of a body containing `creator` — a meaning nobody chose.
+
+**Two CORS settings are load-bearing**, because the frontend and API are on different
+origins:
+
+- `exposedHeaders: ['ETag']` — cross-origin JavaScript can only read the safelisted
+  response headers, and `ETag` is not one. Without it the client reads null, stores no
+  validator and never revalidates: the cache looks fine and does nothing.
+- `allowedHeaders` includes `If-None-Match` — it is not a safelisted *request* header,
+  so sending it triggers a preflight, and an unlisted header means the browser blocks
+  the request entirely.
+
+Both were missing when this first went in, and neither is detectable from the test
+suite: supertest does not enforce CORS. `app.cors.test.js` asserts the headers are
+advertised, which is as close as a test can get.
+
+On the client, `requests.js` holds the one cached payload in memory, keyed by
+tournament and session. Not `localStorage`: a stale organiser payload surviving a
+browser restart is worse than no cache. The cache is cleared on logout and whenever
+`sessionVersion` moves — though correctness does not rest on that, since the server
+would refuse to revalidate another session's entry anyway.
 
 ### Editing a division's teams
 
@@ -385,6 +457,30 @@ Implemented:
 - `server.js` exits at boot if `DATABASE_URL` or `JWT_SECRET` is unset.
 - Removed the per-request path logging in `app.js` and the `console.log(tournamentData)`
   in `tournaments.controller.js`, which wrote user-submitted content to logs.
+- Length and type validation at the service boundary, via `assertText` in
+  `api/src/utils/validation.js`. `username` and `email` are checked at 100 and
+  `location` at 50, the column widths in `docs/database.md`; `tournaments.name` and
+  `description` are unbounded `text`, so they carry application limits of 100 and 2000.
+  An over-length or wrong-typed field is now `FIELD_TOO_LONG` or `FIELD_INVALID` — a 400
+  carrying `{ field, max, length }` in `data`, since catalogue messages are static.
+  Passwords are deliberately unlimited: they are stored as a fixed-size bcrypt hash.
+- `helmet`, mounted first in `app.js` so the headers reach every response including
+  errors and 404s. It also removes the `X-Powered-By` banner Express sets by default.
+- Rate limiting on `POST /api/users/login` and `POST /api/users/signup`, via
+  `express-rate-limit` in `api/src/middleware/rateLimit.js`. Ten attempts per minute per
+  IP, shared between the two routes. Nothing else is limited: browsing and viewing a
+  tournament are anonymous and legitimate, and repetition buys an attacker nothing there.
+  The rejection is handed to the error middleware as `TOO_MANY_REQUESTS` rather than
+  answered by the limiter, so a 429 carries the same envelope as every other failure.
+  Advertised with `RateLimit-*` headers; the obsolete `X-RateLimit-*` ones are off.
+- `app.set("trust proxy", 1)`. Render terminates TLS and forwards, so without it `req.ip`
+  is Render's proxy and every visitor would share one rate-limit bucket. One hop rather
+  than `true`, so the value cannot be forged: the trusted proxy appends the real peer to
+  `X-Forwarded-For` after anything the client sent.
+- bcrypt `saltRounds` raised from 10 to 12. No migration: bcrypt stores the cost inside
+  the hash, so existing passwords keep verifying at 10 and only new ones are written at
+  12. The dead duplicate of the constant in `users.repository.js` is gone — hashing has
+  lived in the service since the error-handling work.
 
 Outstanding, in rough priority order:
 
@@ -395,13 +491,9 @@ Outstanding, in rough priority order:
   owner as part of a fetch it already needed. `requireAuth` proves identity; the service
   proves permission. See `docs/decisions.md`, and `progression.service.js` for the
   reference implementation.
-- Validate and length-limit user input at the service boundary. `username` and `email`
-  are `varchar(100)`, `location` is `varchar(50)`; oversized input currently surfaces
-  as a 500 from Postgres rather than a 400.
-- Rate limit `POST /api/users/login` and `POST /api/users/signup`.
+- Extend the same length and type validation to division and team names, which
+  `divisionService.createDivision` still passes through unchecked. `divisions.type` is
+  `varchar(50)` and both names are unbounded `text`.
 
-Deferred — each adds a dependency, so needs approval under `CLAUDE.md`:
-
-- `helmet` for baseline security headers.
-- `express-rate-limit` for the rate limiting above.
-- Raising bcrypt `saltRounds` from 10 to 12.
+Nothing is deferred. `helmet`, `express-rate-limit` and the bcrypt cost increase were
+approved on 2026-08-10 and implemented; they are listed above.

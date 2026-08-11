@@ -14,11 +14,93 @@ const app = (await import("../../../src/app.js")).default;
 const { userService } = await import("../../../src/services/users.service.js");
 const { AppError } = await import("../../../src/errors.js");
 const { authCookie } = await import("../../helpers/auth.js");
+const { resetAuthLimiter, AUTH_MAX_ATTEMPTS } = await import("../../../src/middleware/rateLimit.js");
 
 beforeEach(() => {
     vi.mocked(userService.createUser).mockReset();
     vi.mocked(userService.loginUser).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // Signup and login are rate limited per IP, and every test here comes from
+    // the same one. Without this the file spends its own budget and later cases
+    // get a 429 instead of the response they are asserting.
+    resetAuthLimiter();
+});
+
+describe("auth rate limiting", () => {
+    const login = { email: "tom@example.com", password: "secret" };
+
+    async function attemptLogin() {
+        return await request(app).post("/api/users/login").send(login);
+    }
+
+    it(`allows ${AUTH_MAX_ATTEMPTS} attempts and refuses the next one`, async () => {
+        userService.loginUser.mockResolvedValue({ token: "signed-token", username: "tom" });
+
+        for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt += 1) {
+            expect((await attemptLogin()).status).toBe(200);
+        }
+
+        expect((await attemptLogin()).status).toBe(429);
+    });
+
+    // A bare rejection from the middleware would be the only response in the
+    // application not wearing the envelope.
+    it("returns the 429 in the standard envelope", async () => {
+        userService.loginUser.mockRejectedValue(new AppError("INVALID_CREDENTIALS"));
+
+        for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt += 1) {
+            await attemptLogin();
+        }
+        const response = await attemptLogin();
+
+        expect(response.status).toBe(429);
+        expect(response.body).toEqual({
+            success: false,
+            message: "Too many attempts. Please wait a minute and try again",
+            data: null
+        });
+    });
+
+    it("stops calling the service once the limit is reached", async () => {
+        userService.loginUser.mockRejectedValue(new AppError("INVALID_CREDENTIALS"));
+
+        for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS + 3; attempt += 1) {
+            await attemptLogin();
+        }
+
+        expect(userService.loginUser).toHaveBeenCalledTimes(AUTH_MAX_ATTEMPTS);
+    });
+
+    it("counts signup against the same budget as login", async () => {
+        userService.loginUser.mockResolvedValue({ token: "signed-token", username: "tom" });
+        userService.createUser.mockResolvedValue({ token: "signed-token", username: "tom" });
+
+        for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt += 1) {
+            await attemptLogin();
+        }
+
+        const signup = await request(app).post("/api/users/signup")
+            .send({ username: "tom", email: "tom@example.com", password: "secret", confirmPassword: "secret" });
+
+        expect(signup.status).toBe(429);
+    });
+
+    it("leaves an unthrottled endpoint alone", async () => {
+        for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS + 2; attempt += 1) {
+            await request(app).get("/api/users/check-login");
+        }
+
+        expect((await request(app).get("/api/users/check-login")).status).toBe(200);
+    });
+
+    it("advertises the limit in RateLimit headers, not the obsolete X-RateLimit ones", async () => {
+        userService.loginUser.mockResolvedValue({ token: "signed-token", username: "tom" });
+
+        const response = await attemptLogin();
+
+        expect(response.headers["ratelimit-policy"]).toBeDefined();
+        expect(response.headers["x-ratelimit-limit"]).toBeUndefined();
+    });
 });
 
 describe("POST /api/users/signup", () => {
@@ -58,6 +140,23 @@ describe("POST /api/users/signup", () => {
         userService.createUser.mockRejectedValue(new AppError("MISSING_FIELDS"));
 
         expect((await request(app).post("/api/users/signup").send({})).status).toBe(400);
+    });
+
+    // The wire shape the client codes against. The message is static by
+    // contract, so which field was wrong has to travel in `data`.
+    it("names the offending field in data when one is too long", async () => {
+        userService.createUser.mockRejectedValue(
+            new AppError("FIELD_TOO_LONG", { details: { field: "username", max: 100, length: 101 } })
+        );
+
+        const response = await request(app).post("/api/users/signup").send(body);
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({
+            success: false,
+            message: "One of the fields is too long",
+            data: { field: "username", max: 100, length: 101 }
+        });
     });
 
     it("reports an already-registered email as 409, not a fault", async () => {

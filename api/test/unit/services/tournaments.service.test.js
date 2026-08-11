@@ -97,6 +97,60 @@ describe("tournamentService.createTournament", () => {
             .toHaveBeenNthCalledWith(2, { name: "Division B" }, "tour-1", "user-1", dbMock.client);
     });
 
+    // Validation runs before the transaction opens, so a rejected field never
+    // reaches Postgres and no connection is taken for a request that cannot work.
+    describe("input validation", () => {
+        function withDetails(overrides) {
+            return { ...payload, details: { ...payload.details, ...overrides } };
+        }
+
+        // location is varchar(50). A 200-character one used to reach the column
+        // and come back as a 500 that named nothing.
+        it("refuses an oversized location with a 400 naming the field", async () => {
+            await expect(tournamentService.createTournament(withDetails({ location: "a".repeat(200) }), "user-1"))
+                .rejects.toMatchObject({
+                    code: "FIELD_TOO_LONG",
+                    status: 400,
+                    details: { field: "location", max: 50, length: 200 }
+                });
+
+            expect(clientSql()).toEqual([]);
+            expect(tournamentRepository.createTournament).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ["name", { name: "a".repeat(101) }, 100],
+            ["description", { description: "a".repeat(2001) }, 2000]
+        ])("refuses an oversized %s, which the schema does not bound", async (field, overrides, max) => {
+            await expect(tournamentService.createTournament(withDetails(overrides), "user-1"))
+                .rejects.toMatchObject({ code: "FIELD_TOO_LONG", details: { field, max } });
+        });
+
+        it.each([
+            ["name", { name: undefined }],
+            ["location", { location: undefined }]
+        ])("refuses a missing %s, naming it", async (field, overrides) => {
+            await expect(tournamentService.createTournament(withDetails(overrides), "user-1"))
+                .rejects.toMatchObject({ code: "MISSING_FIELDS", status: 400, details: { field } });
+        });
+
+        it("refuses a name that is not a string", async () => {
+            await expect(tournamentService.createTournament(withDetails({ name: 42 }), "user-1"))
+                .rejects.toMatchObject({ code: "FIELD_INVALID", status: 400, details: { field: "name" } });
+        });
+
+        it("accepts a payload with no description at all", async () => {
+            tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
+
+            await expect(tournamentService.createTournament(payload, "user-1")).resolves.toBe("tour-1");
+        });
+
+        it("refuses a payload with no details, rather than throwing a TypeError", async () => {
+            await expect(tournamentService.createTournament({ divisions: [] }, "user-1"))
+                .rejects.toMatchObject({ code: "MISSING_FIELDS", details: { field: "details" } });
+        });
+    });
+
     it("creates the divisions one at a time, since a single client cannot run concurrent queries", async () => {
         tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
 
@@ -170,7 +224,7 @@ describe("tournamentService.fetchTournaments", () => {
         expect(grouped.ongoing.map((entry) => entry.id)).toEqual(["b"]);
         expect(grouped.completed.map((entry) => entry.id)).toEqual(["c"]);
         expect(grouped.upcoming[0].start_date).toBe("1 August 2026");
-        expect(grouped.upcoming[0].end_date).toBe("2026-08-04");
+        expect(grouped.upcoming[0].end_date).toBe("2026-08-03");
     });
 
     it("drops a tournament whose status is not one it recognises", async () => {
@@ -179,16 +233,19 @@ describe("tournamentService.fetchTournaments", () => {
         expect(await tournamentService.fetchTournaments()).toEqual({ upcoming: [], ongoing: [], completed: [] });
     });
 
-    it("stops processing at the first tournament with no status", async () => {
-        // The loop breaks rather than skipping, so "b" is lost as well.
-        // test/known-bugs asserts that only the null row should be skipped.
+    // Was bug 4. The loop used `break` where it meant `continue`, so one row with
+    // no status hid every tournament after it.
+    it("skips only the tournament with no status", async () => {
         tournamentRepository.getAllTournaments.mockResolvedValue([
             row({ id: "a", status: "Ongoing" }),
             row({ id: "null-row", status: null }),
             row({ id: "b", status: "Ongoing" })
         ]);
 
-        expect((await tournamentService.fetchTournaments()).ongoing.map((entry) => entry.id)).toEqual(["a"]);
+        const grouped = await tournamentService.fetchTournaments();
+
+        expect(grouped.ongoing.map((entry) => entry.id)).toEqual(["a", "b"]);
+        expect([...grouped.upcoming, ...grouped.completed]).toEqual([]);
     });
 
     it("lets a repository failure propagate untouched", async () => {
@@ -227,7 +284,10 @@ describe("tournamentService.fetchTournamentDetails", () => {
 
         const result = await tournamentService.fetchTournamentDetails("tour-1", "user-1");
 
-        expect(result).toEqual({ creator: true, view: { formatted: true } });
+        // changeKey is the ETag's data half, derived from rows already loaded.
+        // The fixtures carry no last_update, so it is null here; buildChangeKey
+        // is tested directly in test/unit/utils/etag.test.js.
+        expect(result).toEqual({ creator: true, changeKey: null, view: { formatted: true } });
         expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledTimes(2);
         expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(1, ["t1", "t2"]);
         expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(2, ["t3"]);

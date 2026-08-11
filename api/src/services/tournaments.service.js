@@ -7,10 +7,31 @@ import { getISODate, getLongDate } from "../utils/DateHandler.js";
 import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
 import { validateSchedule } from "../utils/scheduleValidator.js";
 import { AppError } from "../errors.js";
+import { assertText } from "../utils/validation.js";
+import { buildChangeKey } from "../utils/etag.js";
 
 const db = DatabaseConnection();
 
+// tournaments.name and description are unbounded `text`, so these two limits are
+// the application's rather than the schema's. They exist so that a request that
+// is plainly not a tournament name is refused at the edge instead of being
+// stored. location is varchar(50) and the number is the column's.
+// See docs/database.md.
+const TOURNAMENT_NAME_MAX = 100;
+const TOURNAMENT_DESCRIPTION_MAX = 2000;
+const TOURNAMENT_LOCATION_MAX = 50;
+
 async function createTournament(tournamentData, userId) {
+    const details = tournamentData?.details;
+    if (!details) {
+        throw new AppError("MISSING_FIELDS", { details: { field: "details" } });
+    }
+
+    assertText(details.name, "name", { max: TOURNAMENT_NAME_MAX });
+    assertText(details.location, "location", { max: TOURNAMENT_LOCATION_MAX });
+    // description is the one nullable free-text column of the three.
+    assertText(details.description, "description", { max: TOURNAMENT_DESCRIPTION_MAX, required: false });
+
     // One transaction for the whole creation: the tournament, its divisions,
     // their teams and their fixtures commit together or not at all.
     //
@@ -20,7 +41,7 @@ async function createTournament(tournamentData, userId) {
     // a failed tournament insert left no id to delete by.
     return await db.withTransaction(async (client) => {
         const { tournamentId } =
-            await tournamentRepository.createTournament(tournamentData.details, userId, client);
+            await tournamentRepository.createTournament(details, userId, client);
 
         // Sequential, not Promise.all: a single pg client cannot run concurrent
         // queries. Nothing is lost — each division used to open its own
@@ -67,6 +88,9 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
 
     return {
         creator: viewerUserId !== null && viewerUserId === tournament.created_by,
+        // Derived from rows already loaded, so this costs no extra query. The
+        // controller turns it into an ETag; it is not part of the payload.
+        changeKey: buildChangeKey({ tournament, divisions }),
         view
     };
 }
@@ -203,7 +227,9 @@ function groupTournamentsByStatus(tournaments){
     };
 
     for (const tournament of tournaments){
-        if (tournament.status === null) break;
+        // A row with no status is skipped, not treated as the end of the list.
+        // This was `break`, which hid every tournament after the first null one.
+        if (tournament.status === null) continue;
 
         switch (tournament.status){
             case 'Not Started':

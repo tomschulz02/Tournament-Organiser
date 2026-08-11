@@ -3,8 +3,13 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { SESSION_TTL_JWT } from "../config/auth.js";
 import { AppError } from "../errors.js";
+import { assertText } from "../utils/validation.js";
 
-const saltRounds = 10;
+// Raised from 10 on 2026-08-10. No migration is needed and none is possible:
+// bcrypt stores the cost inside the hash, so every existing password keeps
+// verifying at the cost it was written with, and only new or changed ones are
+// written at 12.
+const saltRounds = 12;
 const jwtSecret = process.env.JWT_SECRET;
 
 function issueToken(user) {
@@ -30,6 +35,13 @@ async function createUser(username, email, password, confirmPassword) {
     if (!username || !email || !password) {
         throw new AppError("MISSING_FIELDS");
     }
+
+    // users.username and users.email are varchar(100) — see docs/database.md.
+    // Over that, the insert used to fail inside Postgres and surface as a 500.
+    // Nothing checks the password's length: it is stored as a bcrypt hash of
+    // fixed size, so no column can overflow.
+    assertText(username, "username", { max: 100 });
+    assertText(email, "email", { max: 100 });
 
     const hash = await bcrypt.hash(password, saltRounds);
 

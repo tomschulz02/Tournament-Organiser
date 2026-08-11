@@ -40,3 +40,31 @@ describe("CORS in development", () => {
         expect(response.headers["access-control-allow-origin"]).toBeUndefined();
     });
 });
+
+// These two are what makes the tournament view's ETag usable from the browser,
+// and both were missing when the caching went in. supertest does not enforce
+// CORS, so nothing here fails the way a browser does — it can only assert that
+// the headers are advertised. That is enough to catch the regression: with
+// either one absent, the cache is silently inert or every request is blocked.
+describe("CORS and conditional requests", () => {
+    it("lets the browser read the ETag it is meant to send back", async () => {
+        const response = await request(app)
+            .get("/api/users/check-login")
+            .set("Origin", "https://tourganiser.example");
+
+        // Without this, cross-origin JavaScript reads null and never caches.
+        expect(response.headers["access-control-expose-headers"]).toContain("ETag");
+    });
+
+    it("permits If-None-Match on the preflight", async () => {
+        const response = await request(app)
+            .options("/api/tournaments/45bb764e-c07d-474e-8d01-9d9711d39a3a")
+            .set("Origin", "https://tourganiser.example")
+            .set("Access-Control-Request-Method", "GET")
+            .set("Access-Control-Request-Headers", "if-none-match");
+
+        // If-None-Match is not safelisted, so sending it triggers a preflight.
+        // Unlisted, the browser blocks the request outright.
+        expect(response.headers["access-control-allow-headers"]).toContain("If-None-Match");
+    });
+});

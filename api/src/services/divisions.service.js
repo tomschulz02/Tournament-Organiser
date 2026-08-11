@@ -109,6 +109,13 @@ async function renameTeams(divisionId, entries, existingIds) {
             for (const entry of changed) {
                 await divisionsRepository.updateTeam(entry.id, entry.name, client);
             }
+
+            // A rename writes only to `teams`, which carries no last_update and
+            // has no trigger. Without this the division's stamp would not move,
+            // the tournament view's ETag would not change, and every reader
+            // would keep being told their cached page — with the old names — is
+            // still current.
+            await divisionsRepository.touchDivision(divisionId, client);
         });
     }
 

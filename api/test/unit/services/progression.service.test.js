@@ -27,7 +27,8 @@ const {
 } = await import("../../../src/services/progression.service.js");
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
-const { makeFixture, makeRound, makeState } = await import("../../helpers/fixtures.js");
+const { makeFixture, makeNormalisedFixture, makeRound, makeState } =
+    await import("../../helpers/fixtures.js");
 
 const TEAM_IDS = ["t1", "t2", "t3", "t4"];
 
@@ -196,11 +197,18 @@ describe("sameOrder", () => {
 describe("buildKnockoutOutcomes", () => {
     const round = finalsRound();
 
+    // buildKnockoutOutcomes runs on fixtures that have already been through
+    // normalizeFixtureResult, so build them in that shape rather than the
+    // fixtures-table shape.
     function knockoutFixture(overrides = {}) {
-        return {
-            ...makeFixture({ round: "Finals", status: "COMPLETED", team_1: "t1", team_2: "t2", ...overrides }),
-            result: overrides.result ?? [[21, 15]]
-        };
+        return makeNormalisedFixture({
+            round: "Finals",
+            status: "COMPLETED",
+            team_1_id: "t1",
+            team_2_id: "t2",
+            result: [[21, 15]],
+            ...overrides
+        });
     }
 
     it("reports the winner and loser of each match", () => {
@@ -254,6 +262,26 @@ describe("computeRoundResults", () => {
         expect(computeRoundResults(round, state, fixtures)).toEqual([
             { id: "t2" }, { id: "t4" }, { id: "t1" }, { id: "t3" }
         ]);
+    });
+
+    // Was bug 1. buildHeadToHeadMap reads team_1_id / team_2_id; progression used
+    // to hand it rows straight from the fixtures table, which name those columns
+    // team_1 / team_2, so the map was always empty and head-to-head — step 4 of
+    // the chain in docs/tournament-rules.md — never fired here.
+    it("ranks the winner of a head-to-head above the loser when nothing else separates them", () => {
+        const fourTeamState = makeState({ teams: ["t1", "t2", "t3", "t4"] });
+        const round = makeRound({ name: "Pool Play", groups: [["t1", "t2", "t3", "t4"]] });
+
+        // t1 and t2 finish level on wins, set ratio and point ratio.
+        // t2 beat t1, so t2 must rank higher despite t1 being the better seed.
+        const fixtures = normalised([
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t2", team_2: "t1", team_1_result: [21], team_2_result: [15] }),
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t1", team_2: "t3", team_1_result: [21], team_2_result: [15] }),
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t4", team_2: "t2", team_1_result: [21], team_2_result: [15] })
+        ]);
+
+        expect(computeRoundResults(round, fourTeamState, fixtures).map((row) => row.id))
+            .toEqual(["t4", "t2", "t1", "t3"]);
     });
 
     it("returns nothing when the round has no groups", () => {
@@ -502,6 +530,37 @@ describe("progressionService.commit", () => {
         expect(fixturesRepository.updateFixtures).toHaveBeenCalledWith("div-1", [
             { id: "f-final", team_1: "t1", team_2: "t4" }
         ]);
+    });
+
+    // Was bug 8. The two writes are separate transactions, so their order is the
+    // only thing protecting the division from a failure between them. Binding
+    // first means a crash leaves the old round with correct fixtures, which a
+    // retry just repeats; advancing first would leave the division on a round
+    // whose fixtures still hold placeholders.
+    it("binds the next round's fixtures before advancing the round", async () => {
+        loadable();
+
+        const order = [];
+        fixturesRepository.updateFixtures.mockImplementation(async () => {
+            order.push("updateFixtures");
+        });
+        divisionsRepository.updateRounds.mockImplementation(async () => {
+            order.push("updateRounds");
+        });
+
+        await progressionService.commit("div-1", "user-1", ["t1", "t4", "t2", "t3"]);
+
+        expect(order).toEqual(["updateFixtures", "updateRounds"]);
+    });
+
+    it("leaves the round unadvanced when binding the fixtures fails", async () => {
+        loadable();
+        fixturesRepository.updateFixtures.mockRejectedValue(new Error("bind failed"));
+
+        await expect(progressionService.commit("div-1", "user-1", ["t1", "t4", "t2", "t3"]))
+            .rejects.toThrow("bind failed");
+
+        expect(divisionsRepository.updateRounds).not.toHaveBeenCalled();
     });
 
     it("records that the organiser amended the ranking", async () => {

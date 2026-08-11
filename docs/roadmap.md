@@ -6,7 +6,7 @@ application in a better state than it found it.
 Item codes (`C1`, `B7`, `F3`…) refer to `docs/gap-analysis.md`, which describes each one
 in full. This document says what to do and in what order; that one says why.
 
-Last reviewed 2026-08-10.
+Last reviewed 2026-08-11.
 
 ---
 
@@ -153,14 +153,30 @@ had bound.
 
 ### Tournament view polish
 
-Small, and independent of the endpoints above.
+**Complete 2026-08-11.** Small, and independent of the endpoints above.
 
-- **The fixture card's right-hand side is cramped and does not align.** Division, stage
-  and status are squeezed together, and a longer stage label shifts the division column
-  on that row. Give the trailing fields fixed columns so they line up down the list.
-- **Status should be a colour indicator, not a word** — it is the least-read text on a
-  row and the most repeated. Keep the label accessible to screen readers and to a title
-  attribute; show a dot.
+- ~~**The fixture card's right-hand side is cramped and does not align.**~~ — **done
+  2026-08-11.** `.tv-fixture-rows` owns the columns and each row is a
+  `grid-template-columns: subgrid` of them, so the widths are shared across the whole
+  list rather than recomputed per row. Court, division and round are three columns
+  instead of one flex cell, placed by class rather than by order, so a row missing a
+  slot leaves the column empty instead of pulling the next one into it. The spacing
+  between columns rides on the cells rather than on the grid gap, because a gap is
+  charged whether or not anything fills the column — a single-division list would
+  otherwise pay for a badge column nobody uses. All three trailing labels stay
+  `nowrap`.
+
+  One limit worth knowing: `ScheduleTab` renders a list per time group, so columns line
+  up within a group and not across them. Making them align down a whole day would mean
+  subgridding the schedule's own grid, which is a larger change than this was.
+- ~~**Status should be a colour indicator, not a word**~~ — **done 2026-08-11.** A dot
+  in the row's first column: blue upcoming, green live, red completed, muted cancelled.
+  The outcome column now carries a score or nothing. The row's left edge stays the
+  neutral border on every status — settled 2026-08-11, one fact encoded once, so there
+  is nothing for the dot to disagree with. The dot is `aria-hidden` and carries the
+  label as a `title`; the label itself sits beside it as visually hidden text, which is
+  what a screen reader reads. Putting the `title` on the `<li>` instead made the status
+  the list item's accessible name and got it announced twice.
 
 ## Phase 3.5 — Teams
 
@@ -285,6 +301,60 @@ The generator stays in the client and the server validates on write — settled
 
 ## Phase 5 — Correctness and consolidation
 
+**Complete 2026-08-11.** The coverage gate is back at 100 and CI now runs both packages.
+Six of the seven known bugs are fixed and their tests moved into the regular suites, so
+`npm run test:bugs` reports only bug 10 — the friends and saved-tournament queries, which
+cover unreachable code for a feature that has no schema.
+
+`helmet` and `express-rate-limit` are installed, login and signup are throttled with a
+429 that goes through the error catalogue like everything else, and `saltRounds` is 12.
+Input length is checked at the service boundary through `assertText`, which names the
+offending field in `AppError`'s `details`. There is a health endpoint and `SIGTERM` closes
+the pool. `getDivisionDetails` and the leaking scroll listener are gone, closing **B11**
+and **F8**.
+
+Client caching is an ETag on `GET /api/tournaments/:tournamentId`, built from the greatest
+`last_update` across the tournament and its divisions **and the viewer** — because the
+payload carries `creator`, a validator built from the timestamp alone would serve an
+organiser's copy to a signed-out reader on a 304. `Vary: Cookie`, `Cache-Control:
+no-cache`, and Express's own automatic ETag disabled so the only one sent is deliberate.
+
+Making that work took two things beyond the plan:
+
+- **Two writes had to start stamping.** A team rename touches only `teams`, which has no
+  `last_update` and no trigger, and a result on a fixture whose round is absent from
+  `state` skips the state write. Both would have changed what a reader sees while the
+  change key stood still, so both now call `divisionsRepository.touchDivision`.
+- **Two CORS settings are load-bearing**, and both were missing at first: `ETag` must be
+  in `exposedHeaders` or cross-origin JavaScript reads null and the cache is silently
+  inert, and `If-None-Match` must be in `allowedHeaders` or the browser blocks the
+  request at the preflight. Neither is visible to the test suite — supertest does not
+  enforce CORS — and both were found by loading the real page against the real API.
+
+`tourganiser-ui` has tests for the first time, closing **F12**: vitest over the pure
+modules — `scheduleUtils`, `scheduleGenerator`, `fixtureUtils` — plus `requests.js`,
+whose tournament cache decides whether one reader can be shown another's payload. No
+coverage threshold on the UI yet, deliberately: a gate over four files out of forty
+would be theatre. CI runs the suite, then lint, then build.
+
+### Outstanding from Phase 5
+
+- **`trg_tournaments_last_updated` has not been applied to the database.** It is recorded
+  in `docs/database.md` with the statement to run. Until it exists, division-level
+  changes invalidate the cache correctly but tournament-level ones — a schedule save,
+  start, end — do not, because nothing moves `tournaments.last_update`.
+- **Whether `tournaments.last_update` is nullable is unconfirmed.** `docs/database.md`
+  records it as `NOT NULL DEFAULT now()`; the Phase 5 handover described it as nullable.
+  The verification and backfill statements are in `docs/database.md`. A null stamp is
+  handled — it means "unknown, always refetch" — so this costs caching, not correctness.
+- **X4, a linter for `api/`, was not done.** It was in the original scope below and never
+  entered the handover. `tourganiser-ui` keeps a baseline of five pre-existing ESLint
+  errors; CI fails only if that count grows, which is stated in the workflow.
+- Division and team names are still unvalidated — `assertText` covers `users` and
+  `tournaments` only. Recorded under Security in `docs/api.md`.
+
+The original scope follows.
+
 - The remaining known bugs in `api/test/known-bugs/`, worked through as the surrounding
   code is touched, per the existing "fix drift when you touch it" rule.
 - **B9** input validation, and the deferred security items in `docs/api.md` — rate
@@ -299,16 +369,21 @@ The generator stays in the client and the server validates on write — settled
 
 ### Client-side caching
 
-- Cache the tournament payload in the client and refetch only when the server says it has
-  changed, keyed on `last_update`. Fetching only the changed slice would be better than
-  refetching the whole payload, but is not the point — avoiding the refetch entirely is.
-- **Every write to `divisions` must stamp `last_update`.** Several currently do not.
-- **`tournaments` has no `last_update` column.** Tournament-level changes — name, status,
-  and now `schedule` — are therefore invisible to a cache keyed on the division. Either
-  add the column or derive a tournament-level value from `max(divisions.last_update)`,
-  which does not cover a schedule edit. Decide before building the cache.
-- Interacts with the logout bug in Phase 1: whatever holds the cache has to be cleared
-  when the session changes, or a logged-out viewer keeps the organiser's payload.
+As scoped. Every question here was answered; the answers are in the summary above and in
+`docs/api.md`, and two of the bullets were wrong by the time the work started.
+
+- ~~Cache the tournament payload and refetch only when the server says it changed.~~
+  Done as a conditional request rather than a client-side comparison: the server owns the
+  validator and answers 304, so the client never has to decide whether its copy is stale.
+- ~~**Every write to `divisions` must stamp `last_update`.**~~ Two did not; both now do.
+- ~~**`tournaments` has no `last_update` column.**~~ Out of date — the column was added
+  on 2026-08-10, before this phase began. The change key is the greatest stamp across the
+  tournament **and** its divisions, so a schedule edit is covered, which
+  `max(divisions.last_update)` would not have been.
+- ~~Interacts with the logout bug in Phase 1.~~ The cache is keyed on the session and
+  cleared on logout — but that is the second line of defence, not the first. The ETag
+  covers the viewer, so the server will not revalidate one session's copy for another
+  even if the client offers it.
 
 ## Planned redesigns
 

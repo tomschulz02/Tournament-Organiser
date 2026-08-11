@@ -140,6 +140,34 @@ describe("updateTeam", () => {
     });
 });
 
+describe("touchDivision", () => {
+    // Exists for the writes that change what a reader sees without touching a
+    // stamped row — a team rename, and a result on a fixture whose round is
+    // missing from state. See src/utils/etag.js.
+    it("moves last_update and nothing else", async () => {
+        expect(await divisionsRepository.touchDivision("div-1")).toEqual({ message: "Division touched" });
+
+        expect(db.query).toHaveBeenCalledWith(
+            "UPDATE divisions SET last_update = now() WHERE id = $1::uuid",
+            ["div-1"]
+        );
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await divisionsRepository.touchDivision("div-1", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws rather than returning an error string", async () => {
+        const underlying = new Error("no such division");
+        db.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(divisionsRepository.touchDivision("div-1"), "Failed to touch division", underlying);
+    });
+});
+
 describe("deleteTeamsByIds", () => {
     // Requires the client: the rows the fixtures referenced have to go in the
     // same transaction that deleted those fixtures.
@@ -379,43 +407,9 @@ describe("getFixturesByDivisionId", () => {
 // updateSchedule moved to tournament.repository.js on 2026-08-08: a schedule
 // spans the tournament, not a division. Its tests moved with it.
 
-describe("getDivisionDetails", () => {
-    it("returns each division with its fixtures attached", async () => {
-        client.query
-            .mockResolvedValueOnce({ rows: [{ id: "div-1" }, { id: "div-2" }] })
-            .mockResolvedValueOnce({ rows: [{ id: "f1" }] })
-            .mockResolvedValueOnce({ rows: [] });
-
-        const details = await divisionsRepository.getDivisionDetails("tour-1");
-
-        expect(details.divisions).toEqual([
-            { id: "div-1", fixtures: [{ id: "f1" }] },
-            { id: "div-2", fixtures: [] }
-        ]);
-        expect(client.release).toHaveBeenCalledOnce();
-    });
-
-    it("returns an empty collection when the tournament has no divisions", async () => {
-        // Not a missing resource: the repository assigns no meaning to it, the
-        // same as getDivisionsByTournamentId returning [].
-        client.query.mockResolvedValueOnce({ rows: [] });
-
-        expect(await divisionsRepository.getDivisionDetails("tour-1")).toEqual({ divisions: [] });
-        expect(client.release).toHaveBeenCalledOnce();
-    });
-
-    it("throws rather than returning an error string", async () => {
-        const underlying = new Error("connection lost");
-        client.query.mockRejectedValueOnce(underlying);
-
-        await expectWrapped(
-            divisionsRepository.getDivisionDetails("tour-1"),
-            "Failed to fetch division details",
-            underlying
-        );
-        expect(client.release).toHaveBeenCalledOnce();
-    });
-});
+// getDivisionDetails and its three tests were removed on 2026-08-10 along with
+// the function. It had no callers; getDivisionsByTournamentId below, plus
+// getFixturesByDivisionIds, is what the view actually uses.
 
 describe("getDivisionsByTournamentId", () => {
     it("returns the tournament's divisions by name", async () => {

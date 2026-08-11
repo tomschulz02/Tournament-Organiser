@@ -1,9 +1,7 @@
-import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
 import DatabaseConnection from "../config/db.js";
 
 const db = DatabaseConnection();
-const saltRounds = 10;
 
 // used for user registration
 async function createUser(username, email, password) {

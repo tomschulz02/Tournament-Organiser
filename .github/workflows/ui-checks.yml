@@ -1,0 +1,72 @@
+name: UI checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: Test + lint + build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: tourganiser-ui
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tourganiser-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Covers the pure modules only — scheduleUtils, scheduleGenerator and
+      # fixtureUtils. No coverage threshold is set: a gate over three files out
+      # of forty would be theatre. Add one when the suite covers enough to mean
+      # something. Unlike the lint step below, this one DOES fail on any failure.
+      - name: Run tests
+        run: npm test
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage
+          path: tourganiser-ui/coverage/
+          retention-days: 14
+
+      # THIS STEP DOES NOT FAIL ON THE EXISTING LINT ERRORS.
+      #
+      # tourganiser-ui has a baseline of 5 pre-existing ESLint errors: three
+      # react-refresh/only-export-components and two react-hooks/set-state-in-effect.
+      # Clearing them means moving exports into new files and reworking two effects,
+      # which is a change to the components themselves, not to CI. So this step
+      # asserts the count has not GROWN instead of asserting it is zero.
+      #
+      # A red build here therefore means a NEW lint error, never one of the five.
+      #
+      # When the five are fixed, drop LINT_BASELINE to 0 and this becomes an
+      # ordinary `npm run lint` gate. Do not raise it to accommodate a new error.
+      - name: Lint (baseline check)
+        env:
+          LINT_BASELINE: 5
+        run: |
+          npm run lint -- -f json -o eslint-report.json || true
+          count=$(jq '[.[].errorCount] | add' eslint-report.json)
+          echo "ESLint errors: $count (baseline $LINT_BASELINE)"
+          if [ "$count" -gt "$LINT_BASELINE" ]; then
+            echo "::error::Lint errors grew from $LINT_BASELINE to $count. Fix the new one."
+            npm run lint || true
+            exit 1
+          fi
+          if [ "$count" -lt "$LINT_BASELINE" ]; then
+            echo "::notice::Lint errors are down to $count. Lower LINT_BASELINE in this workflow."
+          fi
+
+      - name: Build
+        run: npm run build

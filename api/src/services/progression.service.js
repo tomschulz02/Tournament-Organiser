@@ -102,6 +102,16 @@ async function commit(divisionId, userId, confirmedTeamIds) {
     // schedule already referencing them survives.
     const boundFixtures = bindFixturesToResults(nextRound, confirmed);
 
+    // Order matters, and these are two separate transactions.
+    //
+    // Bind first: a failure after this leaves the division still on the old
+    // round with the next round's fixtures already correct, and a retry simply
+    // redoes the same deterministic binding. Advancing first would leave the
+    // division sitting on a round whose fixtures still read "Rank 1".
+    if (boundFixtures.length > 0) {
+        await fixturesRepository.updateFixtures(divisionId, boundFixtures);
+    }
+
     await divisionsRepository.updateRounds(
         divisionId,
         userId,
@@ -109,10 +119,6 @@ async function commit(divisionId, userId, confirmedTeamIds) {
         null,
         roundIndex + 1
     );
-
-    if (boundFixtures.length > 0) {
-        await fixturesRepository.updateFixtures(divisionId, boundFixtures);
-    }
 
     return {
         divisionId: division.id,
@@ -207,8 +213,8 @@ function computeRoundResults(round, state, fixtures) {
             if (!isCountableFixture(fixture)) return;
             if (fixture.round !== round.name) return;
 
-            const teamOne = rows.find((row) => row.id === fixture.team_1);
-            const teamTwo = rows.find((row) => row.id === fixture.team_2);
+            const teamOne = rows.find((row) => row.id === fixture.team_1_id);
+            const teamTwo = rows.find((row) => row.id === fixture.team_2_id);
             if (!teamOne || !teamTwo) return;
 
             applyFixtureToStandings(teamOne, teamTwo, fixture.result);
@@ -238,8 +244,8 @@ function buildKnockoutOutcomes(round, fixtures) {
             if (oneSets === twoSets) return null;
 
             return oneSets > twoSets
-                ? { winnerId: fixture.team_1, loserId: fixture.team_2 }
-                : { winnerId: fixture.team_2, loserId: fixture.team_1 };
+                ? { winnerId: fixture.team_1_id, loserId: fixture.team_2_id }
+                : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id };
         })
         .filter(Boolean);
 }
@@ -289,9 +295,19 @@ function normalizeState(state) {
     return state;
 }
 
-// fixtures.team_1_result and team_2_result are parallel integer arrays, one entry
-// per set. The standings helpers expect [[teamOneScore, teamTwoScore], ...].
+// The one adapter from a fixtures-table row to the shape the standings helpers
+// take. Two things differ:
+//
+//   - team_1_result and team_2_result are parallel integer arrays, one entry per
+//     set; the helpers expect [[teamOneScore, teamTwoScore], ...] on `result`.
+//   - the table names the team columns team_1 / team_2; the helpers read
+//     team_1_id / team_2_id.
+//
+// The team columns are renamed rather than added alongside, so that past this
+// point there is exactly one name for a team id. Carrying both is what let
+// buildHeadToHeadMap read undefined without anything noticing.
 function normalizeFixtureResult(fixture) {
+    const { team_1, team_2, ...rest } = fixture;
     const one = Array.isArray(fixture.team_1_result) ? fixture.team_1_result : [];
     const two = Array.isArray(fixture.team_2_result) ? fixture.team_2_result : [];
     const setCount = Math.min(one.length, two.length);
@@ -301,7 +317,7 @@ function normalizeFixtureResult(fixture) {
         result.push([Number(one[index]) || 0, Number(two[index]) || 0]);
     }
 
-    return { ...fixture, result };
+    return { ...rest, team_1_id: team_1 ?? null, team_2_id: team_2 ?? null, result };
 }
 
 function isRoundComplete(round, fixtures) {

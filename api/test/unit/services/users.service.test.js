@@ -55,7 +55,9 @@ describe("userService.createUser", () => {
         const created = await userService.createUser("tom", "tom@example.com", "secret", "secret");
 
         expect(created).toEqual({ token: "signed-token", username: "tom" });
-        expect(bcrypt.hash).toHaveBeenCalledWith("secret", 10);
+        // Cost 12, raised from 10 on 2026-08-10. bcrypt stores the cost in the
+        // hash, so passwords written at 10 keep verifying without a migration.
+        expect(bcrypt.hash).toHaveBeenCalledWith("secret", 12);
         expect(userRepository.createUser).toHaveBeenCalledWith("tom", "tom@example.com", "hashed-password");
         expect(jwt.sign).toHaveBeenCalledWith(
             { id: "user-1", username: "tom", email: "tom@example.com", admin: false },
@@ -77,6 +79,36 @@ describe("userService.createUser", () => {
         expect(await codeOf(userService.createUser("", "tom@example.com", "secret", "secret"))).toBe("MISSING_FIELDS");
         expect(await codeOf(userService.createUser("tom", "", "secret", "secret"))).toBe("MISSING_FIELDS");
         expect(await codeOf(userService.createUser("tom", "tom@example.com", "", ""))).toBe("MISSING_FIELDS");
+    });
+
+    // users.username and users.email are varchar(100). Over that, the insert
+    // used to fail inside Postgres and reach the client as a 500 naming nothing.
+    it.each([
+        ["username", ["a".repeat(101), "tom@example.com"]],
+        ["email", ["tom", `${"a".repeat(95)}@example.com`]]
+    ])("refuses an oversized %s with a 400 naming the field", async (field, [username, email]) => {
+        await expect(userService.createUser(username, email, "secret", "secret"))
+            .rejects.toMatchObject({
+                code: "FIELD_TOO_LONG",
+                status: 400,
+                details: { field, max: 100 }
+            });
+
+        expect(userRepository.createUser).not.toHaveBeenCalled();
+        expect(bcrypt.hash).not.toHaveBeenCalled();
+    });
+
+    it("accepts a username and email exactly at the limit", async () => {
+        const username = "a".repeat(100);
+        const email = `${"a".repeat(88)}@example.com`;
+
+        await expect(userService.createUser(username, email, "secret", "secret")).resolves.toBeDefined();
+        expect(userRepository.createUser).toHaveBeenCalledWith(username, email, "hashed-password");
+    });
+
+    it("does not limit the password, which is stored as a fixed-size hash", async () => {
+        await expect(userService.createUser("tom", "tom@example.com", "a".repeat(5000), "a".repeat(5000)))
+            .resolves.toBeDefined();
     });
 
     it("turns a duplicate email into a 409 that says so", async () => {

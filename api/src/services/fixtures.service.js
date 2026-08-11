@@ -85,6 +85,11 @@ async function syncCompletedGames(fixture, client) {
     // malformed division rather than an error in this request, so the result is
     // still recorded.
     if (roundIndex === -1) {
+        // The state write below is what normally moves the division's stamp, and
+        // it is being skipped — but the result was still written, and the view
+        // shows it. Stamp anyway, or the tournament's ETag stays put and readers
+        // keep their cached page.
+        await divisionsRepository.touchDivision(fixture.division_id, client);
         return null;
     }
 
@@ -196,7 +201,13 @@ export function generateFixtures(rounds){
             result = generateRoundRobinFixtures(matchNo, round);
         } else if (round.type === 'knockout'){
             result = generateKnockoutFixtures(matchNo, round);
+        } else {
+            // Without this the next line reads matchNo off undefined, and an
+            // unrecognised round type surfaced as "Cannot read properties of
+            // undefined" — a 500 the controllers could not map to anything.
+            throw new AppError("UNSUPPORTED_ROUND_TYPE", { details: { type: round.type } });
         }
+
         matchNo = result.matchNo;
         fixtures.push(result.fixtures);
 

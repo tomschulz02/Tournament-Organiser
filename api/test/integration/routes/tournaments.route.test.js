@@ -112,6 +112,90 @@ describe("GET /api/tournaments/:tournamentId", () => {
         expect(tournamentService.fetchTournamentDetails).toHaveBeenCalledWith(VALID_UUID, null);
     });
 
+    // Through the real Express stack, so these cover what the controller tests
+    // cannot: that the headers survive helmet and the middleware chain, and
+    // that Express does not substitute its own ETag or its own 304.
+    describe("caching", () => {
+        const CHANGE_KEY = "1754042400000";
+        const OWNER_ID = "45bb764e-c07d-474e-8d01-9d9711d39a3a";
+
+        function serves({ creator = false, changeKey = CHANGE_KEY, view = { tournament: { id: "tour-1" } } } = {}) {
+            tournamentService.fetchTournamentDetails.mockResolvedValue({ creator, changeKey, view });
+        }
+
+        it("sends an ETag, Vary and Cache-Control on the full response", async () => {
+            serves();
+
+            const response = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+
+            expect(response.status).toBe(200);
+            expect(response.headers.etag).toMatch(/^".+"$/);
+            expect(response.headers.vary).toBe("Cookie");
+            expect(response.headers["cache-control"]).toBe("no-cache");
+        });
+
+        it("answers 304 with an empty body when the validator matches", async () => {
+            serves();
+            const first = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+
+            const second = await request(app)
+                .get(`/api/tournaments/${VALID_UUID}`)
+                .set("If-None-Match", first.headers.etag);
+
+            expect(second.status).toBe(304);
+            expect(second.text).toBeFalsy();
+        });
+
+        it("answers 200 once the data has moved", async () => {
+            serves();
+            const first = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+
+            serves({ changeKey: "1754042499999" });
+            const second = await request(app)
+                .get(`/api/tournaments/${VALID_UUID}`)
+                .set("If-None-Match", first.headers.etag);
+
+            expect(second.status).toBe(200);
+            expect(second.body.data).toMatchObject({ tournament: { id: "tour-1" } });
+        });
+
+        // The trap, end to end. A signed-out reader presenting the organiser's
+        // validator must be given a fresh, non-organiser payload — never a 304
+        // that leaves them rendering the organiser's cached page.
+        it("never honours the organiser's validator for a signed-out reader", async () => {
+            serves({ creator: true });
+            const organiser = await request(app)
+                .get(`/api/tournaments/${VALID_UUID}`)
+                .set("Cookie", authCookie({ id: OWNER_ID }));
+
+            serves({ creator: false });
+            const anonymous = await request(app)
+                .get(`/api/tournaments/${VALID_UUID}`)
+                .set("If-None-Match", organiser.headers.etag);
+
+            expect(anonymous.status).toBe(200);
+            expect(anonymous.body.data).toMatchObject({ loggedIn: false, creator: false });
+            expect(anonymous.headers.etag).not.toBe(organiser.headers.etag);
+        });
+
+        it("gives the same reader and data the same validator twice", async () => {
+            serves();
+            const first = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+            const second = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+
+            expect(second.headers.etag).toBe(first.headers.etag);
+        });
+
+        it("sends no ETag when the change key is unknown", async () => {
+            serves({ changeKey: null });
+
+            const response = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+
+            expect(response.status).toBe(200);
+            expect(response.headers.etag).toBeUndefined();
+        });
+    });
+
     it("marks the owner as the creator", async () => {
         tournamentService.fetchTournamentDetails.mockResolvedValue({ creator: true, view: {} });
 

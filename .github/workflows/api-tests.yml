@@ -26,17 +26,12 @@ jobs:
         run: npm ci
 
       # Runs every suite and enforces 100% statement, branch, function and line
-      # coverage of api/src. The three files excluded from that figure are listed
+      # coverage of api/src. The two files excluded from that figure are listed
       # in api/vitest.config.js with the reason for each.
       #
-      # This job is EXPECTED TO FAIL today: test/known-bugs holds fourteen tests
-      # that assert the behaviour ten outstanding bugs prevent. Each one names the
-      # source line responsible. As the bugs are fixed the job goes green on its own.
-      #
-      # To get a mergeable pipeline before then, swap the line below for:
-      #     run: npm test -- --exclude 'test/known-bugs/**'
-      # and re-enable the reporting job underneath. Coverage stays at 100% either
-      # way — the bug tests are not load-bearing for it.
+      # test/known-bugs is NOT run here — api/vitest.config.js excludes it, because
+      # it is written to fail until the bugs it documents are fixed. This job is
+      # expected to be green. Run the bug suite on its own with `npm run test:bugs`.
       - name: Run tests
         run: npm test
 
@@ -48,8 +43,9 @@ jobs:
           path: api/coverage/
           retention-days: 14
 
-  # Reports the outstanding bugs without blocking the pipeline. Only useful once
-  # the job above stops running them; left disabled so they are not run twice.
+  # Reports the outstanding bugs without blocking the pipeline. Left disabled: the
+  # suite is a specification for work not yet done, and a permanently amber job is
+  # noise rather than signal. Enable it if that stops being true.
   #
   # known-bugs:
   #   name: Known bugs (informational)

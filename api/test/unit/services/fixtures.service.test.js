@@ -21,7 +21,8 @@ vi.mock("../../../src/repositories/fixtures.repository.js", () => ({
 vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     divisionsRepository: {
         getStateForUpdate: vi.fn(),
-        updateStateRounds: vi.fn()
+        updateStateRounds: vi.fn(),
+        touchDivision: vi.fn()
     }
 }));
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     fixturesRepository.countCompletedInRounds.mockReset().mockResolvedValue(0);
     divisionsRepository.getStateForUpdate.mockReset().mockResolvedValue(makeState());
     divisionsRepository.updateStateRounds.mockReset();
+    divisionsRepository.touchDivision.mockReset();
 });
 
 describe("rotateGroupTeams", () => {
@@ -177,6 +179,23 @@ describe("generateFixtures", () => {
 
         expect(result.fixtures.map((fixture) => fixture.matchNo)).toEqual([1, 2]);
         expect(result.rounds).toBe(rounds);
+    });
+
+    // Was bug 9. No generator matched, so `result` stayed undefined and the next
+    // line read matchNo off it — a TypeError the controllers could only turn
+    // into a 500, rather than a named 400.
+    it("names the failure when no generator handles the round type", () => {
+        expect(() => generateFixtures([makeRound({ type: "swiss" })]))
+            .toThrow(expect.objectContaining({ code: "UNSUPPORTED_ROUND_TYPE", status: 400 }));
+    });
+
+    it("reports which round type it could not handle", () => {
+        try {
+            generateFixtures([makeRound({ type: "swiss" })]);
+            expect.unreachable("generateFixtures should have thrown");
+        } catch (error) {
+            expect(error.details).toEqual({ type: "swiss" });
+        }
     });
 
     it("writes the fixture ids and game count back onto each round", () => {
@@ -503,6 +522,26 @@ describe("fixtureService.updateResult", () => {
         expect(result).toEqual({ id: "f1", status: "COMPLETED", completedGames: null });
         expect(fixturesRepository.updateResult).toHaveBeenCalled();
         expect(divisionsRepository.updateStateRounds).not.toHaveBeenCalled();
+    });
+
+    // The state write is what normally moves the division's stamp, and this
+    // path skips it — but the result was still written and the view shows it,
+    // so the tournament's ETag has to move or readers keep their cached page.
+    it("stamps the division even when the state write is skipped", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({ rounds: [makeRound({ name: "Some Other Round" })] })
+        );
+
+        await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
+
+        expect(divisionsRepository.touchDivision).toHaveBeenCalledWith("div-1", dbMock.client);
+    });
+
+    it("does not stamp separately when the state write already did", async () => {
+        await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
+
+        expect(divisionsRepository.updateStateRounds).toHaveBeenCalled();
+        expect(divisionsRepository.touchDivision).not.toHaveBeenCalled();
     });
 
     it.each([

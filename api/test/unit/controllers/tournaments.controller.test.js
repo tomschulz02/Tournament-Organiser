@@ -123,6 +123,110 @@ describe("tournamentController.fetchTournamentDetails", () => {
         });
     });
 
+    describe("caching", () => {
+        const CHANGE_KEY = "1754042400000";
+
+        function loadableWith(overrides = {}) {
+            tournamentService.fetchTournamentDetails.mockResolvedValue({
+                creator: true,
+                changeKey: CHANGE_KEY,
+                view: {},
+                ...overrides
+            });
+        }
+
+        async function fetchAs(res, { user = { id: "user-1" }, ifNoneMatch } = {}) {
+            await tournamentController.fetchTournamentDetails(
+                makeReq({
+                    params: { tournamentId: VALID_UUID },
+                    user,
+                    headers: ifNoneMatch ? { "if-none-match": ifNoneMatch } : {}
+                }),
+                res
+            );
+        }
+
+        it("offers an ETag and forbids a shared cache from reusing the response", async () => {
+            loadableWith();
+            const res = makeRes();
+
+            await fetchAs(res);
+
+            expect(res.headers.ETag).toMatch(/^".+"$/);
+            // Without Vary, a shared cache could hand the organiser's body to
+            // the next reader regardless of the ETag.
+            expect(res.headers.Vary).toBe("Cookie");
+            expect(res.headers["Cache-Control"]).toBe("no-cache");
+        });
+
+        it("answers 304 with no body when the validator matches", async () => {
+            loadableWith();
+            const first = makeRes();
+            await fetchAs(first);
+
+            const second = makeRes();
+            await fetchAs(second, { ifNoneMatch: first.headers.ETag });
+
+            expect(second.status).toHaveBeenCalledWith(304);
+            expect(second.end).toHaveBeenCalled();
+            expect(second.json).not.toHaveBeenCalled();
+        });
+
+        it("answers 200 when the data has moved", async () => {
+            loadableWith();
+            const first = makeRes();
+            await fetchAs(first);
+
+            loadableWith({ changeKey: "1754042499999" });
+            const second = makeRes();
+            await fetchAs(second, { ifNoneMatch: first.headers.ETag });
+
+            expect(second.status).toHaveBeenCalledWith(200);
+            expect(second.json).toHaveBeenCalled();
+        });
+
+        // THE TRAP. The organiser's validator must never be honoured for a
+        // signed-out reader, or they receive a 304 and render the cached page
+        // complete with management controls.
+        it("refuses the organiser's validator for a signed-out reader", async () => {
+            loadableWith({ creator: true });
+            const organiser = makeRes();
+            await fetchAs(organiser, { user: { id: "user-1" } });
+
+            loadableWith({ creator: false });
+            const anonymous = makeRes();
+            await fetchAs(anonymous, { user: null, ifNoneMatch: organiser.headers.ETag });
+
+            expect(anonymous.status).toHaveBeenCalledWith(200);
+            expect(anonymous.status).not.toHaveBeenCalledWith(304);
+            expect(anonymous.json.mock.calls[0][0].data).toMatchObject({ loggedIn: false, creator: false });
+            expect(anonymous.headers.ETag).not.toBe(organiser.headers.ETag);
+        });
+
+        it("refuses one signed-in user's validator for another", async () => {
+            loadableWith();
+            const first = makeRes();
+            await fetchAs(first, { user: { id: "user-1" } });
+
+            const second = makeRes();
+            await fetchAs(second, { user: { id: "user-2" }, ifNoneMatch: first.headers.ETag });
+
+            expect(second.status).toHaveBeenCalledWith(200);
+        });
+
+        // Nothing to validate against, so every request is answered in full
+        // rather than risking a validator that means nothing.
+        it("offers no ETag and never 304s when the change key is unknown", async () => {
+            loadableWith({ changeKey: null });
+            const res = makeRes();
+
+            await fetchAs(res, { ifNoneMatch: '"anything"' });
+
+            expect(res.headers.ETag).toBeUndefined();
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+    });
+
     it("rejects an id that is not a v1-v5 UUID without calling the service", async () => {
         const res = makeRes();
 

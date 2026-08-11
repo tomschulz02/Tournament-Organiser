@@ -5,7 +5,7 @@ import { AuthContext } from './AuthContext';
 import { useMessage } from './MessageContext';
 import { MessagePopup } from './MessageProvider';
 import { useTheme } from './ThemeContext';
-import { logoutUser } from './requests';
+import { logoutUser, clearTournamentCache } from './requests';
 import LoadingScreen from './components/LoadingScreen';
 
 export default function App() {
@@ -13,16 +13,21 @@ export default function App() {
 	const [showHelpMenu, setShowHelpMenu] = useState(false);
 
 	useEffect(() => {
-		window.addEventListener('scroll', () => {
-			const header = document.querySelector('header');
-			if (header) {
-				if (window.scrollY > 25) {
-					header.classList.add('scrolled');
-				} else {
-					header.classList.remove('scrolled');
-				}
-			}
-		});
+		// Resolved once, not on every scroll event. Effects run after the whole
+		// tree is committed, so Header's element is already in the document.
+		const header = document.querySelector('header');
+		if (!header) return;
+
+		const onScroll = () => header.classList.toggle('scrolled', window.scrollY > 25);
+
+		// Passive: the handler never calls preventDefault, and saying so lets the
+		// browser scroll without waiting on it.
+		window.addEventListener('scroll', onScroll, { passive: true });
+
+		// This effect previously returned nothing, so every mount of App added a
+		// listener that outlived it — and App does unmount, since /login is
+		// outside its layout route.
+		return () => window.removeEventListener('scroll', onScroll);
 	}, []);
 
 	return (
@@ -129,6 +134,11 @@ function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 		setLoading(true);
 		try {
 			await logoutUser();
+			// Drop every cached payload before the session version moves. Those
+			// bodies were resolved for the organiser and carry `creator: true`;
+			// the server's ETag would refuse to revalidate them for a signed-out
+			// reader, but there is no reason to keep them around to find out.
+			clearTournamentCache();
 			// Bumps the session version, which is what makes pages holding
 			// server-resolved data — the tournament view and its organiser
 			// controls — refetch without a reload.

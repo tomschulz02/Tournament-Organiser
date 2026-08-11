@@ -1,6 +1,7 @@
 import { tournamentService } from "../services/tournaments.service.js";
 import { AppError } from "../errors.js";
 import { isUuid } from "../utils/validation.js";
+import { buildTournamentEtag, matchesEtag } from "../utils/etag.js";
 
 // Controllers do not catch. Express 5 forwards a rejected promise from an async
 // handler to the error middleware, which owns every status and message.
@@ -29,7 +30,28 @@ async function fetchTournamentDetails(req, res){
         throw new AppError("TOURNAMENT_NOT_FOUND");
     }
 
-    const tournament = await tournamentService.fetchTournamentDetails(tournamentId, req.user?.id || null);
+    const viewerUserId = req.user?.id || null;
+    const tournament = await tournamentService.fetchTournamentDetails(tournamentId, viewerUserId);
+
+    // This response differs by session cookie — `creator` and `loggedIn` both
+    // do — so no shared cache may hand one reader's copy to another. Vary says
+    // that; no-cache lets a client store the body but never reuse it without
+    // asking, which is what makes the ETag below the only thing deciding.
+    res.set("Vary", "Cookie");
+    res.set("Cache-Control", "no-cache");
+
+    // Covers the viewer as well as the data. See src/utils/etag.js for why the
+    // timestamp alone would be wrong.
+    const etag = buildTournamentEtag(tournament.changeKey, viewerUserId);
+    if (etag) {
+        res.set("ETag", etag);
+
+        if (matchesEtag(req.headers["if-none-match"], etag)) {
+            // 304 carries no body by specification, which is fine alongside the
+            // envelope: the client already holds the payload this validates.
+            return res.status(304).end();
+        }
+    }
 
     res.status(200).json({
         success: true,

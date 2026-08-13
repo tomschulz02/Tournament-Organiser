@@ -2,16 +2,16 @@
 	"version": "0.0.1",
 	"configurations": [
 		{
-			"name": "tourganiser-ui",
-			"runtimeExecutable": "npm",
-			"runtimeArgs": ["run", "dev", "--prefix", "tourganiser-ui"],
-			"port": 5173
-		},
-		{
 			"name": "tourganiser-api",
 			"runtimeExecutable": "npm",
 			"runtimeArgs": ["start", "--prefix", "api"],
 			"port": 3000
+		},
+		{
+			"name": "tourganiser-ui",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": ["run", "dev", "--prefix", "tourganiser-ui"],
+			"port": 5173
 		}
 	]
 }

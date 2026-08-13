@@ -205,8 +205,8 @@ describe("tournamentService.fetchTournaments", () => {
         return {
             id: "tour-1",
             status: "Not Started",
-            start_date: new Date("2026-08-01T00:00:00.000Z"),
-            end_date: new Date("2026-08-03T00:00:00.000Z"),
+            start_date: "2026-08-01",
+            end_date: "2026-08-03",
             ...overrides
         };
     }

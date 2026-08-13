@@ -2,7 +2,22 @@ import pkg from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
-const { Pool } = pkg;
+const { Pool, types } = pkg;
+
+// A `date` column is a calendar day: no time, no zone. pg's default parser turns
+// it into a Date at local midnight, and every reader then has to guess which
+// timezone to render it in. The two readers guessed differently — DateHandler in
+// UTC, scheduleValidator in local time — so east of UTC the client was told the
+// tournament started a day before the validator would accept an entry on, and
+// every schedule save was rejected.
+//
+// Handing the raw 'YYYY-MM-DD' string through removes the conversion rather than
+// compensating for it. Registered once here, where the pool is created, so every
+// query benefits.
+//
+// 1082 is `date` alone. `timestamp` (1114) and `timestamptz` (1184) keep their
+// default parsers, so last_update and the ETag change key are untouched.
+types.setTypeParser(types.builtins.DATE, (value) => value);
 
 class DBConnection {
     constructor () {

@@ -223,12 +223,12 @@ describe("validateSchedule — times and dates", () => {
         ).not.toThrow();
     });
 
-    it("reads a Date from the DATE column by its local components", () => {
+    it("accepts the first day of a one-day tournament", () => {
         expect(() =>
             validateSchedule(schedule([entry({ day: "2026-09-12" })]), {
                 ...CONTEXT,
-                startDate: new Date(2026, 8, 12),
-                endDate: new Date(2026, 8, 12)
+                startDate: "2026-09-12",
+                endDate: "2026-09-12"
             })
         ).not.toThrow();
     });

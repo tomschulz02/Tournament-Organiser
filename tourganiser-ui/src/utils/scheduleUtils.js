@@ -377,25 +377,21 @@ export function calculateScheduledStats(schedule, fixtures) {
 	};
 }
 
-export function getDayBounds(schedule, day) {
-	const dayEntries = getDayEntries(schedule, day);
-	const configuredStart = schedule.settings.dayStartTime || DEFAULT_SCHEDULE_START;
-	const configuredEnd = schedule.settings.dayEndTime || DEFAULT_SCHEDULE_END;
-
-	if (dayEntries.length === 0) {
-		return {
-			start: configuredStart,
-			end: configuredEnd,
-		};
-	}
-
-	const earliest = dayEntries.reduce((min, entry) => (compareTimes(entry.startTime, min) < 0 ? entry.startTime : min), configuredStart);
-	const latest = dayEntries.reduce((max, entry) => (compareTimes(entry.endTime, max) > 0 ? entry.endTime : max), configuredEnd);
-
+// The day's configured hours, and nothing else.
+//
+// This used to widen the day to contain its entries, so placing an entry moved
+// the axis it was placed on. Every row below it shifted, the time column appeared
+// to move, and counting down from a known time landed on the wrong row. The axis
+// is a property of the settings; an entry is drawn on it or it is not.
+export function getDayBounds(schedule) {
 	return {
-		start: earliest,
-		end: latest,
+		start: schedule.settings.dayStartTime || DEFAULT_SCHEDULE_START,
+		end: schedule.settings.dayEndTime || DEFAULT_SCHEDULE_END,
 	};
+}
+
+export function getSlotMinutes(schedule) {
+	return Number(schedule.settings.slotMinutes) || DEFAULT_SLOT_MINUTES;
 }
 
 export function buildTimeSlots(startTime, endTime, slotMinutes) {
@@ -411,35 +407,52 @@ export function buildTimeSlots(startTime, endTime, slotMinutes) {
 	return slots;
 }
 
-// The row boundaries a day's grid is drawn on, ascending, including the closing
-// boundary — so a grid of n rows gets n + 1 times back.
+// The start time of every row on a day's grid, ascending. One per row, and no
+// closing boundary — the row at index i runs from rowTimes[i] for slotMinutes.
 //
-// buildTimeSlots alone is not enough. An entry only lands on a slot boundary
-// while slotMinutes and dayStartTime are unchanged, and the moment either moves,
-// an existing entry sits between two rows with no row to occupy. Looking its
-// start time up in the ladder then returns "not found", which used to be read as
-// row 1 — so several entries stacked in the same cell at the top of the grid.
+// It used to add each entry's own start and end as extra boundaries, which is
+// what made the axis a function of its contents: adding a 09:15 entry inserted a
+// 09:15 row, so rows were unequal spans drawn at equal height and every reading
+// of the time column below it was wrong.
 //
-// Adding each entry's own start and end as boundaries gives every entry an exact
-// row range instead. The grid gains a row wherever an entry needs one, which is
-// visible and correct, rather than drawing it somewhere it is not.
-export function buildGridRowTimes(schedule, day, bounds) {
-	const times = new Set(buildTimeSlots(bounds.start, bounds.end, schedule.settings.slotMinutes));
-	times.add(bounds.start);
-	times.add(bounds.end);
+// The rows are uniform instead. A day whose configured hours are not a whole
+// number of slots gets one final row that runs past dayEndTime rather than a
+// short row, because a short row drawn at full height is the fault this replaces.
+export function buildGridRowTimes(schedule, bounds) {
+	const slotMinutes = getSlotMinutes(schedule);
+	const startMinutes = timeToMinutes(bounds.start);
+	const rowCount = Math.max(0, Math.ceil((timeToMinutes(bounds.end) - startMinutes) / slotMinutes));
 
-	getDayEntries(schedule, day).forEach((entry) => {
-		// getDayBounds already widens the day to contain its entries, so this
-		// only discards a time the bounds could not cover.
-		if (compareTimes(entry.startTime, bounds.start) >= 0 && compareTimes(entry.startTime, bounds.end) <= 0) {
-			times.add(entry.startTime);
-		}
-		if (compareTimes(entry.endTime, bounds.start) >= 0 && compareTimes(entry.endTime, bounds.end) <= 0) {
-			times.add(entry.endTime);
-		}
-	});
+	return Array.from({ length: rowCount }, (_, index) => minutesToTime(startMinutes + index * slotMinutes));
+}
 
-	return [...times].sort(compareTimes);
+// Where an entry sits on that axis, in rows. rowStart is a 1-based grid line and
+// the entry occupies rowStart through rowStart + rowSpan - 1.
+//
+// Arithmetic in minutes rather than a lookup in the row list, so an entry's drawn
+// position and a cell's occupied state are derived from the same expression and
+// cannot disagree. Occupancy used to be walked in rows and was therefore only
+// correct against the row set of the moment.
+//
+// `snapped` is true when the entry does not begin and end on a boundary. It is
+// then drawn over the rows that contain it, and the caller marks it as
+// approximate — its stored times are never changed. `inDay` is false when the
+// entry falls outside the configured hours altogether; widening the day to reach
+// it is what this change removes, so it is listed off the grid instead.
+export function getEntryRowPlacement(entry, { start, slotMinutes, rowCount }) {
+	const startMinutes = timeToMinutes(start);
+	const startOffset = timeToMinutes(entry.startTime) - startMinutes;
+	const endOffset = timeToMinutes(entry.endTime) - startMinutes;
+
+	const firstRow = Math.floor(startOffset / slotMinutes);
+	const lastRow = Math.ceil(endOffset / slotMinutes);
+
+	return {
+		rowStart: firstRow + 1,
+		rowSpan: Math.max(1, lastRow - firstRow),
+		snapped: startOffset % slotMinutes !== 0 || endOffset % slotMinutes !== 0,
+		inDay: startOffset >= 0 && endOffset > startOffset && lastRow <= rowCount,
+	};
 }
 
 export function getEntrySlotSpan(entry, slotMinutes) {

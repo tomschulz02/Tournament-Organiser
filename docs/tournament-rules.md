@@ -234,6 +234,27 @@ A partial schedule is legal, so an earlier round may be entirely unplaced. The c
 is measured against every earlier round that *has* been placed, not only the immediately
 preceding one.
 
+### A team never plays two matches back to back
+
+At least one slot of rest between a team's two matches on the same day. Settled
+2026-08-11 and enforced from 2026-08-13 as a hard constraint in the generator, not a
+preference it can trade away: a tight tournament now reports a fixture it cannot place
+rather than placing it against a team that has just come off court.
+
+Only the generator enforces it. The server accepts a hand-placed back-to-back match,
+because the organiser may have a reason — a walkover, a team that asked for it — and
+`docs/schedule.md` is clear that the server rejects the impossible rather than judging
+whether a schedule is good.
+
+**It cannot apply across the pool-to-knockout boundary.** A semifinal's teams are not
+known until pool play has finished, so the generator has nobody to give rest to and will
+place a semifinal in the slot immediately after the last pool match. The round-order rule
+above still holds, so the match is playable; it may not be kind. An organiser who wants a
+gap there adds a break. Recorded in `docs/known-limitations.md`.
+
+The full priority order the generator works to is in `docs/schedule.md` under Generation
+objectives.
+
 ### Officials are not assigned
 
 A schedule entry carries an `officials` string and it is stored and displayed, but

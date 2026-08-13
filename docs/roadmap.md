@@ -6,7 +6,7 @@ application in a better state than it found it.
 Item codes (`C1`, `B7`, `F3`…) refer to `docs/gap-analysis.md`, which describes each one
 in full. This document says what to do and in what order; that one says why.
 
-Last reviewed 2026-08-11.
+Last reviewed 2026-08-13.
 
 ---
 
@@ -385,18 +385,194 @@ As scoped. Every question here was answered; the answers are in the summary abov
   covers the viewer, so the server will not revalidate one session's copy for another
   even if the client offers it.
 
-## Planned redesigns
+## Redesigns
 
-- **Tournament creation page.** To be redesigned in the same way the tournament view was,
-  with a specification supplied separately. Wait for it — the walkthrough is written from
-  the specification, not invented.
+- ~~**Tournament view**~~ — done 2026-08-08.
+- ~~**Tournament creation page**~~ — **done 2026-08-11.** It has its own route,
+  `/tournaments/create`, rather than a hash-driven section of `Browse`, which is what made
+  the post-creation redirect appear to do nothing. The page carries tournament details and
+  a list of division summary cards; division configuration happens in a modal that runs
+  Basics → Configuration → Teams, skipping the middle screen for a format that has nothing
+  to configure. A review modal previews the tournament before anything is persisted, and
+  the whole form autosaves to a versioned `localStorage` draft that survives a refresh and
+  is cleared only on a successful creation.
+
+  Two things the specification asked for were deliberately not built: the review's format
+  preview is an **illustrative schematic** rather than a real generated bracket, and Single
+  Elimination is not offered at all, because `generateDivisionDetails` throws
+  `FORMAT_NOT_IMPLEMENTED` for it.
+
+## Found in testing, 2026-08-11
+
+Five independent pieces. Grouped as decided on the day; none blocks another.
+
+### Schedule: dates and the grid
+
+**Complete 2026-08-13.** One handover, because the two were entangled in the same screen.
+They were unrelated in cause.
+
+- ~~**The date conversion bug**~~ — **done 2026-08-13.** A `pg` type parser for the `date`
+  OID (1082) in `api/src/config/db.js` hands `tournaments.start_date` and `end_date`
+  through as the stored `'YYYY-MM-DD'` string, so there is no instant for two helpers to
+  render differently. `getISODate` and `scheduleValidator.toIsoDate` both take that string
+  and reject anything else. `timestamp` is untouched, confirmed against the running
+  server. `test/unit/utils/scheduleDates.test.js` is the one test file that sets a non-UTC
+  timezone deliberately — the rest of the suite is pinned to UTC and was blind here.
+- ~~**The grid renders entries wrongly**~~ — **done 2026-08-13.** Every symptom came from
+  one decision: `buildGridRowTimes` added each entry's own start and end as extra row
+  boundaries, and `getDayBounds` widened the day to contain its entries, so the axis was a
+  function of its own contents. Both are now functions of the settings alone, the rows are
+  uniform `slotMinutes` apart at a fixed height, and an entry is positioned by minutes
+  through `getEntryRowPlacement` rather than by looking its times up in the row list.
+  Occupancy comes from the same placement, so a cell that looks occupied is occupied. An
+  unaligned entry is drawn across the slots it covers and marked as approximate; one
+  outside the day's hours is listed beneath the grid with its reason, alongside the
+  existing court-no-longer-exists case. `locateEntry`'s `placeable` handling from Phase 4
+  is kept.
+- ~~**Whether the generator needs rework**~~ — **it does not, confirmed 2026-08-13.**
+  Audited against a two-division, three-court, two-day tournament — 18 fixtures, pool play
+  plus semifinals and finals in each division. All four assertions hold in the produced
+  payload: no court holds two entries at overlapping times, no team plays two matches at
+  once, each division's pool fixtures end before its first knockout fixture starts
+  (div-1's pool closes at 16:00 and its first semifinal starts at 16:00; div-2's knockout
+  moves to the second day), and two runs over the same input produce an identical
+  schedule. Every fixture was placed. The symptoms were the two faults above.
+
+  That answered the correctness question and not the quality one — the generator placed
+  fixtures legally and chose between the legal options badly. That is the rewrite below,
+  which was already scoped separately on the same day.
+
+### Schedule generator rewrite
+
+**Complete 2026-08-13.** The generator placed fixtures correctly but chose badly, because
+its objectives were never decided — they emerged from weights that did not compose. Court
+affinity was `+180` against earliness at `-2` per slot index, so ninety slots of delay
+cost exactly one affinity bonus; and that index counted the *filtered available* slots, so
+the same slot scored differently on every iteration.
+
+The weighted score is gone. In its place: five hard constraints that a slot either
+satisfies or is not a candidate for, and a lexicographic comparison over four objectives
+in a stated order. Both are written down in `docs/schedule.md` under Generation
+objectives, which is the durable record and what future changes are judged against.
+
+- **Rest is now a hard constraint**, not a score a slot could outbid — one slot between a
+  team's two matches on a day, checked in both directions because fixtures are not placed
+  in time order. Recorded in `docs/tournament-rules.md`.
+- **Under capacity, fixtures are left unplaced and the warning names the constraint.**
+  "N fixtures could not be scheduled with the available capacity" was often simply wrong;
+  it now distinguishes the court being busy, the teams being busy, the round barrier, and
+  the rest minimum, each with what to do about it. An organiser told "capacity" when the
+  blocker was rest would add a court that does not help.
+- **Unbound knockout teams constrain nothing**, matching the server's treatment of a null
+  `team_1`. This mattered only once team exclusivity became hard: two semifinals both
+  waiting on `Rank 1` would otherwise never have run at once.
+
+Judged on a two-division, three-court tournament — 20 fixtures, full round robins plus
+semifinals, bronze and final, knockout teams unbound as the API really sends them:
+
+| | new | old |
+|---|---|---|
+| finish time | **15:00** | 18:00 |
+| division changeovers | **1** | 3 |
+| fixtures placed | 20 of 20 | 20 of 20 |
+
+No court double-booked, no team in two places, no back-to-back match, each division's pool
+play finished before its knockout started, and two runs identical. The produced payload
+was fed to `api/src/utils/scheduleValidator.js` directly and accepted. Under-provisioned —
+one court, a three-hour day — it reported two fixtures blocked by the rest minimum and
+twelve by capacity, as two separate warnings.
+
+Two things the rewrite decided against, both recorded in `docs/known-limitations.md`: no
+backtracking, and no attempt to give rest across the pool-to-knockout boundary, where the
+teams are not yet known.
+
+One departure from the handover worth knowing: **the second objective, "maximise rest
+beyond the hard minimum", is not a comparison.** Two candidate slots are only ever
+compared when they share an instant, and two slots at one instant give a team the same
+rest whichever court they are on — so a comparison there is a branch no input can reach.
+The objective is met by the hard floor plus the first objective, and the code says so at
+the point where the comparison would have gone. If the first objective ever stops being
+the slot's instant, it has to come back.
+
+### Standings
+
+- **Points for and against move into the default table.** Already tracked as `pointsFor`
+  and `pointsAgainst`; this is a display change.
+- **Set-score outcome columns in the advanced view** — how many times a team won 2-0, 2-1,
+  and so on. This is new data: `standings.js` does not bucket results by scoreline.
+  **Derived per division**, decided 2026-08-11 — the columns come from the set counts
+  actually played rather than from an assumed match format, because rounds still have no
+  match-format key. See `docs/division-state.md`.
+- **The mobile table's sticky columns leak.** The first statistic sits behind the team
+  name, and while scrolling horizontally the hidden statistics reappear in the gap between
+  the two locked columns.
+
+### The knockout bracket is cramped
+
+Nodes sit close enough to clip each other. Spacing only — the connector geometry is
+correct and is what keeps a fed match aligned on the midpoint of its two feeders, so it
+must survive any change to the spacing.
+
+### Mobile, application-wide
+
+One piece of work, **two different kinds of change**. Keep them as separate steps or the
+second will be absorbed into the first and get a token fix.
+
+**Spacing.** Reduce margins and padding across every page so elements can be larger and
+less space is wasted. Visual only, no behaviour.
+
+**The schedule maker is unusable on mobile, and spacing is not why.** Three specific
+faults, none of which padding will touch:
+
+- **Three panels stack vertically in a viewport-height modal.** At 900px and below
+  `.schedule-maker-layout` becomes a single column, so the fixture sidebar, the board and
+  the inspector sit one above another, each with `min-height: 280px`. That is 840px of
+  minimum content inside a `100vh` modal that has already spent height on a header and a
+  toolbar. The board — the thing being worked in — ends up a 280px window, reached by
+  scrolling past the other two.
+- **The grid has no horizontal scroll.** `.schedule-grid-body` sets `overflow-y: auto` and
+  nothing for the x axis, so `96px repeat(courts, minmax(0, 1fr))` squashes each court to
+  around 75px on a 320px screen. The entry cards carry team names and a division label and
+  become illegible rather than scrollable.
+- **No way to focus one panel.** All three compete for the same vertical space at once.
+
+The fix is an interaction change, not a spacing one: on small screens the panels should
+become switchable — a segmented control or tabs — so one occupies the screen at a time,
+and the grid should get a minimum court width with horizontal scroll.
+
+That last part has precedent. The tournament view already handles wide content on narrow
+screens with three sanctioned scrollers, and `docs/architecture.md` records both the
+pattern and the audit method — a container with `overflow-x: hidden` turns overflow into
+silently clipped content rather than a scrolling page, so check each descendant's right
+edge rather than trusting `scrollWidth`. The schedule grid should join that list.
+
+### Client cache survives a refresh
+
+The ETag and `If-None-Match` exchange works, but the cache is a module-level `Map`, so a
+reload empties it and the next request has no validator to send. Move it somewhere that
+outlives a refresh. The server already sends `Cache-Control: no-cache`, `Vary: Cookie` and
+an ETag — which is what tells the browser's own HTTP cache to keep the body and
+revalidate — so check whether the manual layer is preventing that before adding a third
+cache.
+
+Whatever holds it must stay keyed on the viewer. The payload carries `creator`, and
+`sessionVersion` exists for this.
 
 ## Phase 6 — Decide what is real
 
 Each of these is currently a stub with no schema behind it. Either it enters the roadmap
 properly or the stub is removed.
 
-- **F9** Profile, Friends, Saved Tournaments — inert menu items, plus a `getUserProfile`
-  route that hangs.
+- ~~**Friends**~~ — **removed, decided 2026-08-11.** No table, no UI beyond an inert menu
+  item, and it was really a step towards letting someone other than the organiser update a
+  tournament — which is now the editors-and-scorers entry in `docs/future-features.md`, and
+  a better shape for the need. Deleting `addFriend` and `getFriends` from
+  `users.repository.js`, the menu item, and known bug 10's cases for them empties
+  `npm run test:bugs`, which has never been green. The saved-tournament functions in bug 10
+  stay until the Profile page uses them.
+- **Profile and Saved Tournaments** — settled 2026-08-11 as a **future feature**, not a
+  stub to remove. They belong together: a saved-tournaments list needs somewhere to live,
+  and that somewhere is the Profile page in `docs/future-features.md`. Both stay as inert
+  menu items, and the follow button keeps reporting its 501, until that page is built.
 - Live scoring, officials assignment, configurable ranking basis, and the rest of
   `docs/future-features.md`.

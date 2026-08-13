@@ -45,6 +45,33 @@ function entriesFor(schedule, fixtureId) {
 	return schedule.entries.find((entry) => entry.fixtureId === fixtureId);
 }
 
+function courtOf(schedule, fixtureId) {
+	return entriesFor(schedule, fixtureId).courtId;
+}
+
+function startOf(schedule, fixtureId) {
+	return entriesFor(schedule, fixtureId).startTime;
+}
+
+function lastEnd(schedule) {
+	return schedule.entries.reduce((latest, entry) => (entry.endTime > latest ? entry.endTime : latest), '');
+}
+
+// The generator names the constraint that blocked a fixture rather than blaming
+// capacity for everything, so an organiser knows whether to add a court, extend
+// the day, or shorten matches. Kept here as builders so a wording change is one
+// edit rather than eight.
+const WARNINGS = {
+	court: (n) =>
+		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: every court is booked for the whole day. Add a court, extend the day, or shorten matches.`,
+	team: (n) =>
+		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: the teams involved are already playing in every remaining slot. Add a court or extend the day.`,
+	round: (n) =>
+		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: no free slot is left once the earlier rounds of the same division have finished. Extend the day or add another day.`,
+	rest: (n) =>
+		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: the only free slots would leave a team playing two matches back to back. Add a court or extend the day.`,
+};
+
 describe('input validation', () => {
 	it.each([
 		['no courts', { courtCount: 0 }],
@@ -114,14 +141,17 @@ describe('placing fixtures', () => {
 
 		expect(schedule.entries).toHaveLength(4);
 		expect(unscheduledFixtures).toHaveLength(2);
-		expect(warnings).toEqual(['2 fixtures could not be scheduled with the available capacity.']);
+		// The warning names the constraint rather than always blaming capacity —
+		// here capacity really is the answer, and the tests below cover the cases
+		// where it is not. See docs/schedule.md.
+		expect(warnings).toEqual([WARNINGS.court(2)]);
 	});
 
 	it('words the warning for a single fixture', () => {
 		const fixtures = Array.from({ length: 3 }, (_, i) => fixture(`f${i + 1}`));
 		const { warnings } = generate({ fixtures, courtCount: 1, dailyStartTime: '09:00', dailyEndTime: '11:00' });
 
-		expect(warnings).toEqual(['1 fixture could not be scheduled with the available capacity.']);
+		expect(warnings).toEqual([WARNINGS.court(1)]);
 	});
 
 	it('spreads across the tournament days it was given', () => {
@@ -396,9 +426,14 @@ describe('the round-order constraint', () => {
 });
 
 describe('court affinity', () => {
-	// One court is free at every step, so only the affinity preference can
-	// decide where the second and third pool matches land.
-	it('keeps a pool on the court its first match used', () => {
+	// REWRITTEN 2026-08-13, and it now asserts the opposite of what it used to.
+	//
+	// It was "keeps a pool on the court its first match used", written when the
+	// weights made affinity worth ninety slots of delay. docs/schedule.md puts
+	// court affinity LAST and finishing early FIRST, so a pool that can run two
+	// matches at once does, and the schedule ends an hour sooner. Do not restore
+	// the old expectation without changing the priority order first.
+	it('moves a pool onto a second court rather than waiting for its own', () => {
 		const fixtures = [
 			fixture('a1', { round: 'Group A', team1: 'A1', team2: 'A2' }),
 			fixture('a2', { round: 'Group A', team1: 'A3', team2: 'A4' }),
@@ -406,9 +441,26 @@ describe('court affinity', () => {
 		];
 
 		const { schedule } = generate({ fixtures, courtCount: 2 });
-		const courts = new Set(schedule.entries.map((e) => e.courtId));
 
-		expect(courts.size).toBe(1);
+		expect(new Set(schedule.entries.map((e) => e.courtId)).size).toBe(2);
+		// Three one-hour matches on two courts finish at 11:00. Held to one court
+		// for the sake of affinity they would have finished at 12:00.
+		expect(lastEnd(schedule)).toBe('11:00');
+	});
+
+	// Where affinity is meant to decide: one team plays all three, so the times
+	// are forced and the court is the only thing still open.
+	it('keeps a pool on its established court once the time is settled', () => {
+		const fixtures = [
+			fixture('a1', { round: 'Group A', team1: 'Aces', team2: 'A2' }),
+			fixture('a2', { round: 'Group A', team1: 'Aces', team2: 'A3' }),
+			fixture('a3', { round: 'Group A', team1: 'Aces', team2: 'A4' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 2 });
+
+		expect(new Set(schedule.entries.map((e) => e.courtId)).size).toBe(1);
+		expect(schedule.entries.map((e) => e.startTime)).toEqual(['09:00', '11:00', '13:00']);
 	});
 
 	// Nothing to key affinity on, so it must simply not apply rather than throw
@@ -425,20 +477,244 @@ describe('court affinity', () => {
 		expect(schedule.entries).toHaveLength(2);
 	});
 
+	// Unchanged in intent, rebuilt so affinity is what the case turns on. Each
+	// division has one team playing both its matches, so the second match's time
+	// is forced and only its court is still open — under the old weights the
+	// fixtures had distinct teams and affinity was strong enough to hold them
+	// back, which it no longer is.
+	// Every key the generator builds — teams, pools, changeovers — is scoped to
+	// the division, so a fixture without one must still resolve to something
+	// rather than throwing.
+	it('places a fixture that names no division', () => {
+		const fixtures = [
+			{ id: 'x1', round: 'Group A', team1: 'X1', team2: 'X2' },
+			{ id: 'x2', round: 'Group A', team1: 'X3', team2: 'X4' },
+		];
+
+		const { schedule, unscheduledFixtures } = generate({ fixtures, courtCount: 2 });
+
+		expect(unscheduledFixtures).toEqual([]);
+		expect(schedule.entries).toHaveLength(2);
+	});
+
 	it('scopes affinity to the division, so two Pool As do not share a court', () => {
 		const fixtures = [
-			fixture('a1', { division_id: 'div-1', round: 'Group A', team1: 'A1', team2: 'A2' }),
-			fixture('a2', { division_id: 'div-1', round: 'Group A', team1: 'A3', team2: 'A4' }),
-			fixture('b1', { division_id: 'div-2', round: 'Group A', team1: 'B1', team2: 'B2' }),
-			fixture('b2', { division_id: 'div-2', round: 'Group A', team1: 'B3', team2: 'B4' }),
+			fixture('a1', { division_id: 'div-1', round: 'Group A', team1: 'A-Anchor', team2: 'A2' }),
+			fixture('a2', { division_id: 'div-1', round: 'Group A', team1: 'A-Anchor', team2: 'A3' }),
+			fixture('b1', { division_id: 'div-2', round: 'Group A', team1: 'B-Anchor', team2: 'B2' }),
+			fixture('b2', { division_id: 'div-2', round: 'Group A', team1: 'B-Anchor', team2: 'B3' }),
 		];
 
 		const { schedule } = generate({ fixtures, courtCount: 2 });
-		const courtOf = (id) => entriesFor(schedule, id).courtId;
 
-		expect(courtOf('a1')).toBe(courtOf('a2'));
-		expect(courtOf('b1')).toBe(courtOf('b2'));
-		expect(courtOf('a1')).not.toBe(courtOf('b1'));
+		expect(courtOf(schedule, 'a1')).toBe(courtOf(schedule, 'a2'));
+		expect(courtOf(schedule, 'b1')).toBe(courtOf(schedule, 'b2'));
+		expect(courtOf(schedule, 'a1')).not.toBe(courtOf(schedule, 'b1'));
+	});
+});
+
+// docs/schedule.md: one slot of rest is a hard constraint, not a preference. The
+// generator this replaced scored it, so a slot could outbid it — and under
+// pressure it regularly did.
+describe('the rest minimum', () => {
+	it('never places a team in two consecutive slots', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+			fixture('f3', { team1: 'Aces', team2: 'Ducks' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3 });
+
+		expect(schedule.entries.map((e) => e.startTime)).toEqual(['09:00', '11:00', '13:00']);
+	});
+
+	// Fixtures are not placed in time order — within a round each takes the
+	// earliest slot left, so one placed later can land before one placed earlier.
+	// Checking rest only backwards would let that pair end up back to back: f3
+	// would take 10:00 and hand Cubs 10:00-11:00 followed by f2 at 11:00.
+	it('keeps the rest when a later placement lands before an earlier one', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+			fixture('f3', { team1: 'Cubs', team2: 'Ducks' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 1 });
+
+		expect(startOf(schedule, 'f1')).toBe('09:00');
+		expect(startOf(schedule, 'f2')).toBe('11:00');
+		expect(startOf(schedule, 'f3')).toBe('13:00');
+	});
+
+	// A3: do not quietly relax a hard constraint to fit everything in.
+	it('leaves a fixture unplaced rather than removing the rest between two matches', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule, unscheduledFixtures, warnings } = generate({
+			fixtures,
+			courtCount: 1,
+			dailyStartTime: '09:00',
+			dailyEndTime: '11:00',
+		});
+
+		expect(schedule.entries).toHaveLength(1);
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f2']);
+		expect(warnings).toEqual([WARNINGS.rest(1)]);
+	});
+});
+
+// An unbound knockout slot carries a placeholder, not a team. Team exclusivity
+// is a hard constraint now rather than a penalty a slot could outscore, so
+// conflating two divisions' "Rank 1" — or two semifinals' "TBD" — would forbid
+// them from ever running at once and report them unschedulable.
+describe('unbound knockout fixtures', () => {
+	it('lets two semifinals waiting on the pools run at the same time', () => {
+		const fixtures = [
+			{ id: 'sf1', division_id: 'div-1', round: 'Semifinals', team1: 'TBD', team2: 'TBD' },
+			{ id: 'sf2', division_id: 'div-1', round: 'Semifinals', team1: 'TBD', team2: 'TBD' },
+		];
+
+		const { schedule, unscheduledFixtures } = generate({ fixtures, courtCount: 2 });
+
+		expect(unscheduledFixtures).toEqual([]);
+		expect(schedule.entries.map((e) => e.startTime)).toEqual(['09:00', '09:00']);
+	});
+
+	it('treats a rank placeholder as unbound rather than as a team name', () => {
+		const placeholders = (id, divisionId) => ({
+			id,
+			division_id: divisionId,
+			round: 'Finals',
+			team1: 'Rank 1',
+			team2: 'Rank 2',
+			team_1_placeholder: 'Rank 1',
+			team_2_placeholder: 'Rank 2',
+		});
+
+		const { schedule } = generate({
+			fixtures: [placeholders('f1', 'div-1'), placeholders('f2', 'div-2')],
+			courtCount: 2,
+		});
+
+		expect(schedule.entries.map((e) => e.startTime)).toEqual(['09:00', '09:00']);
+	});
+
+	// The other half of the same rule: a bound team still constrains, and two
+	// divisions that happen to share a team name still do not collide.
+	it('still separates two matches once their teams are bound', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 2 });
+
+		expect(schedule.entries.map((e) => e.startTime)).toEqual(['09:00', '11:00']);
+	});
+});
+
+// Every objective below the first is only ever consulted on a tie, so the order
+// has to be visible in the outcome rather than buried in weights.
+describe('the lexicographic objective', () => {
+	it('resolves a slot that ties on every objective by court order', () => {
+		const { schedule } = generate({ fixtures: [fixture('f1'), fixture('f2')], courtCount: 3 });
+
+		expect(schedule.entries.map((e) => e.courtId)).toEqual(['court-1', 'court-2']);
+	});
+
+	// Affinity cannot be what decides this: every fixture is in a different pool,
+	// so no pool has an established court by the time the second row is placed.
+	// Only the changeover objective distinguishes the two courts at 10:00.
+	it('keeps a court on one division rather than swapping between them', () => {
+		const fixtures = [
+			fixture('a1', { division_id: 'div-1', round: 'Group A', team1: 'A1', team2: 'A2' }),
+			fixture('b1', { division_id: 'div-2', round: 'Group C', team1: 'B1', team2: 'B2' }),
+			fixture('a2', { division_id: 'div-1', round: 'Group B', team1: 'A3', team2: 'A4' }),
+			fixture('b2', { division_id: 'div-2', round: 'Group D', team1: 'B3', team2: 'B4' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 2 });
+
+		expect(courtOf(schedule, 'a1')).toBe(courtOf(schedule, 'a2'));
+		expect(courtOf(schedule, 'b1')).toBe(courtOf(schedule, 'b2'));
+		expect(courtOf(schedule, 'a1')).not.toBe(courtOf(schedule, 'b1'));
+	});
+});
+
+// A3 again, from the organiser's side: being told "capacity" when the real
+// blocker was the rest minimum sends them to add a court that will not help.
+describe('warnings name the constraint', () => {
+	it('names the round order when a free court was too early to use', () => {
+		const fixtures = [
+			fixture('p1', { round: 'Pool Play' }),
+			fixture('p2', { round: 'Pool Play' }),
+			fixture('f1', { round: 'Finals' }),
+		];
+
+		// Three courts and one slot: the third court is free, and the final may
+		// not start until pool play has finished, which is when the day ends.
+		const { unscheduledFixtures, warnings } = generate({
+			fixtures,
+			divisions: [division('div-1', ['Pool Play', 'Finals'])],
+			courtCount: 3,
+			dailyStartTime: '09:00',
+			dailyEndTime: '10:00',
+		});
+
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f1']);
+		expect(warnings).toEqual([WARNINGS.round(1)]);
+	});
+
+	it('names the team clash when a court was free but the teams were not', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { warnings } = generate({
+			fixtures,
+			courtCount: 2,
+			dailyStartTime: '09:00',
+			dailyEndTime: '10:00',
+		});
+
+		expect(warnings).toEqual([WARNINGS.team(1)]);
+	});
+
+	// A day with no room for even one match produces no candidate slots at all,
+	// so there is no constraint to have failed and capacity is the true answer.
+	it('falls back to capacity when there was no slot to refuse', () => {
+		const { schedule, unscheduledFixtures, warnings } = generate({
+			fixtures: [fixture('f1')],
+			dailyStartTime: '09:00',
+			dailyEndTime: '10:00',
+			fixtureDurationMinutes: 90,
+		});
+
+		expect(schedule.entries).toEqual([]);
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f1']);
+		expect(warnings).toEqual([WARNINGS.court(1)]);
+	});
+
+	it('reports each constraint once, however many fixtures it blocked', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+			fixture('f3', { team1: 'Aces', team2: 'Ducks' }),
+		];
+
+		const { warnings } = generate({
+			fixtures,
+			courtCount: 2,
+			dailyStartTime: '09:00',
+			dailyEndTime: '10:00',
+		});
+
+		expect(warnings).toEqual([WARNINGS.team(2)]);
 	});
 });
 

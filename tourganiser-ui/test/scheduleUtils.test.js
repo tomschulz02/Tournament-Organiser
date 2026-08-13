@@ -35,8 +35,10 @@ import {
 	getDayEntries,
 	calculateScheduledStats,
 	getDayBounds,
+	getSlotMinutes,
 	buildTimeSlots,
 	buildGridRowTimes,
+	getEntryRowPlacement,
 	getEntrySlotSpan,
 	serialiseScheduleForSave,
 } from '../src/utils/scheduleUtils';
@@ -882,24 +884,29 @@ describe('calculateScheduledStats', () => {
 
 describe('getDayBounds', () => {
 	it('uses the configured day when nothing is scheduled', () => {
-		expect(getDayBounds(schedule(), '2026-08-01')).toEqual({
+		expect(getDayBounds(schedule())).toEqual({
 			start: DEFAULT_SCHEDULE_START,
 			end: DEFAULT_SCHEDULE_END,
 		});
 	});
 
-	it('widens to contain an entry that starts before or ends after the configured day', () => {
+	// It used to widen to contain them, which made the axis a function of its own
+	// contents: placing an entry moved every row below it.
+	it('does not widen to contain an entry outside the configured day', () => {
 		const base = schedule({
 			entries: [entry({ id: 'early', startTime: '07:00', endTime: '08:00' }), entry({ id: 'late', startTime: '19:00', endTime: '20:00' })],
 		});
 
-		expect(getDayBounds(base, '2026-08-01')).toEqual({ start: '07:00', end: '20:00' });
+		expect(getDayBounds(base)).toEqual({
+			start: DEFAULT_SCHEDULE_START,
+			end: DEFAULT_SCHEDULE_END,
+		});
 	});
 
 	it('does not narrow to the entries when they sit inside the configured day', () => {
 		const base = schedule({ entries: [entry({ startTime: '11:00', endTime: '12:00' })] });
 
-		expect(getDayBounds(base, '2026-08-01')).toEqual({
+		expect(getDayBounds(base)).toEqual({
 			start: DEFAULT_SCHEDULE_START,
 			end: DEFAULT_SCHEDULE_END,
 		});
@@ -908,10 +915,21 @@ describe('getDayBounds', () => {
 	it('falls back to the defaults when the settings are blank', () => {
 		const base = schedule({ settings: { dayStartTime: '', dayEndTime: '', slotMinutes: 30 } });
 
-		expect(getDayBounds(base, '2026-08-01')).toEqual({
+		expect(getDayBounds(base)).toEqual({
 			start: DEFAULT_SCHEDULE_START,
 			end: DEFAULT_SCHEDULE_END,
 		});
+	});
+});
+
+describe('getSlotMinutes', () => {
+	it('reads the configured slot length', () => {
+		expect(getSlotMinutes(schedule({ settings: { slotMinutes: 20 } }))).toBe(20);
+	});
+
+	it('falls back to the default when it is missing or unusable', () => {
+		expect(getSlotMinutes(schedule({ settings: {} }))).toBe(DEFAULT_SLOT_MINUTES);
+		expect(getSlotMinutes(schedule({ settings: { slotMinutes: 0 } }))).toBe(DEFAULT_SLOT_MINUTES);
 	});
 });
 
@@ -930,74 +948,99 @@ describe('buildTimeSlots', () => {
 	});
 });
 
-// The regression this function exists for: an entry that does not land on a slot
-// boundary used to be looked up in the ladder, not found, and drawn at row 1 —
-// stacking several entries in the same cell.
+// The axis is uniform and depends on the settings alone. It used to add each
+// entry's own start and end as extra boundaries, so adding a 09:15 entry inserted
+// a 09:15 row: rows of unequal span drawn at equal height, and every reading of
+// the time column below it wrong.
 describe('buildGridRowTimes', () => {
-	it('returns the slot ladder plus the closing boundary', () => {
+	it('returns one start time per row, with no closing boundary', () => {
 		const base = schedule({ settings: { dayStartTime: '09:00', dayEndTime: '11:00', slotMinutes: 30 } });
 
-		expect(buildGridRowTimes(base, '2026-08-01', { start: '09:00', end: '11:00' })).toEqual([
-			'09:00',
-			'09:30',
-			'10:00',
-			'10:30',
-			'11:00',
-		]);
+		expect(buildGridRowTimes(base, { start: '09:00', end: '11:00' })).toEqual(['09:00', '09:30', '10:00', '10:30']);
 	});
 
-	it('adds a row boundary for an entry that falls between two slots', () => {
+	it('does not add a row for an entry that falls between two slots', () => {
 		const base = schedule({
 			entries: [entry({ startTime: '09:20', endTime: '09:50' })],
 			settings: { dayStartTime: '09:00', dayEndTime: '10:00', slotMinutes: 30 },
 		});
 
-		expect(buildGridRowTimes(base, '2026-08-01', { start: '09:00', end: '10:00' })).toEqual([
-			'09:00',
-			'09:20',
-			'09:30',
-			'09:50',
-			'10:00',
-		]);
+		expect(buildGridRowTimes(base, { start: '09:00', end: '10:00' })).toEqual(['09:00', '09:30']);
 	});
 
-	it('does not duplicate a boundary an entry shares with a slot', () => {
-		const base = schedule({
-			entries: [entry({ startTime: '09:30', endTime: '10:00' })],
-			settings: { dayStartTime: '09:00', dayEndTime: '10:00', slotMinutes: 30 },
-		});
-
-		expect(buildGridRowTimes(base, '2026-08-01', { start: '09:00', end: '10:00' })).toEqual([
-			'09:00',
-			'09:30',
-			'10:00',
-		]);
-	});
-
-	it('discards an entry time the bounds cannot cover', () => {
+	it('does not add a row for an entry outside the configured day', () => {
 		const base = schedule({
 			entries: [entry({ startTime: '07:00', endTime: '20:00' })],
 			settings: { dayStartTime: '09:00', dayEndTime: '10:00', slotMinutes: 30 },
 		});
 
-		expect(buildGridRowTimes(base, '2026-08-01', { start: '09:00', end: '10:00' })).toEqual([
-			'09:00',
-			'09:30',
-			'10:00',
-		]);
+		expect(buildGridRowTimes(base, { start: '09:00', end: '10:00' })).toEqual(['09:00', '09:30']);
 	});
 
-	it('ignores entries belonging to another day', () => {
-		const base = schedule({
-			entries: [entry({ day: '2026-08-02', startTime: '09:20', endTime: '09:50' })],
-			settings: { dayStartTime: '09:00', dayEndTime: '10:00', slotMinutes: 30 },
-		});
+	// A short final row drawn at full height is the fault this replaces, so the
+	// last row runs past the configured end instead.
+	it('rounds a day that is not a whole number of slots up to a full row', () => {
+		const base = schedule({ settings: { dayStartTime: '09:00', dayEndTime: '10:15', slotMinutes: 30 } });
 
-		expect(buildGridRowTimes(base, '2026-08-01', { start: '09:00', end: '10:00' })).toEqual([
-			'09:00',
-			'09:30',
-			'10:00',
-		]);
+		expect(buildGridRowTimes(base, { start: '09:00', end: '10:15' })).toEqual(['09:00', '09:30', '10:00']);
+	});
+
+	it('returns no rows for an empty or inverted day', () => {
+		const base = schedule({ settings: { slotMinutes: 30 } });
+
+		expect(buildGridRowTimes(base, { start: '09:00', end: '09:00' })).toEqual([]);
+		expect(buildGridRowTimes(base, { start: '11:00', end: '09:00' })).toEqual([]);
+	});
+});
+
+describe('getEntryRowPlacement', () => {
+	const axis = { start: '09:00', slotMinutes: 30, rowCount: 4 }; // 09:00 to 11:00
+
+	it('places an aligned entry on the row its start time labels', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '10:00', endTime: '10:30' }), axis)).toEqual({
+			rowStart: 3,
+			rowSpan: 1,
+			snapped: false,
+			inDay: true,
+		});
+	});
+
+	it('spans an entry over every row it covers', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '09:00', endTime: '10:30' }), axis)).toMatchObject({
+			rowStart: 1,
+			rowSpan: 3,
+		});
+	});
+
+	// The entry's stored times are untouched; the caller marks the block as
+	// approximate rather than drawing it at the nearest row and saying nothing.
+	it('snaps an unaligned entry outwards to the rows that contain it', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '09:20', endTime: '09:50' }), axis)).toEqual({
+			rowStart: 1,
+			rowSpan: 2,
+			snapped: true,
+			inDay: true,
+		});
+	});
+
+	it('reports an entry starting before the day as outside it', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '08:30', endTime: '09:30' }), axis).inDay).toBe(false);
+	});
+
+	it('reports an entry ending after the day as outside it', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '10:30', endTime: '11:30' }), axis).inDay).toBe(false);
+	});
+
+	it('reports an entry of no length as outside it', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '10:00', endTime: '10:00' }), axis).inDay).toBe(false);
+	});
+
+	it('places an entry that ends exactly at the close of the day', () => {
+		expect(getEntryRowPlacement(entry({ startTime: '10:30', endTime: '11:00' }), axis)).toMatchObject({
+			rowStart: 4,
+			rowSpan: 1,
+			inDay: true,
+		});
 	});
 });
 

@@ -144,6 +144,31 @@ Outstanding:
   revisiting if generation ever changes shape. Storing both on the division would remove
   the guesswork.
 
+## Dates Are Converted Two Different Ways
+
+**Fixed 2026-08-13.** Kept here because the shape of the fault is worth remembering.
+
+Saving any schedule failed with "An entry falls outside the tournament dates" on a server
+not running in UTC. `pg` had no type parser configured for the `date` OID, so
+`tournaments.start_date` and `end_date` arrived as JavaScript `Date` objects set to
+**local** midnight, and two places turned that back into a string differently:
+`DateHandler.getISODate` in **UTC** via `toISOString()`, and `scheduleValidator.toIsoDate`
+in **local time** via `getFullYear` / `getMonth` / `getDate`. East of UTC they differ by a
+day, so the client was told the tournament started a day early, built its schedule days
+from that, and the validator rejected every entry on them.
+
+The fix is one type parser in `api/src/config/db.js`: OID 1082 is handed through as the
+stored `'YYYY-MM-DD'` string, so there is no instant to render and nothing left to
+disagree about. Both conversion sites now take that string and reject anything else rather
+than defending against a `Date` that no longer arrives. `timestamp` (1114) and
+`timestamptz` (1184) keep their default parsers, so the ETag change key is untouched —
+confirmed against the running server, where `last_update` still comes back as an instant.
+
+`test/setup.js` pins `TZ=UTC`, which is why the suite was blind to it.
+`test/unit/utils/scheduleDates.test.js` is the one file that sets a non-UTC zone
+deliberately, and drives the whole round trip — what the formatter reports, and what the
+validator will then accept. Do not tidy the timezone out of it.
+
 ## Phase 3
 
 From making the tournament runnable, 2026-08-09.
@@ -230,9 +255,40 @@ here. What is left:
   nothing constrains it. That is drift rather than an impossible schedule, and refusing
   the save over it would strand the organiser, but it does mean the rule has a hole that
   bad data can fall through.
-- **`getEntrySlotSpan` in `scheduleUtils.js` is now called by nothing.** The grid derives
-  a span from exact row indices instead. Left in place rather than deleted — deleting
-  code is High Risk under `CLAUDE.md`.
+- **`getEntrySlotSpan` and `buildTimeSlots` in `scheduleUtils.js` are called by nothing.**
+  The fixed-axis work of 2026-08-13 left both behind: the grid derives a span from
+  `getEntryRowPlacement`, which floors the start and ceils the end so an unaligned entry
+  covers the rows it actually overlaps — `getEntrySlotSpan` counts duration alone and
+  would draw it a row short. `buildTimeSlots` was the old row builder. Both left in place
+  rather than deleted — deleting code is High Risk under `CLAUDE.md` — and both still
+  carry tests.
+- **An entry that does not begin and end on a slot boundary is drawn across the slots it
+  covers, not at its exact time.** Its stored times are untouched and shown on the block,
+  and the block carries a dashed inset and a title saying so, but the grid cannot express
+  a 12:35 start on a 30-minute axis. The alternative was to leave it off the grid
+  entirely, which hides a real entry. An entry outside the day's configured hours *is*
+  left off, and listed beneath the grid with its reason.
+- **The rest minimum cannot reach across the pool-to-knockout boundary.** A semifinal's
+  teams are unbound at generation time — the fixture carries `Rank 1` and a null
+  `team_1` — so the generator has nobody to give rest to and will place it in the slot
+  immediately after the last pool match of its division. Found while auditing the
+  2026-08-13 rewrite. It is playable, because the round-order rule still holds, and it is
+  not fixable without either guessing who advances or inventing a per-round gap that the
+  server's validator would not share. An organiser who wants the gap adds a break. See
+  `docs/tournament-rules.md`.
+- **Unbound teams do not constrain the generator at all**, which is the same rule seen
+  from the other side and is deliberate: two semifinals both waiting on the pools are not
+  the same team and must be free to run at once. `Rank 1` in one division and `Rank 1` in
+  another are likewise unrelated. Before 2026-08-13 team exclusivity was a score rather
+  than a constraint, so conflating them merely produced an odd schedule; now it would
+  report those fixtures as unschedulable, which is why the placeholder case is handled
+  explicitly rather than left to the name fallback.
+- **The generator is greedy and does not backtrack.** A fixture that takes a slot another
+  needed more is never reconsidered, so `unscheduledFixtures` can name fixtures that some
+  arrangement would have fitted. Settled deliberately in the 2026-08-13 rewrite: the
+  honest fix is backtracking, and surfacing the failure with the constraint that caused it
+  was judged to serve the organiser better than a much larger algorithm. The warning names
+  the constraint precisely so the reported failure is actionable.
 - **A schedule is stored as it is sent, beyond the structural checks.** There is no cap
   on entry count or on the length of `title`, `notes` and `officials`, so the column will
   hold whatever an authenticated organiser sends. That belongs with **B9** input

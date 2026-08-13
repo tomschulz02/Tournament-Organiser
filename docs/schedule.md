@@ -89,10 +89,86 @@ server validates on write rather than relying on the client to have sent somethi
 | `dayEndTime` | string | `'18:00'` | `HH:MM`. The grid stops before this. |
 | `slotMinutes` | integer | `30` | Row height of the grid, in minutes. |
 
-Settings describe the grid the organiser is looking at, not a constraint on entries. An
-entry may start before `dayStartTime`, end after `dayEndTime`, or begin off a slot
-boundary; `getDayBounds` widens the drawn day to contain it. Changing `slotMinutes` or
-`dayStartTime` after entries exist leaves entries that no longer land on a boundary.
+Settings describe the grid the organiser is looking at, not a constraint on entries — the
+server stores an entry outside them without complaint. But since 2026-08-13 the grid's
+axis is a function of these three values alone and nothing else, so an entry that does not
+fit them is visibly not drawn on it: one that begins off a slot boundary is drawn across
+the slots it covers and marked as approximate, and one outside `dayStartTime`…`dayEndTime`
+is listed beneath the grid instead. The axis no longer widens to contain an entry, because
+an axis that moves under its own contents cannot be read.
+
+Changing `slotMinutes` or `dayStartTime` after entries exist therefore leaves entries that
+no longer land on a boundary, and that is now something the organiser can see.
+
+**The generator is stricter than the payload.** Everything it places lies inside the
+configured day and on a slot boundary, because it only ever builds candidate slots there —
+see Generation objectives below. Hand-placed entries and breaks are what the paragraph
+above is about.
+
+## Generation objectives
+
+Settled 2026-08-11, implemented 2026-08-13. This section is what
+`tourganiser-ui/src/utils/scheduleGenerator.js` is judged against, and what any future
+change to it has to argue with. The generator stays in the client — see
+`docs/decisions.md`.
+
+### Hard constraints
+
+Feasibility, not preference. A slot either satisfies all five or it is not a candidate,
+and none of them can be traded away for a better score on anything below.
+
+1. **Court exclusivity.** No two entries overlap on one court on one day. An entry with
+   `courtId: null` is a break spanning every court and blocks all of them.
+2. **Team exclusivity.** No team plays two matches at the same time.
+3. **Round order.** A fixture of round *n* in a division may not start before every
+   fixture of that division's earlier rounds has finished. The server enforces the same
+   rule on write; see `docs/tournament-rules.md`.
+4. **Rest.** At least one slot between a team's two matches on the same day. A team never
+   plays back to back.
+5. **Day bounds.** Every entry lies within the configured `dayStartTime` and `dayEndTime`.
+
+A team is only a team when the fixture names one. An unbound knockout slot carries a
+placeholder — `Rank 1`, `TBD` — and constrains nothing, which is how the server's
+validator treats a null `team_1`. Two semifinals both waiting on the pools are not the
+same team and must be free to run at once. Where the payload carries team ids they are
+used; where it does not, the name is used, and either way the key is scoped to the
+division, because two divisions may both have a "Team A".
+
+### Objectives, in priority order
+
+1. **Minimise the finish time.** The venue is booked for a window; compactness wins.
+2. **Maximise rest** beyond the hard minimum, where it costs nothing above.
+3. **Minimise division changeovers.** A division need not be strictly contiguous, but a
+   court should switch between divisions as seldom as possible.
+4. **Court affinity for pools.** Last and least — nice when it is free.
+
+### The algorithm is lexicographic, not weighted
+
+Two candidate slots are compared on the first objective; only where they tie is the
+second consulted, and so on, ending in a total tiebreak so that two genuinely equivalent
+slots always resolve the same way. Generation is deterministic: the same input produces
+the same schedule.
+
+This is deliberate, and it is the whole point of the 2026-08-13 rewrite. The generator it
+replaced summed weights — court affinity `+180` against earliness `-2` per slot index —
+so ninety slots of delay cost exactly one affinity bonus and a pool match could be pushed
+hours later to stay on its court. Nobody could have justified those numbers, and nobody
+could predict what changing one would do. A weighted sum needs numbers that compose; a
+priority order needs only an order.
+
+Because the first objective is the slot's start instant and slots are of fixed size,
+compactness falls out of the structure rather than being scored: take the earliest
+feasible time, then choose among the courts free at that time using the objectives below
+it.
+
+### Under capacity, leave fixtures unplaced
+
+A fixture with no feasible slot goes to `unscheduledFixtures` and the schedule is returned
+without it. No hard constraint is relaxed to make it fit. A tight tournament will
+therefore report fixtures that an earlier generator would have placed back to back — that
+is the intended trade, and the warning names the constraint that blocked it rather than
+blaming capacity for everything, so an organiser knows whether to add a court, extend the
+day, or shorten matches.
 
 ## What the server validates
 

@@ -1,18 +1,27 @@
-// Two renderings of one calendar day, in UTC.
+// Two renderings of one calendar day.
 //
-// getISODate used to add a day before formatting and getLongDate did not, so the
-// same tournament rendered as two different dates depending on which helper the
-// caller reached for. Nothing compensated for the shift anywhere, so it was
-// simply off by one; removing it is the fix.
+// A tournament's start_date and end_date are `date` columns, and src/config/db.js
+// registers a pg type parser that hands them through as the stored
+// 'YYYY-MM-DD' string. So there is no instant here to convert and no timezone to
+// choose — only a shape to assert.
 //
-// getLongDate is derived from getISODate rather than formatting the Date
-// directly. That is what stops the two drifting apart again: formatting the raw
-// Date uses the server's local timezone, which on a non-UTC host would land on a
-// different day from the UTC-based ISO form. test/setup.js pins TZ=UTC, so the
-// tests would not catch that on their own.
+// Both helpers used to route through a Date, which is what let the same
+// tournament render as two different days: getISODate formatted in UTC while
+// scheduleValidator's toIsoDate read the local components of the same value.
+// The guard below rejects anything that is not a calendar day rather than
+// quietly making one up, because a date arriving in some other form means
+// something upstream has changed and should be seen.
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
 
 export function getISODate(date) {
-    return new Date(date).toISOString().split("T")[0];
+    const match = String(date).match(ISO_DATE);
+
+    if (!match) {
+        throw new RangeError(`Not a calendar date: ${date}`);
+    }
+
+    return match[0];
 }
 
 export function getLongDate(date) {

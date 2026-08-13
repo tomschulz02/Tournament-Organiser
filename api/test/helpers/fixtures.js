@@ -123,8 +123,11 @@ export function makeTournament(overrides = {}) {
         description: null,
         location: null,
         status: null,
-        start_date: new Date("2026-08-01T00:00:00.000Z"),
-        end_date: new Date("2026-08-03T00:00:00.000Z"),
+        // Strings, because that is what a `date` column now yields — see the
+        // type parser in src/config/db.js. A Date here would model a shape the
+        // application no longer sees.
+        start_date: "2026-08-01",
+        end_date: "2026-08-03",
         created_by: "user-1",
         schedule: null,
         ...overrides

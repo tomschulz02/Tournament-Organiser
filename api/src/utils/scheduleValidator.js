@@ -28,6 +28,7 @@ import { AppError } from "../errors.js";
 // midnight ends there. Anything past it is not a time.
 const TIME_PATTERN = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const LEADING_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/;
 
 export function validateSchedule(schedule, { startDate, endDate, divisions = [], fixtures = [] } = {}) {
     if (!isPlainObject(schedule)) {
@@ -300,24 +301,14 @@ function teamsOf(fixture) {
     return [fixture.team_1, fixture.team_2].filter((team) => team !== null && team !== undefined);
 }
 
-// tournaments.start_date and end_date are DATE columns, which pg hands back as a
-// Date at local midnight, so the local components are the stored date. A string
-// is taken at its leading date.
+// tournaments.start_date and end_date are `date` columns, and src/config/db.js
+// hands those through as the stored 'YYYY-MM-DD' string, so the value is already
+// the day to compare against. It used to read the local components of a Date
+// while DateHandler read the UTC ones, which is what rejected every save east of
+// UTC. Anything that is not a calendar day constrains nothing.
 function toIsoDate(value) {
-    if (value instanceof Date && !Number.isNaN(value.getTime())) {
-        const year = value.getFullYear();
-        const month = String(value.getMonth() + 1).padStart(2, "0");
-        const day = String(value.getDate()).padStart(2, "0");
-
-        return `${year}-${month}-${day}`;
-    }
-
-    if (typeof value === "string") {
-        const match = value.match(/^\d{4}-\d{2}-\d{2}/);
-        return match ? match[0] : null;
-    }
-
-    return null;
+    const match = typeof value === "string" ? value.match(LEADING_DATE_PATTERN) : null;
+    return match ? match[0] : null;
 }
 
 function isPlainObject(value) {

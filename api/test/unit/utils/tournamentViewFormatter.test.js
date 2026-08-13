@@ -55,7 +55,7 @@ describe("toISODate", () => {
     });
 
     it("delegates to getISODate otherwise", () => {
-        expect(toISODate(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-01");
+        expect(toISODate("2026-08-01")).toBe("2026-08-01");
     });
 });
 

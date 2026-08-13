@@ -11,14 +11,15 @@ import {
 	buildFixtureIndex,
 	buildGridRowTimes,
 	calculateScheduledStats,
-	compareTimes,
 	createBreakEntry,
 	createFixtureEntry,
 	formatDateLabel,
 	getCourtName,
 	getDayBounds,
 	getDayEntries,
+	getEntryRowPlacement,
 	getScheduleForTournament,
+	getSlotMinutes,
 	getUnscheduledFixtures,
 	normaliseFixtures,
 	removeScheduleEntry,
@@ -519,7 +520,11 @@ export default function ScheduleMakerModal({
 		setViewMode('grid');
 
 		if (result.warnings.length > 0) {
-			showMessage(result.warnings[0], 'info', 6000);
+			// All of them, not the first. The generator returns one warning per
+			// constraint that blocked something, and being told about the rest
+			// minimum while the round-order failure stays hidden sends the
+			// organiser to fix the wrong thing. See docs/schedule.md.
+			showMessage(result.warnings.join(' '), 'info', 9000);
 		} else {
 			showMessage('Automatic schedule generated. You can edit any slot afterwards.', 'success');
 		}
@@ -775,26 +780,38 @@ export default function ScheduleMakerModal({
 	);
 }
 
-// Where one entry sits on the grid. rowStart and rowEnd are 1-based grid lines,
-// so an entry occupies rows rowStart to rowEnd - 1.
+// Where one entry sits on the grid, and whether it can be drawn there at all.
 //
-// courtIndex is -1 when the entry names a court that is no longer in the schedule
-// — which happens the moment the court count is reduced below it. That entry has
-// no column to be drawn in, and drawing it in the first one moves it silently.
-// It is listed beneath the grid instead.
-function locateEntry(entry, rowTimes, courts) {
-	const rowStart = rowTimes.indexOf(entry.startTime) + 1;
-	const rowEnd = rowTimes.indexOf(entry.endTime) + 1;
+// The row arithmetic is getEntryRowPlacement's, in minutes against the fixed
+// axis. It used to look the entry's times up in the row list, which only worked
+// because the row list had been built from those same times.
+//
+// Two things stop an entry being drawn, and each is a reason the organiser needs
+// to see rather than have quietly resolved:
+//   'court' — it names a court the schedule no longer has, which happens the
+//             moment the court count is reduced below it. Drawing it in the
+//             first column would move it silently.
+//   'hours' — it falls outside the day's configured hours. Widening the day to
+//             reach it is what made the axis move under its own contents.
+// Either way it is listed beneath the grid.
+function locateEntry(entry, axis, courts) {
+	const placement = getEntryRowPlacement(entry, axis);
 	const courtIndex = entry.courtId === null ? null : courts.findIndex((court) => court.id === entry.courtId);
+	const reason = !placement.inDay ? 'hours' : courtIndex === -1 ? 'court' : null;
 
 	return {
 		entry,
-		rowStart,
-		rowSpan: Math.max(1, rowEnd - rowStart),
+		...placement,
 		courtIndex,
-		placeable: rowStart > 0 && rowEnd > rowStart && courtIndex !== -1,
+		placeable: reason === null,
+		reason,
 	};
 }
+
+const UNPLACEABLE_REASONS = {
+	court: 'On a court the schedule no longer has',
+	hours: "Outside the day's hours",
+};
 
 function ScheduleGridView({
 	schedule,
@@ -807,22 +824,24 @@ function ScheduleGridView({
 	onDropOnSlot,
 	onDragEntry,
 }) {
-	const dayBounds = getDayBounds(schedule, activeDay);
-	// One more time than there are rows: the last is the day's closing boundary.
-	const rowTimes = buildGridRowTimes(schedule, activeDay, dayBounds);
-	const timeSlots = rowTimes.slice(0, -1);
+	// The axis is a function of the settings alone. Nothing an entry does can
+	// change how many rows there are, where they start, or how long each one is.
+	const dayBounds = getDayBounds(schedule);
+	const timeSlots = buildGridRowTimes(schedule, dayBounds);
+	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: timeSlots.length };
 	const dayEntries = getDayEntries(schedule, activeDay);
-	const located = dayEntries.map((entry) => locateEntry(entry, rowTimes, schedule.courts));
+	const located = dayEntries.map((entry) => locateEntry(entry, axis, schedule.courts));
 	const placedEntries = located.filter((item) => item.placeable);
-	const unplaceableEntries = located.filter((item) => !item.placeable).map((item) => item.entry);
+	const unplaceableEntries = located.filter((item) => !item.placeable);
 	const occupiedSlots = new Set();
 	// The same set minus the entry being dragged. A drop must respect occupancy,
 	// but an entry does not block itself — otherwise a placed entry could only
 	// ever be moved somewhere it does not already overlap.
 	const dropBlockedSlots = new Set();
 
-	// Still row by row and still spanning multi-row entries; only the row list it
-	// walks has changed, and every placed entry now has an exact range in it.
+	// Walked from the same rowStart and rowSpan the entry is drawn with, so a cell
+	// that looks occupied is occupied. A snapped entry covers the whole of every
+	// row it overlaps, which is what its block covers too.
 	placedEntries.forEach(({ entry, rowStart, rowSpan }) => {
 		if (entry.courtId === null) {
 			return;
@@ -864,12 +883,16 @@ function ScheduleGridView({
 					className="schedule-grid-cells"
 					style={{
 						gridTemplateColumns: `96px repeat(${schedule.courts.length}, minmax(0, 1fr))`,
-						gridTemplateRows: `repeat(${timeSlots.length}, minmax(84px, auto))`,
+						// Every row is the same span, so every row is the same height.
+						// minmax(84px, auto) let a row grow to its content, which drew
+						// rows of unequal length at unequal heights and made the time
+						// column impossible to count down.
+						gridTemplateRows: `repeat(${timeSlots.length}, 84px)`,
 					}}>
-					{timeSlots.map((time) => (
+					{timeSlots.map((time, rowIndex) => (
 						<React.Fragment key={time}>
-							<div className="schedule-grid-time">{time}</div>
-							{schedule.courts.map((court) => {
+							<div className="schedule-grid-time" style={{ gridColumn: 1, gridRow: rowIndex + 1 }}>{time}</div>
+							{schedule.courts.map((court, columnIndex) => {
 								const slotKey = getSlotKey(activeDay, court.id, time);
 								const isOccupied = occupiedSlots.has(slotKey);
 								const acceptsDrop = canEdit && !dropBlockedSlots.has(slotKey);
@@ -881,20 +904,26 @@ function ScheduleGridView({
 										onClick={() => !isOccupied && canEdit && onOpenSlot(activeDay, court.id, time)}
 										onDragOver={(event) => acceptsDrop && event.preventDefault()}
 										onDrop={(event) => acceptsDrop && onDropOnSlot(event, activeDay, court.id, time)}
+										style={{ gridColumn: columnIndex + 2, gridRow: rowIndex + 1 }}
 									/>
 								);
 							})}
 						</React.Fragment>
 					))}
 
-					{placedEntries.map(({ entry, rowStart, rowSpan, courtIndex }) => (
+					{placedEntries.map(({ entry, rowStart, rowSpan, courtIndex, snapped }) => (
 						// Draggable and clickable at once: dragging moves the entry, clicking
 						// opens the inspector. The payload is the entry id rather than the
 						// fixture id, which is how the cell tells a move from a placement.
 						<button
 							key={entry.id}
 							type="button"
-							className={`schedule-grid-entry ${entry.type}`}
+							className={`schedule-grid-entry ${entry.type}${snapped ? ' snapped' : ''}`}
+							// An entry that does not sit on a slot boundary covers the rows
+							// that contain it. Its own times are on the block and unchanged;
+							// this says the block is wider than the entry rather than
+							// leaving the organiser to notice.
+							title={snapped ? `${entry.startTime} - ${entry.endTime}, shown across the slots it covers` : undefined}
 							draggable={canEdit}
 							onDragStart={(event) => {
 								event.dataTransfer.setData('text/plain', `${ENTRY_DRAG}${entry.id}`);
@@ -920,17 +949,18 @@ function ScheduleGridView({
 				<div className="schedule-grid-unplaceable">
 					<h4>Not shown on the grid</h4>
 					<p>
-						{unplaceableEntries.length === 1 ? 'This entry is' : 'These entries are'} on a court that is no longer in
-						the schedule. Open {unplaceableEntries.length === 1 ? 'it' : 'each one'} to move or remove{' '}
-						{unplaceableEntries.length === 1 ? 'it' : 'them'}.
+						{unplaceableEntries.length === 1 ? 'This entry has' : 'These entries have'} nowhere on the grid to be
+						drawn. Open {unplaceableEntries.length === 1 ? 'it' : 'each one'} to move or remove{' '}
+						{unplaceableEntries.length === 1 ? 'it' : 'them'}, or widen the day&apos;s hours.
 					</p>
 					<div className="schedule-grid-unplaceable-list">
-						{unplaceableEntries.map((entry) => (
+						{unplaceableEntries.map(({ entry, reason }) => (
 							<button key={entry.id} type="button" className="schedule-fixture-pill" onClick={() => onSelectEntry(entry)}>
 								<strong>{getEntryLabel(entry, fixturesById)}</strong>
 								<small>
 									{entry.startTime} - {entry.endTime} - {getCourtName(schedule, entry.courtId)}
 								</small>
+								<small>{UNPLACEABLE_REASONS[reason]}</small>
 							</button>
 						))}
 					</div>
@@ -1273,12 +1303,15 @@ function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 }
 
 function ScheduleExportGridDay({ schedule, day, fixturesById }) {
-	const dayBounds = getDayBounds(schedule, day);
-	// The same row boundaries the on-screen grid uses, so an entry that does not
-	// land on a slot boundary appears on the printed page rather than being
-	// dropped from it.
-	const slots = buildGridRowTimes(schedule, day, dayBounds).slice(0, -1);
-	const entries = getDayEntries(schedule, day);
+	// The same fixed axis and the same row arithmetic the screen uses, so the
+	// printed page puts an entry in the row the organiser saw it in. Matching on
+	// startTime alone dropped every entry that did not begin exactly on a slot.
+	const dayBounds = getDayBounds(schedule);
+	const slots = buildGridRowTimes(schedule, dayBounds);
+	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: slots.length };
+	const entries = getDayEntries(schedule, day)
+		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
+		.filter((item) => item.inDay);
 
 	return (
 		<div className="schedule-export-grid">
@@ -1291,23 +1324,26 @@ function ScheduleExportGridDay({ schedule, day, fixturesById }) {
 						{court.name}
 					</div>
 				))}
-				{slots.map((slot) => (
+				{slots.map((slot, rowIndex) => (
 					<React.Fragment key={slot}>
 						<div className="schedule-export-grid-time">{slot}</div>
 						{schedule.courts.map((court) => {
-							const entry = entries.find((item) => item.courtId === court.id && item.startTime === slot);
+							const placed = entries.find((item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1);
 							const spanningBreak = entries.find(
-								(item) => item.courtId === null && compareTimes(item.startTime, slot) <= 0 && compareTimes(item.endTime, slot) > 0
+								(item) =>
+									item.entry.courtId === null &&
+									item.rowStart <= rowIndex + 1 &&
+									item.rowStart + item.rowSpan > rowIndex + 1
 							);
 
 							return (
 								<div key={`${court.id}-${slot}`} className="schedule-export-grid-cell">
 									{spanningBreak ? (
-										<strong>{spanningBreak.title}</strong>
-									) : entry ? (
+										<strong>{spanningBreak.entry.title}</strong>
+									) : placed ? (
 										<>
-											<strong>{getEntryLabel(entry, fixturesById)}</strong>
-											<span>{getEntrySecondary(entry, fixturesById)}</span>
+											<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
+											<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
 										</>
 									) : null}
 								</div>

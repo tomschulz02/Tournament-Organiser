@@ -1,0 +1,65 @@
+name: API tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Vitest + coverage
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Runs every suite and enforces 100% statement, branch, function and line
+      # coverage of api/src. The two files excluded from that figure are listed
+      # in api/vitest.config.js with the reason for each.
+      #
+      # test/known-bugs is NOT run here — api/vitest.config.js excludes it, because
+      # it is written to fail until the bugs it documents are fixed. This job is
+      # expected to be green. Run the bug suite on its own with `npm run test:bugs`.
+      - name: Run tests
+        run: npm test
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: api/coverage/
+          retention-days: 14
+
+  # Reports the outstanding bugs without blocking the pipeline. Left disabled: the
+  # suite is a specification for work not yet done, and a permanently amber job is
+  # noise rather than signal. Enable it if that stops being true.
+  #
+  # known-bugs:
+  #   name: Known bugs (informational)
+  #   runs-on: ubuntu-latest
+  #   continue-on-error: true
+  #   defaults:
+  #     run:
+  #       working-directory: api
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 24
+  #         cache: npm
+  #         cache-dependency-path: api/package-lock.json
+  #     - run: npm ci
+  #     - run: npm run test:bugs

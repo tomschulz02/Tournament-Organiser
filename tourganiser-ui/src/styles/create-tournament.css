@@ -1,0 +1,1150 @@
+/* Tournament creation.
+ *
+ * Imported by pages/CreateTournament.jsx. Every class here is prefixed ct- so
+ * that neither this page's cleanup nor the tournament view's can reach into the
+ * other. The tv- prefix belongs to styles/tournament-view.css and is not used
+ * here, deliberately.
+ *
+ * Three notes carried over from the tournament view, all still true:
+ *
+ * 1. --text-color is white in BOTH themes. It is only readable on a filled
+ *    surface. Body text on the page background uses --secondary-text-color.
+ * 2. The breakpoint tokens in App.css say 480/768/1024, but the stylesheet
+ *    actually uses 768 and 1200. This file matches the stylesheet.
+ * 3. App.css styles header, main and img as bare element selectors. This page's
+ *    markup uses none of them.
+ */
+
+body.light {
+	--ct-surface: #ffffff;
+	--ct-surface-alt: #f4f7fb;
+	--ct-border: rgba(37, 37, 37, 0.12);
+	--ct-muted: rgba(37, 37, 37, 0.66);
+	--ct-track: rgba(37, 37, 37, 0.1);
+}
+
+body.dark {
+	--ct-surface: #242424;
+	--ct-surface-alt: #2f2f2f;
+	--ct-border: rgba(245, 245, 245, 0.14);
+	--ct-muted: rgba(245, 245, 245, 0.7);
+	--ct-track: rgba(245, 245, 245, 0.12);
+}
+
+/* For text only a screen reader needs. Off-screen rather than display: none,
+   which would take it out of the accessibility tree entirely. */
+.ct-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	border: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.ct-page {
+	width: 100%;
+	max-width: 900px;
+	margin: 0 auto;
+	padding: 24px 16px 64px;
+	color: var(--secondary-text-color);
+	/* The page itself never scrolls sideways. Anything wide — the schematic in
+	   step 6 — gets its own axis on its own container. */
+	overflow-x: hidden;
+}
+
+/* --- intro --------------------------------------------------------------- */
+
+.ct-intro {
+	padding-bottom: 8px;
+}
+
+.ct-title {
+	margin: 0 0 8px;
+	font-size: clamp(1.4rem, 5vw, 2rem);
+	line-height: 1.2;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.ct-lede {
+	margin: 0;
+	max-width: 60ch;
+	font-size: 0.95rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+}
+
+/* --- progress ------------------------------------------------------------ */
+
+/* Feedback, not navigation. No steps, no clicking, no celebration — a quiet
+   line that fills as the setup becomes complete. */
+.ct-progress {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 20px 0 24px;
+}
+
+.ct-progress-track {
+	flex: 1 1 auto;
+	/* minmax-free, but the same lesson: a floor of 0 so the track shrinks with
+	   the page rather than pushing the label off the edge. */
+	min-width: 0;
+	height: 6px;
+	border-radius: 999px;
+	background-color: var(--ct-track);
+	overflow: hidden;
+}
+
+.ct-progress-fill {
+	height: 100%;
+	border-radius: 999px;
+	background-color: var(--main-color);
+	transition: width 0.3s ease;
+}
+
+.ct-progress-label {
+	flex: 0 0 auto;
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--ct-muted);
+}
+
+/* --- draft --------------------------------------------------------------- */
+
+.ct-draft-banner {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 16px;
+	padding: 14px 16px;
+	border: 1px solid var(--main-color);
+	border-radius: 10px;
+	background-color: var(--ct-surface);
+}
+
+.ct-draft-banner-text {
+	min-width: 0;
+}
+
+.ct-draft-banner-title {
+	margin: 0 0 2px;
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.ct-draft-banner-detail {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--ct-muted);
+	overflow-wrap: anywhere;
+}
+
+.ct-draft-banner-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.ct-draft-banner-actions .ct-button {
+	flex: 1 1 0;
+}
+
+/* Feedback, not an announcement. */
+.ct-draft-saved {
+	margin: -12px 0 12px;
+	font-size: 0.75rem;
+	color: var(--ct-muted);
+}
+
+@media (min-width: 768px) {
+	.ct-draft-banner {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.ct-draft-banner-actions {
+		flex: 0 0 auto;
+	}
+
+	.ct-draft-banner-actions .ct-button {
+		flex: 0 0 auto;
+	}
+}
+
+/* --- sections ------------------------------------------------------------ */
+
+.ct-sections {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+.ct-section {
+	background-color: var(--ct-surface);
+	border: 1px solid var(--ct-border);
+	border-radius: 12px;
+	box-shadow: 0 1px 3px var(--card-shadow-color);
+	padding: 20px;
+}
+
+.ct-section-heading {
+	margin: 0 0 4px;
+	font-size: 1.1rem;
+	line-height: 1.3;
+	color: var(--secondary-text-color);
+}
+
+.ct-section-hint {
+	margin: 0 0 16px;
+	font-size: 0.875rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+}
+
+/* --- fields -------------------------------------------------------------- */
+
+.ct-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.ct-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	/* A floor of zero, so a field inside the date pair shrinks with its column
+	   instead of holding the row wider than the card. */
+	min-width: 0;
+}
+
+.ct-field-label {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.ct-field-required {
+	font-size: 0.7rem;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--ct-muted);
+}
+
+.ct-input {
+	width: 100%;
+	/* Without this the padding is added to the width above and every field
+	   overflows its card by 24px. */
+	box-sizing: border-box;
+	min-height: 44px;
+	padding: 10px 12px;
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
+	background-color: var(--ct-surface-alt);
+	color: var(--secondary-text-color);
+	font-family: inherit;
+	font-size: 1rem;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+textarea.ct-input {
+	min-height: 96px;
+	resize: vertical;
+	line-height: 1.5;
+}
+
+.ct-input:focus {
+	outline: none;
+	border-color: var(--main-color);
+	box-shadow: 0 0 0 3px rgb(from var(--main-color) r g b / 0.2);
+}
+
+.ct-input-invalid {
+	border-color: var(--error-color);
+}
+
+.ct-input-invalid:focus {
+	box-shadow: 0 0 0 3px rgb(from var(--error-color) r g b / 0.2);
+}
+
+/* Error, hint and counter share a row. The message takes the space and the
+   counter keeps its own width. */
+.ct-field-foot {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 1.2em;
+}
+
+.ct-field-error,
+.ct-field-hint {
+	margin: 0;
+	min-width: 0;
+	font-size: 0.8rem;
+	line-height: 1.4;
+}
+
+.ct-field-error {
+	color: var(--error-color);
+}
+
+.ct-field-hint {
+	color: var(--ct-muted);
+}
+
+.ct-field-counter {
+	flex: 0 0 auto;
+	margin-left: auto;
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--ct-muted);
+}
+
+.ct-field-pair {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+@media (min-width: 768px) {
+	.ct-field-pair {
+		flex-direction: row;
+	}
+
+	.ct-field-pair > .ct-field {
+		flex: 1 1 0;
+	}
+}
+
+/* --- buttons ------------------------------------------------------------- */
+
+.ct-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	/* 44px is the minimum tap target the tournament view established. */
+	min-height: 44px;
+	padding: 10px 18px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	font-family: inherit;
+	font-size: 0.95rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.ct-button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.ct-button-primary {
+	background-color: var(--main-color);
+	color: var(--text-color);
+}
+
+.ct-button-primary:hover:not(:disabled) {
+	background-color: var(--quarternary-color);
+}
+
+.ct-button-quiet {
+	background-color: transparent;
+	border-color: var(--ct-border);
+	color: var(--secondary-text-color);
+}
+
+.ct-button-quiet:hover:not(:disabled) {
+	background-color: var(--ct-surface-alt);
+}
+
+/* --- divisions ----------------------------------------------------------- */
+
+.ct-divisions-empty {
+	padding: 16px;
+	border: 1px dashed var(--ct-border);
+	border-radius: 10px;
+	background-color: var(--ct-surface-alt);
+}
+
+.ct-divisions-empty-lead {
+	margin: 0 0 8px;
+	font-size: 0.95rem;
+	line-height: 1.55;
+	color: var(--secondary-text-color);
+}
+
+.ct-divisions-empty-note {
+	margin: 0;
+	font-size: 0.875rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+}
+
+.ct-division-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.ct-division-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 14px 16px;
+	border: 1px solid var(--ct-border);
+	border-radius: 10px;
+	background-color: var(--ct-surface-alt);
+}
+
+.ct-division-body {
+	min-width: 0;
+}
+
+.ct-division-name {
+	margin: 0 0 2px;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.ct-division-format {
+	margin: 0 0 8px;
+	font-size: 0.85rem;
+	color: var(--main-color);
+}
+
+.ct-division-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 8px;
+}
+
+.ct-division-fact {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background-color: var(--ct-track);
+	font-size: 0.78rem;
+	color: var(--ct-muted);
+	/* A pill that cannot shrink is what pushes a card past its container, so it
+	   is allowed to wrap onto the next line instead. */
+	white-space: nowrap;
+}
+
+.ct-division-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.ct-division-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 44px;
+	padding: 6px 12px;
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
+	background-color: transparent;
+	color: var(--ct-muted);
+	font-family: inherit;
+	font-size: 0.85rem;
+	cursor: pointer;
+	transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.ct-division-action:hover {
+	color: var(--secondary-text-color);
+	border-color: var(--ct-muted);
+}
+
+.ct-division-action svg {
+	fill: currentColor;
+}
+
+.ct-division-action-remove:hover {
+	color: var(--error-color);
+	border-color: var(--error-color);
+}
+
+.ct-add-division {
+	width: 100%;
+	box-sizing: border-box;
+	min-height: 48px;
+	margin-top: 16px;
+	padding: 12px;
+	border: 1px dashed var(--main-color);
+	border-radius: 10px;
+	background-color: transparent;
+	color: var(--main-color);
+	font-family: inherit;
+	font-size: 0.95rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.ct-add-division:hover {
+	background-color: rgb(from var(--main-color) r g b / 0.08);
+}
+
+/* --- page actions -------------------------------------------------------- */
+
+.ct-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	padding-top: 24px;
+}
+
+.ct-review-button {
+	/* 44px minimum target, as the tournament view established. */
+	min-height: 48px;
+	padding: 12px 24px;
+	border: none;
+	border-radius: 10px;
+	background-color: var(--main-color);
+	color: var(--text-color);
+	font-family: inherit;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.ct-review-button:hover {
+	background-color: var(--quarternary-color);
+}
+
+/* Never a disabled button with no explanation — the button stays live and the
+   note below it says what is missing. See step 5. */
+.ct-review-button.ct-review-button-incomplete {
+	background-color: var(--ct-track);
+	color: var(--ct-muted);
+}
+
+.ct-actions-note {
+	margin: 0;
+	text-align: center;
+	font-size: 0.85rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+}
+
+.ct-actions-missing {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+}
+
+.ct-missing-list {
+	margin: 0;
+	padding-left: 20px;
+	font-size: 0.85rem;
+	line-height: 1.6;
+	color: var(--ct-muted);
+}
+
+/* --- modals -------------------------------------------------------------- */
+
+/* .modal-backdrop in App.css is z-index 5. The site header is 1000 and the
+   footer is 10, so a modal using the base class alone is painted under both and
+   loses its top and bottom. This is the same escape .schedule-maker-backdrop
+   makes, and both are portalled onto document.body so nothing can create a
+   containing block above them. */
+.ct-modal-backdrop {
+	z-index: 1100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	overflow-y: auto;
+}
+
+.ct-modal {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 620px;
+	/* The body scrolls, not the modal, so the header and the footer buttons stay
+	   put however long the team list gets. */
+	max-height: min(88vh, 900px);
+	background-color: var(--ct-surface);
+	border: 1px solid var(--ct-border);
+	border-radius: 14px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+	color: var(--secondary-text-color);
+	overflow: hidden;
+}
+
+.ct-modal-large {
+	max-width: 880px;
+}
+
+.ct-modal:focus {
+	outline: none;
+}
+
+.ct-modal-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 18px 20px 14px;
+	border-bottom: 1px solid var(--ct-border);
+}
+
+.ct-modal-heading {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.ct-modal-header h2 {
+	margin: 0;
+	font-size: 1.15rem;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.ct-modal-subtitle {
+	margin: 4px 0 0;
+	font-size: 0.85rem;
+	color: var(--ct-muted);
+}
+
+.ct-modal-close {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border: none;
+	border-radius: 8px;
+	background-color: transparent;
+	color: var(--ct-muted);
+	cursor: pointer;
+}
+
+.ct-modal-close:hover {
+	background-color: var(--ct-surface-alt);
+	color: var(--secondary-text-color);
+}
+
+.ct-modal-close svg {
+	fill: currentColor;
+}
+
+.ct-modal-body {
+	flex: 1 1 auto;
+	padding: 20px;
+	overflow-y: auto;
+	/* The page never scrolls sideways and neither does this. Anything genuinely
+	   wide gets its own scroller. */
+	overflow-x: hidden;
+}
+
+.ct-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 20px;
+	border-top: 1px solid var(--ct-border);
+	background-color: var(--ct-surface-alt);
+}
+
+.ct-modal-footer-right {
+	display: flex;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* --- modal screens ------------------------------------------------------- */
+
+.ct-screen {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+.ct-screen-lede {
+	margin: 0;
+	font-size: 0.9rem;
+	line-height: 1.55;
+	color: var(--ct-muted);
+}
+
+.ct-screen-error {
+	margin: 0;
+}
+
+.ct-empty-note {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--ct-muted);
+}
+
+.ct-notice {
+	margin: 0;
+	padding: 12px 14px;
+	border-left: 3px solid var(--main-color);
+	border-radius: 0 8px 8px 0;
+	background-color: var(--ct-surface-alt);
+	font-size: 0.875rem;
+	line-height: 1.55;
+	color: var(--secondary-text-color);
+}
+
+.ct-fieldset {
+	margin: 0;
+	padding: 0;
+	border: none;
+	min-width: 0;
+}
+
+.ct-fieldset legend {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 0 0 10px;
+}
+
+/* Every option carries the same information whether selected or not, so
+   choosing one moves a border and nothing else. A screen that reflows under the
+   cursor is a screen you have to read twice. */
+.ct-format-options {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 10px;
+}
+
+.ct-format-option {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 14px 16px;
+	border: 2px solid var(--ct-border);
+	border-radius: 10px;
+	background-color: var(--ct-surface-alt);
+	color: var(--secondary-text-color);
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 0.2s ease;
+}
+
+.ct-format-option:hover {
+	border-color: var(--ct-muted);
+}
+
+.ct-format-option-selected {
+	border-color: var(--main-color);
+}
+
+.ct-format-name {
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+.ct-format-summary {
+	font-size: 0.875rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+}
+
+.ct-format-best {
+	font-size: 0.8rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+	font-style: italic;
+}
+
+.ct-input-number {
+	max-width: 160px;
+}
+
+/* --- teams --------------------------------------------------------------- */
+
+.ct-team-add {
+	display: flex;
+	gap: 8px;
+}
+
+.ct-team-add .ct-input {
+	/* A floor of zero so the input yields to the button instead of the pair
+	   overflowing the modal. */
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.ct-team-count {
+	margin: 0;
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--ct-muted);
+}
+
+.ct-team-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/* A row per team, not a card per team — some divisions hold thirty-two. */
+.ct-team-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.ct-team-number {
+	flex: 0 0 auto;
+	width: 26px;
+	text-align: right;
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--ct-muted);
+}
+
+.ct-team-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 40px;
+	padding: 6px 10px;
+	font-size: 0.925rem;
+}
+
+.ct-team-remove {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border: none;
+	border-radius: 8px;
+	background-color: transparent;
+	color: var(--ct-muted);
+	cursor: pointer;
+}
+
+.ct-team-remove:hover {
+	background-color: var(--ct-surface-alt);
+	color: var(--error-color);
+}
+
+.ct-team-remove svg {
+	fill: currentColor;
+}
+
+/* --- review -------------------------------------------------------------- */
+
+.ct-review {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+.ct-review-name {
+	margin: 0 0 10px;
+	font-size: clamp(1.3rem, 4vw, 1.7rem);
+	line-height: 1.2;
+	overflow-wrap: anywhere;
+}
+
+.ct-review-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 18px;
+}
+
+.ct-review-meta-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: 0.9rem;
+	color: var(--ct-muted);
+}
+
+.ct-review-meta-item svg {
+	flex: 0 0 auto;
+	fill: currentColor;
+}
+
+.ct-review-meta-item span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.ct-review-description {
+	margin: 14px 0 0;
+	max-width: 70ch;
+	font-size: 0.925rem;
+	line-height: 1.6;
+	color: var(--secondary-text-color);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.ct-review-divisions {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.ct-review-division {
+	padding: 16px;
+	border: 1px solid var(--ct-border);
+	border-radius: 10px;
+	background-color: var(--ct-surface-alt);
+}
+
+.ct-review-division-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 12px;
+	margin-bottom: 12px;
+}
+
+.ct-review-division-name {
+	margin: 0;
+	font-size: 1.05rem;
+	overflow-wrap: anywhere;
+}
+
+.ct-review-division-format {
+	font-size: 0.85rem;
+	color: var(--main-color);
+}
+
+.ct-review-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 28px;
+	margin: 0 0 14px;
+}
+
+.ct-review-fact {
+	min-width: 0;
+}
+
+.ct-review-fact dt {
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--ct-muted);
+}
+
+.ct-review-fact dd {
+	margin: 2px 0 0;
+	font-size: 1.05rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* --- schematic ----------------------------------------------------------- */
+
+.ct-schematic {
+	margin: 0 0 16px;
+	padding: 14px;
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
+	background-color: var(--ct-surface);
+}
+
+/* Said plainly and said first. This is an illustration, not a promise. */
+.ct-schematic-caption {
+	margin: 0 0 14px;
+	font-size: 0.8rem;
+	line-height: 1.5;
+	font-style: italic;
+	color: var(--ct-muted);
+}
+
+.ct-schematic-stage + .ct-schematic-stage {
+	margin-top: 16px;
+	padding-top: 16px;
+	border-top: 1px solid var(--ct-border);
+}
+
+.ct-schematic-stage-name {
+	margin: 0 0 8px;
+	font-size: 0.72rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--ct-muted);
+}
+
+/* The one element on the page allowed its own horizontal axis. Eight pools do
+   not fit a phone, and scaling them down until the numbers are unreadable is
+   not an improvement. */
+.ct-schematic-pools {
+	display: flex;
+	gap: 8px;
+	overflow-x: auto;
+	padding-bottom: 4px;
+}
+
+.ct-schematic-pool {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	/* Fixed and non-shrinking: these are the children the scroller exists for. */
+	flex: 0 0 auto;
+	min-width: 88px;
+	padding: 10px 12px;
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
+	background-color: var(--ct-surface-alt);
+}
+
+.ct-schematic-pool-name {
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+
+.ct-schematic-pool-count {
+	font-size: 0.78rem;
+	color: var(--ct-muted);
+}
+
+.ct-schematic-rounds {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: ct-round;
+}
+
+.ct-schematic-round {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px 10px;
+	padding: 8px 12px;
+	border-left: 3px solid var(--main-color);
+	border-radius: 0 6px 6px 0;
+	background-color: var(--ct-surface-alt);
+}
+
+.ct-schematic-round-name {
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.ct-schematic-round-detail {
+	min-width: 0;
+	font-size: 0.78rem;
+	color: var(--ct-muted);
+	overflow-wrap: anywhere;
+}
+
+.ct-review-teams-label {
+	margin: 0 0 6px;
+	font-size: 0.72rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--ct-muted);
+}
+
+.ct-review-teams {
+	display: grid;
+	/* min() rather than a bare minmax floor: a 160px minimum wider than the
+	   container overflows instead of shrinking. */
+	grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.ct-review-team {
+	padding: 6px 10px;
+	border-radius: 6px;
+	background-color: var(--ct-surface);
+	font-size: 0.875rem;
+	/* The track allows shrinking; this is what makes the child actually do it. */
+	overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+	.ct-format-options {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.ct-division-card {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.ct-division-actions {
+		flex: 0 0 auto;
+	}
+}
+
+/* Below 768 the modals take the whole screen. There is not enough room for a
+   dialog floating in a margin, and the team list needs every pixel. */
+@media (max-width: 767px) {
+	.ct-modal-backdrop {
+		padding: 0;
+		align-items: stretch;
+	}
+
+	.ct-modal {
+		max-width: none;
+		max-height: none;
+		height: 100%;
+		border: none;
+		border-radius: 0;
+	}
+
+	.ct-modal-footer {
+		flex-wrap: wrap;
+	}
+
+	.ct-modal-footer-right {
+		flex: 1 1 auto;
+	}
+
+	.ct-modal-footer-right .ct-button {
+		flex: 1 1 0;
+	}
+}
+
+@media (min-width: 768px) {
+	.ct-page {
+		padding: 32px 24px 72px;
+	}
+
+	.ct-actions {
+		align-items: center;
+	}
+
+	.ct-review-button {
+		min-width: 260px;
+	}
+}

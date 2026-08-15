@@ -1,0 +1,1734 @@
+/* Tournament view.
+ *
+ * Imported by components/tournament/TournamentShell.jsx. Every class here is
+ * prefixed tv- so the step 13 sweep over App.css — which removes the old
+ * tournament-view-, dashboard-, fixture-card- and schedule-tab- rules — cannot
+ * touch it.
+ *
+ * Two notes on the shared tokens in App.css, both counter-intuitive:
+ *
+ * 1. --text-color is white in BOTH themes. It is only readable on a filled
+ *    surface. Body text on the page background uses --secondary-text-color,
+ *    which is near-black on light and near-white on dark. The existing schedule
+ *    rules already follow this; do not "fix" the token names here.
+ * 2. The breakpoint tokens say 480/768/1024, but the stylesheet actually uses
+ *    768 and 1200 almost everywhere. This file matches the stylesheet.
+ */
+
+body.light {
+	--tv-surface: #ffffff;
+	--tv-surface-alt: #f4f7fb;
+	--tv-border: rgba(37, 37, 37, 0.12);
+	--tv-muted: rgba(37, 37, 37, 0.66);
+	--tv-skeleton: rgba(37, 37, 37, 0.09);
+	--tv-skeleton-sheen: rgba(37, 37, 37, 0.04);
+}
+
+body.dark {
+	--tv-surface: #242424;
+	--tv-surface-alt: #2f2f2f;
+	--tv-border: rgba(245, 245, 245, 0.14);
+	--tv-muted: rgba(245, 245, 245, 0.7);
+	--tv-skeleton: rgba(245, 245, 245, 0.1);
+	--tv-skeleton-sheen: rgba(245, 245, 245, 0.05);
+}
+
+/* For text that only a screen reader needs — a status carried visually by a
+   colour, for instance. Off-screen rather than display: none, which would take
+   it out of the accessibility tree along with everything else. */
+.tv-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	border: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.tv-shell {
+	width: 100%;
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 20px 16px 48px;
+	color: var(--secondary-text-color);
+	/* The page itself must never scroll sideways. Only the nav and, later, the
+	   standings tables and the bracket are allowed their own axis. */
+	overflow-x: hidden;
+}
+
+/* --- subheader ---------------------------------------------------------- */
+
+/* Three parts: back, name, follow.
+ *
+ * The outer columns are equal, so the name stays centred on the page even though
+ * the two buttons are different widths. Their floor is min-content, which is the
+ * button's own width — without that floor a long name collapses both columns to
+ * zero and the buttons render on top of the title. The middle column is the one
+ * allowed to shrink, so the name wraps instead of pushing anything off-screen. */
+.tv-subheader {
+	display: grid;
+	grid-template-columns: minmax(min-content, 1fr) minmax(0, auto) minmax(min-content, 1fr);
+	align-items: center;
+	gap: 12px;
+	padding: 12px 0 16px;
+}
+
+.tv-title {
+	grid-column: 2;
+	margin: 0;
+	text-align: center;
+	font-size: clamp(1.15rem, 4vw, 1.75rem);
+	line-height: 1.25;
+	color: var(--secondary-text-color);
+	/* Wrap rather than truncate, per the spec. anywhere is deliberate: it also
+	   breaks a single unbroken word, which is the only case that can still
+	   overflow at 320px. */
+	overflow-wrap: anywhere;
+}
+
+.tv-subheader .tv-back {
+	grid-column: 1;
+	justify-self: start;
+}
+
+.tv-subheader .tv-follow {
+	grid-column: 3;
+	justify-self: end;
+}
+
+/* Equal-width buttons, so the outer columns have equal floors and the name sits
+   on the true centre of the page rather than half a button-width off it. */
+.tv-back,
+.tv-follow {
+	min-width: 6.5rem;
+	justify-content: center;
+}
+
+.tv-icon-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 12px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+	cursor: pointer;
+	/* Keeps min-content equal to the button's full width, which is what the
+	   subheader grid uses as the floor for its outer columns. */
+	white-space: nowrap;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tv-icon-button svg {
+	fill: currentColor;
+	flex: 0 0 auto;
+}
+
+.tv-icon-button:hover:not(:disabled) {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+.tv-icon-button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.tv-follow.active {
+	background: var(--main-color);
+	border-color: var(--main-color);
+	/* Filled surface, so the white token is the right one here. */
+	color: var(--text-color);
+}
+
+/* --- navigation --------------------------------------------------------- */
+
+.tv-nav {
+	border-bottom: 1px solid var(--tv-border);
+}
+
+/* One row, always. nowrap plus overflow-x is the whole mechanism: the row
+   scrolls sideways instead of becoming two rows on a narrow viewport. */
+.tv-nav-list {
+	display: flex;
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	overflow-y: hidden;
+	gap: 4px;
+	scrollbar-width: none;
+	-webkit-overflow-scrolling: touch;
+}
+
+.tv-nav-list::-webkit-scrollbar {
+	display: none;
+}
+
+.tv-nav-item {
+	flex: 0 0 auto;
+	padding: 12px 16px;
+	border: none;
+	border-bottom: 2px solid transparent;
+	background: none;
+	color: var(--tv-muted);
+	font-size: 0.95rem;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tv-nav-item:hover {
+	color: var(--secondary-text-color);
+}
+
+.tv-nav-item.active {
+	color: var(--main-color);
+	border-bottom-color: var(--main-color);
+	font-weight: 600;
+}
+
+/* --- content area ------------------------------------------------------- */
+
+.tv-content {
+	padding-top: 24px;
+}
+
+.tv-panel {
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 14px;
+	padding: 24px;
+}
+
+.tv-panel-message {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	text-align: center;
+	padding: 40px 24px;
+}
+
+.tv-panel-message h2 {
+	margin: 0;
+	font-size: 1.1rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-panel-message p {
+	margin: 0;
+	max-width: 46ch;
+	color: var(--tv-muted);
+}
+
+.tv-retry {
+	margin-top: 4px;
+	padding: 10px 20px;
+	border: none;
+	border-radius: 999px;
+	background: var(--main-color);
+	color: var(--text-color);
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+.tv-retry:hover {
+	background: var(--quarternary-color);
+}
+
+/* --- division selector -------------------------------------------------- */
+
+.tv-division-selector {
+	position: relative;
+	margin-bottom: 20px;
+}
+
+/* Out of flow, so it can be measured without contributing to the width it is
+   being measured against. nowrap is the point of it: the measurement asks how
+   wide the pill row would be on one line. */
+.tv-division-measure {
+	position: absolute;
+	top: 0;
+	left: 0;
+	visibility: hidden;
+	pointer-events: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	white-space: nowrap;
+}
+
+.tv-division-pills {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.tv-division-selector-label {
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+.tv-division-pill {
+	padding: 7px 14px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tv-division-pill:hover {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+.tv-division-pill.active {
+	background: var(--main-color);
+	border-color: var(--main-color);
+	/* Filled surface, so the white token is the right one here. */
+	color: var(--text-color);
+}
+
+.tv-division-dropdown {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.tv-division-dropdown select {
+	flex: 1 1 auto;
+	min-width: 0;
+	max-width: 320px;
+	padding: 8px 12px;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+/* --- division badge ----------------------------------------------------- */
+
+.tv-division-badge {
+	display: inline-block;
+	padding: 2px 9px;
+	border-radius: 999px;
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+	font-size: 0.75rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* --- team identity ------------------------------------------------------ */
+
+.tv-team {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* Initials stand in for a logo. There are no team logos in the schema. */
+.tv-team-initials {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	background: rgb(from var(--quarternary-color) r g b / 0.18);
+	color: var(--secondary-text-color);
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.tv-team--small .tv-team-initials {
+	width: 26px;
+	height: 26px;
+	font-size: 0.68rem;
+}
+
+.tv-team-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.tv-team-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tv-team-note {
+	font-size: 0.76rem;
+	color: var(--tv-muted);
+}
+
+/* --- overview ----------------------------------------------------------- */
+
+.tv-band + .tv-band {
+	margin-top: 32px;
+}
+
+.tv-band-heading {
+	margin: 0 0 14px;
+	font-size: 1.05rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-info-card {
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 14px;
+	padding: 20px;
+}
+
+.tv-info-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+/* The organiser's lifecycle controls, at the foot of the info card. Separated
+   by a rule because they act on the tournament rather than describe it. */
+.tv-info-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 18px;
+	padding-top: 16px;
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-status-pill {
+	padding: 4px 12px;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	background: rgb(from var(--secondary-color) r g b / 0.15);
+	color: var(--secondary-color);
+}
+
+.tv-status-pill--ongoing {
+	background: rgb(from var(--success-color) r g b / 0.16);
+	color: var(--success-color);
+}
+
+.tv-status-pill--finished {
+	background: rgb(from var(--tv-muted) r g b / 0.16);
+	color: var(--tv-muted);
+}
+
+.tv-info-format {
+	padding: 3px 10px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	font-size: 0.76rem;
+	color: var(--tv-muted);
+}
+
+.tv-info-description {
+	margin: 0 0 16px;
+	max-width: 70ch;
+	line-height: 1.55;
+	color: var(--secondary-text-color);
+}
+
+.tv-info-grid,
+.tv-division-card-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+	gap: 14px;
+	margin: 0;
+}
+
+.tv-info-item dt {
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+.tv-info-item dd {
+	margin: 3px 0 0;
+	font-size: 0.95rem;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-division-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+	gap: 16px;
+}
+
+.tv-division-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 14px;
+	padding: 18px;
+}
+
+.tv-division-card-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.tv-division-card h3 {
+	margin: 0;
+	font-size: 1rem;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-progress-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--tv-surface-alt);
+	overflow: hidden;
+}
+
+.tv-progress-fill {
+	display: block;
+	height: 100%;
+	border-radius: 999px;
+	background: var(--main-color);
+}
+
+.tv-progress-label {
+	display: block;
+	margin-top: 6px;
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+.tv-division-card-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: auto;
+}
+
+.tv-division-card-actions button {
+	flex: 1 1 0;
+	padding: 8px 10px;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: none;
+	color: var(--secondary-text-color);
+	font-size: 0.85rem;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tv-division-card-actions button:hover {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+/* --- activity ----------------------------------------------------------- */
+
+/* min(300px, 100%) rather than a bare 300px: an auto-fit track whose minimum
+   exceeds the container width overflows it rather than shrinking, which is what
+   pushed this column past the page edge at 320px. The min() caps the floor at
+   the space actually available. The same guard is on every auto-fit grid here. */
+.tv-activity {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+	gap: 20px;
+}
+
+.tv-activity-heading {
+	margin: 0 0 10px;
+	font-size: 0.88rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+.tv-activity-empty {
+	margin: 0;
+	padding: 16px;
+	border: 1px dashed var(--tv-border);
+	border-radius: 12px;
+	font-size: 0.88rem;
+	color: var(--tv-muted);
+}
+
+.tv-fixture-previews {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* High information density, low visual density: three short columns, one line
+   each where the names allow it. */
+.tv-fixture-preview {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+}
+
+.tv-fixture-preview-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.tv-match-no {
+	font-size: 0.75rem;
+	color: var(--tv-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-fixture-preview-teams {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: 0.9rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-fixture-preview-teams > span:not(.tv-versus) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tv-versus {
+	flex: 0 0 auto;
+	font-size: 0.75rem;
+	color: var(--tv-muted);
+}
+
+.tv-fixture-preview-outcome {
+	font-size: 0.82rem;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	color: var(--secondary-text-color);
+}
+
+.tv-fixture-preview-outcome--status {
+	color: var(--tv-muted);
+}
+
+/* --- fixtures ----------------------------------------------------------- */
+
+.tv-fixtures-toolbar {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+/* Compact and inline. The filters wrap onto as many rows as they need rather
+   than each taking a full row, so they stay one block of controls. */
+.tv-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.tv-filter {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.tv-filter > span {
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+.tv-filter select,
+.tv-filter input {
+	min-width: 0;
+	max-width: 200px;
+	padding: 7px 10px;
+	border: 1px solid var(--tv-border);
+	border-radius: 9px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.86rem;
+}
+
+.tv-primary-action {
+	padding: 9px 18px;
+	border: none;
+	border-radius: 999px;
+	background: var(--main-color);
+	/* Filled surface, so the white token is the right one here. */
+	color: var(--text-color);
+	font-size: 0.88rem;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-primary-action:hover {
+	background: var(--quarternary-color);
+}
+
+.tv-fixtures-count {
+	margin: 0 0 10px;
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+/* The list owns the columns and each row is a subgrid of them, so a division
+   badge lines up with the one above it however long the round label beside it
+   happens to be. Subgrid rather than display: contents because the row has to
+   keep its own box — its surface, border and radius are the row. */
+.tv-fixture-rows {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	display: grid;
+	/* status | no | teams | court | division | round | outcome | action */
+	grid-template-columns: auto auto minmax(0, 1fr) repeat(5, auto);
+	row-gap: 6px;
+}
+
+/* High information density, low visual density: a single line per fixture, with
+   the teams taking whatever width is left over. */
+.tv-fixture-row {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: subgrid;
+	align-items: center;
+	padding: 9px 14px;
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-left: 3px solid var(--tv-border);
+	border-radius: 10px;
+}
+
+/* The space between columns rides on the cells rather than on the grid, because
+   a grid gap is charged whether or not anything fills the column. A list with no
+   courts and no division badges would otherwise pay for both. */
+.tv-fixture-row > * + *,
+.tv-fixture-row-meta > * {
+	margin-left: 14px;
+}
+
+/* Placement by class, not by order: a row missing a slot leaves the column empty
+   rather than pulling the next one into it. */
+.tv-fixture-row > .tv-status-dot {
+	grid-column: 1;
+}
+
+.tv-fixture-row > .tv-match-no {
+	grid-column: 2;
+}
+
+.tv-fixture-row-meta > .tv-court-chip {
+	grid-column: 4;
+}
+
+.tv-fixture-row-meta > .tv-division-badge {
+	grid-column: 5;
+}
+
+.tv-fixture-row-meta > .tv-round-label {
+	grid-column: 6;
+}
+
+.tv-fixture-row-action {
+	grid-column: 8;
+}
+
+.tv-fixture-row--cancelled {
+	opacity: 0.65;
+}
+
+/* One dot per row, in the first column, so the statuses read straight down the
+   list. Blue upcoming, green live, red completed, muted cancelled. The row's
+   left edge stays the neutral border on every status: this is the only place a
+   status is encoded, so there is nothing for it to disagree with. */
+.tv-status-dot {
+	display: block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--tv-muted);
+}
+
+.tv-status-dot--upcoming {
+	background: var(--main-color);
+}
+
+.tv-status-dot--live {
+	background: var(--success-color);
+}
+
+.tv-status-dot--completed {
+	background: var(--error-color);
+}
+
+.tv-status-dot--cancelled {
+	background: var(--tv-muted);
+}
+
+.tv-fixture-row-teams {
+	grid-column: 3;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	font-size: 0.92rem;
+}
+
+.tv-fixture-row-teams > span:not(.tv-versus) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Court, division and round are three columns, not one blob in a single cell —
+   sharing a cell was what let a long round name push the division badge out of
+   line with the row above. The wrapper stays in the DOM because the mobile
+   layout still stacks them as one block. */
+.tv-fixture-row-meta {
+	display: contents;
+}
+
+.tv-round-label {
+	font-size: 0.76rem;
+	color: var(--tv-muted);
+	white-space: nowrap;
+}
+
+.tv-fixture-row-outcome {
+	grid-column: 7;
+	font-size: 0.84rem;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	text-align: right;
+}
+
+.tv-fixture-row-outcome--status {
+	color: var(--tv-muted);
+}
+
+/* --- schedule ----------------------------------------------------------- */
+
+.tv-schedule-day + .tv-schedule-day {
+	margin-top: 28px;
+}
+
+.tv-schedule-day-heading {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 0 0 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--tv-border);
+	font-size: 1rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-schedule-day-date {
+	font-size: 0.8rem;
+	font-weight: 400;
+	color: var(--tv-muted);
+}
+
+/* Time is the grouping level, so it sits outside the rows rather than being a
+   column inside each one. Everything at 09:00 is visibly one block. */
+.tv-time-group {
+	display: grid;
+	grid-template-columns: 64px minmax(0, 1fr);
+	gap: 12px;
+	padding: 8px 0;
+}
+
+.tv-time-group + .tv-time-group {
+	border-top: 1px dashed var(--tv-border);
+}
+
+.tv-time-group-time {
+	padding-top: 9px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--secondary-text-color);
+	white-space: nowrap;
+}
+
+/* Courts are distinguished within a time group by this chip, which is the first
+   thing on each row so the column of them can be read straight down. */
+.tv-court-chip {
+	padding: 2px 9px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface-alt);
+	font-size: 0.75rem;
+	font-weight: 600;
+	white-space: nowrap;
+	color: var(--secondary-text-color);
+}
+
+.tv-fixture-row--break {
+	background: var(--tv-surface-alt);
+	border-left-color: var(--tertiary-color);
+	border-style: dashed;
+}
+
+.tv-fixture-row--break .tv-fixture-row-teams {
+	font-style: italic;
+	color: var(--tv-muted);
+}
+
+/* --- standings ---------------------------------------------------------- */
+
+.tv-standings-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 4px;
+}
+
+.tv-advanced-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.82rem;
+	color: var(--tv-muted);
+	cursor: pointer;
+}
+
+.tv-advanced-toggle input {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--main-color);
+	cursor: pointer;
+}
+
+.tv-stage-tabs {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 16px;
+}
+
+.tv-stage-tab {
+	padding: 7px 16px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--tv-muted);
+	font-size: 0.85rem;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-stage-tab.active {
+	border-color: transparent;
+	background: var(--main-color);
+	/* Filled surface, so the white token is the right one here. */
+	color: var(--text-color);
+}
+
+.tv-standings-round + .tv-standings-round {
+	margin-top: 24px;
+}
+
+.tv-standings-round-name {
+	margin: 0 0 10px;
+	font-size: 0.95rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-standings-group + .tv-standings-group {
+	margin-top: 18px;
+}
+
+.tv-standings-group-name {
+	margin: 0 0 8px;
+	font-size: 0.82rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+/* The one place on this page allowed its own horizontal axis, along with the
+   bracket. The advanced columns widen the table inside this container rather
+   than widening the page, so turning them on moves nothing outside it. */
+.tv-table-scroll {
+	overflow-x: auto;
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+}
+
+.tv-standings-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.88rem;
+	/* Columns keep a readable width and the container scrolls, rather than every
+	   column shrinking until none of them can be read. */
+	min-width: 440px;
+}
+
+.tv-standings-table th,
+.tv-standings-table td {
+	padding: 10px 12px;
+	text-align: right;
+	white-space: nowrap;
+	color: var(--secondary-text-color);
+}
+
+.tv-standings-table thead th {
+	font-size: 0.74rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+	border-bottom: 1px solid var(--tv-border);
+}
+
+.tv-standings-table tbody tr + tr th,
+.tv-standings-table tbody tr + tr td {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-standings-table abbr {
+	text-decoration: none;
+	cursor: help;
+}
+
+.tv-standings-table .tv-col-rank {
+	width: 44px;
+	text-align: center;
+	color: var(--tv-muted);
+}
+
+.tv-standings-table .tv-col-team {
+	text-align: left;
+	font-weight: 600;
+	/* The only column allowed to wrap. A long team name should cost height, not
+	   push the numeric columns off the end. */
+	white-space: normal;
+	min-width: 140px;
+}
+
+/* Rank and team stay put while the numeric columns scroll under them, so a row
+   never becomes a line of figures with no team attached. */
+.tv-standings-table .tv-col-rank,
+.tv-standings-table .tv-col-team {
+	position: sticky;
+	background: var(--tv-surface);
+}
+
+.tv-standings-table .tv-col-rank {
+	left: 0;
+}
+
+.tv-standings-table .tv-col-team {
+	left: 44px;
+	/* Covers the numeric cell sliding beneath it. */
+	box-shadow: 1px 0 0 var(--tv-border);
+}
+
+.tv-final-standings {
+	margin-bottom: 24px;
+}
+
+.tv-final-standings-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.tv-final-standings-list li {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+}
+
+.tv-final-rank {
+	flex: 0 0 auto;
+	min-width: 24px;
+	font-weight: 700;
+	color: var(--main-color);
+}
+
+.tv-final-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.tv-final-note {
+	flex: 0 0 auto;
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+/* --- knockout bracket --------------------------------------------------- */
+
+/* Half the gap between rounds. Both stubs and the vertical connector are
+   positioned from this, so the whole linkage moves together if it changes. */
+.tv-bracket-wrap {
+	--tv-bracket-gap: 32px;
+	--tv-bracket-stub: 16px;
+}
+
+/* The second and last thing on this page allowed its own horizontal axis. */
+.tv-bracket-scroll {
+	overflow-x: auto;
+	padding-bottom: 6px;
+}
+
+.tv-bracket {
+	display: flex;
+	align-items: stretch;
+	gap: var(--tv-bracket-gap);
+	/* Columns keep their width and the container scrolls. A bracket scaled down
+	   to fit a phone is unreadable in a way that scrolling is not. */
+	min-width: min-content;
+}
+
+.tv-bracket-round {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	width: 200px;
+}
+
+.tv-bracket-round-name {
+	margin: 0 0 10px;
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+	text-align: center;
+}
+
+/* Every round's body is the same height, because the columns stretch. Each
+   match then takes an equal share of it, which is what makes a match in one
+   round line up with the midpoint of its two feeders in the round before —
+   with no measurement and no library. */
+.tv-bracket-round-body {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+}
+
+.tv-bracket-pair,
+.tv-bracket-round-body > .tv-bracket-slot {
+	flex: 1 1 0;
+}
+
+.tv-bracket-pair {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+
+.tv-bracket-slot {
+	display: flex;
+	align-items: center;
+	position: relative;
+	min-height: 84px;
+}
+
+.tv-bracket-pair > .tv-bracket-slot {
+	flex: 1 1 0;
+}
+
+/* Out of each match in a feeding pair, to the middle of the gap. */
+.tv-bracket-pair > .tv-bracket-slot::after {
+	content: '';
+	position: absolute;
+	left: 100%;
+	top: 50%;
+	width: var(--tv-bracket-stub);
+	height: 2px;
+	background: var(--tv-border);
+}
+
+/* The vertical joining the two stubs. Each slot in a pair is half its height,
+   so their centres sit at 25% and 75% — the line spans exactly between them. */
+.tv-bracket-pair::after {
+	content: '';
+	position: absolute;
+	left: calc(100% + var(--tv-bracket-stub));
+	top: 25%;
+	width: 2px;
+	height: 50%;
+	background: var(--tv-border);
+}
+
+/* Into each match of a round that is actually fed by the one before it. */
+.tv-bracket-round--fed .tv-bracket-slot::before {
+	content: '';
+	position: absolute;
+	right: 100%;
+	top: 50%;
+	width: var(--tv-bracket-stub);
+	height: 2px;
+	background: var(--tv-border);
+}
+
+.tv-bracket-match {
+	width: 100%;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+	overflow: hidden;
+}
+
+.tv-bracket-match--cancelled {
+	opacity: 0.6;
+}
+
+.tv-bracket-match-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 5px 10px;
+	background: var(--tv-surface-alt);
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+}
+
+.tv-bracket-outcome {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tv-bracket-participant {
+	padding: 8px 10px;
+	font-size: 0.85rem;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-bracket-participant + .tv-bracket-participant {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-bracket-participant--winner {
+	font-weight: 700;
+	box-shadow: inset 3px 0 0 var(--success-color);
+}
+
+/* A placeholder is a real state, not missing data: a knockout fixture exists
+   before the pool feeding it has finished. */
+.tv-bracket-participant--placeholder {
+	color: var(--tv-muted);
+	font-style: italic;
+}
+
+.tv-bracket-placement {
+	max-width: 240px;
+	margin-top: 24px;
+}
+
+/* --- teams -------------------------------------------------------------- */
+
+/* Row and card at once: a bordered card so a team reads as an object, laid out
+   as a row so a division holding forty of them stays scannable. */
+.tv-team-rows {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+	gap: 8px;
+}
+
+.tv-team-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-width: 0;
+	padding: 10px 14px;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+}
+
+/* The form replaces the row's contents, so it takes the whole cell. */
+.tv-team-row--editing {
+	display: block;
+	padding: 12px 14px;
+}
+
+.tv-team-actions {
+	display: flex;
+	flex: 0 0 auto;
+	gap: 4px;
+}
+
+/* Subtle by design: Add Team is the prominent action, Edit and Remove sit
+   quietly beside the team they act on. */
+.tv-subtle-action {
+	padding: 5px 10px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: none;
+	color: var(--tv-muted);
+	font-size: 0.8rem;
+	cursor: pointer;
+}
+
+.tv-subtle-action:hover:not(:disabled) {
+	border-color: var(--tv-border);
+	color: var(--secondary-text-color);
+}
+
+.tv-subtle-action--danger:hover:not(:disabled) {
+	border-color: rgb(from var(--error-color) r g b / 0.5);
+	color: var(--error-color);
+}
+
+.tv-subtle-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tv-inline-form {
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.tv-inline-form-field {
+	display: flex;
+	flex: 1 1 220px;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.tv-inline-form-field > span {
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+.tv-inline-form-field input {
+	min-width: 0;
+	padding: 8px 10px;
+	border: 1px solid var(--tv-border);
+	border-radius: 9px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+}
+
+.tv-inline-form-actions {
+	display: flex;
+	flex: 0 0 auto;
+	gap: 6px;
+}
+
+/* Inside a row the form is the whole cell, so its margin would double the
+   padding. */
+.tv-team-row--editing .tv-inline-form {
+	margin-bottom: 0;
+}
+
+/* Edits accumulate and are saved as one request, so there has to be somewhere
+   that says so. Tinted rather than bordered: it is a state the section is in,
+   not another card in the list. */
+.tv-teams-pending {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface-alt);
+}
+
+.tv-teams-pending-note {
+	margin: 0;
+	min-width: 0;
+	color: var(--tv-muted);
+	font-size: 0.85rem;
+}
+
+.tv-structure-modal {
+	text-align: left;
+}
+
+.tv-structure-title {
+	margin: 0 0 8px;
+	font-size: 1.05rem;
+}
+
+/* Side by side while there is room. They are one decision — how the division is
+   shaped — and reading them apart invites setting one without the other. */
+.tv-structure-fields {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.tv-structure-fields .form-group {
+	flex: 1 1 140px;
+	min-width: 0;
+}
+
+/* --- skeletons ---------------------------------------------------------- */
+
+/* Skeletons rather than a spinner: the shell is already on screen, and a
+   spinner in the content area would read as the whole page reloading. */
+.tv-skeleton {
+	display: block;
+	border-radius: 6px;
+	background: linear-gradient(
+		90deg,
+		var(--tv-skeleton) 0%,
+		var(--tv-skeleton-sheen) 50%,
+		var(--tv-skeleton) 100%
+	);
+	background-size: 200% 100%;
+	animation: tv-shimmer 1.4s ease-in-out infinite;
+}
+
+.tv-skeleton-title {
+	width: min(320px, 55vw);
+	height: 1.5rem;
+}
+
+.tv-skeleton-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.tv-skeleton-row {
+	height: 64px;
+	border-radius: 12px;
+}
+
+/* Cards for the sections that lay out in a grid — division summaries, team
+   lists — so the placeholder has the shape of what replaces it. */
+.tv-skeleton-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+	gap: 16px;
+}
+
+.tv-skeleton-card {
+	height: 140px;
+	border-radius: 14px;
+}
+
+@keyframes tv-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.tv-skeleton {
+		animation: none;
+	}
+}
+
+/* --- narrow viewports --------------------------------------------------- */
+
+@media (max-width: 768px) {
+	.tv-shell {
+		padding: 12px 12px 40px;
+	}
+
+	/* Icon only. The labels are the first thing to go — losing them keeps the
+	   name column wide enough to wrap sensibly instead of one word per line. */
+	.tv-back-label,
+	.tv-follow-label {
+		display: none;
+	}
+
+	.tv-icon-button {
+		padding: 8px;
+	}
+
+	/* Icon only, so they are already the same width — the desktop floor would
+	   just waste the space the name needs. */
+	.tv-back,
+	.tv-follow {
+		min-width: auto;
+	}
+
+	.tv-nav-item {
+		padding: 12px;
+		font-size: 0.9rem;
+	}
+
+	.tv-content {
+		padding-top: 16px;
+	}
+
+	.tv-panel {
+		padding: 16px;
+	}
+
+	.tv-panel-message {
+		padding: 32px 16px;
+	}
+
+	.tv-info-card,
+	.tv-division-card {
+		padding: 14px;
+	}
+
+	.tv-band + .tv-band {
+		margin-top: 24px;
+	}
+
+	/* The three columns become two rows: the teams need the full width far more
+	   than the outcome needs to sit beside them. */
+	.tv-fixture-preview {
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 6px 10px;
+	}
+
+	.tv-fixture-preview-meta {
+		grid-column: 1;
+	}
+
+	.tv-fixture-preview-outcome {
+		grid-column: 2;
+		grid-row: 1;
+		justify-self: end;
+	}
+
+	.tv-fixture-preview-teams {
+		grid-column: 1 / -1;
+	}
+
+	/* The fixture row folds into stacked full-width lines: status, match number
+	   and outcome, then the teams, then the division and stage. Nothing is
+	   dropped.
+
+	   The division badge and the stage label are both nowrap, so the meta cell
+	   cannot shrink — squeezing it beside the other two pushed it off the page at
+	   320px. Giving it the full width and letting it wrap is what fixes that. */
+
+	/* Stacked, every row spans the whole list and nothing sits in the list's
+	   columns, so the list goes back to being a plain column. Left as a grid, its
+	   eight now-empty tracks would still take their share of the width. */
+	.tv-fixture-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.tv-fixture-row {
+		grid-template-columns: auto auto minmax(0, 1fr);
+		gap: 6px 10px;
+		padding: 10px 12px;
+	}
+
+	/* The cell margins that carry the column spacing on a wide viewport would be
+	   indentation here; the row's own gap does the job instead. */
+	.tv-fixture-row > * + *,
+	.tv-fixture-row-meta > * {
+		margin-left: 0;
+	}
+
+	.tv-fixture-row > .tv-status-dot {
+		grid-row: 1;
+		grid-column: 1;
+	}
+
+	.tv-fixture-row .tv-match-no {
+		grid-row: 1;
+		grid-column: 2;
+	}
+
+	.tv-fixture-row-outcome {
+		grid-row: 1;
+		grid-column: 3;
+		justify-self: end;
+	}
+
+	.tv-fixture-row-teams {
+		grid-row: 2;
+		grid-column: 1 / -1;
+	}
+
+	.tv-fixture-row-meta {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		grid-row: 3;
+		grid-column: 1 / -1;
+		flex-wrap: wrap;
+		min-width: 0;
+	}
+
+	.tv-fixture-row-action {
+		grid-row: 4;
+		grid-column: 1 / -1;
+	}
+
+	.tv-filters {
+		width: 100%;
+	}
+
+	.tv-filter {
+		flex: 1 1 140px;
+	}
+
+	.tv-filter select,
+	.tv-filter input {
+		max-width: none;
+		width: 100%;
+	}
+
+	.tv-primary-action {
+		width: 100%;
+	}
+
+	/* The time becomes a heading above its rows rather than a left gutter —
+	   64px of gutter is too much to give up at this width. */
+	.tv-time-group {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+
+	.tv-time-group-time {
+		padding-top: 0;
+		font-size: 0.82rem;
+		color: var(--tv-muted);
+	}
+
+	/* The toggle drops below the selector rather than competing with it for the
+	   row. Both stay full width so neither is a small target. */
+	.tv-standings-toolbar {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.tv-standings-table th,
+	.tv-standings-table td {
+		padding: 9px 10px;
+	}
+
+	/* Rank, Team, Played, Won and Lost are what a phone should show without
+	   moving; the sets columns are reached by scrolling the table itself. */
+	.tv-standings-table .tv-col-team {
+		min-width: 110px;
+	}
+
+	/* Touch targets. Measured at 320px, these controls came in between 29px and
+	   38px tall — fine under a mouse, too small under a thumb. The filters are
+	   the ones step 12 names explicitly, but Edit and Remove at 29px were the
+	   worst of them. 44px is the floor everywhere something is tapped.
+
+	   The back and follow buttons are deliberately left at 40px: they sit in the
+	   subheader's outer grid columns, and widening them takes the width straight
+	   out of the tournament name, which is already wrapping hard at this size. */
+	.tv-filter select,
+	.tv-filter input,
+	.tv-inline-form-field input,
+	.tv-division-dropdown select,
+	.tv-division-pill,
+	.tv-primary-action,
+	.tv-stage-tab,
+	.tv-subtle-action,
+	.tv-retry,
+	.tv-division-card-actions button {
+		min-height: 44px;
+	}
+
+	.tv-subtle-action {
+		padding-inline: 14px;
+	}
+
+	/* The label is the target — it wraps the checkbox and its text — so the
+	   height belongs on the label rather than on the input. */
+	.tv-advanced-toggle {
+		min-height: 44px;
+	}
+
+	.tv-advanced-toggle input {
+		width: 20px;
+		height: 20px;
+	}
+
+	/* Narrower columns and a tighter gap, so two rounds are readable at once
+	   before the reader has to scroll. The bracket is not scaled down. */
+	.tv-bracket-wrap {
+		--tv-bracket-gap: 22px;
+		--tv-bracket-stub: 11px;
+	}
+
+	.tv-bracket-round {
+		width: 168px;
+	}
+
+	.tv-bracket-slot {
+		min-height: 76px;
+	}
+}

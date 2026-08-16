@@ -299,20 +299,20 @@ here. What is left:
 
 ## Overlays and stacking
 
-- **`.modal-overlay` and `.modal-backdrop` sit at `z-index: 5`, below the site header's
-  `1000` and the footer's `10`.** So `ScoreUpdateModal` and `NextRoundModal` render
-  *underneath* both. Reproduced 2026-08-10 at 900×420, where the score modal's top edge
-  falls inside the header band and `elementFromPoint` at that point returns the site
-  title rather than the modal — the header is not merely drawn over it, it takes the
-  clicks. At a tall viewport the modals happen to sit clear of the band and the fault is
-  invisible, which is why it has survived.
+- ~~**`.modal-overlay` and `.modal-backdrop` sit at `z-index: 5`, below the site header's
+  `1000` and the footer's `10`**, so `ScoreUpdateModal` and `NextRoundModal` render
+  *underneath* both.~~ **Fixed 2026-08-16.** Both are now portalled onto `document.body`
+  and both backdrop classes sit on `--z-modal`. The whole application moved onto a named
+  stacking scale at the same time, so nothing else inherits the old fault. The scale is
+  tabulated in `docs/architecture.md` under frontend traps.
 
-  Phase 4 fixed exactly this for the schedule maker, by portalling it onto
-  `document.body` and raising it to `1100`. The same two-line fix applies here, but the
-  portal is the part that matters: `z-index` alone leaves the modal at the mercy of any
-  ancestor that creates a containing block.
-
-  The full scale is tabulated in `docs/architecture.md` under frontend traps.
+- **Tap targets in the `App.css` site chrome are below the 44px floor.** The 44px minimum
+  was established by the tournament view's responsive pass and applied in
+  `create-tournament.css` and `tournament-view.css`; it never reached the header, the menu
+  or the footer. At 320px the footer links are 21px tall, the menu items 23px, the donate
+  button 39px and `.tv-icon-button` 40px. None of this was introduced by the mobile
+  refresh — the spacing pass left the floor where it found it. Fixing it means giving the
+  chrome controls their own `min-height`, which is a piece of work in its own right.
 
 ## Project
 

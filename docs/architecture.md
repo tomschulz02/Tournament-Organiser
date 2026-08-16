@@ -138,25 +138,71 @@ for measure-then-store.
 **`npm run lint` has 5 pre-existing errors** in `ThemeContext.jsx`, `ConfirmDialog.jsx`,
 `ScoreUpdateModal.jsx` and `main.jsx`. Judge a change by whether that count moves.
 
-**The site header outranks most overlays.** `header` carries `z-index: 1000` and
-`.site-footer` carries `10`, both in the root stacking context, so an overlay has to
-clear 1000 to sit over the whole viewport. The scale as it stands:
+**Stacking is a scale of named layers, not numbers.** `:root` in `App.css` defines it.
+Never write a bare `z-index` — one hardcoded number is all it takes for the next person to
+add another beside it. Order two things inside one layer with
+`calc(var(--z-menu) + 1)`.
 
-| Layer | `z-index` | Class |
+| Token | Value | Used by |
 |---|---|---|
-| Score modal, next-round modal | 5 | `.modal-overlay`, `.modal-backdrop` |
-| Site footer | 10 | `.site-footer` |
-| Site header | 1000 | `header` |
-| Schedule maker | 1100 | `.schedule-maker-backdrop` |
-| Confirmation dialog | 1200 | `.confirm-backdrop` |
-| Tooltip | 1000000 | `.tooltip-box` |
-| Loading screen | 10<sup>15</sup> | `.loading-container` |
+| `--z-below` | -1 | `.menu-bar`, `.menu-bar.close` |
+| `--z-base` | 0 | the default |
+| `--z-raised` | 10 | `.feature-card::after`, `.feature-content`, `.schedule-grid-entry` |
+| `--z-chrome` | 100 | `.site-footer`; `header` and `.help-button` at +1 |
+| `--z-menu` | 200 | `.help-menu-container`, `.menu-bar.open`; `.menu-bar-content` at +1 |
+| `--z-modal` | 300 | `.modal-overlay`, `.modal-backdrop`, `.schedule-maker-backdrop`, `.ct-modal-backdrop`, `.login-popup` |
+| `--z-confirm` | 400 | `.confirm-backdrop` |
+| `--z-toast` | 500 | `.message-popup` |
+| `--z-tooltip` | 600 | `.tooltip-box` |
+| `--z-loading` | 700 | `.loading-container` |
+
+The gaps of 100 exist so a new layer can be inserted without renumbering.
 
 The confirmation dialog is above every modal on purpose: it is always asked on behalf of
-one, and the schedule maker's Discard prompt is asked from inside a backdrop at 1100.
+one, and the schedule maker's Discard prompt is asked from inside a modal backdrop.
 
-**The first two rows are a known bug**, recorded in `docs/known-limitations.md`: at 5,
-those two modals render underneath the header and the footer.
+**A z-index is not enough on its own — modals are portalled too.** `.modal-backdrop` used
+to sit at 5, under the header and the footer, which cut the schedule maker off at both
+ends. Being on `--z-modal` fixes the ordering, but only `createPortal` onto
+`document.body` guarantees no ancestor creates a containing block above it. All four
+modals do both.
+
+**Five sanctioned horizontal scrollers**, and no others:
+
+| Scroller | Why it is wide |
+|---|---|
+| `.tv-nav-list` | the tournament view's tab row, one line always |
+| `.tv-table-scroll` | the standings table |
+| `.tv-bracket-scroll` | the knockout bracket |
+| `.schedule-grid-body` | the schedule grid — one column per court |
+| `.schedule-maker-day-tabs` | the schedule maker's day strip — one tab per tournament day |
+
+The reasoning is the same in each case: inherently wide content is better scrolled than
+shrunk. On a phone vertical space is the scarce axis and horizontal can be borrowed, so a
+row that wraps to avoid scrolling has made the wrong trade — the day strip used to wrap
+into a two-column grid, which grew the modal's chrome with the number of tournament days.
+
+The schedule grid's court columns have a 140px floor, below which an entry card carrying
+two team names and a division label stops being readable; the header row and the time
+column are `position: sticky` against this scrollport, which is why the header lives
+inside it rather than above it.
+
+**A strip that scrolls its active item into view must be its own `offsetParent`.** The
+pattern — compare `active.offsetLeft` against the container's `scrollLeft` and assign
+`scrollLeft` directly, never `behavior: 'smooth'`, which the development pane drops — only
+works if the two are in the same coordinate space. Without `position: relative` on the
+scroller, `offsetLeft` is measured from whatever positioned ancestor is above it, and the
+constant error is invisible at the right-hand end because clamping hides it. `.tv-nav-list`
+gets away with it by accident of layout; `.schedule-maker-day-tabs` sets `position:
+relative` deliberately.
+
+**Auditing for clipped content.** A container with `overflow-x: hidden` turns overflow
+into silently clipped content rather than a scrolling page, so `scrollWidth` will not
+report it. For every descendant, compare its right edge against its container's; if it is
+past, walk the ancestor chain for one with `overflow-x: auto | scroll` between the two. If
+there is one the content is reachable by scrolling and legitimate; if there is not, it is
+clipped. Walk the chain generically rather than hard-coding the four above — that is what
+discovers a fifth.
 
 ## Current State
 

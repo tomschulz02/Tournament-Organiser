@@ -515,8 +515,71 @@ must survive any change to the spacing.
 
 ### Mobile, application-wide
 
-One piece of work, **two different kinds of change**. Keep them as separate steps or the
-second will be absorbed into the first and get a token fix.
+**Complete 2026-08-16.** Delivered as spacing and stacking scales first, then the mobile
+tuning and the schedule maker on top of them.
+
+- **A spacing scale.** `--space-1` to `--space-7` on a 4px base, numbered by position
+  because a `max-width: 768px` block redefines the top four for mobile. 520 hardcoded
+  declarations across the three stylesheets were snapped onto it, preferring the smaller
+  step on a tie — which is what removed the whitespace. The mobile tuning is now seven
+  numbers in one block.
+- **A stacking scale.** Fourteen z-index values across fifteen orders of magnitude became
+  ten named layers. Tabulated in `docs/architecture.md`.
+- **`ScoreUpdateModal` and `NextRoundModal` are no longer clipped** by the header and the
+  footer. Both are portalled; the fault is recorded as fixed in
+  `docs/known-limitations.md`.
+- **The schedule maker has its own stylesheet**, `styles/schedule-maker.css`, which ships
+  in the modal's lazy chunk rather than the main bundle.
+- **The schedule maker switches panels below 900px** instead of stacking them, and the
+  grid is the fourth sanctioned scroller.
+
+Two follow-up faults on the schedule maker were found and fixed on 2026-08-16:
+
+- **The switcher took the modal's flexible row.** `.schedule-maker-modal` had three tracks
+  and, once the switcher existed, four children below 900px. The switcher landed on
+  `minmax(0, 1fr)` and the layout was pushed into an implicit row and clipped — three
+  enormous pills on a tablet, and on a phone a collapsed row that read as the switcher
+  being missing. The 900px block now declares four tracks and names the child count.
+- **The print export roots covered the screen on narrow viewports.** They were hidden by
+  `left: -200vw` with `width: 1200px` — a viewport-relative offset against an absolute
+  width, so below about 600px a 1200px fixed element reached back across the screen and
+  painted over the modal. The off-screen hack was a requirement of the old `html2canvas`
+  export and outlived it; the roots are now `display: none`. The print block also has to
+  name the switcher explicitly, because its media query is evaluated against the print
+  viewport and A4 portrait is under 900px.
+
+**The schedule maker's chrome and usability, complete 2026-08-16.** The chrome took
+400–470px of a 667px phone viewport and grew with the number of tournament days, two of
+its panels could not be scrolled, and a schedule could only be built by generating one
+first. Measured at 320, 390 and 768 on a six-day, three-court tournament, the chrome is
+now **186px** and the board gets 72% of the viewport.
+
+- **Print moved into the toolbar** and the header is one row at every width — kicker and
+  subtitle hidden below 768px, title truncating. The header keeps only the close button.
+- **The day selector moved into the board panel** at every width, as a single
+  non-wrapping scrolling strip. It is what stopped the chrome growing with the day count,
+  and the Fixtures and Inspector panels no longer carry a control they never used.
+- **Secondary actions collapse into an overflow menu below 768px.** Both sets are
+  rendered and a media query picks; nothing measures a width, because the development
+  pane delivers no resize events. Save and Generate stay visible at every width.
+- **The inspector's panels scroll**, with their headings pinned by `position: sticky`.
+- **A fixture can be placed from the list**: tap it, tap a free slot. Dragging already
+  covered this on desktop and cannot work below 900px, where the list and the board are
+  never on screen together. Both directions reuse `handleAssignFixtureToSlot`.
+- **Reset** empties the schedule including previously saved entries, behind a
+  confirmation that states the counts. It marks dirty rather than saving, so Discard
+  undoes it until Save.
+
+The 186px sits above the ~165px the specification aimed at, and that is the floor rather
+than slack: a 44px tap target plus the toolbar's own padding makes ~176px the minimum the
+three bands can occupy. Nothing is stacking.
+
+Two things this work turned up and deliberately did not fix, both recorded in
+`docs/known-limitations.md`: the `App.css` site chrome has tap targets below the 44px
+floor, which the tournament view's pass never reached; and `.schedule-maker-launcher*` is
+unreferenced, left in place with the rest of the dead classes.
+
+The original statement of the problem follows, for the reasoning.
 
 **Spacing.** Reduce margins and padding across every page so elements can be larger and
 less space is wasted. Visual only, no behaviour.

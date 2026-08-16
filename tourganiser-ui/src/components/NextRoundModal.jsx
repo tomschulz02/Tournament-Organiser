@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { fetchRoundProgression, confirmRoundProgression } from '../requests';
 import '../App.css';
+
+// Portalled onto document.body, the same as ScheduleMakerModal and CreateModal.
+// Mounted inline from pages/View.jsx, inside <main id="app">, this shares a
+// stacking context with the fixed header and the footer. On a tall desktop
+// viewport the modal happened to land between the two and the clipping went
+// unnoticed; on a phone or a short window it lost its top and its bottom.
+// Leaving the tree means no ancestor can create a containing block for it.
+//
+// All three states below go through this, not just the loaded one — the loading
+// and error states are the ones most likely to be seen on a slow phone.
+const portal = (content) => createPortal(content, document.body);
 
 // Round progression.
 //
@@ -87,7 +99,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 	};
 
 	if (loading) {
-		return (
+		return portal(
 			<div className="modal-backdrop">
 				<div className="next-round-modal">
 					<h2>Next Round Setup</h2>
@@ -98,7 +110,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 	}
 
 	if (!proposal) {
-		return (
+		return portal(
 			<div className="modal-backdrop">
 				<div className="next-round-modal">
 					<h2>Next Round Setup</h2>
@@ -113,7 +125,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 		);
 	}
 
-	return (
+	return portal(
 		<div className="modal-backdrop">
 			<div className="next-round-modal">
 				<h2>Next Round Setup</h2>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import '../App.css';
 
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
@@ -33,7 +34,14 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 		onSave(sets);
 	};
 
-	return (
+	// Portalled onto document.body, the same as ScheduleMakerModal and
+	// CreateModal. Mounted inline from pages/View.jsx, inside <main id="app">,
+	// this shares a stacking context with the fixed header and the footer. On a
+	// tall desktop viewport the modal happened to land between the two and the
+	// clipping went unnoticed; on a phone or a short window it lost its top and
+	// its bottom. Leaving the tree means no ancestor can create a containing
+	// block for it.
+	return createPortal(
 		<div className="modal-overlay">
 			<div className="score-modal">
 				<h3>Update Score - Match #{fixture.match_no}</h3>
@@ -84,7 +92,8 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 					</div>
 				</form>
 			</div>
-		</div>
+		</div>,
+		document.body
 	);
 };
 

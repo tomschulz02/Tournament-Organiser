@@ -52,7 +52,7 @@ body.dark {
 	width: 100%;
 	max-width: 1200px;
 	margin: 0 auto;
-	padding: 20px 16px 48px;
+	padding: var(--space-4) var(--space-4) 48px;
 	color: var(--secondary-text-color);
 	/* The page itself must never scroll sideways. Only the nav and, later, the
 	   standings tables and the bracket are allowed their own axis. */
@@ -72,8 +72,8 @@ body.dark {
 	display: grid;
 	grid-template-columns: minmax(min-content, 1fr) minmax(0, auto) minmax(min-content, 1fr);
 	align-items: center;
-	gap: 12px;
-	padding: 12px 0 16px;
+	gap: var(--space-3);
+	padding: var(--space-3) 0 var(--space-4);
 }
 
 .tv-title {
@@ -110,8 +110,8 @@ body.dark {
 .tv-icon-button {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	padding: 8px 12px;
+	gap: var(--space-1);
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 999px;
 	background: var(--tv-surface);
@@ -159,7 +159,7 @@ body.dark {
 	flex-wrap: nowrap;
 	overflow-x: auto;
 	overflow-y: hidden;
-	gap: 4px;
+	gap: var(--space-1);
 	scrollbar-width: none;
 	-webkit-overflow-scrolling: touch;
 }
@@ -170,7 +170,7 @@ body.dark {
 
 .tv-nav-item {
 	flex: 0 0 auto;
-	padding: 12px 16px;
+	padding: var(--space-3) var(--space-4);
 	border: none;
 	border-bottom: 2px solid transparent;
 	background: none;
@@ -194,23 +194,23 @@ body.dark {
 /* --- content area ------------------------------------------------------- */
 
 .tv-content {
-	padding-top: 24px;
+	padding-top: var(--space-5);
 }
 
 .tv-panel {
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
 	border-radius: 14px;
-	padding: 24px;
+	padding: var(--space-5);
 }
 
 .tv-panel-message {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 12px;
+	gap: var(--space-3);
 	text-align: center;
-	padding: 40px 24px;
+	padding: var(--space-7) var(--space-5);
 }
 
 .tv-panel-message h2 {
@@ -226,8 +226,8 @@ body.dark {
 }
 
 .tv-retry {
-	margin-top: 4px;
-	padding: 10px 20px;
+	margin-top: var(--space-1);
+	padding: var(--space-2) var(--space-4);
 	border: none;
 	border-radius: 999px;
 	background: var(--main-color);
@@ -244,7 +244,7 @@ body.dark {
 
 .tv-division-selector {
 	position: relative;
-	margin-bottom: 20px;
+	margin-bottom: var(--space-4);
 }
 
 /* Out of flow, so it can be measured without contributing to the width it is
@@ -258,7 +258,7 @@ body.dark {
 	pointer-events: none;
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-2);
 	white-space: nowrap;
 }
 
@@ -266,7 +266,7 @@ body.dark {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: var(--space-2);
 }
 
 .tv-division-selector-label {
@@ -277,7 +277,7 @@ body.dark {
 }
 
 .tv-division-pill {
-	padding: 7px 14px;
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 999px;
 	background: var(--tv-surface);
@@ -303,14 +303,14 @@ body.dark {
 .tv-division-dropdown {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-2);
 }
 
 .tv-division-dropdown select {
 	flex: 1 1 auto;
 	min-width: 0;
 	max-width: 320px;
-	padding: 8px 12px;
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
 	background: var(--tv-surface);
@@ -323,7 +323,7 @@ body.dark {
 
 .tv-division-badge {
 	display: inline-block;
-	padding: 2px 9px;
+	padding: 2px var(--space-2);
 	border-radius: 999px;
 	background: rgb(from var(--main-color) r g b / 0.12);
 	color: var(--main-color);
@@ -337,7 +337,7 @@ body.dark {
 .tv-team {
 	display: inline-flex;
 	align-items: center;
-	gap: 10px;
+	gap: var(--space-2);
 	min-width: 0;
 }
 
@@ -383,11 +383,11 @@ body.dark {
 /* --- overview ----------------------------------------------------------- */
 
 .tv-band + .tv-band {
-	margin-top: 32px;
+	margin-top: var(--space-6);
 }
 
 .tv-band-heading {
-	margin: 0 0 14px;
+	margin: 0 0 var(--space-3);
 	font-size: 1.05rem;
 	color: var(--secondary-text-color);
 }
@@ -396,15 +396,15 @@ body.dark {
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
 	border-radius: 14px;
-	padding: 20px;
+	padding: var(--space-4);
 }
 
 .tv-info-header {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 10px;
-	margin-bottom: 12px;
+	gap: var(--space-2);
+	margin-bottom: var(--space-3);
 }
 
 /* The organiser's lifecycle controls, at the foot of the info card. Separated
@@ -413,14 +413,14 @@ body.dark {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 10px;
-	margin-top: 18px;
-	padding-top: 16px;
+	gap: var(--space-2);
+	margin-top: var(--space-4);
+	padding-top: var(--space-4);
 	border-top: 1px solid var(--tv-border);
 }
 
 .tv-status-pill {
-	padding: 4px 12px;
+	padding: var(--space-1) var(--space-3);
 	border-radius: 999px;
 	font-size: 0.78rem;
 	font-weight: 600;
@@ -439,7 +439,7 @@ body.dark {
 }
 
 .tv-info-format {
-	padding: 3px 10px;
+	padding: 3px var(--space-2);
 	border: 1px solid var(--tv-border);
 	border-radius: 999px;
 	font-size: 0.76rem;
@@ -447,7 +447,7 @@ body.dark {
 }
 
 .tv-info-description {
-	margin: 0 0 16px;
+	margin: 0 0 var(--space-4);
 	max-width: 70ch;
 	line-height: 1.55;
 	color: var(--secondary-text-color);
@@ -457,7 +457,7 @@ body.dark {
 .tv-division-card-stats {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
-	gap: 14px;
+	gap: var(--space-3);
 	margin: 0;
 }
 
@@ -478,24 +478,24 @@ body.dark {
 .tv-division-cards {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-	gap: 16px;
+	gap: var(--space-4);
 }
 
 .tv-division-card {
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: var(--space-3);
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
 	border-radius: 14px;
-	padding: 18px;
+	padding: var(--space-4);
 }
 
 .tv-division-card-header {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: var(--space-2);
 }
 
 .tv-division-card h3 {
@@ -521,20 +521,20 @@ body.dark {
 
 .tv-progress-label {
 	display: block;
-	margin-top: 6px;
+	margin-top: var(--space-1);
 	font-size: 0.78rem;
 	color: var(--tv-muted);
 }
 
 .tv-division-card-actions {
 	display: flex;
-	gap: 8px;
+	gap: var(--space-2);
 	margin-top: auto;
 }
 
 .tv-division-card-actions button {
 	flex: 1 1 0;
-	padding: 8px 10px;
+	padding: var(--space-2) var(--space-2);
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
 	background: none;
@@ -558,11 +558,11 @@ body.dark {
 .tv-activity {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-	gap: 20px;
+	gap: var(--space-4);
 }
 
 .tv-activity-heading {
-	margin: 0 0 10px;
+	margin: 0 0 var(--space-2);
 	font-size: 0.88rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -571,7 +571,7 @@ body.dark {
 
 .tv-activity-empty {
 	margin: 0;
-	padding: 16px;
+	padding: var(--space-4);
 	border: 1px dashed var(--tv-border);
 	border-radius: 12px;
 	font-size: 0.88rem;
@@ -584,7 +584,7 @@ body.dark {
 	padding: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--space-2);
 }
 
 /* High information density, low visual density: three short columns, one line
@@ -593,8 +593,8 @@ body.dark {
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr) auto;
 	align-items: center;
-	gap: 12px;
-	padding: 10px 12px;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
@@ -603,7 +603,7 @@ body.dark {
 .tv-fixture-preview-meta {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-1);
 }
 
 .tv-match-no {
@@ -615,7 +615,7 @@ body.dark {
 .tv-fixture-preview-teams {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-1);
 	min-width: 0;
 	font-size: 0.9rem;
 	color: var(--secondary-text-color);
@@ -651,8 +651,8 @@ body.dark {
 	align-items: flex-end;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 12px;
-	margin-bottom: 12px;
+	gap: var(--space-3);
+	margin-bottom: var(--space-3);
 }
 
 /* Compact and inline. The filters wrap onto as many rows as they need rather
@@ -660,13 +660,13 @@ body.dark {
 .tv-filters {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 10px;
+	gap: var(--space-2);
 }
 
 .tv-filter {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: var(--space-1);
 	min-width: 0;
 }
 
@@ -681,7 +681,7 @@ body.dark {
 .tv-filter input {
 	min-width: 0;
 	max-width: 200px;
-	padding: 7px 10px;
+	padding: var(--space-2) var(--space-2);
 	border: 1px solid var(--tv-border);
 	border-radius: 9px;
 	background: var(--tv-surface);
@@ -690,7 +690,7 @@ body.dark {
 }
 
 .tv-primary-action {
-	padding: 9px 18px;
+	padding: var(--space-2) var(--space-4);
 	border: none;
 	border-radius: 999px;
 	background: var(--main-color);
@@ -707,7 +707,7 @@ body.dark {
 }
 
 .tv-fixtures-count {
-	margin: 0 0 10px;
+	margin: 0 0 var(--space-2);
 	font-size: 0.78rem;
 	color: var(--tv-muted);
 }
@@ -724,7 +724,7 @@ body.dark {
 	display: grid;
 	/* status | no | teams | court | division | round | outcome | action */
 	grid-template-columns: auto auto minmax(0, 1fr) repeat(5, auto);
-	row-gap: 6px;
+	row-gap: var(--space-1);
 }
 
 /* High information density, low visual density: a single line per fixture, with
@@ -734,7 +734,7 @@ body.dark {
 	display: grid;
 	grid-template-columns: subgrid;
 	align-items: center;
-	padding: 9px 14px;
+	padding: var(--space-2) var(--space-3);
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
 	border-left: 3px solid var(--tv-border);
@@ -746,7 +746,7 @@ body.dark {
    courts and no division badges would otherwise pay for both. */
 .tv-fixture-row > * + *,
 .tv-fixture-row-meta > * {
-	margin-left: 14px;
+	margin-left: var(--space-3);
 }
 
 /* Placement by class, not by order: a row missing a slot leaves the column empty
@@ -811,7 +811,7 @@ body.dark {
 	grid-column: 3;
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-2);
 	min-width: 0;
 	font-size: 0.92rem;
 }
@@ -851,16 +851,16 @@ body.dark {
 /* --- schedule ----------------------------------------------------------- */
 
 .tv-schedule-day + .tv-schedule-day {
-	margin-top: 28px;
+	margin-top: var(--space-5);
 }
 
 .tv-schedule-day-heading {
 	display: flex;
 	align-items: baseline;
 	flex-wrap: wrap;
-	gap: 10px;
-	margin: 0 0 12px;
-	padding-bottom: 8px;
+	gap: var(--space-2);
+	margin: 0 0 var(--space-3);
+	padding-bottom: var(--space-2);
 	border-bottom: 1px solid var(--tv-border);
 	font-size: 1rem;
 	color: var(--secondary-text-color);
@@ -877,8 +877,8 @@ body.dark {
 .tv-time-group {
 	display: grid;
 	grid-template-columns: 64px minmax(0, 1fr);
-	gap: 12px;
-	padding: 8px 0;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
 }
 
 .tv-time-group + .tv-time-group {
@@ -886,7 +886,7 @@ body.dark {
 }
 
 .tv-time-group-time {
-	padding-top: 9px;
+	padding-top: var(--space-2);
 	font-size: 0.9rem;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
@@ -897,7 +897,7 @@ body.dark {
 /* Courts are distinguished within a time group by this chip, which is the first
    thing on each row so the column of them can be read straight down. */
 .tv-court-chip {
-	padding: 2px 9px;
+	padding: 2px var(--space-2);
 	border: 1px solid var(--tv-border);
 	border-radius: 999px;
 	background: var(--tv-surface-alt);
@@ -925,14 +925,14 @@ body.dark {
 	align-items: center;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 12px;
-	margin-bottom: 4px;
+	gap: var(--space-3);
+	margin-bottom: var(--space-1);
 }
 
 .tv-advanced-toggle {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-2);
 	font-size: 0.82rem;
 	color: var(--tv-muted);
 	cursor: pointer;
@@ -947,12 +947,12 @@ body.dark {
 
 .tv-stage-tabs {
 	display: flex;
-	gap: 6px;
-	margin-bottom: 16px;
+	gap: var(--space-1);
+	margin-bottom: var(--space-4);
 }
 
 .tv-stage-tab {
-	padding: 7px 16px;
+	padding: var(--space-2) var(--space-4);
 	border: 1px solid var(--tv-border);
 	border-radius: 999px;
 	background: var(--tv-surface);
@@ -971,21 +971,21 @@ body.dark {
 }
 
 .tv-standings-round + .tv-standings-round {
-	margin-top: 24px;
+	margin-top: var(--space-5);
 }
 
 .tv-standings-round-name {
-	margin: 0 0 10px;
+	margin: 0 0 var(--space-2);
 	font-size: 0.95rem;
 	color: var(--secondary-text-color);
 }
 
 .tv-standings-group + .tv-standings-group {
-	margin-top: 18px;
+	margin-top: var(--space-4);
 }
 
 .tv-standings-group-name {
-	margin: 0 0 8px;
+	margin: 0 0 var(--space-2);
 	font-size: 0.82rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -1013,7 +1013,7 @@ body.dark {
 
 .tv-standings-table th,
 .tv-standings-table td {
-	padding: 10px 12px;
+	padding: var(--space-2) var(--space-3);
 	text-align: right;
 	white-space: nowrap;
 	color: var(--secondary-text-color);
@@ -1072,7 +1072,7 @@ body.dark {
 }
 
 .tv-final-standings {
-	margin-bottom: 24px;
+	margin-bottom: var(--space-5);
 }
 
 .tv-final-standings-list {
@@ -1081,14 +1081,14 @@ body.dark {
 	padding: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: var(--space-1);
 }
 
 .tv-final-standings-list li {
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	padding: 10px 14px;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
 	background: var(--tv-surface);
@@ -1126,7 +1126,7 @@ body.dark {
 /* The second and last thing on this page allowed its own horizontal axis. */
 .tv-bracket-scroll {
 	overflow-x: auto;
-	padding-bottom: 6px;
+	padding-bottom: var(--space-1);
 }
 
 .tv-bracket {
@@ -1146,7 +1146,7 @@ body.dark {
 }
 
 .tv-bracket-round-name {
-	margin: 0 0 10px;
+	margin: 0 0 var(--space-2);
 	font-size: 0.78rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -1236,8 +1236,8 @@ body.dark {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
-	padding: 5px 10px;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-2);
 	background: var(--tv-surface-alt);
 	font-size: 0.72rem;
 	color: var(--tv-muted);
@@ -1250,7 +1250,7 @@ body.dark {
 }
 
 .tv-bracket-participant {
-	padding: 8px 10px;
+	padding: var(--space-2) var(--space-2);
 	font-size: 0.85rem;
 	color: var(--secondary-text-color);
 	overflow-wrap: anywhere;
@@ -1274,7 +1274,7 @@ body.dark {
 
 .tv-bracket-placement {
 	max-width: 240px;
-	margin-top: 24px;
+	margin-top: var(--space-5);
 }
 
 /* --- teams -------------------------------------------------------------- */
@@ -1287,16 +1287,16 @@ body.dark {
 	padding: 0;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
-	gap: 8px;
+	gap: var(--space-2);
 }
 
 .tv-team-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	gap: var(--space-3);
 	min-width: 0;
-	padding: 10px 14px;
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
 	background: var(--tv-surface);
@@ -1305,19 +1305,19 @@ body.dark {
 /* The form replaces the row's contents, so it takes the whole cell. */
 .tv-team-row--editing {
 	display: block;
-	padding: 12px 14px;
+	padding: var(--space-3) var(--space-3);
 }
 
 .tv-team-actions {
 	display: flex;
 	flex: 0 0 auto;
-	gap: 4px;
+	gap: var(--space-1);
 }
 
 /* Subtle by design: Add Team is the prominent action, Edit and Remove sit
    quietly beside the team they act on. */
 .tv-subtle-action {
-	padding: 5px 10px;
+	padding: var(--space-1) var(--space-2);
 	border: 1px solid transparent;
 	border-radius: 8px;
 	background: none;
@@ -1345,15 +1345,15 @@ body.dark {
 	display: flex;
 	align-items: flex-end;
 	flex-wrap: wrap;
-	gap: 10px;
-	margin-bottom: 12px;
+	gap: var(--space-2);
+	margin-bottom: var(--space-3);
 }
 
 .tv-inline-form-field {
 	display: flex;
 	flex: 1 1 220px;
 	flex-direction: column;
-	gap: 4px;
+	gap: var(--space-1);
 	min-width: 0;
 }
 
@@ -1366,7 +1366,7 @@ body.dark {
 
 .tv-inline-form-field input {
 	min-width: 0;
-	padding: 8px 10px;
+	padding: var(--space-2) var(--space-2);
 	border: 1px solid var(--tv-border);
 	border-radius: 9px;
 	background: var(--tv-surface);
@@ -1377,7 +1377,7 @@ body.dark {
 .tv-inline-form-actions {
 	display: flex;
 	flex: 0 0 auto;
-	gap: 6px;
+	gap: var(--space-1);
 }
 
 /* Inside a row the form is the whole cell, so its margin would double the
@@ -1394,9 +1394,9 @@ body.dark {
 	align-items: center;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 12px;
-	margin-bottom: 12px;
-	padding: 10px 14px;
+	gap: var(--space-3);
+	margin-bottom: var(--space-3);
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
 	background: var(--tv-surface-alt);
@@ -1414,7 +1414,7 @@ body.dark {
 }
 
 .tv-structure-title {
-	margin: 0 0 8px;
+	margin: 0 0 var(--space-2);
 	font-size: 1.05rem;
 }
 
@@ -1423,8 +1423,8 @@ body.dark {
 .tv-structure-fields {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 12px;
-	margin: 12px 0;
+	gap: var(--space-3);
+	margin: var(--space-3) 0;
 }
 
 .tv-structure-fields .form-group {
@@ -1457,7 +1457,7 @@ body.dark {
 .tv-skeleton-rows {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: var(--space-3);
 }
 
 .tv-skeleton-row {
@@ -1470,7 +1470,7 @@ body.dark {
 .tv-skeleton-cards {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
-	gap: 16px;
+	gap: var(--space-4);
 }
 
 .tv-skeleton-card {
@@ -1497,7 +1497,7 @@ body.dark {
 
 @media (max-width: 768px) {
 	.tv-shell {
-		padding: 12px 12px 40px;
+		padding: var(--space-3) var(--space-3) var(--space-7);
 	}
 
 	/* Icon only. The labels are the first thing to go — losing them keeps the
@@ -1508,7 +1508,7 @@ body.dark {
 	}
 
 	.tv-icon-button {
-		padding: 8px;
+		padding: var(--space-2);
 	}
 
 	/* Icon only, so they are already the same width — the desktop floor would
@@ -1519,36 +1519,36 @@ body.dark {
 	}
 
 	.tv-nav-item {
-		padding: 12px;
+		padding: var(--space-3);
 		font-size: 0.9rem;
 	}
 
 	.tv-content {
-		padding-top: 16px;
+		padding-top: var(--space-4);
 	}
 
 	.tv-panel {
-		padding: 16px;
+		padding: var(--space-4);
 	}
 
 	.tv-panel-message {
-		padding: 32px 16px;
+		padding: var(--space-6) var(--space-4);
 	}
 
 	.tv-info-card,
 	.tv-division-card {
-		padding: 14px;
+		padding: var(--space-3);
 	}
 
 	.tv-band + .tv-band {
-		margin-top: 24px;
+		margin-top: var(--space-5);
 	}
 
 	/* The three columns become two rows: the teams need the full width far more
 	   than the outcome needs to sit beside them. */
 	.tv-fixture-preview {
 		grid-template-columns: minmax(0, 1fr) auto;
-		gap: 6px 10px;
+		gap: var(--space-1) var(--space-2);
 	}
 
 	.tv-fixture-preview-meta {
@@ -1579,13 +1579,13 @@ body.dark {
 	.tv-fixture-rows {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1);
 	}
 
 	.tv-fixture-row {
 		grid-template-columns: auto auto minmax(0, 1fr);
-		gap: 6px 10px;
-		padding: 10px 12px;
+		gap: var(--space-1) var(--space-2);
+		padding: var(--space-2) var(--space-3);
 	}
 
 	/* The cell margins that carry the column spacing on a wide viewport would be
@@ -1619,7 +1619,7 @@ body.dark {
 	.tv-fixture-row-meta {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		grid-row: 3;
 		grid-column: 1 / -1;
 		flex-wrap: wrap;
@@ -1653,7 +1653,7 @@ body.dark {
 	   64px of gutter is too much to give up at this width. */
 	.tv-time-group {
 		grid-template-columns: minmax(0, 1fr);
-		gap: 6px;
+		gap: var(--space-1);
 	}
 
 	.tv-time-group-time {
@@ -1667,12 +1667,12 @@ body.dark {
 	.tv-standings-toolbar {
 		align-items: stretch;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2);
 	}
 
 	.tv-standings-table th,
 	.tv-standings-table td {
-		padding: 9px 10px;
+		padding: var(--space-2) var(--space-2);
 	}
 
 	/* Rank, Team, Played, Won and Lost are what a phone should show without

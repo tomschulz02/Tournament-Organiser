@@ -173,15 +173,21 @@ Almost every design question resolves against one of them.
 
 ## 5. State of play
 
-`docs/roadmap.md` is the authority. In brief, as of 2026-08-11:
+`docs/roadmap.md` is the authority. In brief, as of 2026-08-16:
 
 **Done.** Phases 0 to 5 — ground truth, the critical path, the contracts, making a
 tournament runnable, teams, scheduling, and correctness and consolidation. Both redesigns:
 the tournament view and tournament creation. An organiser can create a tournament, start
 it, enter scores, advance rounds, build and save a schedule, and finish it.
 
-**In flight.** `docs/handover-mobile-refresh.md` — spacing and stacking tokens, the mobile
-spacing pass, and making the schedule maker usable on a phone. Eight steps.
+The mobile refresh landed on 2026-08-16 — spacing and stacking scales, the mobile spacing
+pass, and the schedule maker's panel switcher and grid scroller — followed by two
+follow-up fixes to the schedule maker on small screens. Both handovers are deleted; the
+record is in `docs/roadmap.md` under "Mobile, application-wide".
+
+**In flight.** `docs/handover-schedule-maker-chrome.md` — reclaiming the 400–470px the
+schedule maker's chrome takes on a phone, making two unscrollable panels scroll, and
+letting a schedule be built without generating one first. Eight steps, not started.
 
 **Decided, not built.** The standings changes: points for and against into the default
 table, and set-score outcome columns derived per division. Client-side caching that

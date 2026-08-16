@@ -4,6 +4,7 @@ import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
+import '../styles/schedule-maker.css';
 import { printSchedule } from '../utils/scheduleExport';
 import { generateAutomaticSchedule } from '../utils/scheduleGenerator';
 import {
@@ -169,7 +170,21 @@ export default function ScheduleMakerModal({
 	const [viewMode, setViewMode] = useState(getDefaultViewMode);
 	const [activeDay, setActiveDay] = useState(() => initialSchedule.days[0]?.date || '');
 	const [panelMode, setPanelMode] = useState('overview');
+	// Which of the three panels is showing below 900px, where they no longer fit
+	// side by side and stacking them left the board a 280px window reached by
+	// scrolling past the other two. Above 900px this is inert — the stylesheet
+	// ignores it and all three panels show. The board is the default because it
+	// is what the organiser came for; the other two are things they reach for.
+	const [mobilePanel, setMobilePanel] = useState('board');
 	const [selectedEntryId, setSelectedEntryId] = useState(null);
+	// The fixture chosen from the unscheduled list, waiting for a slot to be
+	// tapped. Dragging covers this on desktop and cannot work below 900px, where
+	// the list and the board are never on screen together.
+	const [pendingFixtureId, setPendingFixtureId] = useState(null);
+	// Open state of the toolbar's overflow menu. Only its open/closed state is
+	// React's — whether the menu exists as a control at all is a media query,
+	// because a width measured in JavaScript cannot be trusted here.
+	const [menuOpen, setMenuOpen] = useState(false);
 	const [fixtureSearch, setFixtureSearch] = useState('');
 	const [roundFilter, setRoundFilter] = useState('all');
 	const [divisionFilter, setDivisionFilter] = useState('all');
@@ -189,6 +204,8 @@ export default function ScheduleMakerModal({
 	const [entryForm, setEntryForm] = useState(null);
 	const initialScheduleRef = useRef(null);
 	const modalRef = useRef(null);
+	const dayTabsRef = useRef(null);
+	const overflowRef = useRef(null);
 	const [schedule, dispatch] = useReducer(scheduleReducer, initialSchedule);
 	const deferredSearch = useDeferredValue(fixtureSearch);
 
@@ -218,6 +235,44 @@ export default function ScheduleMakerModal({
 	useEffect(() => {
 		initialScheduleRef.current = initialSchedule;
 	}, [initialSchedule]);
+
+	// Outside click closes the overflow menu. Escape and selection are handled
+	// where they happen; this is the third way, and the only one that needs a
+	// listener outside the menu itself.
+	useEffect(() => {
+		if (!menuOpen) return;
+
+		const onPointerDown = (event) => {
+			if (!overflowRef.current?.contains(event.target)) setMenuOpen(false);
+		};
+
+		document.addEventListener('pointerdown', onPointerDown);
+		return () => document.removeEventListener('pointerdown', onPointerDown);
+	}, [menuOpen]);
+
+	// The day strip is one line that scrolls, so the active day can be off-screen
+	// after switching or on open with a long tournament. Instant scrollLeft, not
+	// scrollIntoView or behavior: 'smooth' — the same approach TournamentShell
+	// takes with its tab row, for the same reason.
+	useEffect(() => {
+		const list = dayTabsRef.current;
+		if (!list) return;
+
+		const active = list.querySelector(`[data-day="${CSS.escape(activeDay)}"]`);
+		if (!active) return;
+
+		const itemLeft = active.offsetLeft;
+		const itemRight = itemLeft + active.offsetWidth;
+		const viewLeft = list.scrollLeft;
+		const viewRight = viewLeft + list.clientWidth;
+		const margin = 12;
+
+		if (itemLeft < viewLeft) {
+			list.scrollLeft = Math.max(itemLeft - margin, 0);
+		} else if (itemRight > viewRight) {
+			list.scrollLeft = itemRight - list.clientWidth + margin;
+		}
+	}, [activeDay, mobilePanel]);
 
 	const fixturesById = useMemo(() => buildFixtureIndex(fixtures), [fixtures]);
 	const selectedEntry = useMemo(
@@ -274,6 +329,12 @@ export default function ScheduleMakerModal({
 	const handleKeyDown = (event) => {
 		if (event.key === 'Escape') {
 			event.stopPropagation();
+			// The menu is the innermost thing open, so it closes first. Without
+			// this, Escape from an open menu closes the whole modal.
+			if (menuOpen) {
+				setMenuOpen(false);
+				return;
+			}
 			handleClose();
 			return;
 		}
@@ -330,6 +391,40 @@ export default function ScheduleMakerModal({
 		setPanelMode('overview');
 	};
 
+	// Reset and Discard are different actions and the labels have to carry that.
+	// Discard reverts unsaved changes back to the last saved schedule. Reset
+	// empties the schedule outright, including entries saved previously, which
+	// otherwise can only be removed one at a time.
+	//
+	// It marks dirty rather than saving, so Discard undoes it right up until
+	// Save. That is the safety net that makes it reasonable to offer at all.
+	const handleReset = async () => {
+		const fixtureCount = schedule.entries.filter((entry) => entry.type === 'fixture').length;
+		const breakCount = schedule.entries.filter((entry) => entry.type === 'break').length;
+		if (fixtureCount + breakCount === 0) return;
+
+		const parts = [
+			fixtureCount > 0 ? `${fixtureCount} placed fixture${fixtureCount === 1 ? '' : 's'}` : null,
+			breakCount > 0 ? `${breakCount} break${breakCount === 1 ? '' : 's'}` : null,
+		].filter(Boolean);
+
+		// The count, not an abstract question — "are you sure?" tells nobody what
+		// they are about to lose.
+		const confirmed = await confirm(
+			`Remove ${parts.join(' and ')} from the whole schedule? Nothing is saved until you save, so Discard will bring it back.`
+		);
+		if (!confirmed) return;
+
+		dispatch({ type: 'replace', payload: { ...schedule, entries: [] } });
+		setSelectedEntryId(null);
+		setSlotDraft(null);
+		setPendingFixtureId(null);
+		setPanelMode('overview');
+		setMobilePanel('board');
+		markDirty();
+		showMessage('Schedule cleared. Discard to bring it back.', 'success');
+	};
+
 	const handleAddCourt = () => {
 		const nextName = courtDraft.trim();
 		if (!nextName) {
@@ -377,6 +472,11 @@ export default function ScheduleMakerModal({
 		dispatch({ type: 'upsertEntry', payload: candidate });
 		setPanelMode('overview');
 		setSlotDraft(null);
+		// Placed, so it is no longer pending. A rejected placement returns above
+		// this line and leaves it pending, so another slot can be tried.
+		setPendingFixtureId(null);
+		// Back to the board so the organiser sees where it landed.
+		setMobilePanel('board');
 		markDirty();
 		showMessage(`${fixture.team1} vs ${fixture.team2} scheduled.`, 'success');
 	};
@@ -405,6 +505,7 @@ export default function ScheduleMakerModal({
 		}
 
 		dispatch({ type: 'upsertEntry', payload: candidate });
+		setMobilePanel('board');
 		markDirty();
 		showMessage(`Moved to ${candidate.startTime} on ${getCourtName(schedule, candidate.courtId)}.`, 'success');
 	};
@@ -427,10 +528,44 @@ export default function ScheduleMakerModal({
 		);
 	};
 
+	// Fixture-first placement: choose a fixture, then choose where it goes.
+	// Dragging already covers this direction on desktop and cannot work below
+	// 900px, where the list and the board are never on screen at once.
+	//
+	// Tapping the pending fixture again cancels, which is the cheapest way out
+	// and needs no extra control in the list.
+	const handleSelectFixtureForPlacement = (fixtureId) => {
+		if (pendingFixtureId === fixtureId) {
+			setPendingFixtureId(null);
+			return;
+		}
+
+		setPendingFixtureId(fixtureId);
+		setMobilePanel('board');
+	};
+
 	const handleOpenSlotPicker = (day, courtId, startTime) => {
+		const draft = createSlotDraft(day, courtId, startTime, schedule.settings.slotMinutes);
+
+		// A fixture is waiting for somewhere to go, so this tap is the answer to
+		// that rather than a request to open the picker. Same function the
+		// slot-first path calls — a second entry point, not a second
+		// implementation.
+		if (pendingFixtureId) {
+			const fixture = fixturesById[pendingFixtureId];
+			if (fixture) {
+				handleAssignFixtureToSlot(fixture, draft);
+				return;
+			}
+			setPendingFixtureId(null);
+		}
+
 		setSelectedEntryId(null);
-		setSlotDraft(createSlotDraft(day, courtId, startTime, schedule.settings.slotMinutes));
+		setSlotDraft(draft);
 		setPanelMode('slot');
+		// The slot form lives in the inspector. Without this the organiser taps an
+		// empty cell on a phone and nothing appears to happen.
+		setMobilePanel('inspector');
 	};
 
 	const handleCreateBreak = () => {
@@ -454,6 +589,7 @@ export default function ScheduleMakerModal({
 		dispatch({ type: 'upsertEntry', payload: candidate });
 		setBreakDraft(null);
 		setPanelMode('overview');
+		setMobilePanel('board');
 		markDirty();
 		showMessage('Break added to the schedule.', 'success');
 	};
@@ -465,6 +601,7 @@ export default function ScheduleMakerModal({
 		dispatch({ type: 'removeEntry', payload: entryId });
 		setSelectedEntryId(null);
 		setPanelMode('overview');
+		setMobilePanel('board');
 		markDirty();
 		showMessage('Schedule entry removed.', 'success');
 	};
@@ -478,6 +615,7 @@ export default function ScheduleMakerModal({
 			notes: entry.notes || '',
 		});
 		setPanelMode('entry');
+		setMobilePanel('inspector');
 	};
 
 	const handleUpdateEntry = () => {
@@ -517,6 +655,7 @@ export default function ScheduleMakerModal({
 
 		replaceSchedule(result.schedule);
 		setPanelMode('overview');
+		setMobilePanel('board');
 		setViewMode('grid');
 
 		if (result.warnings.length > 0) {
@@ -530,6 +669,16 @@ export default function ScheduleMakerModal({
 		}
 	};
 
+	// The fixtures panel only exists for an editor, so a read-only viewer gets a
+	// two-option switcher and can never be left looking at a panel that is not
+	// rendered.
+	const mobilePanels = [
+		...(canEdit ? [{ id: 'fixtures', label: 'Fixtures' }] : []),
+		{ id: 'board', label: 'Board' },
+		{ id: 'inspector', label: 'Inspector' },
+	];
+	const activeMobilePanel = mobilePanels.some((panel) => panel.id === mobilePanel) ? mobilePanel : 'board';
+
 	// Opens the browser's print dialog on the chosen layout. Save as PDF from
 	// there is what replaced the immediate download.
 	const handlePrint = (type) => {
@@ -537,6 +686,60 @@ export default function ScheduleMakerModal({
 			printSchedule(type);
 		} catch {
 			showMessage('Could not open the print dialog.', 'error');
+		}
+	};
+
+	const placedCount = schedule.entries.length;
+	const pendingFixture = pendingFixtureId ? fixturesById[pendingFixtureId] : null;
+
+	// One definition, rendered twice: inline in the toolbar above 768px and
+	// inside the overflow menu below it. A media query decides which is visible,
+	// so nothing here measures a width.
+	//
+	// Descriptors carry no handlers. Building an array of closures during render
+	// that reach through to a ref — handleDiscard reads initialScheduleRef — is
+	// what react-hooks flags as accessing refs during render. The id is data; the
+	// work happens in runSecondaryAction at event time.
+	const secondaryActions = [
+		...(canEdit ? [{ id: 'break', label: 'Add Break' }] : []),
+		{ id: 'print-grid', label: 'Print Grid' },
+		{ id: 'print-list', label: 'Print List' },
+		...(canEdit
+			? [
+					{ id: 'discard', label: 'Discard Changes', disabled: !dirty },
+					{ id: 'reset', label: 'Reset Schedule', disabled: placedCount === 0 },
+			  ]
+			: []),
+	];
+
+	const runSecondaryAction = (id) => {
+		switch (id) {
+			case 'break':
+				setBreakDraft({
+					day: activeDay,
+					startTime: schedule.settings.dayStartTime,
+					endTime: addMinutesToTime(schedule.settings.dayStartTime, schedule.settings.slotMinutes),
+					title: '',
+					courtId: '',
+					notes: '',
+				});
+				setPanelMode('break');
+				setMobilePanel('inspector');
+				break;
+			case 'print-grid':
+				handlePrint('grid');
+				break;
+			case 'print-list':
+				handlePrint('list');
+				break;
+			case 'discard':
+				handleDiscard();
+				break;
+			case 'reset':
+				handleReset();
+				break;
+			default:
+				break;
 		}
 	};
 
@@ -573,12 +776,6 @@ export default function ScheduleMakerModal({
 						</p>
 					</div>
 					<div className="schedule-maker-header-actions">
-						<button type="button" onClick={() => handlePrint('grid')}>
-							Print Grid
-						</button>
-						<button type="button" onClick={() => handlePrint('list')}>
-							Print List
-						</button>
 						<button type="button" className="schedule-maker-close" onClick={handleClose} aria-label="Close schedule maker">
 							<Icon name="exit" />
 						</button>
@@ -586,63 +783,100 @@ export default function ScheduleMakerModal({
 				</div>
 
 				<div className="schedule-maker-toolbar">
-					<div className="schedule-maker-day-tabs" role="tablist" aria-label="Schedule days">
-						{schedule.days.map((day) => (
-							<button
-								key={day.id}
-								type="button"
-								role="tab"
-								className={activeDay === day.date ? 'active' : ''}
-								aria-selected={activeDay === day.date}
-								onClick={() => setActiveDay(day.date)}>
-								{day.label}
-								<span>{formatDateLabel(day.date)}</span>
-							</button>
-						))}
-					</div>
-
 					<div className="schedule-maker-toolbar-actions">
+						{/* Both labels render; a media query picks. Same reason as the
+						    action set below — nothing here measures a width. */}
 						<div className="schedule-view-toggle">
 							<button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}>
-								Grid View
+								<span className="schedule-label-long">Grid View</span>
+								<span className="schedule-label-short">Grid</span>
 							</button>
 							<button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>
-								List View
+								<span className="schedule-label-long">List View</span>
+								<span className="schedule-label-short">List</span>
 							</button>
 						</div>
 
+						{/* Rendered whatever the width; the stylesheet hides this group
+						    below 768px, where the same actions appear in the overflow. */}
+						<div className="schedule-maker-inline-actions">
+							{secondaryActions.map((action) => (
+								<button
+									key={action.id}
+									type="button"
+									onClick={() => runSecondaryAction(action.id)}
+									disabled={action.disabled}>
+									{action.label}
+								</button>
+							))}
+						</div>
+
+						{/* Generate and Save stay visible at every width. */}
 						{canEdit && (
 							<>
 								<button
 									type="button"
 									onClick={() => {
-										setBreakDraft({
-											day: activeDay,
-											startTime: schedule.settings.dayStartTime,
-											endTime: addMinutesToTime(schedule.settings.dayStartTime, schedule.settings.slotMinutes),
-											title: '',
-											courtId: '',
-											notes: '',
-										});
-										setPanelMode('break');
+										setPanelMode('generate');
+										setMobilePanel('inspector');
 									}}>
-									Add Break
-								</button>
-								<button type="button" onClick={() => setPanelMode('generate')}>
-									Generate Schedule
-								</button>
-								<button type="button" onClick={handleDiscard} disabled={!dirty}>
-									Discard
+									Generate
 								</button>
 								<button type="button" className="primary" onClick={handleSave} disabled={!dirty || saving}>
-									Save Schedule
+									<span className="schedule-label-long">Save Schedule</span>
+									<span className="schedule-label-short">Save</span>
 								</button>
 							</>
 						)}
+
+						{/* The counterpart: hidden above 768px, so the toolbar stays one
+						    short row on a phone without any of it becoming unreachable. */}
+						<div className="schedule-maker-overflow" ref={overflowRef}>
+							<button
+								type="button"
+								aria-haspopup="menu"
+								aria-expanded={menuOpen}
+								aria-label="More actions"
+								onClick={() => setMenuOpen((open) => !open)}>
+								More
+							</button>
+							{menuOpen && (
+								<div className="schedule-maker-overflow-menu" role="menu">
+									{secondaryActions.map((action) => (
+										<button
+											key={action.id}
+											type="button"
+											role="menuitem"
+											disabled={action.disabled}
+											onClick={() => {
+												setMenuOpen(false);
+												runSecondaryAction(action.id);
+											}}>
+											{action.label}
+										</button>
+									))}
+								</div>
+							)}
+						</div>
 					</div>
 				</div>
 
-				<div className="schedule-maker-layout">
+				{/* Below 900px only; the stylesheet hides it above that. */}
+				<div className="schedule-maker-panel-switcher" role="tablist" aria-label="Schedule maker panels">
+					{mobilePanels.map((panel) => (
+						<button
+							key={panel.id}
+							type="button"
+							role="tab"
+							aria-selected={activeMobilePanel === panel.id}
+							className={activeMobilePanel === panel.id ? 'active' : ''}
+							onClick={() => setMobilePanel(panel.id)}>
+							{panel.label}
+						</button>
+					))}
+				</div>
+
+				<div className="schedule-maker-layout" data-mobile-panel={activeMobilePanel}>
 					{canEdit && (
 						<aside className="schedule-maker-sidebar">
 							<div className="schedule-maker-sidebar-header">
@@ -689,8 +923,10 @@ export default function ScheduleMakerModal({
 											key={fixture.id}
 											type="button"
 											draggable
-											className="schedule-fixture-pill"
-											onDragStart={(event) => event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`)}>
+											aria-pressed={pendingFixtureId === fixture.id}
+											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
+											onDragStart={(event) => event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`)}
+											onClick={() => handleSelectFixtureForPlacement(fixture.id)}>
 											<strong>{fixture.team1}</strong>
 											<span>vs</span>
 											<strong>{fixture.team2}</strong>
@@ -710,6 +946,40 @@ export default function ScheduleMakerModal({
 					)}
 
 					<section className="schedule-maker-board">
+						{/* The day only ever affected the board. It used to sit in the
+						    toolbar, where the fixtures list and the inspector paid for a
+						    control neither of them uses. */}
+						<div className="schedule-maker-day-tabs" role="tablist" aria-label="Schedule days" ref={dayTabsRef}>
+							{schedule.days.map((day) => (
+								<button
+									key={day.id}
+									type="button"
+									role="tab"
+									data-day={day.date}
+									className={activeDay === day.date ? 'active' : ''}
+									aria-selected={activeDay === day.date}
+									onClick={() => setActiveDay(day.date)}>
+									{day.label}
+									<span>{formatDateLabel(day.date)}</span>
+								</button>
+							))}
+						</div>
+
+						{/* Below 900px the fixtures list is not on screen while the board
+						    is, so the pending fixture has to say so here — and be
+						    cancellable here. */}
+						{pendingFixture && (
+							<div className="schedule-pending-banner" role="status">
+								<span>
+									Tap a free slot for <strong>{pendingFixture.team1}</strong> v{' '}
+									<strong>{pendingFixture.team2}</strong>
+								</span>
+								<button type="button" onClick={() => setPendingFixtureId(null)}>
+									Cancel
+								</button>
+							</div>
+						)}
+
 						{viewMode === 'grid' ? (
 							<ScheduleGridView
 								schedule={schedule}
@@ -867,22 +1137,30 @@ function ScheduleGridView({
 		);
 	}
 
+	// A court column narrower than this cannot hold a two-line entry card, so
+	// below it the grid scrolls sideways rather than shrinking. Both grids take
+	// the same template, which is what keeps the headings over their columns.
+	const gridColumns = `96px repeat(${schedule.courts.length}, minmax(140px, 1fr))`;
+
 	return (
 		<div className="schedule-grid-shell">
-			<div className="schedule-grid-header" style={{ gridTemplateColumns: `96px repeat(${schedule.courts.length}, minmax(0, 1fr))` }}>
-				<div className="schedule-grid-header-time">Time</div>
-				{schedule.courts.map((court) => (
-					<div key={court.id} className="schedule-grid-header-court">
-						{court.name}
-					</div>
-				))}
-			</div>
-
+			{/* The header lives inside the scrolling body deliberately. Sticky
+			    positions against the nearest scrollport, so a header outside it
+			    could not stay aligned with the columns underneath it. */}
 			<div className="schedule-grid-body">
+				<div className="schedule-grid-header" style={{ gridTemplateColumns: gridColumns }}>
+					<div className="schedule-grid-header-time">Time</div>
+					{schedule.courts.map((court) => (
+						<div key={court.id} className="schedule-grid-header-court">
+							{court.name}
+						</div>
+					))}
+				</div>
+
 				<div
 					className="schedule-grid-cells"
 					style={{
-						gridTemplateColumns: `96px repeat(${schedule.courts.length}, minmax(0, 1fr))`,
+						gridTemplateColumns: gridColumns,
 						// Every row is the same span, so every row is the same height.
 						// minmax(84px, auto) let a row grow to its content, which drew
 						// rows of unequal length at unequal heights and made the time

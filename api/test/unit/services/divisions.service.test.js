@@ -18,6 +18,8 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
         updateTeam: vi.fn(),
         touchDivision: vi.fn(),
         deleteTeamsByIds: vi.fn(),
+        deleteDivision: vi.fn(),
+        getDivisionsByTournamentId: vi.fn(),
         replaceState: vi.fn(),
         updateTeamOrder: vi.fn()
     }
@@ -65,6 +67,8 @@ beforeEach(() => {
     divisionsRepository.getTeamsByIds.mockReset();
     divisionsRepository.updateTeam.mockReset();
     divisionsRepository.deleteTeamsByIds.mockReset();
+    divisionsRepository.deleteDivision.mockReset();
+    divisionsRepository.getDivisionsByTournamentId.mockReset();
     divisionsRepository.replaceState.mockReset();
     divisionsRepository.updateTeamOrder.mockReset();
     fixturesRepository.createFixture.mockReset();
@@ -967,5 +971,154 @@ describe("divisionService.updateDivision", () => {
 
             expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe("divisionService.deleteDivision", () => {
+    const owned = (overrides = {}) => ({
+        id: "div-1",
+        tournament_id: "tour-1",
+        name: "Division A",
+        type: "Classic",
+        state: { teams: ["t1", "t2"] },
+        created_by: "user-1",
+        tournament_status: "Not Started",
+        ...overrides
+    });
+
+    // Two divisions, so the last-division rule is satisfied by default.
+    const twoDivisions = [{ id: "div-1" }, { id: "div-2" }];
+
+    beforeEach(() => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(owned());
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(twoDivisions);
+    });
+
+    it("deletes the fixtures first, then the division, in one transaction", async () => {
+        fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1", "f2", "f3"]);
+
+        const result = await divisionService.deleteDivision("div-1", "user-1");
+
+        expect(result).toEqual({
+            divisionId: "div-1",
+            tournamentId: "tour-1",
+            fixturesRemoved: 3,
+            scheduleEntriesRemoved: 0
+        });
+
+        expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+
+        // Both on the transaction's client, and the fixtures before the row —
+        // after the cascade their ids are gone, and they are the only thing the
+        // schedule repair can match on.
+        expect(fixturesRepository.deleteByDivisionId).toHaveBeenCalledWith("div-1", dbMock.client);
+        expect(divisionsRepository.deleteDivision).toHaveBeenCalledWith("div-1", dbMock.client);
+        expect(fixturesRepository.deleteByDivisionId.mock.invocationCallOrder[0])
+            .toBeLessThan(divisionsRepository.deleteDivision.mock.invocationCallOrder[0]);
+    });
+
+    // The team rows go by cascade — teams.division_id REFERENCES divisions(id)
+    // ON DELETE CASCADE. Deleting them by hand would be a second way to get it
+    // wrong.
+    it("does not delete the team rows itself", async () => {
+        await divisionService.deleteDivision("div-1", "user-1");
+
+        expect(divisionsRepository.deleteTeamsByIds).not.toHaveBeenCalled();
+    });
+
+    // The check most likely to be skipped: easy to get right for the division
+    // being removed, easy to get wrong for the ones that stay.
+    it("drops only the removed division's schedule entries", async () => {
+        const entry = (id, fixtureId, overrides = {}) => ({
+            id,
+            type: fixtureId === null ? "break" : "fixture",
+            day: "2026-08-01",
+            courtId: "court-1",
+            startTime: "09:00",
+            endTime: "09:30",
+            fixtureId,
+            title: "",
+            officials: "",
+            notes: "",
+            ...overrides
+        });
+
+        const schedule = {
+            version: 1,
+            days: [{ id: "day-1", date: "2026-08-01", label: "Day 1" }],
+            courts: [{ id: "court-1", name: "Court 1" }],
+            entries: [
+                entry("e1", "f1"),
+                entry("e2", null, { courtId: null, startTime: "12:00", endTime: "13:00", title: "Lunch" }),
+                entry("e3", "other-division", { startTime: "13:00", endTime: "13:30" })
+            ],
+            settings: { dayStartTime: "09:00", dayEndTime: "18:00", slotMinutes: 30 }
+        };
+
+        fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1", "f2"]);
+        tournamentRepository.getScheduleForUpdate.mockResolvedValue(schedule);
+
+        const result = await divisionService.deleteDivision("div-1", "user-1");
+
+        const [tournamentId, written, client] = tournamentRepository.updateSchedule.mock.calls[0];
+        expect(tournamentId).toBe("tour-1");
+        expect(client).toBe(dbMock.client);
+
+        // The break and the other division's placement survive whole — same day,
+        // same court, same times.
+        expect(written.entries).toEqual([schedule.entries[1], schedule.entries[2]]);
+        expect(written).toMatchObject({
+            version: 1,
+            days: schedule.days,
+            courts: schedule.courts,
+            settings: schedule.settings
+        });
+        expect(result.scheduleEntriesRemoved).toBe(1);
+    });
+
+    it("refuses an unknown division", async () => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(null);
+
+        await expect(divisionService.deleteDivision("div-1", "user-1"))
+            .rejects.toMatchObject({ code: "DIVISION_NOT_FOUND", status: 404 });
+        expect(clientSql()).toEqual([]);
+    });
+
+    it("refuses a division belonging to somebody else's tournament", async () => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(owned({ created_by: "user-2" }));
+
+        await expect(divisionService.deleteDivision("div-1", "user-1"))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(clientSql()).toEqual([]);
+    });
+
+    // Removing a division from a running tournament leaves a schedule and a set
+    // of standings describing a tournament that no longer exists.
+    it.each(["Ongoing", "Finished"])("refuses removal from a %s tournament", async (status) => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(owned({ tournament_status: status }));
+
+        await expect(divisionService.deleteDivision("div-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+        expect(divisionsRepository.deleteDivision).not.toHaveBeenCalled();
+    });
+
+    it("treats a null tournament status as Not Started", async () => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(owned({ tournament_status: null }));
+
+        await divisionService.deleteDivision("div-1", "user-1");
+
+        expect(divisionsRepository.deleteDivision).toHaveBeenCalledOnce();
+    });
+
+    // A tournament cannot be created without a division, so it should not be
+    // reducible to zero afterwards either.
+    it("refuses to remove the last division", async () => {
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([{ id: "div-1" }]);
+
+        await expect(divisionService.deleteDivision("div-1", "user-1"))
+            .rejects.toMatchObject({ code: "LAST_DIVISION", status: 409 });
+        expect(clientSql()).toEqual([]);
+        expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
     });
 });

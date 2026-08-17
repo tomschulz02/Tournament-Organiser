@@ -267,6 +267,13 @@ export const endTournament = (tournamentId) => request(`tournaments/${tournament
 // Cascades to the tournament's divisions, fixtures and saved rows. There is no undo.
 export const deleteTournament = (tournamentId) => request(`tournaments/${tournamentId}`, { method: 'DELETE' });
 
+// Adds a division to an existing tournament. The body is the same shape the
+// creation page sends for one division, num_teams included, and it goes through
+// the same generator — so an added division is indistinguishable from one
+// created with the tournament. Refused with a 409 once the tournament starts.
+export const addDivision = (tournamentId, division) =>
+	request(`tournaments/${tournamentId}/divisions`, { method: 'POST', body: division });
+
 // A schedule spans the tournament, not a division. Sent whole: the server
 // replaces the column rather than merging, and validates before it writes, so a
 // rejection names the rule that was broken. See docs/schedule.md.
@@ -303,6 +310,12 @@ export const updateRounds = (divisionId, rounds, qualifiedTeams, standings, fixt
 // so there is nothing here to declare which it is.
 export const updateDivisionTeams = (divisionId, { teams, num_groups, knockout_teams }) =>
 	request(`divisions/${divisionId}`, { method: 'PUT', body: { teams, num_groups, knockout_teams } });
+
+// Removes the division outright. Cascades to its teams and its fixtures, and the
+// tournament's saved schedule is repaired — the removed division's entries go,
+// everything else stays where it was. There is no undo. Refused with a 409 once
+// the tournament starts, and refused for the tournament's last division.
+export const deleteDivision = (divisionId) => request(`divisions/${divisionId}`, { method: 'DELETE' });
 
 // The per-team add, rename and remove requests were removed on 2026-08-10.
 // updateDivisionTeams above replaces all three: a team can only be added or

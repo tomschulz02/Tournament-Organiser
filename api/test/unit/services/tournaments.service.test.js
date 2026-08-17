@@ -516,3 +516,78 @@ describe("tournamentService.deleteTournament", () => {
         expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith("tour-1");
     });
 });
+
+describe("tournamentService.addDivision", () => {
+    const division = {
+        name: "Division B",
+        type: "classic",
+        num_teams: 2,
+        teams: [{ name: "Aces" }, { name: "Bears" }]
+    };
+
+    // The whole point of the function: it delegates to the same createDivision
+    // createTournament calls, so a division added afterwards is indistinguishable
+    // from one created with the tournament.
+    it("creates the division through divisionService, inside a transaction", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        expect(await tournamentService.addDivision("tour-1", "user-1", division)).toBe("div-9");
+
+        expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    // createDivision writes three tables and has to do it on the transaction's
+    // client; the default connection would commit each write on its own.
+    it("hands createDivision the transaction's client, not the default connection", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        await tournamentService.addDivision("tour-1", "user-1", division);
+
+        expect(divisionService.createDivision)
+            .toHaveBeenCalledWith(division, "tour-1", "user-1", dbMock.client);
+    });
+
+    it("treats a null status as Not Started", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: null }));
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        await tournamentService.addDivision("tour-1", "user-1", division);
+
+        expect(divisionService.createDivision).toHaveBeenCalledOnce();
+    });
+
+    it("refuses an unknown tournament", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(null);
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("refuses a tournament belonging to somebody else", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-2", status: "Not Started" }));
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    // A division added mid-tournament would change what the saved schedule and
+    // the standings are describing.
+    it.each(["Ongoing", "Finished"])("refuses to add to a %s tournament", async (status) => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status }));
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+        expect(clientSql()).toEqual([]);
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+});

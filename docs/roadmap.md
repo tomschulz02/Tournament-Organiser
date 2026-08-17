@@ -715,6 +715,77 @@ same guards as the creation draft, so a corrupted or unavailable store costs the
 not the page. `clearTournamentCache` now runs inside `AuthProvider`'s `setIsLoggedIn`,
 which is the one place logout, login and signup all reach. `docs/decisions.md` records it.
 
+## Improvements raised 2026-08-17
+
+Twelve items in four groups. Decisions taken on the day are in `docs/decisions.md`; the
+two that change domain rules also require `docs/tournament-rules.md` to be corrected when
+the code lands.
+
+### Knockout correctness
+
+All four are done, 2026-08-17. `docs/tournament-rules.md` carries the corrected rules and
+the three limitations they closed are out of `docs/known-limitations.md`.
+
+- ~~**Crossovers after the first round pair the wrong teams.**~~ — **done 2026-08-17.**
+  The sort by seed is out of `seedKnockoutResults`, so match order survives and the winner
+  of QF1 meets the winner of QF4.
+- ~~**Qualifiers are ordered by pool within a tier**~~ — **done 2026-08-17.** Pool A's
+  winner first, then pool B's; cross-pool statistics decide only the places a tier cannot
+  fill cleanly. The qualifier count is derived from the next round's `groups` rather than
+  read from a key that was never written, and a knockout round's `results` now carry its
+  bye teams — a Round of 12 advances the right eight.
+- ~~**The bracket payload carries its feed links**~~ — **done 2026-08-17.** Each match
+  carries a `sources` array parallel to its participants, so later rounds are labelled
+  "Winner of #31" rather than repeating rank placeholders and the connectors are drawn
+  from what the server declares instead of from match counts.
+- ~~**Final rankings get their own tab**~~ — **done 2026-08-17**, beside Pool/League and
+  Knockout. A round-robin division fills once at the end; a division with knockout rounds
+  fills from the bottom after each round, so places five and below are known before the
+  final. Teams knocked out in the same round are separated by their performance in the
+  match they lost, then by earlier rounds, then by seeding.
+
+### Lifecycle controls
+
+Both are done, 2026-08-17.
+
+- ~~**Add and remove divisions from the Overview tab**~~ — **done 2026-08-17**, organiser
+  only, while `Not Started`. `POST /api/tournaments/:tournamentId/divisions` fills the
+  route stub that used to hang and goes through `divisionService.createDivision`, so an
+  added division is indistinguishable from one created with the tournament. `DELETE
+  /api/divisions/:divisionId` cascades to the division's teams and fixtures and repairs the
+  schedule in the same transaction rather than nulling it, per `docs/decisions.md`; the
+  last division is refused with `LAST_DIVISION`. Adding reuses the creation modal, imported
+  from `components/create/`.
+- ~~**Hide controls that cannot be used**~~ — **done 2026-08-17.** `isNotStarted` in
+  `components/tournament/tournamentStatus.js` is the one rule, and Add Team, Edit, Remove,
+  the reorder handles, Add Division and Remove Division are all absent once the tournament
+  has started. The note explaining why reordering was unavailable went with them. Start
+  Tournament now confirms first, naming both what locks and what does not. **The schedule
+  stays editable after the start** — tournaments overrun, and it is the organiser's main
+  tool. Every server check stayed; hiding is presentation, the 409s are the enforcement.
+
+### Schedule maker
+
+- **Courts can be assigned to divisions**, stored on the schedule so the constraint
+  survives a reload and the generator honours it on every run. Changes `docs/schedule.md`;
+  the validator should enforce it. Unassigned courts behave as now.
+- **Courts can be removed** from the schedule overview, not only added.
+- **Officials can be auto-assigned**, behind a toggle in the generation settings. One team
+  per match. A team never officiates a match overlapping its own — a hard constraint, not
+  a preference. Prefer not to officiate immediately before their own game, prefer to
+  officiate within their pool, and **never** outside their division.
+
+### Smaller UI
+
+- **Fixture groups collapse.** By day when a schedule exists, by status otherwise — Live,
+  Upcoming, Completed, as the browse page orders them. Section headers with a show/hide
+  control, no surrounding borders. Everything expanded on load.
+- **`ScoreUpdateModal` shows progress.** Clicking Save disables both buttons and shows a
+  spinner inside Save; End Match likewise.
+- **Team names get a frontend soft cap**, and the Overview's up-next and recent-results
+  rows get a maximum render width so one long name stops truncating the short ones beside
+  it.
+
 ## Phase 6 — Decide what is real
 
 Each of these is currently a stub with no schema behind it. Either it enters the roadmap

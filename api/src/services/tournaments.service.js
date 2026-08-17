@@ -144,6 +144,32 @@ async function deleteTournament(tournamentId, userId) {
     return { id: tournamentId };
 }
 
+// --- composition ------------------------------------------------------------
+
+// POST /api/tournaments/:tournamentId/divisions.
+//
+// Only while the tournament is Not Started: a division added afterwards would
+// change what the saved schedule and the standings are describing. See
+// docs/decisions.md.
+//
+// Everything about what a division is — the team list, the format, the ids, the
+// fixtures — belongs to divisionService.createDivision, which is the same call
+// createTournament makes. A division added here has to be indistinguishable
+// from one created with the tournament, and that is only true if it goes
+// through the same path. The transaction exists because createDivision requires
+// a client and writes three tables.
+async function addDivision(tournamentId, userId, division) {
+    const tournament = await loadOwnedTournament(tournamentId, userId);
+
+    if (statusOf(tournament) !== "Not Started") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    return await db.withTransaction(async (client) =>
+        divisionService.createDivision(division, tournamentId, userId, client)
+    );
+}
+
 // --- schedule ---------------------------------------------------------------
 
 // PUT /api/tournaments/:tournamentId/schedule.
@@ -215,6 +241,7 @@ export const tournamentService = {
     startTournament,
     endTournament,
     deleteTournament,
+    addDivision,
     updateSchedule
 }
 

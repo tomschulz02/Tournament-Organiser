@@ -161,42 +161,73 @@ fixtures exist before the teams that will play them are known.
 `results` is a single flat list spanning every pool in the round, ordered by **pool
 position first, then by ratios**:
 
-1. All pool winners, ranked against each other.
-2. All runners-up, ranked against each other.
-3. And so on down the pools.
+1. Teams are grouped into tiers by pool position — all pool winners, then all
+   runners-up, and so on.
+2. A tier that fits entirely within the qualifying places is taken in **pool order**:
+   A1, B1, C1, D1, then A2, B2, C2, D2. Nothing is compared across pools.
+3. Only the one tier that cannot be filled cleanly — the tier the qualifying places run
+   out inside — is compared across pools, and only the places that remain are taken
+   from it.
 
-So with pools A and B, the order is A1/B1 (whichever is stronger first), then A2/B2, and
-so on. Teams finishing in the same pool position are separated using the same chain as
-in-pool standings: set ratio, then point ratio, then seeding. Head-to-head is skipped
-across pools, since teams from different pools have usually not played each other.
+Cross-pool comparison uses the same chain as in-pool standings: set ratio, then point
+ratio, then seeding. Head-to-head is skipped across pools, since teams from different
+pools have usually not played each other.
+
+**Worked example.** Four pools, ten qualifiers. The first eight places are the pool
+winners and the runners-up, in pool order: A1, B1, C1, D1, A2, B2, C2, D2. Places nine
+and ten are the two best third-placed teams, compared across the four pools — so they
+may both come from the same pool.
 
 This produces a seeded list where index 0 is the strongest qualifier, which is why
 semifinals are expressed as `[0, 3]` and `[1, 2]`.
 
+**The consequence an organiser notices.** Under pool order, `populateGroups(4, [0..7])`
+folds the qualifiers into `[0, 7] [1, 6] [2, 5] [3, 4]` — A1–D2, B1–C2, C1–B2, D1–A2.
+No first-round knockout match is ever contested by two teams from the same pool.
+
 ### From a knockout round
 
-`results` is **winners first, then losers**. Within each half, teams keep the seeding
-order they carried into the round.
+`results` is **one team per group, in group order** — the bye team for a one-team group,
+the match winner for a two-team group — **followed by the losers, in match order.**
+
+"Winners first, then losers" is the power-of-two special case of that rule: with no byes
+every group is a match, so group order and match order are the same thing.
+
+An uneven round is built as one-team groups for the teams going straight through, then
+the matches. A Round of 12 therefore produces twelve results: the four bye teams, then
+the four winners, then the four losers — and the quarter-finals draw the right eight. A
+bye team is in no match, so it can never be a loser.
+
+Within each half teams keep the order of the groups or matches they came from, so the
+next round's fold produces a fixed bracket. E.g. the winner of quarterfinal 1 will play
+the winner of quarterfinal 4.
 
 For a semifinal round this gives `[winner1, winner2, loser1, loser2]`, so the following
 round expresses the bronze match as `[2, 3]` and the final as `[0, 1]`.
+
+The Finals round is walked with the playoff included: the 3rd place playoff's own round
+name is `"3rd Place Playoff"`, but it is one of the Finals round's two groups, so
+anything matching fixtures to that round must accept it.
 
 ### A two-team knockout still consumes four ranks
 
 A knockout stage of two teams generates a bronze match as well as a final, so the Finals
 round holds `groups: [[2, 3], [0, 1]]` — the playoff first, as `createClassicState`
-unshifts it onto the front. Its `qualifyingTeams` is therefore **4, not 2**, for a
-division configured with `knockout_teams: 2`.
+unshifts it onto the front. It therefore needs **four ranks, not two**, for a division
+configured with `knockout_teams: 2`.
 
-Anything reasoning about how many teams a knockout round needs must read
-`qualifyingTeams` rather than inferring it from the round's name or from the configured
-knockout size.
+Anything reasoning about how many teams a knockout round needs **derives the count from
+that round's `groups`, as one past the largest index they reference** — here `3 + 1 = 4`.
+It is never read from a stored key and never inferred from the round's name or from the
+configured knockout size. There is no `qualifyingTeams` key on a round: none has ever
+been written, and `state` is JSONB that no migration reaches, so deriving is the only
+approach that works on divisions that already exist.
 
 ### Qualification
 
-The number of teams advancing is the round's `qualifyingTeams`. When it is not a
-multiple of the pool count, the guaranteed places are filled first — the top
-`floor(qualifyingTeams / poolCount)` from every pool — and the remaining places go to
+The number of teams advancing is the count derived from the next round's `groups`. When
+it is not a multiple of the pool count, the guaranteed places are filled first — the top
+`floor(count / poolCount)` from every pool — and the remaining places go to
 the best teams not yet qualified, compared across pools by the cross-pool rules above.
 
 ## Implementation

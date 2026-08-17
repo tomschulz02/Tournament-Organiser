@@ -458,7 +458,7 @@ describe("seedKnockoutResults", () => {
         ];
 
         // [w1, w2, l1, l2] so the next round can express bronze as [2, 3].
-        expect(seedKnockoutResults(matchups, seedIndex)).toEqual(["s1", "s3", "s0", "s2"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["s3", "s1", "s0", "s2"]);
     });
 
     it("takes one side of a matchup when the other is missing", () => {
@@ -467,7 +467,7 @@ describe("seedKnockoutResults", () => {
             { winnerId: undefined, loserId: "s2" }
         ];
 
-        expect(seedKnockoutResults(matchups, seedIndex)).toEqual(["s1", "s2"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["s1", "s2"]);
     });
 
     it("sorts unseeded teams last", () => {
@@ -476,7 +476,7 @@ describe("seedKnockoutResults", () => {
             { winnerId: "s0", loserId: "s2" }
         ];
 
-        expect(seedKnockoutResults(matchups, seedIndex)).toEqual(["s0", "unseeded", "s2", "s3"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["unseeded", "s0", "s3", "s2"]);
     });
 
     it("keeps a stable order when unseeded teams appear on either side of a comparison", () => {
@@ -486,13 +486,13 @@ describe("seedKnockoutResults", () => {
             { winnerId: "u3", loserId: "s1" }
         ];
 
-        const ordered = seedKnockoutResults(matchups, seedIndex);
+        const ordered = seedKnockoutResults(matchups);
 
-        expect(ordered.slice(0, 3)).toEqual(["s0", "u1", "u3"]);
-        expect(ordered.slice(3)).toEqual(["s1", "s3", "u2"]);
+        expect(ordered.slice(0, 3)).toEqual(["u1", "s0", "u3"]);
+        expect(ordered.slice(3)).toEqual(["u2", "s3", "s1"]);
     });
 
     it("returns an empty list when no matches were played", () => {
-        expect(seedKnockoutResults([], seedIndex)).toEqual([]);
+        expect(seedKnockoutResults([])).toEqual([]);
     });
 });

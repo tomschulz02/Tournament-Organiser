@@ -256,6 +256,61 @@ async function rebuildDivision(division, entries, payload) {
     });
 }
 
+// DELETE /api/divisions/:divisionId.
+//
+// Gated on Not Started, like the rebuild: a division removed from a running
+// tournament leaves a schedule and a set of standings describing a tournament
+// that no longer exists. Deleting a whole tournament is allowed at any status
+// because that leaves nothing behind to be inconsistent with.
+//
+// Lives here rather than in tournaments.service.js because repairSchedule is
+// module-private to this file, and because the rebuild path directly below does
+// the same job.
+async function deleteDivision(divisionId, userId) {
+    const division = await divisionsRepository.getDivisionWithOwner(divisionId);
+    if (!division) {
+        throw new AppError("DIVISION_NOT_FOUND");
+    }
+
+    if (division.created_by !== userId) {
+        throw new AppError("NOT_TOURNAMENT_OWNER");
+    }
+
+    if ((division.tournament_status || "Not Started") !== "Not Started") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    const divisions = await divisionsRepository.getDivisionsByTournamentId(division.tournament_id);
+    if (divisions.length <= 1) {
+        throw new AppError("LAST_DIVISION");
+    }
+
+    // One transaction: the fixtures, the division and the schedule repair
+    // together, or none of it.
+    return await db.withTransaction(async (client) => {
+        // First, and explicitly rather than through the cascade: after the
+        // division row goes the fixture ids are gone, and they are what the
+        // schedule references.
+        const deletedFixtureIds = await fixturesRepository.deleteByDivisionId(division.id, client);
+
+        // The team rows go with this, by cascade — see docs/database.md.
+        await divisionsRepository.deleteDivision(division.id, client);
+
+        const scheduleEntriesRemoved = await repairSchedule(
+            division.tournament_id,
+            deletedFixtureIds,
+            client
+        );
+
+        return {
+            divisionId: division.id,
+            tournamentId: division.tournament_id,
+            fixturesRemoved: deletedFixtureIds.length,
+            scheduleEntriesRemoved
+        };
+    });
+}
+
 // Drops the schedule entries that pointed at fixtures which no longer exist, and
 // leaves everything else alone — breaks, and every other division's placements.
 // The column is repaired, never nulled.
@@ -284,7 +339,8 @@ async function repairSchedule(tournamentId, deletedFixtureIds, client) {
 
 export const divisionService = {
     createDivision,
-    updateDivision
+    updateDivision,
+    deleteDivision
 }
 
 

@@ -53,6 +53,9 @@ export const ERRORS = {
 	// The second half of the rebuild gate. The status check can be wrong; a
 	// completed fixture cannot.
 	DIVISION_HAS_RESULTS: [409, "This division already has results"],
+	// Removing a division. CreateTournament refuses to build a tournament with no
+	// divisions, so one should not be reducible to zero afterwards either.
+	LAST_DIVISION: [409, "A tournament needs at least one division"],
 	// A group or qualifier count the new team count cannot support. Refused
 	// rather than corrected — the organiser chose these numbers.
 	INVALID_STRUCTURE: [400, "The group and qualifier counts do not fit the number of teams"],

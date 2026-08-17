@@ -352,6 +352,81 @@ a reordered list, so it routes to `renameTeams`, which writes only changed names
 touches `state.teams`. A reorder submitted today does nothing at all. Closing that is part
 of the work.
 
+## Knockout Progression Follows Match Order, Not Seed
+
+Decided 2026-08-17. **This corrects `docs/tournament-rules.md`**, which currently
+documents the behaviour being replaced.
+
+A knockout round's `results` are ordered **by the match each team came from** — winners of
+match 1, 2, 3, 4, then losers of match 1, 2, 3, 4 — not re-sorted by the seed they carried
+into the round.
+
+The next round folds that list bottom-up, which the existing `populateGroups` call already
+does: with four winners the groups are `[[0, 3], [1, 2]]`. Combined with match ordering
+that gives the standard bracket — the winner of the first quarter-final meets the winner of
+the fourth, and the second meets the third. The bronze match becomes the two semi-final
+losers, which is what it should always have been.
+
+`seedKnockoutResults` in `api/src/utils/standings.js` sorts winners and losers by seed.
+That sort is the whole of the fault: the matchups already arrive in match order.
+
+Reason:
+Re-seeding after every round is a legitimate format, but it is not the one this
+application intends. Under it an upset moves the winner into the beaten team's place in the
+ranking rather than in the bracket, so a team that beat the top seed inherits the top
+seed's *ranking* and can be paired against a team it should not meet until later. A fixed
+bracket is what an organiser draws on a wall chart, and it is what the fold implies.
+
+Given up: nothing the application relied on. The documented rule was wrong rather than a
+deliberate choice.
+
+## Qualifiers Are Ordered By Pool Within A Tier
+
+Decided 2026-08-17. **This also corrects `docs/tournament-rules.md`.**
+
+Qualification still fills by tier — every pool winner, then every runner-up, and so on,
+which is what `seedAcrossGroups` already does. What changes is the order **within** a tier:
+by pool, not by stats. Pool A's winner is always the first qualifier, then pool B's, and so
+on; then pool A's runner-up, and so on.
+
+Cross-pool statistics decide only the places a tier cannot fill cleanly. With ten
+qualifiers from four pools the first eight are the top two from each pool in pool order,
+and the remaining two are the best teams not already through, compared across pools by the
+existing chain.
+
+The chain still applies **within** a pool. A tie for a qualifying place inside one pool is
+resolved exactly as `docs/tournament-rules.md` describes.
+
+Reason:
+Pools are themselves seeded serpentine, so pool A already holds the top seed. Ordering
+qualifiers by pool keeps the bracket predictable from the draw rather than dependent on
+scorelines, and it means an organiser can point at the wall chart before the pools finish
+and say which slot each pool winner will take.
+
+Given up: the convention that the strongest qualifier earns the easiest quarter-final.
+
+## The Bracket Payload Carries Its Own Progression
+
+Decided 2026-08-17.
+
+`buildDivisionBracket` includes, for each match, which matches feed it. The bracket stops
+being inferred.
+
+This closes a limitation recorded in `docs/known-limitations.md`: nothing in the payload
+said which match fed which, so `BracketView` guessed from match counts and drew connectors
+only where a round held exactly twice the matches of the next. An uneven round — a
+`Round of 9` holding one real match because seven teams had byes — drew no lines at all.
+
+It also lets the client label later rounds "Winner of #31" instead of repeating the rank
+placeholders, which only apply to the first knockout round. Match numbers are shown in the
+bracket for the same reason.
+
+Reason:
+The alternative was a third client-side copy of structural arithmetic, after
+`populateGroups` and the round shapes. The server already knows the answer; saying it is
+cheaper than deriving it, and it removes an inference that was already producing visibly
+wrong output.
+
 ## Ownership Is Checked In The Service, Not In Middleware
 
 Decided 2026-08-08.

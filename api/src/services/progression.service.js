@@ -32,12 +32,16 @@ async function getProposal(divisionId, userId) {
         throw new AppError("ROUND_NOT_COMPLETE");
     }
 
-    const computed = computeRoundResults(round, state, fixtures).map((row) => ({
+    const nextRound = rounds[roundIndex + 1] || null;
+
+    const computed = computeRoundResults(round, state, fixtures, {
+        nextRound,
+        previousResults: rounds[roundIndex - 1]?.results
+    }).map((row) => ({
         ...row,
         name: teamNames.get(row.id) || "Unknown"
     }));
-    const nextRound = rounds[roundIndex + 1] || null;
-    const qualifyingTeams = nextRound?.qualifyingTeams ?? computed.length;
+    const qualifyingTeams = qualifierCount(nextRound) || computed.length;
 
     return {
         divisionId: division.id,
@@ -78,7 +82,10 @@ async function commit(divisionId, userId, confirmedTeamIds) {
         }
     }
 
-    const computed = computeRoundResults(round, state, fixtures);
+    const computed = computeRoundResults(round, state, fixtures, {
+        nextRound,
+        previousResults: rounds[roundIndex - 1]?.results
+    });
     const confirmed = validateConfirmedTeams(confirmedTeamIds, computed, nextRound);
 
     const amended = !sameOrder(confirmed, computed.slice(0, confirmed.length).map((row) => row.id));
@@ -130,28 +137,38 @@ async function commit(divisionId, userId, confirmedTeamIds) {
     };
 }
 
-// nextRound.groups[i] holds two indices into the confirmed results, and
-// nextRound.fixtures[i] is the placeholder fixture for that matchup.
+// A knockout group holds two indices into the confirmed results. nextRound.fixtures
+// is compacted — generateKnockoutFixtures skips one-team groups — so the fixture is
+// taken from a cursor that advances only on groups of two or more, never from the
+// group index. Reading fixtureIds[groupIndex] meant that in a Round of 12, where the
+// four matches sit at group indices 4-7 and the four fixtures at 0-3, every lookup
+// missed and no fixture in a bye round was ever bound.
 function bindFixturesToResults(nextRound, confirmed) {
     const groups = Array.isArray(nextRound.groups) ? nextRound.groups : [];
     const fixtureIds = Array.isArray(nextRound.fixtures) ? nextRound.fixtures : [];
 
-    return groups
-        .map((group, index) => {
-            const fixtureId = fixtureIds[index];
-            if (!fixtureId || !Array.isArray(group)) return null;
+    const bound = [];
+    let fixtureIndex = 0;
 
-            const [one, two] = group;
-            // A knockout group holds positional indices, not team ids.
-            if (!Number.isInteger(one) || !Number.isInteger(two)) return null;
+    groups.forEach((group) => {
+        // A bye has no fixture, so it consumes no cursor position either.
+        if (!Array.isArray(group) || group.length < 2) return;
 
-            return {
-                id: fixtureId,
-                team_1: confirmed[one] ?? null,
-                team_2: confirmed[two] ?? null
-            };
-        })
-        .filter(Boolean);
+        const fixtureId = fixtureIds[fixtureIndex++];
+        if (!fixtureId) return;
+
+        const [one, two] = group;
+        // A knockout group holds positional indices, not team ids.
+        if (!Number.isInteger(one) || !Number.isInteger(two)) return;
+
+        bound.push({
+            id: fixtureId,
+            team_1: confirmed[one] ?? null,
+            team_2: confirmed[two] ?? null
+        });
+    });
+
+    return bound;
 }
 
 // --- validation -----------------------------------------------------------
@@ -168,7 +185,7 @@ function validateConfirmedTeams(confirmedTeamIds, computed, nextRound) {
         throw new AppError("INVALID_RESULTS");
     }
 
-    const expected = nextRound.qualifyingTeams ?? computed.length;
+    const expected = qualifierCount(nextRound) || computed.length;
     if (confirmedTeamIds.length !== expected) {
         throw new AppError("WRONG_QUALIFIER_COUNT");
     }
@@ -192,11 +209,15 @@ function sameOrder(a, b) {
 // --- ranking --------------------------------------------------------------
 
 // Produces the flat, seeded result list for a round, per docs/tournament-rules.md.
-function computeRoundResults(round, state, fixtures) {
+//
+// The tail is an options object rather than two more positional parameters:
+// nextRound gives the qualifier count, previousResults are the results a knockout
+// round's groups index into, which is the only way to name a bye team.
+function computeRoundResults(round, state, fixtures, { nextRound = null, previousResults = [] } = {}) {
     const seedIndex = buildSeedIndex(state.teams);
 
     if (round.type === "knockout") {
-        return seedKnockoutResults(buildKnockoutOutcomes(round, fixtures), seedIndex)
+        return seedKnockoutResults(buildKnockoutOutcomes(round, fixtures, previousResults))
             .map((id) => ({ id }));
     }
 
@@ -224,30 +245,88 @@ function computeRoundResults(round, state, fixtures) {
         return rankGroup(rows, { headToHead, seedIndex });
     });
 
-    return seedAcrossGroups(rankedGroups, seedIndex);
+    return seedAcrossGroups(rankedGroups, seedIndex, qualifierCount(nextRound));
 }
 
-function buildKnockoutOutcomes(round, fixtures) {
-    const roundFixtures = fixtures.filter(
-        (fixture) => fixture.round === round.name && isCountableFixture(fixture)
-    );
+// The next round's groups hold indices into this round's results, so the number
+// of teams that round needs is one past the largest index it references.
+// Derived rather than stored: rounds written before this existed carry no such
+// key, and state is JSONB that no migration reaches.
+function qualifierCount(nextRound) {
+    const groups = Array.isArray(nextRound?.groups) ? nextRound.groups : [];
+    let max = -1;
+    for (const group of groups) {
+        for (const index of group) {
+            if (typeof index === "number" && index > max) max = index;
+        }
+    }
+    return max + 1;
+}
 
-    return roundFixtures
-        .map((fixture) => {
-            let oneSets = 0;
-            let twoSets = 0;
-            fixture.result.forEach(([one, two]) => {
-                if (one > two) oneSets += 1;
-                else if (two > one) twoSets += 1;
-            });
 
-            if (oneSets === twoSets) return null;
+// One outcome per group, in group order: the bye team for a one-team group, the
+// winner and loser of the match for a two-team group. Emitting one per fixture
+// instead dropped every bye team and let the losers take their places — in a Round
+// of 12 that produced eight results, the right count with the wrong teams.
+//
+// The cursor is the whole point: generateKnockoutFixtures skips one-team groups
+// when it builds round.fixtures, so the fixture at position N belongs to the Nth
+// group of two or more, not to group N. buildDivisionBracket is the model.
+function buildKnockoutOutcomes(round, fixtures, previousResults = []) {
+    // The same selection rule the bracket formatter uses. Without the playoff the
+    // Finals round sees one fixture for two groups and the cursor misaligns.
+    const roundFixtures = fixtures
+        .filter(
+            (fixture) =>
+                fixture.round === round.name ||
+                (round.name === "Finals" && fixture.round === "3rd Place Playoff")
+        )
+        .sort((a, b) => (a.match_no ?? 0) - (b.match_no ?? 0));
 
-            return oneSets > twoSets
+    const groups = Array.isArray(round.groups) ? round.groups : [];
+    const outcomes = [];
+    let fixtureIndex = 0;
+
+    groups.forEach((group) => {
+        if (!Array.isArray(group)) return;
+
+        // A bye. The group holds one index into the previous round's results and
+        // the team named there carries on without playing.
+        if (group.length < 2) {
+            const byeTeamId = resolveGroupTeam(group[0], previousResults);
+            if (byeTeamId) outcomes.push({ winnerId: byeTeamId, loserId: null });
+            return;
+        }
+
+        const fixture = roundFixtures[fixtureIndex++];
+        if (!fixture || !isCountableFixture(fixture)) return;
+
+        let oneSets = 0;
+        let twoSets = 0;
+        fixture.result.forEach(([one, two]) => {
+            if (one > two) oneSets += 1;
+            else if (two > one) twoSets += 1;
+        });
+
+        // A drawn or cancelled match contributes nothing, as before.
+        if (oneSets === twoSets) return;
+
+        outcomes.push(
+            oneSets > twoSets
                 ? { winnerId: fixture.team_1_id, loserId: fixture.team_2_id }
-                : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id };
-        })
-        .filter(Boolean);
+                : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id }
+        );
+    });
+
+    return outcomes;
+}
+
+// A knockout group entry is an index into the previous round's results. A team id
+// is accepted too, for a knockout round that was seeded directly.
+function resolveGroupTeam(entry, previousResults) {
+    if (typeof entry === "string" && entry.length > 0) return entry;
+    if (Number.isInteger(entry)) return previousResults?.[entry] ?? null;
+    return null;
 }
 
 // --- loading --------------------------------------------------------------

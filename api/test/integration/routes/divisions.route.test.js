@@ -11,7 +11,7 @@ vi.mock("../../../src/services/progression.service.js", () => ({
 }));
 
 vi.mock("../../../src/services/divisions.service.js", () => ({
-    divisionService: { updateDivision: vi.fn() }
+    divisionService: { updateDivision: vi.fn(), deleteDivision: vi.fn() }
 }));
 
 const app = (await import("../../../src/app.js")).default;
@@ -27,6 +27,7 @@ beforeEach(() => {
     vi.mocked(progressionService.getProposal).mockReset();
     vi.mocked(progressionService.commit).mockReset();
     vi.mocked(divisionService.updateDivision).mockReset();
+    vi.mocked(divisionService.deleteDivision).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -123,6 +124,57 @@ describe("PUT /api/divisions/:divisionId", () => {
         expect(response.status).toBe(200);
         expect(response.body).toEqual({ success: true, message: "Division updated", data: result });
         expect(divisionService.updateDivision).toHaveBeenCalledWith("div-1", "user-1", payload);
+    });
+});
+
+describe("DELETE /api/divisions/:divisionId", () => {
+    it("requires a session", async () => {
+        const response = await request(app).delete(DIVISION_URL);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({
+            success: false,
+            message: "You must be logged in to do that",
+            data: null
+        });
+        expect(divisionService.deleteDivision).not.toHaveBeenCalled();
+    });
+
+    it("removes the division and answers in the documented envelope", async () => {
+        const result = {
+            divisionId: "div-1",
+            tournamentId: "tour-1",
+            fixturesRemoved: 6,
+            scheduleEntriesRemoved: 4
+        };
+        divisionService.deleteDivision.mockResolvedValue(result);
+
+        const response = await request(app)
+            .delete(DIVISION_URL)
+            .set("Cookie", authCookie({ id: "user-1", username: "tom" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Division removed", data: result });
+        expect(divisionService.deleteDivision).toHaveBeenCalledWith("div-1", "user-1");
+    });
+});
+
+// Every refusal this endpoint can raise, driven end to end. Both 409s are here:
+// a started tournament and the last division are different rules with different
+// messages, and the client shows whichever comes back.
+describe.each([
+    ["NOT_TOURNAMENT_OWNER", 403, "You do not own this tournament"],
+    ["DIVISION_NOT_FOUND", 404, "Division not found"],
+    ["TOURNAMENT_ALREADY_STARTED", 409, "This tournament has already started"],
+    ["LAST_DIVISION", 409, "A tournament needs at least one division"]
+])("division removal error %s", (code, status, message) => {
+    it(`returns ${status}`, async () => {
+        divisionService.deleteDivision.mockRejectedValue(new AppError(code));
+
+        const response = await request(app).delete(DIVISION_URL).set("Cookie", authCookie());
+
+        expect(response.status).toBe(status);
+        expect(response.body).toEqual({ success: false, message, data: null });
     });
 });
 

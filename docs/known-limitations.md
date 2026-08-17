@@ -226,11 +226,6 @@ From the redesign of 2026-08-08.
   `buildDivisionBracket` resolved participants from `round.groups`, which hold positional
   indices permanently; progression binds teams to the fixture instead. The bracket now
   prefers the fixture's bound teams. Separate from the connector problem below.
-- **The knockout bracket infers progression rather than reading it.** Nothing in the
-  payload says which match feeds which; knockout groups hold rank indices, not bracket
-  positions. Connectors are drawn only where the match counts halve exactly, and omitted
-  otherwise — an uneven round such as `Round of 9` renders with no lines rather than
-  wrong ones. A real progression link in the data is the only way to close this.
 - **`DivisionSelector`'s live pills-to-dropdown transition is unverified.** It is correct
   at both widths when loaded fresh, but the in-app browser pane delivers neither `resize`
   events nor `ResizeObserver` callbacks, so the transition itself has never been

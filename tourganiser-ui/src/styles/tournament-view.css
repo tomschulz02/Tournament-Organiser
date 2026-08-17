@@ -411,6 +411,22 @@ body.dark .tv-division-badge {
 	color: var(--secondary-text-color);
 }
 
+/* The heading row of a band that also carries an action, matching
+   .tv-standings-toolbar. The heading's own bottom margin is what spaces a plain
+   band, so the row takes it over rather than adding to it. */
+.tv-band-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	margin-bottom: var(--space-3);
+}
+
+.tv-band-header .tv-band-heading {
+	margin-bottom: 0;
+}
+
 .tv-info-card {
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
@@ -566,6 +582,37 @@ body.dark .tv-division-badge {
 .tv-division-card-actions button:hover {
 	border-color: var(--main-color);
 	color: var(--main-color);
+}
+
+/* Red, and sized to its icon rather than sharing the row evenly: Standings and
+   Teams are what the card is for, and removing the division is not a third way
+   into it. Tinted at rest so it reads as destructive before it is hovered, and
+   solid on hover so the target is unmistakable. */
+.tv-division-card-actions .tv-division-card-remove {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	padding: var(--space-2);
+	border-color: rgb(from var(--error-color) r g b / 0.45);
+	background: rgb(from var(--error-color) r g b / 0.1);
+	color: var(--error-color);
+}
+
+.tv-division-card-actions .tv-division-card-remove:hover:not(:disabled) {
+	border-color: var(--error-color);
+	background: var(--error-color);
+	color: var(--background-color);
+}
+
+.tv-division-card-actions .tv-division-card-remove:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tv-division-card-remove svg {
+	fill: currentColor;
 }
 
 /* --- activity ----------------------------------------------------------- */
@@ -1320,6 +1367,14 @@ body.dark .tv-division-badge {
 	width: 2px;
 	height: 50%;
 	background: var(--tv-border);
+}
+
+/* A pair of one — the single match of a bye round feeding a quarter-final whose
+   other slot came straight from the pool. There is nothing to join, and the two
+   stubs already meet in a straight line; the vertical would be a bar attached to
+   nothing. The slot still fills the pair, so its centre stays on the row. */
+.tv-bracket-pair--single::after {
+	display: none;
 }
 
 /* Into each match of a round that is actually fed by the one before it. */

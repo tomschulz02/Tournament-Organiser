@@ -129,6 +129,20 @@ async function updateSchedule(req, res) {
     res.status(200).json({ success: true, message: "Schedule saved", data });
 }
 
+// add a new division to an already created tournament. The body is the same
+// division payload the creation page sends, and is passed through untouched:
+// what a valid division is belongs to divisionService.createDivision.
+async function addDivision(req, res){
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const id = await tournamentService.addDivision(tournamentId, req.user.id, req.body);
+
+    res.status(201).json({ success: true, message: "Division added", data: { id } });
+}
+
 export const tournamentController = {
     createTournament,
     fetchTournaments,
@@ -138,5 +152,6 @@ export const tournamentController = {
     deleteTournament,
     saveTournament,
     unsaveTournament,
-    updateSchedule
+    updateSchedule,
+    addDivision
 }

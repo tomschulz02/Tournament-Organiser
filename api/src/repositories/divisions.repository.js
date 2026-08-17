@@ -96,6 +96,24 @@ async function deleteTeamsByIds(teamIds, client) {
     }
 }
 
+// Removes the division row. teams.division_id and fixtures.division_id both
+// cascade, so this takes the division's teams with it — see docs/database.md.
+//
+// Requires the client for the same reason deleteTeamsByIds does: this commits
+// with the explicit fixture delete and the schedule repair, or not at all. The
+// fixtures are deleted before this rather than left to the cascade, because
+// their ids are the only thing the schedule repair can match on.
+async function deleteDivision(divisionId, client) {
+    try {
+        const sql = "DELETE FROM divisions WHERE id = $1::uuid;";
+        await client.query(sql, [divisionId]);
+
+        return { message: "Division removed" };
+    } catch (error) {
+        throw new Error("Failed to remove division", { cause: error });
+    }
+}
+
 // Replaces divisions.state outright, together with the stored team count.
 //
 // Wider than updateStateRounds and updateRounds, which patch parts of state. A
@@ -263,6 +281,7 @@ export const divisionsRepository = {
     updateTeam,
     touchDivision,
     deleteTeamsByIds,
+    deleteDivision,
     replaceState,
     updateTeamOrder,
     updateRounds,

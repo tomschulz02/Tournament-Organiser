@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import DivisionSelector from './DivisionSelector';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
+import { isNotStarted } from './tournamentStatus';
 import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
 import { updateDivisionTeams } from '../../requests';
@@ -13,15 +14,15 @@ import { updateDivisionTeams } from '../../requests';
 // whether this is a rename or a rebuild, and a division cannot be left
 // half-edited between two requests.
 //
-// No client-side rule about when a team may be edited. The server owns that, and
-// inventing one here would be a second, competing definition of it. The one
-// thing the client does own is the warning before a rebuild — the organiser
-// should know the fixtures are about to be regenerated before they ask for it.
+// The client invents no rule of its own. The server owns when a team may be
+// edited, and a second definition here would be a competing one. What the client
+// does own is the warning before a rebuild — the organiser should know the
+// fixtures are about to be regenerated before they ask for it.
 //
-// Reordering is the exception, and only for the affordance: the server enforces
-// the Not Started gate, and a drag handle that always fails is worse than none.
-// The rule is still the server's; this only declines to offer what it will
-// refuse, and says why.
+// It also declines to offer what the server will always refuse. Every control on
+// this tab goes through the one PUT, which is gated on Not Started, so none of
+// them is rendered once the tournament has started. That is presentation; the
+// 409 is still the enforcement. See tournamentStatus.js.
 
 // Prefixed for the same reason the schedule maker's payloads are: a bare index
 // could have come from anywhere on the page.
@@ -83,11 +84,15 @@ export default function TeamsTab({
 	const adding = addFor === division.id;
 	const editing = teams.some((row) => row.key === editingKey) ? editingKey : null;
 
-	// Seeding is the final tiebreak in the ranking chain, so it is frozen once
-	// the tournament is under way — the same gate team editing uses, and the one
-	// the server enforces. A missing status is treated as Not Started, which is
-	// what the server does with a null.
-	const canReorder = creator && (status ?? 'Not Started') === 'Not Started';
+	// One gate for the whole team list, not just the order. Adding, renaming,
+	// removing and reordering all go through the same PUT, and the server refuses
+	// every one of them with a 409 once the tournament has started — seeding is
+	// the final tiebreak in the ranking chain, and a team set that moves under a
+	// played fixture is not a smaller version of the same problem.
+	//
+	// Hidden rather than disabled, and hidden rather than offered-then-refused:
+	// see tournamentStatus.js.
+	const canEditTeams = creator && isNotStarted(status);
 
 	const setTeams = (rows) => setDraft({ divisionId: division.id, teams: rows });
 
@@ -262,7 +267,7 @@ export default function TeamsTab({
 
 				{/* Prominent, and absent entirely for anyone who is not the creator —
 				    a viewer sees no management affordance at all, not a disabled one. */}
-				{creator && !adding && (
+				{canEditTeams && !adding && (
 					<button type="button" className="tv-primary-action" onClick={startAdding}>
 						Add Team
 					</button>
@@ -309,7 +314,7 @@ export default function TeamsTab({
 					variant="empty"
 					title="No teams have been added to this division yet"
 					message="Teams appear here in the order they were seeded.">
-					{creator && !adding && (
+					{canEditTeams && !adding && (
 						<button type="button" className="tv-primary-action" onClick={startAdding}>
 							Add Team
 						</button>
@@ -321,14 +326,12 @@ export default function TeamsTab({
 						{teams.length} team{teams.length === 1 ? '' : 's'}
 					</p>
 
-					{/* Said rather than left to be discovered, and said in both
-					    states: a control that has silently gone missing reads as
-					    a fault rather than as a rule. */}
-					{creator && teams.length > 1 && (
+					{/* Said rather than left to be discovered. Only the one branch
+					    now: once the tournament has started the handles are not on
+					    screen either, and there is nothing left to explain. */}
+					{canEditTeams && teams.length > 1 && (
 						<p className="tv-teams-seed-note">
-							{canReorder
-								? 'This order is the seeding. Drag a team by its handle to move it, then Save.'
-								: 'The seeding is fixed once the tournament has started — it is the last tiebreak in the standings, so changing it now would rewrite results already played.'}
+							This order is the seeding. Drag a team by its handle to move it, then Save.
 						</p>
 					)}
 
@@ -352,9 +355,9 @@ export default function TeamsTab({
 									className={`tv-team-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
 										overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
 									}`}
-									onDragOver={(event) => canReorder && handleDragOver(event, index)}
-									onDrop={(event) => canReorder && handleDrop(event, index)}>
-									{canReorder && (
+									onDragOver={(event) => canEditTeams && handleDragOver(event, index)}
+									onDrop={(event) => canEditTeams && handleDrop(event, index)}>
+									{canEditTeams && (
 										<button
 											type="button"
 											className="tv-team-grip"
@@ -375,7 +378,7 @@ export default function TeamsTab({
 									    is (id, name, division_id) and nothing else. */}
 									<TeamIdentity name={row.name} note={`Seed ${index + 1}`} />
 
-									{creator && (
+									{canEditTeams && (
 										<span className="tv-team-actions">
 											<button
 												type="button"

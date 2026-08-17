@@ -199,6 +199,31 @@ describe("deleteTeamsByIds", () => {
     });
 });
 
+describe("deleteDivision", () => {
+    // One statement. teams.division_id and fixtures.division_id both cascade, so
+    // the division's teams go with the row — there is nothing to delete by hand.
+    it("removes the division row", async () => {
+        expect(await divisionsRepository.deleteDivision("div-1", client))
+            .toEqual({ message: "Division removed" });
+
+        expect(client.query).toHaveBeenCalledWith(
+            "DELETE FROM divisions WHERE id = $1::uuid;",
+            ["div-1"]
+        );
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("foreign key violation");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.deleteDivision("div-1", client),
+            "Failed to remove division",
+            underlying
+        );
+    });
+});
+
 describe("replaceState", () => {
     // Wider than updateStateRounds, which patches part of state. A rebuild
     // regenerates every round from a different set of teams, so there is nothing

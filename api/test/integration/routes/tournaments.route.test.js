@@ -14,6 +14,7 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         startTournament: vi.fn(),
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
+        addDivision: vi.fn(),
         updateSchedule: vi.fn()
     }
 }));
@@ -32,6 +33,7 @@ beforeEach(() => {
     vi.mocked(tournamentService.startTournament).mockReset();
     vi.mocked(tournamentService.endTournament).mockReset();
     vi.mocked(tournamentService.deleteTournament).mockReset();
+    vi.mocked(tournamentService.addDivision).mockReset();
     vi.mocked(tournamentService.updateSchedule).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -73,6 +75,64 @@ describe("POST /api/tournaments/create", () => {
 
         expect(response.status).toBe(500);
         expect(response.body).toEqual({ success: false, message: "Internal server error", data: null });
+    });
+});
+
+describe("POST /api/tournaments/:tournamentId/divisions", () => {
+    const url = `/api/tournaments/${VALID_UUID}/divisions`;
+    const division = {
+        name: "Division B",
+        type: "classic",
+        num_teams: 2,
+        teams: [{ name: "Aces" }, { name: "Bears" }]
+    };
+
+    it("requires a session", async () => {
+        const response = await request(app).post(url).send(division);
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.addDivision).not.toHaveBeenCalled();
+    });
+
+    it("adds the division and answers 201 in the documented envelope", async () => {
+        tournamentService.addDivision.mockResolvedValue("div-9");
+
+        const response = await request(app)
+            .post(url)
+            .set("Cookie", authCookie({ id: "user-1", username: "tom" }))
+            .send(division);
+
+        expect(response.status).toBe(201);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Division added",
+            data: { id: "div-9" }
+        });
+        expect(tournamentService.addDivision).toHaveBeenCalledWith(VALID_UUID, "user-1", division);
+    });
+
+    it("answers 404 for a malformed id without reaching the service", async () => {
+        const response = await request(app)
+            .post("/api/tournaments/not-a-uuid/divisions")
+            .set("Cookie", authCookie())
+            .send(division);
+
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual({ success: false, message: "Tournament not found", data: null });
+        expect(tournamentService.addDivision).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["NOT_TOURNAMENT_OWNER", 403, "You do not own this tournament"],
+        ["TOURNAMENT_NOT_FOUND", 404, "Tournament not found"],
+        ["TOURNAMENT_ALREADY_STARTED", 409, "This tournament has already started"]
+    ])("returns %s as %i", async (code, status, message) => {
+        tournamentService.addDivision.mockRejectedValue(new AppError(code));
+
+        const response = await request(app).post(url).set("Cookie", authCookie()).send(division);
+
+        expect(response.status).toBe(status);
+        expect(response.body).toEqual({ success: false, message, data: null });
     });
 });
 

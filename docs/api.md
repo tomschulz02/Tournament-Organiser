@@ -158,6 +158,8 @@ Implemented:
 | GET | `/api/divisions/:divisionId/progression` | required + owner | Proposed ranking and qualifiers for the current round. Read only. |
 | POST | `/api/divisions/:divisionId/progression` | required + owner | Commit the confirmed ranking and advance the round |
 | PUT | `/api/divisions/:divisionId` | required + owner | Replace a division's teams and structure |
+| DELETE | `/api/divisions/:divisionId` | required + owner | Remove a division. Cascades to its teams and fixtures; repairs the schedule. |
+| POST | `/api/tournaments/:tournamentId/divisions` | required + owner | Add a division to a Not Started tournament |
 | PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
 | GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. Cached — see below. |

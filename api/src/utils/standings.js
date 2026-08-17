@@ -200,29 +200,38 @@ export function rankGroup(rows, context) {
 }
 
 // Cross-pool seeding for a round-robin round.
-// Pool position first: every pool winner (ranked against each other), then every
-// runner-up, and so on. Head-to-head is skipped across pools because teams from
-// different pools have usually not met.
-export function seedAcrossGroups(rankedGroups, seedIndex) {
+// Pool position first: every pool winner, then every runner-up, and so on. A tier
+// that fits entirely inside the qualifying places is taken in array order, which is
+// pool order — A1, B1, C1, D1 — with nothing compared across pools. Only the tier
+// that qualifyingTeams cannot fill cleanly is sorted, and there head-to-head is
+// skipped because teams from different pools have usually not met.
+//
+// The default of 0 makes no tier clean, so every tier sorts: a caller that passes no
+// count keeps the old behaviour untouched.
+export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0) {
     const ordered = [];
     const depth = Math.max(0, ...rankedGroups.map((group) => group.length));
+    const cleanTiers = Math.floor(qualifyingTeams / rankedGroups.length);
 
     for (let position = 0; position < depth; position += 1) {
         const atPosition = rankedGroups
             .map((group) => group[position])
             .filter(Boolean);
 
-        atPosition.sort((a, b) => compareTeams(a, b, { seedIndex }));
+        if (position >= cleanTiers){
+            atPosition.sort((a, b) => compareTeams(a, b, { seedIndex }));
+        }
+
         ordered.push(...atPosition);
     }
 
     return ordered;
 }
 
-// Knockout rounds rank winners first, then losers, each half keeping the seeding
-// order it carried into the round. Produces [w1, w2, l1, l2] for a semifinal, so
+// Knockout rounds rank winners first, then losers, each half keeping the match
+// order because the next round folds them bottom-up. Produces [w1, w2, l1, l2] for a semifinal, so
 // the next round can express bronze as [2, 3] and the final as [0, 1].
-export function seedKnockoutResults(matchups, seedIndex) {
+export function seedKnockoutResults(matchups) {
     const winners = [];
     const losers = [];
 
@@ -230,12 +239,6 @@ export function seedKnockoutResults(matchups, seedIndex) {
         if (winnerId) winners.push(winnerId);
         if (loserId) losers.push(loserId);
     });
-
-    const bySeed = (a, b) =>
-        (seedIndex.get(a) ?? Number.MAX_SAFE_INTEGER) - (seedIndex.get(b) ?? Number.MAX_SAFE_INTEGER);
-
-    winners.sort(bySeed);
-    losers.sort(bySeed);
 
     return [...winners, ...losers];
 }

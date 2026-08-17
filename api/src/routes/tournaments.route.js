@@ -25,6 +25,9 @@ tournamentRouter.delete('/:tournamentId/save', requireAuth, tournamentController
 // the server validates on write — see docs/schedule.md for what it checks.
 tournamentRouter.put('/:tournamentId/schedule', requireAuth, tournamentController.updateSchedule);
 
+// Route to add a division after a tournament has been created
+tournamentRouter.post('/:tournamentId/divisions', requireAuth, tournamentController.addDivision);
+
 tournamentRouter.get('/:tournamentId', tournamentController.fetchTournamentDetails);
 tournamentRouter.get('/', tournamentController.fetchTournaments);
 

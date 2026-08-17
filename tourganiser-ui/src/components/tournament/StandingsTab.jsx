@@ -5,6 +5,7 @@ import BracketView from './BracketView';
 
 const STAGE_GROUPS = 'groups';
 const STAGE_KNOCKOUT = 'knockout';
+const STAGE_RANKINGS = 'rankings';
 
 // Standings for one division at a time.
 //
@@ -57,18 +58,22 @@ export default function StandingsTab({
 	// even when one group's fixtures happened never to produce a 2-1.
 	const outcomeColumns = deriveOutcomeColumns(rounds);
 
+	const finalStandings = division.finalStandings ?? [];
+
 	// Derived from the division, never a hard-coded pair: a league has no
 	// knockout, and a straight knockout has no tables.
 	const stages = [];
 	if (rounds.length > 0) stages.push({ id: STAGE_GROUPS, label: 'Pool / League' });
 	if (bracketRounds.length > 0) stages.push({ id: STAGE_KNOCKOUT, label: 'Knockout' });
+	// Its own stage rather than a block above the tables: a division can have
+	// rankings and no surviving standings rows, and that used to show the empty
+	// state instead of the rankings. Last, because the order is chronological.
+	if (finalStandings.length > 0) stages.push({ id: STAGE_RANKINGS, label: 'Final Rankings' });
 
 	// Resolved during render rather than corrected in an effect. Switching to a
 	// division that has no knockout has to fall back on the spot, and the lint
 	// config forbids setState in an effect body in any case.
 	const activeStage = stages.some((stage) => stage.id === requestedStage) ? requestedStage : stages[0]?.id;
-
-	const finalStandings = division.finalStandings ?? [];
 
 	return (
 		<div className="tv-standings">
@@ -129,10 +134,6 @@ export default function StandingsTab({
 
 			{activeStage === STAGE_GROUPS && (
 				<>
-					{/* Above the tables: once a division is decided, its result is the
-					    first thing a reader wants. */}
-					{finalStandings.length > 0 && <FinalStandings rows={finalStandings} />}
-
 					{rounds.map((round) => (
 						<div key={round.roundIndex} className="tv-standings-round">
 							{/* Named only when there is more than one. A single round's
@@ -156,6 +157,8 @@ export default function StandingsTab({
 			)}
 
 			{activeStage === STAGE_KNOCKOUT && <BracketView rounds={bracketRounds} />}
+
+			{activeStage === STAGE_RANKINGS && <FinalStandings rows={finalStandings} />}
 		</div>
 	);
 }

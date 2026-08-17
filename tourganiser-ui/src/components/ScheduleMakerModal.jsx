@@ -111,6 +111,12 @@ function getEntrySecondary(entry, fixturesById) {
 	return fixture.divisionName ? `${fixture.divisionName} - ${context}` : context;
 }
 
+function getEntryOfficials(entry) {
+	if (entry.type === 'break') return '';
+
+	return entry.officials ? 'Officials: ' + entry.officials : '';
+}
+
 function getSlotKey(day, courtId, startTime) {
 	return `${day}_${courtId}_${startTime}`;
 }
@@ -1140,7 +1146,7 @@ function ScheduleGridView({
 	// A court column narrower than this cannot hold a two-line entry card, so
 	// below it the grid scrolls sideways rather than shrinking. Both grids take
 	// the same template, which is what keeps the headings over their columns.
-	const gridColumns = `96px repeat(${schedule.courts.length}, minmax(140px, 1fr))`;
+	const gridColumns = `72px repeat(${schedule.courts.length}, minmax(160px, 1fr))`;
 
 	return (
 		<div className="schedule-grid-shell">
@@ -1165,7 +1171,7 @@ function ScheduleGridView({
 						// minmax(84px, auto) let a row grow to its content, which drew
 						// rows of unequal length at unequal heights and made the time
 						// column impossible to count down.
-						gridTemplateRows: `repeat(${timeSlots.length}, 84px)`,
+						gridTemplateRows: `repeat(${timeSlots.length}, minmax(84px, auto))`,
 					}}>
 					{timeSlots.map((time, rowIndex) => (
 						<React.Fragment key={time}>
@@ -1218,6 +1224,7 @@ function ScheduleGridView({
 							</div>
 							<div className="schedule-grid-entry-title">{getEntryLabel(entry, fixturesById)}</div>
 							<div className="schedule-grid-entry-subtitle">{getEntrySecondary(entry, fixturesById)}</div>
+							{getEntryOfficials(entry) && <div className='schedule-grid-entry-officials'>{getEntryOfficials(entry)}</div>}
 						</button>
 					))}
 				</div>
@@ -1273,7 +1280,7 @@ function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) 
 							<span>{getCourtName(schedule, entry.courtId)}</span>
 							<span>{getEntrySecondary(entry, fixturesById)}</span>
 						</div>
-						{entry.officials && <div className="schedule-list-extra">Officials: {entry.officials}</div>}
+						{entry.officials && <div className="schedule-list-extra">{getEntryOfficials(entry)}</div>}
 						{entry.notes && <div className="schedule-list-extra">{entry.notes}</div>}
 					</div>
 				</button>
@@ -1620,8 +1627,9 @@ function ScheduleExportGridDay({ schedule, day, fixturesById }) {
 										<strong>{spanningBreak.entry.title}</strong>
 									) : placed ? (
 										<>
-											<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
 											<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
+											<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
+											{getEntryOfficials(placed.entry) && <span style={{color: 'dodgerblue'}}>{getEntryOfficials(placed.entry)}</span>}
 										</>
 									) : null}
 								</div>
@@ -1647,7 +1655,8 @@ function ScheduleExportListDay({ schedule, day, fixturesById }) {
 						</strong>
 					</div>
 					<div>{getCourtName(schedule, entry.courtId)}</div>
-					<div>{getEntryLabel(entry, fixturesById)}</div>
+					<div><strong>{getEntryLabel(entry, fixturesById)}</strong></div>
+					{getEntryOfficials(entry) && <div style={{color: 'dodgerblue'}}>{getEntryOfficials(entry)}</div>}
 					<div>{getEntrySecondary(entry, fixturesById)}</div>
 				</div>
 			))}

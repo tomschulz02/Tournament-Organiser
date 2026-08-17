@@ -12,6 +12,7 @@ import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
 import TeamsTab from '../components/tournament/TeamsTab';
 import LoadingScreen from '../components/LoadingScreen';
+import Icon from '../components/Icons';
 import ScoreUpdateModal from '../components/ScoreUpdateModal';
 import NextRoundModal from '../components/NextRoundModal';
 import { flattenFixtures } from '../components/tournament/fixtureUtils';
@@ -160,9 +161,21 @@ export default function ViewPage() {
 	const renderFixtureAction = (fixture) => {
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
 
+		// An icon on the row, where the word would be the widest thing in its
+		// column. aria-label rather than title alone, so the control is named for a
+		// screen reader as well as for a pointer; the label below is the same text
+		// shown when the row has the width for it.
+		const label = fixture.result?.length > 0 ? 'Edit Score' : 'Enter Score';
+
 		return (
-			<button type="button" className="tv-subtle-action" onClick={() => setScoringFixtureId(fixture.id)}>
-				{fixture.result?.length > 0 ? 'Edit Score' : 'Enter Score'}
+			<button
+				type="button"
+				className="tv-row-action"
+				title={label}
+				aria-label={label}
+				onClick={() => setScoringFixtureId(fixture.id)}>
+				<Icon name="edit" size={20} />
+				<span className="tv-row-action-label">{label}</span>
 			</button>
 		);
 	};

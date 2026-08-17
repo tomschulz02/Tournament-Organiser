@@ -736,6 +736,10 @@ body.dark {
 	opacity: 0.9;
 }
 
+.schedule-grid-entry-officials {
+	font-size: 0.9rem;
+}
+
 .schedule-list-day {
 	display: grid;
 	gap: var(--space-3);

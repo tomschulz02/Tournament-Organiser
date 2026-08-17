@@ -9,6 +9,8 @@ import {
 	distinct,
 	distinctStatuses,
 	formatResult,
+	setsWon,
+	setScores,
 } from '../src/components/tournament/fixtureUtils';
 
 function filters(overrides = {}) {
@@ -220,5 +222,52 @@ describe('formatResult', () => {
 		['a non-array', 'not a result'],
 	])('returns null for %s', (_label, value) => {
 		expect(formatResult(value)).toBeNull();
+	});
+});
+
+describe('setsWon', () => {
+	it('counts the sets each team took', () => {
+		expect(setsWon([[25, 21], [19, 25], [25, 23]])).toEqual([2, 1]);
+	});
+
+	it('counts a single set', () => {
+		expect(setsWon([[21, 15]])).toEqual([1, 0]);
+	});
+
+	// docs/tournament-rules.md, and applyFixtureToStandings agrees.
+	it('counts a drawn set for neither team', () => {
+		expect(setsWon([[20, 20]])).toEqual([0, 0]);
+		expect(setsWon([[25, 20], [20, 20]])).toEqual([1, 0]);
+	});
+
+	it.each([
+		['an empty array', []],
+		['null', null],
+		['undefined', undefined],
+		['a non-array', 'not a result'],
+	])('returns null for %s, rather than zeroes', (_label, value) => {
+		expect(setsWon(value)).toBeNull();
+	});
+});
+
+describe('setScores', () => {
+	it('reads a result by team rather than by set', () => {
+		expect(setScores([[25, 21], [19, 25], [25, 23]])).toEqual([
+			[25, 19, 25],
+			[21, 25, 23],
+		]);
+	});
+
+	it('reads a single set', () => {
+		expect(setScores([[21, 15]])).toEqual([[21], [15]]);
+	});
+
+	it.each([
+		['an empty array', []],
+		['null', null],
+		['undefined', undefined],
+		['a non-array', 'not a result'],
+	])('returns null for %s', (_label, value) => {
+		expect(setScores(value)).toBeNull();
 	});
 });

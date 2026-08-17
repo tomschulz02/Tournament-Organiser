@@ -73,3 +73,27 @@ export function formatResult(result) {
 
 	return result.map(([one, two]) => `${one}-${two}`).join(', ');
 }
+
+// Sets won by each team, as [teamOne, teamTwo]. A set with equal scores counts
+// for neither — docs/tournament-rules.md says so and applyFixtureToStandings
+// already behaves that way, so the row and the standings table cannot disagree
+// about who won a set.
+//
+// Null rather than [0, 0] for an unplayed fixture: nothing has been won yet, and
+// the row renders an empty score cell rather than a zero.
+export function setsWon(result) {
+	if (!Array.isArray(result) || result.length === 0) return null;
+
+	return result.reduce(
+		([one, two], [scoreOne, scoreTwo]) => [one + (scoreOne > scoreTwo ? 1 : 0), two + (scoreTwo > scoreOne ? 1 : 0)],
+		[0, 0],
+	);
+}
+
+// The same result read by team rather than by set: [[teamOne...], [teamTwo...]],
+// in set order, so a team's line can be rendered without walking the pairs.
+export function setScores(result) {
+	if (!Array.isArray(result) || result.length === 0) return null;
+
+	return [result.map(([one]) => one), result.map(([, two]) => two)];
+}

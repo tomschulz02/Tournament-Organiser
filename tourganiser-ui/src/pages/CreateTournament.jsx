@@ -10,6 +10,9 @@ import ReviewModal from '../components/create/ReviewModal';
 import { createEmptyDivision, isConfigurableFormat, isDivisionValid } from '../components/create/divisionFormats';
 import { clearDraft, describeDraftAge, hasDraftContent, readDraft, writeDraft } from '../utils/createDraft';
 import '../styles/create-tournament.css';
+// The review embeds BracketView, whose styles live with the tournament view and
+// are otherwise pulled in by TournamentShell — which this page never mounts.
+import '../styles/tournament-view.css';
 
 // Long enough that a burst of typing is one write, short enough that a refresh
 // a heartbeat after the last keystroke still has it.

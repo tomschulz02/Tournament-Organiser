@@ -1415,10 +1415,68 @@ body.dark .tv-division-badge {
 	background: var(--tv-surface);
 }
 
+/* With a drag handle the row has three children rather than two, so the name
+   takes the slack instead of space-between spreading it. */
+.tv-team-row .tv-team {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
 /* The form replaces the row's contents, so it takes the whole cell. */
 .tv-team-row--editing {
 	display: block;
 	padding: var(--space-3) var(--space-3);
+}
+
+/* The handle for reseeding, offered only while the tournament is Not Started.
+   A handle rather than the whole row: the row carries buttons, and dragging
+   from one of those would fight with pressing it. */
+.tv-team-grip {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	min-height: 44px;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--tv-muted);
+	cursor: grab;
+}
+
+.tv-team-grip:hover:not(:disabled) {
+	background: var(--tv-surface-alt);
+}
+
+.tv-team-grip:active {
+	cursor: grabbing;
+}
+
+.tv-team-grip svg {
+	fill: currentColor;
+}
+
+/* Kept visible while it is carried. Hiding it makes the list look one row
+   shorter than it is. */
+.tv-team-row--dragging {
+	opacity: 0.45;
+}
+
+/* Where the carried row will land. The row already has a border, so recolouring
+   it costs no layout. */
+.tv-team-row--over {
+	border-color: var(--main-color);
+}
+
+/* The order is the seeding, and nothing else in this tab says so. Shown in both
+   states: a handle that has silently gone missing reads as a fault rather than
+   as a rule. */
+.tv-teams-seed-note {
+	margin: 0 0 var(--space-2);
+	color: var(--tv-muted);
+	font-size: 0.85rem;
 }
 
 .tv-team-actions {
@@ -1611,6 +1669,21 @@ body.dark .tv-division-badge {
 @media (max-width: 768px) {
 	.tv-shell {
 		padding: var(--space-3) var(--space-3) var(--space-7);
+	}
+
+	/* Four things do not fit across 320px. Edit and Remove drop to a line of
+	   their own so the name keeps the first one — the handle costs the row 28px
+	   and the name was already truncating to two characters without it. */
+	.tv-team-row {
+		flex-wrap: wrap;
+	}
+
+	.tv-team-row .tv-team {
+		flex: 1 1 60%;
+	}
+
+	.tv-team-actions {
+		margin-left: auto;
 	}
 
 	/* Icon only. The labels are the first thing to go — losing them keeps the

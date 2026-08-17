@@ -265,9 +265,15 @@ A team with no `id` is new; a team in `state.teams` and absent from the list is 
 The client never declares which it is doing. The service compares the incoming ids
 against `state.teams` and decides:
 
-- **Same set** — a rename. Only the names that moved are written. Nothing structural
-  depends on a name, so fixtures and the schedule are untouched and this is permitted at
-  any point in the tournament.
+- **Same set, same order** — a rename. Only the names that moved are written. Nothing
+  structural depends on a name, so fixtures and the schedule are untouched and this is
+  permitted at any point in the tournament.
+- **Same set, different order** — a reseed. List position is the seeding, so `state.teams`
+  is written in the submitted order and any name changes go with it in the same
+  transaction. `state.rounds` is left alone: pool groups hold team ids and knockout groups
+  hold rank indices, so neither depends on this order. Allowed only while the tournament
+  is `Not Started` — see `docs/decisions.md`, "Seeding May Only Be Reordered Before A
+  Tournament Starts".
 - **Different set** — the division is rebuilt: fixtures deleted and regenerated, teams
   reconciled, `state` rewritten in full, and that division's entries removed from
   `tournaments.schedule`. Breaks and every other division's placements survive; the
@@ -284,15 +290,17 @@ Rejections:
 | 400 | Missing or nameless team list, a duplicate name or id, an id the division does not hold, or a group/qualifier count the team count cannot support |
 | 403 | Caller does not own the tournament |
 | 404 | No such division |
-| 409 | Rebuild only — the tournament has started, or the division already holds a completed fixture |
+| 409 | `TOURNAMENT_ALREADY_STARTED` — a rebuild or a reorder after the tournament has started, or `DIVISION_HAS_RESULTS` where a rebuild's division already holds a completed fixture |
 
-The gate is two checks rather than one because a status can simply be wrong and a
-completed fixture cannot. `num_groups` and `knockout_teams` are required on a rebuild and
-neither is adjusted to fit: the organiser confirms them against the new team count in the
-client, and correcting their choice without saying so is worse than refusing it.
+A rebuild's gate is two checks rather than one because a status can simply be wrong and a
+completed fixture cannot. A reorder has only the status check: it destroys nothing, so
+there is no second condition for the first to be wrong about. `num_groups` and
+`knockout_teams` are required on a rebuild and neither is adjusted to fit: the organiser
+confirms them against the new team count in the client, and correcting their choice
+without saying so is worse than refusing it.
 
-Success returns `rebuilt`, the resulting team list in seed order, and — for a rebuild —
-the fixture count and how many schedule entries were dropped.
+Success returns `rebuilt` and `reordered`, the resulting team list in seed order, and —
+for a rebuild — the fixture count and how many schedule entries were dropped.
 
 ### Saving a schedule
 

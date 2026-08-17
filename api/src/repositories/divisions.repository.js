@@ -19,9 +19,10 @@ async function createDivision(divisionId, tournamentId, details, userId, client 
     }
 }
 
-// updateTeams was removed on 2026-08-10. It wrote state.teams directly, and
-// nothing called it: seed order now moves only through updateDivision, which
-// rewrites state in full through replaceState.
+// updateTeams was removed on 2026-08-10. It wrote state.teams directly and
+// nothing called it. updateTeamOrder below is its deliberate replacement: seed
+// order moves only through updateDivision, which either rewrites state in full
+// through replaceState or, for a reorder, patches this one key.
 
 // used to create a new team
 //
@@ -108,6 +109,28 @@ async function replaceState(divisionId, state, numTeams, client) {
         return { message: "Division rebuilt" };
     } catch (error) {
         throw new Error("Failed to replace division state", { cause: error });
+    }
+}
+
+// Rewrites state.teams — the seeding — and nothing else.
+//
+// The narrowest write that expresses a reorder, and deliberately narrower than
+// replaceState. A pool group holds team ids and a knockout group holds rank
+// indices, so neither depends on the order of state.teams; rewriting state
+// wholesale would regenerate rounds a reorder has no reason to touch. jsonb_set
+// patches the one key in place.
+//
+// Requires the client: a reorder can carry renames, and the two commit together
+// or not at all. The stamp is here rather than in a separate touchDivision
+// because this statement already writes to the row.
+async function updateTeamOrder(divisionId, teamIds, client) {
+    try {
+        const sql = "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb), last_update = now() WHERE id = $2::uuid";
+        await client.query(sql, [JSON.stringify(teamIds), divisionId]);
+
+        return { message: "Team order updated" };
+    } catch (error) {
+        throw new Error("Failed to update team order", { cause: error });
     }
 }
 
@@ -241,6 +264,7 @@ export const divisionsRepository = {
     touchDivision,
     deleteTeamsByIds,
     replaceState,
+    updateTeamOrder,
     updateRounds,
     getStateForUpdate,
     updateStateRounds,

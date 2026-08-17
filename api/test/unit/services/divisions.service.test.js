@@ -18,7 +18,8 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
         updateTeam: vi.fn(),
         touchDivision: vi.fn(),
         deleteTeamsByIds: vi.fn(),
-        replaceState: vi.fn()
+        replaceState: vi.fn(),
+        updateTeamOrder: vi.fn()
     }
 }));
 
@@ -65,6 +66,7 @@ beforeEach(() => {
     divisionsRepository.updateTeam.mockReset();
     divisionsRepository.deleteTeamsByIds.mockReset();
     divisionsRepository.replaceState.mockReset();
+    divisionsRepository.updateTeamOrder.mockReset();
     fixturesRepository.createFixture.mockReset();
     fixturesRepository.getResults.mockReset();
     fixturesRepository.getResults.mockResolvedValue([]);
@@ -617,13 +619,104 @@ describe("divisionService.updateDivision", () => {
             expect(fixturesRepository.getResults).not.toHaveBeenCalled();
         });
 
-        it("reorders without rebuilding, since the set is unchanged", async () => {
-            const teams = unchanged().reverse();
+        it("leaves the stored order alone, since nothing moved", async () => {
+            const teams = unchanged();
+            teams[0].name = "Angels";
+
+            await divisionService.updateDivision("div-1", "user-1", body(teams));
+
+            expect(divisionsRepository.updateTeamOrder).not.toHaveBeenCalled();
+        });
+    });
+
+    // The seeding. A reordered list satisfies sameSet exactly — every entry
+    // carries a known id and the count matches — so it used to route to
+    // renameTeams, which never touches state.teams: the request succeeded and
+    // changed nothing.
+    describe("the reorder path", () => {
+        const reordered = () => {
+            const teams = unchanged();
+            // t3 to the front. Two positions move, so this cannot pass by a
+            // comparison that only looks at the first entry.
+            teams.unshift(teams.splice(2, 1)[0]);
+
+            return teams;
+        };
+
+        it("writes state.teams in the submitted order and nothing else", async () => {
+            const result = await divisionService.updateDivision("div-1", "user-1", body(reordered()));
+
+            expect(divisionsRepository.updateTeamOrder)
+                .toHaveBeenCalledWith("div-1", ["t3", "t1", "t2", "t4"], dbMock.client);
+
+            // The rounds are untouched: pool groups hold team ids and knockout
+            // groups hold rank indices, so neither depends on this order.
+            expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+            expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+            expect(divisionsRepository.updateTeam).not.toHaveBeenCalled();
+
+            expect(result).toMatchObject({ divisionId: "div-1", rebuilt: false, reordered: true, renamed: 0 });
+            expect(result.teams.map((team) => team.id)).toEqual(["t3", "t1", "t2", "t4"]);
+        });
+
+        // updateTeamOrder writes to `divisions`, which does carry last_update,
+        // so the stamp rides on that statement rather than on touchDivision.
+        it("moves the division's stamp through the order write itself", async () => {
+            await divisionService.updateDivision("div-1", "user-1", body(reordered()));
+
+            expect(divisionsRepository.touchDivision).not.toHaveBeenCalled();
+        });
+
+        it("applies a rename in the same request, and in one transaction", async () => {
+            const teams = reordered();
+            teams[0].name = "Cardinals";
 
             const result = await divisionService.updateDivision("div-1", "user-1", body(teams));
 
-            expect(result.rebuilt).toBe(false);
+            expect(divisionsRepository.updateTeam).toHaveBeenCalledWith("t3", "Cardinals", dbMock.client);
+            expect(divisionsRepository.updateTeamOrder)
+                .toHaveBeenCalledWith("div-1", ["t3", "t1", "t2", "t4"], dbMock.client);
+            expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+            expect(result).toMatchObject({ reordered: true, renamed: 1 });
+        });
+
+        it("rolls back when the order write fails", async () => {
+            const failure = new Error("Failed to update team order");
+            divisionsRepository.updateTeamOrder.mockRejectedValueOnce(failure);
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(reordered())))
+                .rejects.toBe(failure);
+
+            expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+        });
+
+        // Seeding is the final tiebreak in the ranking chain, so reordering it
+        // after results exist would retroactively change who qualified. The same
+        // gate team editing already uses — see docs/decisions.md.
+        it("refuses a tournament that has already started", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ tournament_status: "Ongoing" }));
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(reordered())))
+                .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+
+            expect(divisionsRepository.updateTeamOrder).not.toHaveBeenCalled();
+            expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
+        });
+
+        it("treats a null status as Not Started", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ tournament_status: null }));
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(reordered())))
+                .resolves.toMatchObject({ reordered: true });
+        });
+
+        it("is a reorder rather than a rebuild, so no fixture is destroyed", async () => {
+            await divisionService.updateDivision("div-1", "user-1", body(unchanged().reverse()));
+
             expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+            expect(fixturesRepository.createFixture).not.toHaveBeenCalled();
+            expect(divisionsRepository.deleteTeamsByIds).not.toHaveBeenCalled();
         });
     });
 

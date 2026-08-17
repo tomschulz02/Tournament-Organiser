@@ -155,11 +155,21 @@ export default function ViewPage() {
 		}
 	};
 
-	// Offered only where a result can actually be recorded. A knockout fixture
-	// still showing "Rank 1" has no teams bound, and the server rejects it with a
-	// 400 — better not to offer the action than to explain the refusal.
+	// Offered only where a result can actually be recorded, which is two
+	// conditions rather than one.
+	//
+	// A knockout fixture still showing "Rank 1" has no teams bound, and the
+	// server rejects it with a 400 — better not to offer the action than to
+	// explain the refusal. And a tournament nobody has started cannot have a
+	// result, so the control before kick-off is a lie about what it will do.
+	//
+	// A Finished tournament keeps the action, deliberately. The server accepts a
+	// result whatever the status, and a score entered wrongly would otherwise
+	// have no route to being corrected once the tournament was ended — which is
+	// exactly when somebody notices.
 	const renderFixtureAction = (fixture) => {
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
+		if ((result.data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
 
 		// An icon on the row, where the word would be the widest thing in its
 		// column. aria-label rather than title alone, so the control is named for a
@@ -350,6 +360,9 @@ function TabPanel({
 			selectedDivisionId={selectedDivisionId}
 			onSelectDivision={onSelectDivision}
 			creator={data.creator}
+			// Reseeding is gated on Not Started, and the tab offers the handle
+			// only where the server would accept the request.
+			status={data.tournament?.status}
 			onChanged={onReload}
 		/>
 	);

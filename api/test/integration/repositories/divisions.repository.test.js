@@ -228,6 +228,33 @@ describe("replaceState", () => {
     });
 });
 
+describe("updateTeamOrder", () => {
+    // Narrower than replaceState on purpose. A reorder changes the seeding and
+    // nothing else: pool groups hold team ids and knockout groups hold rank
+    // indices, so neither depends on this order and neither should be rewritten.
+    it("patches state.teams in place and stamps the row", async () => {
+        expect(await divisionsRepository.updateTeamOrder("div-1", ["t3", "t1", "t2"], client))
+            .toEqual({ message: "Team order updated" });
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb), last_update = now() WHERE id = $2::uuid"
+        );
+        expect(params).toEqual([JSON.stringify(["t3", "t1", "t2"]), "div-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid jsonb");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.updateTeamOrder("div-1", ["t1"], client),
+            "Failed to update team order",
+            underlying
+        );
+    });
+});
+
 describe("updateRounds", () => {
     it("writes the rounds and the new current round in one statement", async () => {
         const rounds = [{ name: "Pool Play" }];

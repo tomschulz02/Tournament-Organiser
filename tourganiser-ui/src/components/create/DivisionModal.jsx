@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CreateModal from './CreateModal';
 import Icon from '../Icons';
 import { useConfirm } from '../ConfirmDialog';
@@ -6,6 +6,7 @@ import {
 	DIVISION_NAME_MAX,
 	FORMATS,
 	TEAM_NAME_MAX,
+	createTeamKey,
 	getFormat,
 	isConfigurableFormat,
 	validateDivision,
@@ -35,11 +36,24 @@ const SCREEN_TITLES = {
 	teams: 'Teams',
 };
 
+// The drag payload is prefixed for the same reason the schedule maker's is: a
+// bare index could have come from anywhere on the page.
+const TEAM_DRAG = 'team:';
+
 // The same modal for adding and for editing. `division` is the one being edited,
 // or a fresh empty one — this component never needs to know which, beyond the
 // wording of its title and its confirming button.
 export default function DivisionModal({ division, isEditing, onCancel, onSave }) {
-	const [draft, setDraft] = useState(division);
+	// A stable id per row, handed out when the row enters the draft.
+	//
+	// The list used to be keyed by array index, which is only safe while nothing
+	// moves: React reuses an element positionally, so a reorder would leave one
+	// team's input holding another team's text. The key never leaves this
+	// component — handleSave sends { name } and nothing else.
+	const [draft, setDraft] = useState(() => ({
+		...division,
+		teams: division.teams.map((team) => ({ ...team, key: createTeamKey() })),
+	}));
 	const [screen, setScreen] = useState('basics');
 	const [errors, setErrors] = useState({});
 	// Whether the pool settings have been deliberately changed. Only then is it
@@ -89,17 +103,33 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 		const name = newTeamName.trim();
 		if (name.length === 0) return;
 
-		update({ teams: [...draft.teams, { name }] });
+		update({ teams: [...draft.teams, { key: createTeamKey(), name }] });
 		setNewTeamName('');
 		setErrors((previous) => ({ ...previous, teams: undefined }));
 	};
 
 	const updateTeam = (index, name) => {
-		update({ teams: draft.teams.map((team, position) => (position === index ? { name } : team)) });
+		// Spread, not a fresh object: replacing the entry would drop its key and
+		// put the list back where it was before reordering was possible.
+		update({ teams: draft.teams.map((team, position) => (position === index ? { ...team, name } : team)) });
 	};
 
 	const removeTeam = (index) => {
 		update({ teams: draft.teams.filter((_, position) => position !== index) });
+	};
+
+	// The seeding. Array position is the seed, and the server draws its pools
+	// from that order — see divisionPreview.js — so this is the one place the
+	// organiser can set it before the division exists. Pure client state: the
+	// list is already sent in order.
+	const moveTeam = (from, to) => {
+		if (from === to || to < 0 || to >= draft.teams.length) return;
+
+		const teams = [...draft.teams];
+		const [moved] = teams.splice(from, 1);
+		teams.splice(to, 0, moved);
+
+		update({ teams });
 	};
 
 	// The hard check. Everything the server would refuse, refused here first and
@@ -193,6 +223,7 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 					onAddTeam={addTeam}
 					onUpdateTeam={updateTeam}
 					onRemoveTeam={removeTeam}
+					onMoveTeam={moveTeam}
 				/>
 			)}
 		</CreateModal>
@@ -350,8 +381,24 @@ function ConfigurationScreen({ draft, errors, onChange }) {
 	);
 }
 
-function TeamsScreen({ draft, errors, newTeamName, onNewTeamNameChange, onAddTeam, onUpdateTeam, onRemoveTeam }) {
+function TeamsScreen({
+	draft,
+	errors,
+	newTeamName,
+	onNewTeamNameChange,
+	onAddTeam,
+	onUpdateTeam,
+	onRemoveTeam,
+	onMoveTeam,
+}) {
 	const addInputRef = useRef(null);
+	const listRef = useRef(null);
+	const teamCount = draft.teams.length;
+
+	// The row being carried, and the row it is currently over. Both are indices
+	// rather than keys, because the move is expressed as a pair of positions.
+	const [draggingIndex, setDraggingIndex] = useState(null);
+	const [overIndex, setOverIndex] = useState(null);
 
 	// Enter adds and leaves the cursor where it is, so a list of thirty-two can
 	// be typed without touching the mouse.
@@ -360,6 +407,65 @@ function TeamsScreen({ draft, errors, newTeamName, onNewTeamNameChange, onAddTea
 		event.preventDefault();
 		onAddTeam();
 		addInputRef.current?.focus();
+	};
+
+	// The list has a fixed height, so a newly added team lands below the fold
+	// once it overflows. Only on growth: a removal should leave the view where
+	// the organiser left it.
+	const previousCount = useRef(teamCount);
+
+	useEffect(() => {
+		const grew = teamCount > previousCount.current;
+		previousCount.current = teamCount;
+
+		// An instant assignment, not scrollTo({ behavior: 'smooth' }) — the
+		// development browser drops smooth scrolling silently, so it would look
+		// like nothing happened. See docs/known-limitations.md.
+		if (grew && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+	}, [teamCount]);
+
+	const endDrag = () => {
+		setDraggingIndex(null);
+		setOverIndex(null);
+	};
+
+	const handleDragStart = (event, index) => {
+		event.dataTransfer.setData('text/plain', `${TEAM_DRAG}${index}`);
+		event.dataTransfer.effectAllowed = 'move';
+		setDraggingIndex(index);
+	};
+
+	const handleDragOver = (event, index) => {
+		// Only a row from this list is a valid drop. Without the guard the whole
+		// list would accept dragged text from anywhere on the page.
+		if (draggingIndex === null) return;
+
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		setOverIndex(index);
+	};
+
+	const handleDrop = (event, index) => {
+		event.preventDefault();
+
+		const payload = event.dataTransfer.getData('text/plain') || '';
+		endDrag();
+
+		if (!payload.startsWith(TEAM_DRAG)) return;
+
+		const from = Number(payload.slice(TEAM_DRAG.length));
+		if (Number.isInteger(from)) onMoveTeam(from, index);
+	};
+
+	// The grip is a real button rather than a decorated span, so the order is
+	// not a pointer-only fact. React moves the keyed row rather than rebuilding
+	// it, so focus travels with the team it was on.
+	const handleGripKeyDown = (event, index) => {
+		const step = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+		if (step === 0) return;
+
+		event.preventDefault();
+		onMoveTeam(index, index + step);
 	};
 
 	return (
@@ -395,21 +501,42 @@ function TeamsScreen({ draft, errors, newTeamName, onNewTeamNameChange, onAddTea
 
 			{errors.teams && <p className="ct-field-error ct-screen-error">{errors.teams}</p>}
 
-			{draft.teams.length === 0 ? (
+			{teamCount === 0 ? (
 				<p className="ct-empty-note">No teams yet. Add at least two.</p>
 			) : (
 				<>
 					<p className="ct-team-count">
-						{draft.teams.length} {draft.teams.length === 1 ? 'team' : 'teams'}
+						{teamCount} {teamCount === 1 ? 'team' : 'teams'}
+					</p>
+					{/* Said once, above the list. The order is the seeding, and
+					    nothing else on this screen says so. */}
+					<p className="ct-field-hint ct-team-order-hint">
+						This order is the seeding — drag a team by its number to move it.
 					</p>
 					{/* A row per team, not a card per team. Some divisions hold
-					    thirty-two of these. */}
-					<ul className="ct-team-list">
+					    thirty-two of these, and the list scrolls rather than
+					    growing the modal past them. */}
+					<ul className="ct-team-list" ref={listRef}>
 						{draft.teams.map((team, index) => (
-							<li key={index} className="ct-team-row">
-								<span className="ct-team-number" aria-hidden="true">
+							<li
+								key={team.key}
+								className={`ct-team-row${draggingIndex === index ? ' ct-team-row--dragging' : ''}${
+									overIndex === index && draggingIndex !== index ? ' ct-team-row--over' : ''
+								}`}
+								onDragOver={(event) => handleDragOver(event, index)}
+								onDrop={(event) => handleDrop(event, index)}>
+								<button
+									type="button"
+									className="ct-team-number ct-team-grip"
+									draggable
+									onDragStart={(event) => handleDragStart(event, index)}
+									onDragEnd={endDrag}
+									onKeyDown={(event) => handleGripKeyDown(event, index)}
+									aria-label={`Seed ${index + 1}, ${
+										team.name || `team ${index + 1}`
+									}. Drag, or use the up and down arrow keys, to reorder.`}>
 									{index + 1}
-								</span>
+								</button>
 								<input
 									className="ct-input ct-team-input"
 									type="text"

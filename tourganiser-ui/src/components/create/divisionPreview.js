@@ -1,0 +1,152 @@
+// What a division's configuration will actually produce: which pool each team is
+// drawn into, and the knockout bracket that follows.
+//
+// A faithful mirror of `populateGroups` and `createClassicState` in
+// api/src/services/divisions.service.js, and of `buildDivisionBracket` in
+// api/src/utils/tournamentViewFormatter.js. The index arithmetic is copied
+// rather than approximated, because the creation review is a claim about what
+// will be created rather than an illustration of it — a pool the organiser is
+// shown as holding four named teams really does hold those four.
+//
+// The duplication is deliberate and is recorded in docs/decisions.md, "The
+// Creation Review Computes Pools And Rounds In The Client", which also records
+// what it gives up. It is pinned by shared/division-structure.json: the API
+// suite asserts the server produces those values and the UI suite asserts these
+// functions do, so neither side can move alone without its own tests going red
+// and naming the input that broke.
+//
+// No component lives in this file, for the same reason divisionFormats.js has
+// none: the lint config forbids a module exporting both a component and a plain
+// function.
+
+// The serpentine, expressed as positions in the list rather than its contents.
+//
+// Group 1 takes the first entry, then counts back from the end of the second
+// row, so the sizes are not simply "the remainder into the earlier pools".
+// A group count below one produces nothing, exactly as populateGroups does.
+function serpentinePositions(count, groupCount) {
+	const perGroup = Math.ceil(count / groupCount);
+	const groups = [];
+
+	for (let groupNo = 1; groupNo <= groupCount; groupNo++) {
+		const positions = [];
+
+		for (let index = 0; index < perGroup; index++) {
+			const position = index % 2 === 0 ? index * groupCount + groupNo - 1 : (index + 1) * groupCount - groupNo;
+			// The generator skips an index past the end of the list; here that is
+			// simply a place the group does not get filled.
+			if (position < count) positions.push(position);
+		}
+
+		groups.push(positions);
+	}
+
+	return groups;
+}
+
+// The same walk, resolved against a list. populateGroups is handed the rank
+// indices for a knockout round, and for a preliminary round it is handed a
+// slice of them — so the positions have to be read back out of the list rather
+// than used as the values.
+function serpentineOf(list, groupCount) {
+	return serpentinePositions(list.length, groupCount).map((positions) =>
+		positions.map((position) => list[position]),
+	);
+}
+
+// Which teams land in which pool, as indices into the division's team list in
+// its seeded order. That order is `state.teams`, so reordering the list is what
+// changes the answer here.
+//
+// Sizes fall out of membership rather than being counted separately.
+export function poolMembership(teamCount, poolCount) {
+	// The configuration screen can hold a zero or a blank while it is being
+	// typed into, and the review still has to draw something.
+	return serpentinePositions(teamCount, Math.max(1, Math.floor(poolCount) || 1));
+}
+
+const FINALS = 'Finals';
+
+// Conventional names below sixteen; anything larger is named by its size.
+const ROUND_NAMES = { 2: FINALS, 4: 'Semifinals', 8: 'Quarterfinals' };
+
+// createClassicState's knockout loop, in rank indices. A group holds the
+// placings that meet in it — [0, 3] is the first qualifier against the fourth —
+// and a one-team group is a bye rather than a match.
+export function knockoutRounds(qualifiers) {
+	let remaining = Math.floor(Number(qualifiers));
+	if (!Number.isFinite(remaining)) return [];
+
+	const rounds = [];
+
+	while (remaining >= 2) {
+		const ranks = Array.from({ length: remaining }, (_, index) => index);
+
+		if (Number.isInteger(Math.log2(remaining))) {
+			const name = remaining > 8 ? `Round of ${remaining}` : ROUND_NAMES[remaining];
+			const groups = serpentineOf(ranks, remaining / 2);
+
+			// The third place playoff is unshifted in front of the final, so
+			// index 0 of the Finals round is the bronze match and that round
+			// holds two matches rather than one.
+			if (name === FINALS) groups.unshift([2, 3]);
+
+			rounds.push({ name, groups });
+			remaining /= 2;
+		} else {
+			// A count that is not a power of two opens with a qualifying round:
+			// the surplus play, and the rest go through as one-team groups.
+			const qualifying = 2 ** Math.floor(Math.log2(remaining));
+			const straight = 2 * qualifying - remaining;
+
+			const groups = serpentineOf(ranks.slice(0, straight), straight);
+			serpentineOf(ranks.slice(straight, remaining), remaining - qualifying).forEach((group) =>
+				groups.push(group),
+			);
+
+			rounds.push({ name: `Round of ${remaining}`, groups });
+			remaining = qualifying;
+		}
+	}
+
+	return rounds;
+}
+
+// The rounds above in the shape BracketView reads, which is what
+// buildDivisionBracket produces once a division exists.
+//
+// Every participant is a rank placeholder, which BracketView renders natively —
+// a knockout fixture exists before the pool feeding it has finished, so a
+// preview is the same case rather than a special one.
+export function previewBracket(qualifiers) {
+	return knockoutRounds(qualifiers).map((round, index) => ({
+		name: round.name,
+		// Pool Play is round 0 of state.rounds and the knockout follows it.
+		roundIndex: index + 1,
+		matches: round.groups
+			.map((group, groupIndex) => ({ group, groupIndex }))
+			// A bye generates no fixture, and buildDivisionBracket drops the
+			// group for the same reason. The index is kept from before the drop
+			// so it still names the group it came from.
+			.filter((entry) => entry.group.length >= 2)
+			.map(({ group, groupIndex }) => ({
+				id: `${round.name}-${groupIndex}`,
+				match_no: null,
+				round: round.name,
+				status: 'UPCOMING',
+				participants: [rankPlaceholder(group[0]), rankPlaceholder(group[1])],
+				result: [],
+				winner: null,
+				// generateKnockoutFixtures names group 0 of the Finals round the
+				// third place playoff, and BracketView pulls it out of the flow
+				// by this flag. Unflagged, it would draw as a second final.
+				isPlacementMatch: round.name === FINALS && groupIndex === 0,
+			})),
+	}));
+}
+
+function rankPlaceholder(rank) {
+	const name = `Rank ${rank + 1}`;
+
+	return { id: null, name, placeholder: name };
+}

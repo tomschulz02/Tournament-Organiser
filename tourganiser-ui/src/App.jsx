@@ -5,7 +5,7 @@ import { AuthContext } from './AuthContext';
 import { useMessage } from './MessageContext';
 import { MessagePopup } from './MessageProvider';
 import { useTheme } from './ThemeContext';
-import { logoutUser, clearTournamentCache } from './requests';
+import { logoutUser } from './requests';
 import LoadingScreen from './components/LoadingScreen';
 
 export default function App() {
@@ -134,12 +134,9 @@ function MenuBar({ isOpen, onClose, loggedIn, setLoggedIn }) {
 		setLoading(true);
 		try {
 			await logoutUser();
-			// Drop every cached payload before the session version moves. Those
-			// bodies were resolved for the organiser and carry `creator: true`;
-			// the server's ETag would refuse to revalidate them for a signed-out
-			// reader, but there is no reason to keep them around to find out.
-			clearTournamentCache();
-			// Bumps the session version, which is what makes pages holding
+			// Bumps the session version — and drops the cached tournament
+			// payloads on the way, inside AuthProvider, which is where login and
+			// signup reach the same clear. It is what makes pages holding
 			// server-resolved data — the tournament view and its organiser
 			// controls — refetch without a reload.
 			setLoggedIn(false);

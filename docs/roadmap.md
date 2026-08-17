@@ -318,6 +318,9 @@ Client caching is an ETag on `GET /api/tournaments/:tournamentId`, built from th
 payload carries `creator`, a validator built from the timestamp alone would serve an
 organiser's copy to a signed-out reader on a 304. `Vary: Cookie`, `Cache-Control:
 no-cache`, and Express's own automatic ETag disabled so the only one sent is deliberate.
+The client half is `requests.js`, which holds `{ etag, payload }` per tournament in
+`sessionStorage` — a module-level `Map` at first, moved on 2026-08-17 so that it survives
+the reload it exists for. See `docs/decisions.md`.
 
 Making that work took two things beyond the plan:
 
@@ -629,6 +632,18 @@ edge rather than trusting `scrollWidth`. The schedule grid should join that list
 
 Seven items. The first four are the Standings and Schedule tabs; the rest are spread.
 
+- ~~**Officials appear wherever a schedule does**~~ — **done 2026-08-17.** `FixtureRow`
+  renders them as a conditional line and `ScheduleTab` passes them from the entry; the
+  schedule maker's grid and both exports show them too. `docs/tournament-rules.md` was
+  corrected at the same time — it had claimed officials were unimplemented.
+- ~~**Schedule fixture cards are taller**~~ — **superseded 2026-08-17** by the fixture row
+  layout rework, which replaced the aligned-column row with a three-column card and gave
+  the content its own room.
+- ~~**The score action is an icon**~~ — **done 2026-08-17.** `renderFixtureAction` renders
+  `Icon name="edit"` with an `aria-label`, plus a visible label where the row has width for
+  it. ~~The status gate is still outstanding~~ — **closed 2026-08-17**, see below.
+
+<!-- superseded, kept for the reasoning -->
 - **Officials appear wherever a schedule does.** The field is already captured — the entry
   inspector writes it and the schedule maker's *list* view renders it. Three places ignore
   it: the schedule maker's grid view, the tournament view's Schedule tab, and both print
@@ -647,36 +662,58 @@ Seven items. The first four are the Standings and Schedule tabs; the rest are sp
   would need a different derivation to stay legible — the badge's light-theme darkening
   works under white text, its dark-theme lightening does not. Left open deliberately
   rather than shipped at a contrast the rest of the application does not accept.
-- **The score action appears only once the tournament is `Ongoing`**, and is relabelled —
-  "Enter Result" rather than "Enter Score", or an icon. A score cannot be entered before a
-  tournament starts, so offering it is a lie.
-- **The creation modal's team list keeps a fixed height** and scrolls once it overflows,
-  auto-scrolling to each newly added team, instead of the window growing with every
-  addition. Desktop only; mobile already behaves. The auto-scroll must be an instant
-  `scrollLeft`/`scrollTop` assignment — smooth scrolling is silently dropped in the
-  development browser, per `docs/known-limitations.md`.
-- **The creation review shows the real bracket and groups teams by pool.** Settled
-  2026-08-16 in `docs/decisions.md`: the client computes pool composition and round shape
-  itself, pinned to the server's by a shared expectation fixture. This reverses the
-  illustrative-schematic decision.
-- **Teams can be reordered by dragging**, in both the tournament view's Teams tab and the
-  creation modal, because `state.teams` order is the seeding. Allowed only while
-  `Not Started` — see `docs/decisions.md`. **`PUT /api/divisions/:divisionId` cannot
-  express a reorder today**: its `sameSet` test routes a reordered list to `renameTeams`,
-  which never touches `state.teams`, so the request succeeds and changes nothing. Closing
-  that is part of the work.
+- ~~**The score action appears only once the tournament is `Ongoing`**~~ — **done
+  2026-08-17.** `renderFixtureAction` now takes the tournament's status as well as whether
+  the fixture's teams are bound. A `Finished` tournament keeps the action, deliberately and
+  said so in a comment: the server accepts a result whatever the status, and a score
+  entered wrongly would otherwise have no route to correction once the tournament ended —
+  which is exactly when somebody notices.
+- ~~**The creation modal's team list keeps a fixed height**~~ — **done 2026-08-17.**
+  320px with `overflow-y: auto` above 768px and released below it, where the modal is
+  already the whole screen. The scroll to a newly added team is an instant `scrollTop`
+  assignment and fires only on growth, so removing a team leaves the view where the
+  organiser left it. Measured: sixteen teams, 796px of rows in a 320px window, modal 673px
+  in a 910px viewport.
+- ~~**The creation review shows the real bracket and groups teams by pool**~~ — **done
+  2026-08-17.** `components/create/divisionPreview.js` is the port: `poolMembership`
+  mirrors `populateGroups`, `knockoutRounds` mirrors `createClassicState`'s knockout loop
+  in rank indices, and `previewBracket` shapes them the way `buildDivisionBracket` does so
+  `BracketView` is fed rather than copied. The illustrative caption is gone — the preview
+  is a claim now — and the review's flat team list went with it, because every team appears
+  inside its pool. A Round Robin division says it has no knockout instead of drawing an
+  empty bracket.
 
-### Client cache survives a refresh
+  **The pin is `shared/division-structure.json`**, the condition `docs/decisions.md`
+  attached to accepting the duplication. Six pool cases and seven qualifier counts, with
+  membership, round names, match counts and rank pairings. `api/test/unit/services/
+  divisionStructure.test.js` asserts the server produces them; `tourganiser-ui/test/
+  divisionPreview.test.js` asserts the client does. Neither imports the other's code, and
+  both were checked by breaking one side's arithmetic and confirming only that side's suite
+  went red.
+- ~~**Teams can be reordered by dragging**~~ — **done 2026-08-17**, in the creation modal
+  and the Teams tab. HTML5 drag and drop, following the schedule maker; no library. Both
+  lists carry a handle rather than a draggable row, because both rows hold controls that
+  dragging would fight with, and the handle is a real button that also moves its row on
+  ArrowUp/ArrowDown — so the order is not a pointer-only fact. The creation modal's rows
+  were keyed by array index and now carry a stable local key; without that React reuses an
+  element positionally and one team's input ends up holding another's text.
 
-The ETag and `If-None-Match` exchange works, but the cache is a module-level `Map`, so a
-reload empties it and the next request has no validator to send. Move it somewhere that
-outlives a refresh. The server already sends `Cache-Control: no-cache`, `Vary: Cookie` and
-an ETag — which is what tells the browser's own HTTP cache to keep the body and
-revalidate — so check whether the manual layer is preventing that before adding a third
-cache.
+  ~~`PUT /api/divisions/:divisionId` cannot express a reorder~~ — **closed 2026-08-17.**
+  `sameSet` now splits three ways: same order is the unchanged rename, a different order is
+  a reorder, and a different set is the unchanged rebuild. A reorder writes `state.teams`
+  through `divisionsRepository.updateTeamOrder` — a `jsonb_set` on that one key, which
+  stamps `last_update` itself — applies any name changes in the same transaction, and
+  leaves `state.rounds` alone, because pool groups hold team ids and knockout groups hold
+  rank indices. Gated on `Not Started` and nothing else: a reorder destroys nothing, so
+  there is no second condition for the status check to be wrong about.
 
-Whatever holds it must stay keyed on the viewer. The payload carries `creator`, and
-`sessionVersion` exists for this.
+### ~~Client cache survives a refresh~~ — closed 2026-08-17
+
+The `{ etag, payload }` store moved from a module-level `Map` to `sessionStorage`: keyed on
+the viewer as well as the tournament, bounded to three tournaments, and read through the
+same guards as the creation draft, so a corrupted or unavailable store costs the cache and
+not the page. `clearTournamentCache` now runs inside `AuthProvider`'s `setIsLoggedIn`,
+which is the one place logout, login and signup all reach. `docs/decisions.md` records it.
 
 ## Phase 6 — Decide what is real
 

@@ -116,16 +116,10 @@ function ReviewDivision({ division }) {
 				)}
 			</dl>
 
+			{/* Every team appears here, inside the pool it will be drawn into.
+			    A flat list beside it would be the same names twice, and the
+			    flat one would be the less useful of the two. */}
 			<FormatSchematic division={division} />
-
-			<p className="ct-review-teams-label">Teams</p>
-			<ul className="ct-review-teams">
-				{division.teams.map((team, index) => (
-					<li key={index} className="ct-review-team">
-						{team.name}
-					</li>
-				))}
-			</ul>
 		</section>
 	);
 }

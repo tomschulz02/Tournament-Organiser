@@ -1,0 +1,114 @@
+{
+	"note": "The structure the division rules produce, stated once for both tiers. api/src/services/divisions.service.js builds it on the server and tourganiser-ui/src/components/create/divisionPreview.js mirrors it in the client so the creation review can show pools and a bracket before anything is persisted. Each package asserts against this file and never against the other's code, so a change on either side turns its own suite red and names the input that broke. Plain JSON on purpose: neither package builds it. Positions are indices into the division's team list in seeded order; knockout groups hold rank placings, and a one-team group is a bye that generates no match. See docs/decisions.md, 'The Creation Review Computes Pools And Rounds In The Client'.",
+
+	"pools": [
+		{
+			"label": "eight teams across two pools, dividing evenly",
+			"teams": 8,
+			"pools": 2,
+			"membership": [[0, 3, 4, 7], [1, 2, 5, 6]]
+		},
+		{
+			"label": "nine teams across four pools, which does not divide evenly",
+			"teams": 9,
+			"pools": 4,
+			"membership": [[0, 7, 8], [1, 6], [2, 5], [3, 4]]
+		},
+		{
+			"label": "five teams across two pools, leaving the later pool short",
+			"teams": 5,
+			"pools": 2,
+			"membership": [[0, 3, 4], [1, 2]]
+		},
+		{
+			"label": "sixteen teams across four pools",
+			"teams": 16,
+			"pools": 4,
+			"membership": [[0, 7, 8, 15], [1, 6, 9, 14], [2, 5, 10, 13], [3, 4, 11, 12]]
+		},
+		{
+			"label": "as many pools as teams, one each",
+			"teams": 4,
+			"pools": 4,
+			"membership": [[0], [1], [2], [3]]
+		},
+		{
+			"label": "one pool holding everyone",
+			"teams": 6,
+			"pools": 1,
+			"membership": [[0, 1, 2, 3, 4, 5]]
+		}
+	],
+
+	"knockouts": [
+		{
+			"label": "two qualifiers, a final and the playoff in front of it",
+			"qualifiers": 2,
+			"rounds": [
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		},
+		{
+			"label": "three qualifiers, one preliminary match feeding an uneven final",
+			"qualifiers": 3,
+			"rounds": [
+				{ "name": "Round of 3", "matches": 1, "groups": [[0], [1, 2]] },
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		},
+		{
+			"label": "four qualifiers, a power of two",
+			"qualifiers": 4,
+			"rounds": [
+				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		},
+		{
+			"label": "six qualifiers, two going straight through on a bye",
+			"qualifiers": 6,
+			"rounds": [
+				{ "name": "Round of 6", "matches": 2, "groups": [[0], [1], [2, 5], [3, 4]] },
+				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		},
+		{
+			"label": "eight qualifiers",
+			"qualifiers": 8,
+			"rounds": [
+				{ "name": "Quarterfinals", "matches": 4, "groups": [[0, 7], [1, 6], [2, 5], [3, 4]] },
+				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		},
+		{
+			"label": "twelve qualifiers, four going straight through on a bye",
+			"qualifiers": 12,
+			"rounds": [
+				{
+					"name": "Round of 12",
+					"matches": 4,
+					"groups": [[0], [1], [2], [3], [4, 11], [5, 10], [6, 9], [7, 8]]
+				},
+				{ "name": "Quarterfinals", "matches": 4, "groups": [[0, 7], [1, 6], [2, 5], [3, 4]] },
+				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		},
+		{
+			"label": "sixteen qualifiers, named by size rather than conventionally",
+			"qualifiers": 16,
+			"rounds": [
+				{
+					"name": "Round of 16",
+					"matches": 8,
+					"groups": [[0, 15], [1, 14], [2, 13], [3, 12], [4, 11], [5, 10], [6, 9], [7, 8]]
+				},
+				{ "name": "Quarterfinals", "matches": 4, "groups": [[0, 7], [1, 6], [2, 5], [3, 4]] },
+				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
+				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+			]
+		}
+	]
+}

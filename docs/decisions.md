@@ -454,3 +454,49 @@ straight to `showMessage`. There is no machine-readable error code in the envelo
 HTTP status carries that, and the client's `request` helper preserves it on the thrown
 `ApiError` rather than discarding it as `fetchWithRetry` did. If two conditions ever need
 distinguishing within one status, a code goes inside `data` at that point.
+
+## The Tournament Payload Is Cached In `sessionStorage`, By The Application
+
+`GET /api/tournaments/:tournamentId` is the one cached response. `requests.js` stores
+`{ etag, payload }` per tournament, sends the stored validator as `If-None-Match`, and
+serves the stored body when the server answers 304. Three tournaments are kept, most
+recent first, and the viewer is part of the storage key.
+
+**`sessionStorage`, not `localStorage`.** The original decision rejected `localStorage`
+because *a stale organiser payload surviving a browser restart is worse than no cache at
+all*. That objection is about persistence across restarts, not persistence as such.
+`sessionStorage` is scoped to the tab and cleared when it closes, so it survives the reload
+the cache exists for and nothing beyond it. It meets the objection rather than overriding
+it. A module-level `Map` came first and was emptied by every reload — page state cannot
+cache across a page load. Moved 2026-08-17.
+
+**The application holds the cache, not the browser.** `Cache-Control: no-cache` would let
+the browser's own HTTP cache do much the same job invisibly. It is not left to, for one
+reason: the browser's cache cannot be cleared from JavaScript, and a payload carrying
+`creator` has to be droppable on logout. Sending `If-None-Match` from the application also
+takes the browser's cache out of the exchange — per the Fetch standard a request carrying a
+conditional header is not served from it — so the two cannot disagree about which copy is
+current.
+
+Reason:
+The payload carries `creator`, so the question a cache of it has to answer is not "is this
+current" but "whose is this". Three things answer it, in order: the server's ETag covers
+the viewer, so a stale entry can never be revalidated for anyone else; the viewer is in the
+storage key, so two viewers cannot collide even in principle; and `clearTournamentCache`
+runs wherever `sessionVersion` moves — logout, login and signup all pass through
+`setIsLoggedIn` in `AuthProvider`, which is why the clear lives there rather than at the
+three call sites. The first is the line that holds. The others exist so that being wrong
+about the first is not sufficient.
+
+Storage safety follows `utils/createDraft.js` exactly, and for the same reason: this is
+read on the tournament view's first request, so anything that throws there makes the page
+unopenable for that browser. `getItem` and `JSON.parse` inside one `try`, a version check
+before anything is trusted, guarded writes, a malformed or wrong-version value discarded
+without a word, and a quota error discarding rather than throwing. A cache miss is never an
+error; a browser with storage disabled loses the cache, not the page.
+
+Known cost: the page still awaits the response before it renders, because
+`fetchTournamentData` returns the stored body only once the 304 has come back. What this
+buys is the payload, not the round trip. Rendering from storage before the network resolves
+would mean `View.jsx` showing a copy it has not had confirmed — a different decision, and
+one that puts `creator` on screen on the strength of the cache alone.

@@ -14,8 +14,10 @@ const STAGE_KNOCKOUT = 'knockout';
 // second, competing definition of the ranking in the codebase, which
 // docs/tournament-rules.md exists to prevent.
 //
-// There is no points column. Tourganiser ranks by matches won; no points system
-// exists to have a column for.
+// There is no league-points column. Tourganiser ranks by matches won; no points
+// system exists to have a column for. Points for and against are a different
+// thing — points scored in play, which is what the point-ratio tiebreak is built
+// from — and those do have columns.
 export default function StandingsTab({
 	divisions = [],
 	selectedDivisionId,
@@ -50,6 +52,11 @@ export default function StandingsTab({
 	);
 	const bracketRounds = division.bracket?.rounds ?? [];
 
+	// One column set for the whole division rather than one per group, so two
+	// tables sitting above each other have the same columns in the same order
+	// even when one group's fixtures happened never to produce a 2-1.
+	const outcomeColumns = deriveOutcomeColumns(rounds);
+
 	// Derived from the division, never a hard-coded pair: a league has no
 	// knockout, and a straight knockout has no tables.
 	const stages = [];
@@ -68,8 +75,9 @@ export default function StandingsTab({
 			<div className="tv-standings-toolbar">
 				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={onSelectDivision} />
 
-				{/* Off by default. Set and point ratio are the tiebreakers rather than
-				    the story, and seven columns already fill a phone. */}
+				{/* Off by default. The ratios and the set-score breakdown are the
+				    tiebreakers rather than the story, and nine columns already fill a
+				    phone without them. */}
 				{activeStage === STAGE_GROUPS && (
 					<label className="tv-advanced-toggle">
 						<input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
@@ -138,6 +146,7 @@ export default function StandingsTab({
 										key={group.groupIndex}
 										group={group}
 										advanced={advanced}
+										outcomeColumns={outcomeColumns}
 										showName={round.groups.length > 1}
 									/>
 								))}
@@ -177,9 +186,36 @@ function canProgress(division) {
 	return roundFixtures.every((fixture) => fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED');
 }
 
+// The set-score columns the advanced view shows, taken from the scorelines the
+// division's fixtures actually produced.
+//
+// Not hard-coded and not assumed to be best-of-three: a round carries no
+// match-format key — see docs/division-state.md — so the data is the only thing
+// that knows. A best-of-five division yields six columns and a division with no
+// completed fixtures yields none, both for the same reason.
+function deriveOutcomeColumns(rounds) {
+	const keys = new Set();
+
+	rounds.forEach((round) =>
+		(round.groups ?? []).forEach((group) =>
+			(group.standings ?? []).forEach((row) =>
+				Object.keys(row.setOutcomes ?? {}).forEach((key) => keys.add(key)),
+			),
+		),
+	);
+
+	// Best result first: most sets won, then fewest conceded. 2-0, 2-1, 1-2, 0-2.
+	return [...keys].sort((a, b) => {
+		const [aWon, aLost] = a.split('-').map(Number);
+		const [bWon, bLost] = b.split('-').map(Number);
+
+		return bWon - aWon || aLost - bLost;
+	});
+}
+
 // One table per group. A league is a round with a single group, which is why
 // there is no separate league presentation — it is the same table.
-function StandingsGroup({ group, advanced, showName }) {
+function StandingsGroup({ group, advanced, outcomeColumns, showName }) {
 	return (
 		<div className="tv-standings-group">
 			{showName && <h4 className="tv-standings-group-name">{group.name}</h4>}
@@ -212,10 +248,25 @@ function StandingsGroup({ group, advanced, showName }) {
 							<th scope="col">
 								<abbr title="Sets lost">SL</abbr>
 							</th>
+							<th scope="col">
+								<abbr title="Points for">PF</abbr>
+							</th>
+							<th scope="col">
+								<abbr title="Points against">PA</abbr>
+							</th>
 							{advanced && (
 								<>
-									<th scope="col">Set ratio</th>
-									<th scope="col">Point ratio</th>
+									<th scope="col" className="tv-col-ratio">
+										<abbr title="Set ratio">SR</abbr>
+									</th>
+									<th scope="col" className="tv-col-ratio">
+										<abbr title="Point ratio">PR</abbr>
+									</th>
+									{outcomeColumns.map((key) => (
+										<th key={key} scope="col" className="tv-col-outcome">
+											<abbr title={`Matches finishing ${key}`}>{key}</abbr>
+										</th>
+									))}
 								</>
 							)}
 						</tr>
@@ -234,10 +285,20 @@ function StandingsGroup({ group, advanced, showName }) {
 								<td>{row.lost}</td>
 								<td>{row.setsWon}</td>
 								<td>{row.setsLost}</td>
+								<td>{row.pointsFor}</td>
+								<td>{row.pointsAgainst}</td>
 								{advanced && (
 									<>
-										<td>{formatRatio(row.setsRatio)}</td>
-										<td>{formatRatio(row.pointsRatio)}</td>
+										<td className="tv-col-ratio">{formatRatio(row.setsRatio)}</td>
+										<td className="tv-col-ratio">{formatRatio(row.pointsRatio)}</td>
+										{/* A scoreline this team never produced is a zero, not a
+										    blank — the column exists because some other team in
+										    the division reached it. */}
+										{outcomeColumns.map((key) => (
+											<td key={key} className="tv-col-outcome">
+												{row.setOutcomes?.[key] ?? 0}
+											</td>
+										))}
 									</>
 								)}
 							</tr>

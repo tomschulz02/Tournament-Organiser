@@ -21,6 +21,16 @@ export function createStandingsRow(team, fallbackId) {
         setsLost: 0,
         pointsFor: 0,
         pointsAgainst: 0,
+        // How this team's completed matches finished, keyed by the scoreline from
+        // its own perspective — "2-0", "2-1", "1-2", "0-2". A counter for the
+        // standings table and nothing else: it is deliberately absent from
+        // compareTeams, because the ranking chain in docs/tournament-rules.md is
+        // the five criteria there and no sixth.
+        //
+        // The keys are whatever the fixtures produced, so a best-of-five division
+        // yields six of them. Rounds carry no match-format key to assume one from
+        // — see docs/division-state.md.
+        setOutcomes: {},
         setsRatio: 0,
         pointsRatio: 0
     };
@@ -59,6 +69,18 @@ export function applyFixtureToStandings(teamOne, teamTwo, result) {
         teamTwo.won += 1;
         teamOne.lost += 1;
     }
+
+    // Level set counts are already excluded from won and lost above. They get no
+    // scoreline key either, rather than a key invented to hold them.
+    if (teamOneSetsWon !== teamTwoSetsWon) {
+        recordSetOutcome(teamOne, teamOneSetsWon, teamTwoSetsWon);
+        recordSetOutcome(teamTwo, teamTwoSetsWon, teamOneSetsWon);
+    }
+}
+
+function recordSetOutcome(row, setsWon, setsLost) {
+    const key = `${setsWon}-${setsLost}`;
+    row.setOutcomes[key] = (row.setOutcomes[key] || 0) + 1;
 }
 
 // A team that has won sets but lost none has no defined ratio.

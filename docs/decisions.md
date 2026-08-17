@@ -294,6 +294,64 @@ The old paths were inconsistent enough that each new endpoint needed a judgement
 Settling the convention before Phase 3 builds these avoids renaming across both tiers
 afterwards.
 
+## The Creation Review Computes Pools And Rounds In The Client
+
+Decided 2026-08-16. **Reverses the illustrative-schematic decision** taken with the
+tournament creation redesign, which held that the review would show a suggestive shape
+rather than the real structure.
+
+The review now shows the actual knockout bracket and lists teams grouped by the pool they
+will be drawn into. Neither can be faked: pool membership comes from `populateGroups`'
+serpentine seeding, and the bracket's round shape from `createClassicState`'s arithmetic.
+Both are server code, and nothing is persisted at review time, so the client computes them
+itself.
+
+**This deliberately duplicates logic `docs/tournament-rules.md` says must not be
+duplicated.** Three options were weighed: a preview endpoint running the real generation
+and persisting nothing; porting the arithmetic to the client; or keeping the schematic and
+dropping pool grouping. The port was chosen.
+
+What is ported is narrow — pool composition and round shape only. `generateFixtures` stays
+on the server; the review never shows individual fixtures.
+
+**The duplication is pinned by a shared expectation fixture.** One file in the repository
+lists, for a spread of team, group and qualifier counts, the pool sizes and round names the
+rules produce. The API suite asserts the server matches it; the UI suite asserts the client
+port matches it. Both import the same file, so neither side can move without its own tests
+failing and naming the input that broke.
+
+Reason:
+The organiser is committing to a structure they cannot change afterwards without a
+rebuild, so the review is the last moment the pools can be checked — and a preview that
+cannot show which teams meet in the pool stage does not answer the question being asked of
+it. The endpoint was declined; the fixture is what makes the alternative safe.
+
+Given up: a single source of truth for seeding. If the ranking or grouping rules change,
+two places must change together, and the fixture is the only thing that will say so.
+
+## Seeding May Only Be Reordered Before A Tournament Starts
+
+Decided 2026-08-16.
+
+`state.teams` order is the seeding, and seeding is the final tiebreak in the ranking chain
+— see `docs/tournament-rules.md`. Reordering it after matches have been played would
+retroactively change who separated from whom, and therefore who qualified, with nothing on
+screen to explain why a standings table had reordered itself.
+
+Reordering is therefore allowed only while `tournaments.status` is `Not Started`, the same
+gate team editing already uses. One rule covers both, and there is nothing new to explain.
+
+Note this is stricter than it strictly needs to be: pools hold team ids and knockout groups
+hold rank indices, so a reorder disturbs neither, and a correction made after starting but
+before any result would be harmless. Consistency with the existing gate was preferred over
+that extra permissiveness.
+
+**Consequence: `PUT /api/divisions/:divisionId` cannot currently express a reorder.** Its
+`sameSet` test — every entry carrying a known id, and the count matching — is satisfied by
+a reordered list, so it routes to `renameTeams`, which writes only changed names and never
+touches `state.teams`. A reorder submitted today does nothing at all. Closing that is part
+of the work.
+
 ## Ownership Is Checked In The Service, Not In Middleware
 
 Decided 2026-08-08.

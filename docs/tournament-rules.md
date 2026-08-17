@@ -33,6 +33,11 @@ Scheduling determines:
 - time
 - officials (optional)
 
+Officials are a free-text field on a schedule entry. They are captured in the schedule
+maker's entry inspector and stored with the entry — see `docs/schedule.md`. Nothing
+validates them, nothing assigns them automatically, and they are not a modelled entity;
+they are a note attached to a match.
+
 Scheduling must remain independent from fixture generation.
 
 Knockout stages are independent from pool stages.
@@ -97,6 +102,15 @@ ignored entirely — a cancelled match never happened and moves nobody's played 
 - pointsFor, pointsAgainst
 - setRatio = setsWon / setsLost
 - pointRatio = pointsFor / pointsAgainst
+- setOutcomes — how the team's completed matches finished, keyed by the scoreline from
+  its own perspective (`"2-0"`, `"2-1"`, `"1-2"`, `"0-2"`) with a count against each
+
+`setOutcomes` is a counter and nothing more. It is **not** a ranking criterion and must
+never enter the chain below. Its keys are whatever the fixtures produced — a division of
+best-of-five matches yields six of them — because rounds carry no match-format key to
+assume one from; see `docs/division-state.md`. A match whose set counts are level is
+excluded from won and lost, and is excluded here too rather than given a key of its own,
+so a team's counts sum to its played total minus any level matches.
 
 ### Ranking order
 

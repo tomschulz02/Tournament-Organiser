@@ -76,6 +76,7 @@ export function makeStandingsRow(overrides = {}) {
         setsLost: 0,
         pointsFor: 0,
         pointsAgainst: 0,
+        setOutcomes: {},
         setsRatio: 0,
         pointsRatio: 0,
         ...overrides

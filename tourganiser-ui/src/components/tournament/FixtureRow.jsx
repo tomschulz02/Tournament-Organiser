@@ -44,7 +44,7 @@ export default function FixtureRow({ fixture, showDivision = false, court = null
 
 			<span className="tv-fixture-row-meta">
 				{court && <span className="tv-court-chip">{court}</span>}
-				{showDivision && <DivisionBadge name={fixture.division_name} />}
+				{showDivision && <DivisionBadge id={fixture.division_id} name={fixture.division_name} />}
 				{fixture.round && <span className="tv-round-label">{fixture.round}</span>}
 			</span>
 

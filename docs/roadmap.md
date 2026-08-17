@@ -496,22 +496,38 @@ the slot's instant, it has to come back.
 
 ### Standings
 
-- **Points for and against move into the default table.** Already tracked as `pointsFor`
-  and `pointsAgainst`; this is a display change.
-- **Set-score outcome columns in the advanced view** — how many times a team won 2-0, 2-1,
-  and so on. This is new data: `standings.js` does not bucket results by scoreline.
-  **Derived per division**, decided 2026-08-11 — the columns come from the set counts
-  actually played rather than from an assumed match format, because rounds still have no
+**Complete 2026-08-17.**
+
+- **Points for and against are in the default table.** They were already tracked as
+  `pointsFor` and `pointsAgainst`; this was a display change with no server work.
+- **Set-score outcome columns are in the advanced view** — how many times a team won 2-0,
+  2-1, and so on. `standings.js` now records a `setOutcomes` map per row, keyed by the
+  scoreline from that team's perspective. It is a counter, not a tiebreak: the ranking
+  chain is unchanged and `docs/tournament-rules.md` says so explicitly. **Derived per
+  division**, decided 2026-08-11 — the columns are the union of the scorelines the
+  division's fixtures actually produced, ordered best to worst, so a best-of-five division
+  shows six and a division with nothing completed shows none. Rounds still have no
   match-format key. See `docs/division-state.md`.
-- **The mobile table's sticky columns leak.** The first statistic sits behind the team
-  name, and while scrolling horizontally the hidden statistics reappear in the gap between
-  the two locked columns.
+- **The mobile table's sticky columns no longer leak.** Two independent faults, and either
+  one alone left the table wrong. The offset was a guess: `.tv-col-rank` declared 44px and
+  `.tv-col-team` stuck at a hard-coded `left: 44px`, but under the default
+  `table-layout: auto` a declared cell width is only a suggestion, so a rank column that
+  rendered wider put the team column over it and one that rendered narrower opened a gap
+  for the scrolling cells. The table is now `table-layout: fixed`, every column declares a
+  width, and one custom property drives both the rank width and the team offset. Second,
+  the sticky cells had no `z-index`, so paint order fell back to DOM order and every
+  numeric cell — all of which come after the team cell in the row — painted over them.
+  They now carry a small local stacking value, deliberately not one of the `--z-*` page
+  layers.
 
 ### The knockout bracket is cramped
 
-Nodes sit close enough to clip each other. Spacing only — the connector geometry is
-correct and is what keeps a fed match aligned on the midpoint of its two feeders, so it
-must survive any change to the spacing.
+**Complete 2026-08-17.** `.tv-bracket-slot` went from 84px to 120px (106px below 768px)
+and the match card gained internal padding. The room comes from the slot, never from a
+`gap` on `.tv-bracket-round-body`: the connector geometry depends on every slot's centre
+sitting at its proportional share of the column height, and a uniform gap takes a
+different share in a round of eight than in a round of four, so the lines would go on
+drawing while quietly ceasing to meet the matches they point at.
 
 ### Mobile, application-wide
 
@@ -608,6 +624,47 @@ screens with three sanctioned scrollers, and `docs/architecture.md` records both
 pattern and the audit method — a container with `overflow-x: hidden` turns overflow into
 silently clipped content rather than a scrolling page, so check each descendant's right
 edge rather than trusting `scrollWidth`. The schedule grid should join that list.
+
+### UI polish, raised 2026-08-16
+
+Seven items. The first four are the Standings and Schedule tabs; the rest are spread.
+
+- **Officials appear wherever a schedule does.** The field is already captured — the entry
+  inspector writes it and the schedule maker's *list* view renders it. Three places ignore
+  it: the schedule maker's grid view, the tournament view's Schedule tab, and both print
+  exports. `docs/tournament-rules.md` claimed officials were unimplemented; corrected
+  2026-08-16.
+- **Schedule fixture cards are taller**, so the added information does not crowd.
+- ~~**Divisions carry a colour**~~ — **done 2026-08-17.** `DivisionBadge` hashes the
+  division id into the four existing accent tokens and sets `--tv-division-color` inline,
+  so adding or removing a division does not recolour the rest and a fifth division wraps
+  rather than introducing a colour that belongs to nothing else on screen. The badge still
+  carries the name; colour is not the only distinguisher. The accents are fills on the
+  marketing surfaces, not 0.75rem text on a card — `--tertiary-color` reads at about 1.7:1
+  on white — so each theme pushes the accent away from its own background, keeping the hue
+  and recovering the contrast. **Still only the badge:** the division pill in
+  `DivisionSelector` fills with `--main-color` under white text, and the same hue there
+  would need a different derivation to stay legible — the badge's light-theme darkening
+  works under white text, its dark-theme lightening does not. Left open deliberately
+  rather than shipped at a contrast the rest of the application does not accept.
+- **The score action appears only once the tournament is `Ongoing`**, and is relabelled —
+  "Enter Result" rather than "Enter Score", or an icon. A score cannot be entered before a
+  tournament starts, so offering it is a lie.
+- **The creation modal's team list keeps a fixed height** and scrolls once it overflows,
+  auto-scrolling to each newly added team, instead of the window growing with every
+  addition. Desktop only; mobile already behaves. The auto-scroll must be an instant
+  `scrollLeft`/`scrollTop` assignment — smooth scrolling is silently dropped in the
+  development browser, per `docs/known-limitations.md`.
+- **The creation review shows the real bracket and groups teams by pool.** Settled
+  2026-08-16 in `docs/decisions.md`: the client computes pool composition and round shape
+  itself, pinned to the server's by a shared expectation fixture. This reverses the
+  illustrative-schematic decision.
+- **Teams can be reordered by dragging**, in both the tournament view's Teams tab and the
+  creation modal, because `state.teams` order is the seeding. Allowed only while
+  `Not Started` — see `docs/decisions.md`. **`PUT /api/divisions/:divisionId` cannot
+  express a reorder today**: its `sameSet` test routes a reordered list to `renameTeams`,
+  which never touches `state.teams`, so the request succeeds and changes nothing. Closing
+  that is part of the work.
 
 ### Client cache survives a refresh
 

@@ -321,15 +321,34 @@ body.dark {
 
 /* --- division badge ----------------------------------------------------- */
 
+/* One accent token per division, set inline by DivisionBadge from a hash of the
+   division id. The declaration here is the fallback for a badge rendered without
+   an id, and it is the colour every badge had before. */
 .tv-division-badge {
+	--tv-division-color: var(--main-color);
 	display: inline-block;
 	padding: 2px var(--space-2);
 	border-radius: 999px;
-	background: rgb(from var(--main-color) r g b / 0.12);
-	color: var(--main-color);
+	background: rgb(from var(--tv-division-color) r g b / 0.14);
 	font-size: 0.75rem;
 	font-weight: 600;
 	white-space: nowrap;
+}
+
+/* The accents are chosen to work as fills on the marketing surfaces, not as
+   0.75rem text on a near-white or near-black card: --tertiary-color reads at
+   about 1.7:1 on white and --main-color at about 3.2:1 on the dark surface.
+   Rather than invent four more colours, each theme pushes the accent away from
+   its own background — which keeps the hue, and so keeps the division
+   identifiable, while getting the contrast back. */
+body.light .tv-division-badge {
+	color: rgb(from var(--tv-division-color) calc(r * 0.55) calc(g * 0.55) calc(b * 0.55));
+}
+
+body.dark .tv-division-badge {
+	color: rgb(
+		from var(--tv-division-color) calc(r + (255 - r) * 0.35) calc(g + (255 - g) * 0.35) calc(b + (255 - b) * 0.35)
+	);
 }
 
 /* --- team identity ------------------------------------------------------ */
@@ -1003,20 +1022,45 @@ body.dark {
 }
 
 .tv-standings-table {
+	/* The rank column's width and the team column's sticky offset, from one
+	   number so they cannot disagree. They were two — 44px declared on one and
+	   44px hard-coded on the other — and under the default table-layout: auto a
+	   declared cell width is only a suggestion, so the two were never the same
+	   measurement. A rank column that rendered wider put the team column on top
+	   of it; one that rendered narrower opened a gap for the scrolling numeric
+	   cells to show through. */
+	--tv-rank-width: 44px;
 	width: 100%;
 	border-collapse: collapse;
 	font-size: 0.88rem;
-	/* Columns keep a readable width and the container scrolls, rather than every
-	   column shrinking until none of them can be read. */
-	min-width: 440px;
+	/* Honours the declared widths instead of sizing each column to its content,
+	   which is what makes the offset above correct by construction. It also means
+	   every column has to declare a width: fixed layout gives an undeclared
+	   column an equal share of what is left rather than fitting it to what it
+	   holds. Where the widths add up to more than the container, the table grows
+	   and .tv-table-scroll scrolls — which is what it is for. */
+	table-layout: fixed;
 }
 
 .tv-standings-table th,
 .tv-standings-table td {
+	/* The numeric default. Overridden below for the two sticky columns and for
+	   the wider advanced ones. */
+	width: 50px;
 	padding: var(--space-2) var(--space-3);
 	text-align: right;
 	white-space: nowrap;
 	color: var(--secondary-text-color);
+}
+
+/* Three decimal places, or MAX where the ratio is undefined. */
+.tv-standings-table .tv-col-ratio {
+	width: 62px;
+}
+
+/* A scoreline heading — "2-0" — over a small count. */
+.tv-standings-table .tv-col-outcome {
+	width: 50px;
 }
 
 .tv-standings-table thead th {
@@ -1039,7 +1083,7 @@ body.dark {
 }
 
 .tv-standings-table .tv-col-rank {
-	width: 44px;
+	width: var(--tv-rank-width);
 	text-align: center;
 	color: var(--tv-muted);
 }
@@ -1048,9 +1092,13 @@ body.dark {
 	text-align: left;
 	font-weight: 600;
 	/* The only column allowed to wrap. A long team name should cost height, not
-	   push the numeric columns off the end. */
+	   push the numeric columns off the end. Under table-layout: fixed the column
+	   no longer grows to fit, so a single forty-character word needs a break
+	   opportunity of its own or it overflows the cell and paints across the
+	   statistics this column exists to stay clear of. */
 	white-space: normal;
-	min-width: 140px;
+	overflow-wrap: anywhere;
+	width: 160px;
 }
 
 /* Rank and team stay put while the numeric columns scroll under them, so a row
@@ -1059,6 +1107,12 @@ body.dark {
 .tv-standings-table .tv-col-team {
 	position: sticky;
 	background: var(--tv-surface);
+	/* Every numeric cell comes after the team cell in the row, so without this,
+	   paint order falls back to DOM order and a scrolled numeric cell paints over
+	   the columns that are supposed to be covering it. Deliberately not one of
+	   the --z-* layer tokens: this orders two cells inside one table, not two
+	   things on the page. */
+	z-index: 1;
 }
 
 .tv-standings-table .tv-col-rank {
@@ -1066,7 +1120,7 @@ body.dark {
 }
 
 .tv-standings-table .tv-col-team {
-	left: 44px;
+	left: var(--tv-rank-width);
 	/* Covers the numeric cell sliding beneath it. */
 	box-shadow: 1px 0 0 var(--tv-border);
 }
@@ -1175,11 +1229,19 @@ body.dark {
 	position: relative;
 }
 
+/* The card is centred in the slot and sized by its content, so the separation
+   between two adjacent cards is whatever the slot has over the card — 84px left
+   almost nothing, and a card carrying two full team names and a status filled
+   it. The room comes from the slot rather than from a gap on
+   .tv-bracket-round-body: a gap would take a different share of the column in a
+   round of eight than in a round of four, the slots' centres would stop sitting
+   at their proportional positions, and every connector would quietly stop
+   meeting the match it points at. */
 .tv-bracket-slot {
 	display: flex;
 	align-items: center;
 	position: relative;
-	min-height: 84px;
+	min-height: 120px;
 }
 
 .tv-bracket-pair > .tv-bracket-slot {
@@ -1237,7 +1299,7 @@ body.dark {
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--space-2);
-	padding: var(--space-1) var(--space-2);
+	padding: var(--space-2) var(--space-3);
 	background: var(--tv-surface-alt);
 	font-size: 0.72rem;
 	color: var(--tv-muted);
@@ -1250,7 +1312,7 @@ body.dark {
 }
 
 .tv-bracket-participant {
-	padding: var(--space-2) var(--space-2);
+	padding: var(--space-2) var(--space-3);
 	font-size: 0.85rem;
 	color: var(--secondary-text-color);
 	overflow-wrap: anywhere;
@@ -1676,9 +1738,11 @@ body.dark {
 	}
 
 	/* Rank, Team, Played, Won and Lost are what a phone should show without
-	   moving; the sets columns are reached by scrolling the table itself. */
+	   moving; the sets and points columns are reached by scrolling the table
+	   itself. A width rather than a min-width, because table-layout: fixed
+	   ignores min-width when it sizes a column. */
 	.tv-standings-table .tv-col-team {
-		min-width: 110px;
+		width: 118px;
 	}
 
 	/* Touch targets. Measured at 320px, these controls came in between 29px and
@@ -1728,7 +1792,9 @@ body.dark {
 		width: 168px;
 	}
 
+	/* Below the desktop floor because the column is narrower here, but still well
+	   clear of the card, for the reason on .tv-bracket-slot. */
 	.tv-bracket-slot {
-		min-height: 76px;
+		min-height: 106px;
 	}
 }

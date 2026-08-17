@@ -285,7 +285,7 @@ function FixturePreview({ fixture }) {
 		<li className="tv-fixture-preview">
 			<div className="tv-fixture-preview-meta">
 				{fixture.match_no != null && <span className="tv-match-no">#{fixture.match_no}</span>}
-				<DivisionBadge name={fixture.division_name} />
+				<DivisionBadge id={fixture.division_id} name={fixture.division_name} />
 			</div>
 
 			<div className="tv-fixture-preview-teams">

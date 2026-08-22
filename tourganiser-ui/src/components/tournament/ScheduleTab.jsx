@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import SectionState from './SectionState';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
+import FixtureGroup from './FixtureGroup';
 import {
 	EMPTY_FILTERS,
 	distinct,
@@ -117,12 +118,10 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 			)}
 
 			{sections.map((day) => (
-				<section key={day.date} className="tv-schedule-day">
-					<h2 className="tv-schedule-day-heading">
-						<span>{day.label}</span>
-						<span className="tv-schedule-day-date">{formatDateLabel(day.date)}</span>
-					</h2>
-
+				<FixtureGroup
+					key={day.date}
+					title={day.label}
+					meta={formatDateLabel(day.date)}>
 					{day.groups.map((group) => (
 						<div key={group.startTime} className="tv-time-group">
 							<div className="tv-time-group-time">
@@ -147,16 +146,11 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 							</ul>
 						</div>
 					))}
-				</section>
+				</FixtureGroup>
 			))}
 
 			{unscheduled.length > 0 && (
-				<section className="tv-schedule-day">
-					<h2 className="tv-schedule-day-heading">
-						<span>Not yet scheduled</span>
-						<span className="tv-schedule-day-date">{unscheduled.length} fixtures</span>
-					</h2>
-
+				<FixtureGroup title="Not yet scheduled" meta={`${unscheduled.length} fixtures`}>
 					<ul className="tv-fixture-rows">
 						{unscheduled.map((fixture) => (
 							<FixtureRow
@@ -167,7 +161,7 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 							/>
 						))}
 					</ul>
-				</section>
+				</FixtureGroup>
 			)}
 		</div>
 	);

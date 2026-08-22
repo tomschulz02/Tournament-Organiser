@@ -688,6 +688,11 @@ body.dark .tv-division-badge {
 }
 
 .tv-fixture-preview-teams > span:not(.tv-versus) {
+	/* Equal, capped share of the row so a long team1 can't crowd team2 below
+	   its own ellipsis width — flex: 0 1 auto shrinks each span by its own
+	   content length instead. */
+	flex: 1 1 0;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -967,6 +972,49 @@ body.dark .tv-division-badge {
 }
 
 .tv-schedule-day-date {
+	font-size: 0.8rem;
+	font-weight: 400;
+	color: var(--tv-muted);
+}
+
+/* --- collapsible fixture group ------------------------------------------ */
+
+.tv-fixture-group + .tv-fixture-group {
+	margin-top: var(--space-5);
+}
+
+/* Modelled on .tv-schedule-day-heading's layout, minus the border-bottom: as
+   a clickable show/hide control it carries no surrounding border. */
+.tv-fixture-group-heading {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	width: 100%;
+	margin: 0 0 var(--space-3);
+	padding: 0;
+	background: none;
+	border: none;
+	font: inherit;
+	font-size: 1rem;
+	text-align: left;
+	color: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+.tv-fixture-group-chevron {
+	flex: none;
+	align-self: center;
+	fill: currentColor;
+	transform: rotate(-90deg);
+	transition: transform 0.15s ease;
+}
+
+.tv-fixture-group-heading.expanded .tv-fixture-group-chevron {
+	transform: rotate(0deg);
+}
+
+.tv-fixture-group-meta {
 	font-size: 0.8rem;
 	font-weight: 400;
 	color: var(--tv-muted);

@@ -476,13 +476,17 @@ function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualify
         division.type = "League";
         division.state = createLeagueState(teams, num_teams);
     } else if (format === 'single_elim'){
+        // The ignore spans the throw as well as the two note lines below it:
+        // newer v8 reports the never-taken fall-through after a throw as an
+        // uncovered branch, the same reporting artifact the finally-block
+        // markers in vitest.config.js suppress. The throw itself is exercised.
+        /* v8 ignore next 3 -- unreachable fall-through + notes of the intended shape */
         throw new AppError("FORMAT_NOT_IMPLEMENTED");
-        /* v8 ignore next 2 -- unreachable: kept as a note of the intended shape */
         division.type = "Single Elimination";
         numGroups = Math.ceil(num_teams/2);
     } else if (format === 'double_elim'){
+        /* v8 ignore next 2 -- unreachable fall-through + note of the intended shape */
         throw new AppError("FORMAT_NOT_IMPLEMENTED");
-        /* v8 ignore next -- unreachable: kept as a note of the intended shape */
         division.type = "Double Elimination";
     } else {
         throw new AppError("UNSUPPORTED_FORMAT");

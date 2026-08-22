@@ -1608,11 +1608,34 @@ Score Update Modal styles
 .cancel-btn,
 .save-btn,
 .end-match-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
 	padding: var(--space-2) var(--space-4);
 	border: none;
 	border-radius: 4px;
 	cursor: pointer;
 	font-weight: 500;
+}
+
+.save-btn:disabled,
+.end-match-btn:disabled {
+	cursor: default;
+	opacity: 0.8;
+}
+
+/* Scoped to these two buttons rather than reusing the dead .loading-spinner:
+   currentColor tracks each button's own text colour under either theme, so we
+   don't have to assume a light-on-colour foreground the way border: white did. */
+.save-btn .btn-spinner,
+.end-match-btn .btn-spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
 }
 
 .cancel-btn {

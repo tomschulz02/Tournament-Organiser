@@ -6,6 +6,7 @@ import { isNotStarted } from './tournamentStatus';
 import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
 import { updateDivisionTeams } from '../../requests';
+import { TEAM_NAME_MAX } from '../create/divisionFormats';
 
 // The teams in one division, in seed order.
 //
@@ -545,7 +546,7 @@ function StructureConfirmation({ divisionName, teamCount, knockout, structure, b
 
 // Used for both adding and renaming. Enter submits, Escape cancels — a one-field
 // form where the only alternative is reaching for the mouse.
-function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onCancel }) {
+function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onCancel, maxLength = TEAM_NAME_MAX }) {
 	return (
 		<div className="tv-inline-form">
 			<label className="tv-inline-form-field">
@@ -555,6 +556,7 @@ function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onC
 					value={value}
 					autoFocus
 					disabled={busy}
+					maxLength={maxLength}
 					placeholder="Team name"
 					onChange={(event) => onChange(event.target.value)}
 					onKeyDown={(event) => {

@@ -782,14 +782,17 @@ Both are done, 2026-08-17.
 
 ### Smaller UI
 
-- **Fixture groups collapse.** By day when a schedule exists, by status otherwise — Live,
-  Upcoming, Completed, as the browse page orders them. Section headers with a show/hide
-  control, no surrounding borders. Everything expanded on load.
-- **`ScoreUpdateModal` shows progress.** Clicking Save disables both buttons and shows a
-  spinner inside Save; End Match likewise.
-- **Team names get a frontend soft cap**, and the Overview's up-next and recent-results
-  rows get a maximum render width so one long name stops truncating the short ones beside
-  it.
+- ~~**Fixture groups collapse.**~~ — **done 2026-08-22.** By day when a schedule exists, by
+  status otherwise — Live, Upcoming, Completed, then Cancelled last. A shared
+  `FixtureGroup` component carries the show/hide control, no surrounding borders, everything
+  expanded on load; empty status groups are omitted.
+- ~~**`ScoreUpdateModal` shows progress.**~~ — **done 2026-08-22.** Clicking Save disables
+  both Save and End Match and shows a spinner inside Save; End Match likewise. Add Set and
+  Back stay live. The spinner is scoped to the two buttons and tracks each one's text colour.
+- ~~**Team names get a frontend soft cap**~~ — **done 2026-08-22**, at `TEAM_NAME_MAX` on
+  the Teams tab's add and rename form, and the Overview's up-next and recent-results rows
+  give both team names an equal capped share so one long name stops truncating the short one
+  beside it.
 
 ## Phase 6 — Decide what is real
 

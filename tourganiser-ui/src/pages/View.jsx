@@ -222,7 +222,9 @@ export default function ViewPage() {
 			return { success: true };
 		} catch (apiError) {
 			showMessage(apiError.message, 'error');
-			return { success: false, message: apiError.message };
+			// data carries the rule's details — the offending entry id(s) — which
+			// the modal uses to highlight and scroll to the entry that broke it.
+			return { success: false, message: apiError.message, data: apiError.data };
 		}
 	};
 

@@ -30,7 +30,7 @@ const TIME_PATTERN = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const LEADING_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/;
 
-export function validateSchedule(schedule, { startDate, endDate, divisions = [], fixtures = [] } = {}) {
+export function validateSchedule(schedule, { startDate, endDate, divisions = [], fixtures = [], teamsByDivisionId = new Map() } = {}) {
     if (!isPlainObject(schedule)) {
         throw new AppError("SCHEDULE_MALFORMED");
     }
@@ -47,8 +47,10 @@ export function validateSchedule(schedule, { startDate, endDate, divisions = [],
     const placements = checkFixtureReferences(entries, fixturesById);
 
     checkCourtClashes(entries);
+    checkCourtDivisions(placements, fixturesById, schedule.courts);
     checkTeamClashes(placements, fixturesById);
     checkRoundOrder(placements, fixturesById, buildRoundOrder(divisions));
+    checkOfficials(placements, fixturesById, teamsByDivisionId);
 }
 
 // --- structure --------------------------------------------------------------
@@ -164,6 +166,33 @@ function checkCourtClashes(entries) {
     }
 }
 
+// A court reserved for a set of divisions takes only fixtures of those
+// divisions. Without this a hand-placed fixture bypasses the constraint the
+// generator keeps, and the generator's work becomes decorative. See
+// docs/schedule.md.
+//
+// Lenient about structure, strict about the rule: a court whose divisions is
+// missing, null, not an array, or empty is unrestricted. A break carries no
+// fixtureId so it is not among the placements and is never checked. An entry
+// naming a courtId no court has is not an error here — the client surfaces it
+// under "Not shown on the grid", and checkEntryShapes deliberately does not
+// require the court to exist.
+function checkCourtDivisions(placements, fixturesById, courts) {
+    const courtsById = new Map((Array.isArray(courts) ? courts : []).map((court) => [court.id, court]));
+
+    for (const entry of placements) {
+        const court = courtsById.get(entry.courtId);
+        const divisions = court?.divisions;
+
+        if (!Array.isArray(divisions) || divisions.length === 0) continue;
+
+        const fixture = fixturesById.get(entry.fixtureId);
+        if (!divisions.includes(fixture.division_id)) {
+            throw new AppError("SCHEDULE_COURT_DIVISION", { details: { entryId: entry.id } });
+        }
+    }
+}
+
 // A team cannot be in two places at once, whatever court either match is on.
 // A knockout fixture whose teams have not been bound yet carries nulls, and a
 // null constrains nothing.
@@ -176,6 +205,65 @@ function checkTeamClashes(placements, fixturesById) {
             throw new AppError("SCHEDULE_TEAM_CLASH", { details: { entryIds: [left.id, right.id] } });
         }
     }
+}
+
+// A team may not officiate a match overlapping one it is playing in — the same
+// hard rule the generator keeps, guarded here so a hand-typed name cannot break
+// it. `officials` is free text: it is checked ONLY when it resolves to a real
+// team of the fixture's own division. A string that resolves to no team ("Club
+// referee", a person's name) is accepted untouched — Decision 10 — and getting
+// that wrong quietly breaks the field for every organiser who types a name.
+//
+// Resolution is per division and case-insensitive, the same comparison
+// validateTeamNames uses. It never crosses a division: two divisions may each
+// have a "Team 3", and that is fine precisely because an official never crosses
+// one. A break carries no fixtureId, so it is not among the placements and its
+// officials — always '' — is never read. The preferences the generator applies
+// (pool affinity, back-to-back) are judgement, not rules, and are not checked.
+function checkOfficials(placements, fixturesById, teamsByDivisionId) {
+    const lookupByDivision = buildOfficialLookup(teamsByDivisionId);
+
+    for (const entry of placements) {
+        const officials = typeof entry.officials === "string" ? entry.officials.trim() : "";
+        if (officials === "") continue;
+
+        const fixture = fixturesById.get(entry.fixtureId);
+        const teamId = lookupByDivision.get(fixture.division_id)?.get(officials.toLowerCase());
+        if (teamId === undefined) continue;
+
+        for (const other of placements) {
+            if (other.day !== entry.day) continue;
+            if (other.startTime >= entry.endTime || other.endTime <= entry.startTime) continue;
+
+            // `other` includes `entry` itself, which is how officiating your own
+            // match — the overlap you most obviously cannot referee — is caught.
+            if (teamsOf(fixturesById.get(other.fixtureId)).includes(teamId)) {
+                throw new AppError("SCHEDULE_OFFICIAL_PLAYING", { details: { entryId: entry.id } });
+            }
+        }
+    }
+}
+
+// division id -> (lower-cased team name -> team id). Duplicate names within a
+// division cannot occur — validateTeamNames forbids them — so a name resolves to
+// at most one team, which is what lets a bare name stand in for an id.
+function buildOfficialLookup(teamsByDivisionId) {
+    const source = teamsByDivisionId instanceof Map
+        ? teamsByDivisionId.entries()
+        : Object.entries(teamsByDivisionId ?? {});
+
+    const byDivision = new Map();
+    for (const [divisionId, teams] of source) {
+        const lookup = new Map();
+        for (const team of Array.isArray(teams) ? teams : []) {
+            if (isNonEmptyString(team?.name)) {
+                lookup.set(team.name.trim().toLowerCase(), team.id);
+            }
+        }
+        byDivision.set(divisionId, lookup);
+    }
+
+    return byDivision;
 }
 
 // Every pair of entries that shares a day and overlaps in time. Quadratic, and

@@ -99,6 +99,8 @@ export const ERRORS = {
 	SCHEDULE_COURT_CLASH: [409, "Two entries use the same court at the same time"],
 	SCHEDULE_TEAM_CLASH: [409, "A team is scheduled in two places at once"],
 	SCHEDULE_ROUND_ORDER: [409, "A match is scheduled before the round feeding it has finished"],
+	SCHEDULE_COURT_DIVISION: [409, "A match is scheduled on a court reserved for other divisions"],
+	SCHEDULE_OFFICIAL_PLAYING: [409, "A team is officiating a match it is playing in"],
 
 	// Fixtures. A status is never one of these: it is derived from the scores
 	// and the organiser's intent, never sent. See docs/decisions.md.

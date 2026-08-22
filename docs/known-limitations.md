@@ -242,9 +242,14 @@ validator, the documented payload, round order in the generator, and the schedul
 layout and interaction defects — is recorded in `docs/roadmap.md` and is not repeated
 here. What is left:
 
-- **Officials assignment** is described in `docs/tournament-rules.md` as optional but is
-  not implemented anywhere. An entry carries an `officials` string, it is stored and
-  displayed, and nothing assigns or validates it.
+- ~~**Officials assignment** is described in `docs/tournament-rules.md` as optional but is
+  not implemented anywhere.~~ — **done 2026-08-22.** The generator assigns one team per
+  match as a pass over the placed schedule, behind a toggle in the generation settings that
+  defaults off; a team never officiates a match overlapping one it is playing, nor one
+  outside its own division, and matches with no eligible team are left blank and counted in
+  the warnings. The server validates the overlap rule on write (`SCHEDULE_OFFICIAL_PLAYING`),
+  resolving the `officials` name against the fixture's own division only. A name that
+  resolves to no team is left alone. See `docs/schedule.md`.
 - **A fixture whose round name is not in its division's `state.rounds` is exempt from the
   round-order rule**, in both the generator and the validator. It constrains nothing and
   nothing constrains it. That is drift rather than an impossible schedule, and refusing

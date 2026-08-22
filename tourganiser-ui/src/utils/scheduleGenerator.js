@@ -75,6 +75,11 @@ function buildCandidateSlots(days, courts, startTime, endTime, durationMinutes) 
 					day: day.date,
 					courtId: court.id,
 					courtIndex,
+					// The divisions this court is reserved for. Empty means it
+					// takes any division. Attached here so findSlotFailure can
+					// check it without a courtId lookup — the list is built once
+					// and scanned per fixture.
+					divisions: Array.isArray(court.divisions) ? court.divisions : [],
 					startMinutes: cursor,
 					startTime: minutesToTime(cursor),
 					endTime: minutesToTime(cursor + durationMinutes),
@@ -272,6 +277,14 @@ function recordPlacement(state, slot, fixture, durationMinutes) {
 // they can say "the only free slots would leave a team playing back to back"
 // rather than blaming capacity for everything.
 function findSlotFailure(slot, fixture, state, { durationMinutes, barrier, teams }) {
+	// A court reserved for a set of divisions is closed to every other, whether or
+	// not anything is on it — so this comes before the usedSlots check. Reporting
+	// "every court is booked" for a court that was never open to this division
+	// would send the organiser to the wrong fix. A fixture with no division_id
+	// belongs to no division and is refused by any restricted court, the same way
+	// a division the court does not name is.
+	if (slot.divisions.length > 0 && !slot.divisions.includes(fixture.division_id)) return 'division';
+
 	if (state.usedSlots.has(slotKey(slot))) return 'court';
 
 	if (teams.some((team) => playsAt(state, team, slot.day, slot.startMinutes))) return 'team';
@@ -365,9 +378,10 @@ function compareSlots(left, right, fixture, state) {
 // Which constraint to name when several blocked a fixture. Ordered by how much
 // the answer tells an organiser: "a team would have played back to back" points
 // at a fix, "every court is busy" is the one they would have guessed.
-const FAILURE_PRIORITY = ['rest', 'round', 'team', 'court'];
+const FAILURE_PRIORITY = ['division', 'rest', 'round', 'team', 'court'];
 
 const FAILURE_REASONS = {
+	division: 'no court is open to the fixture’s division. Open a court to that division, or add one.',
 	rest: 'the only free slots would leave a team playing two matches back to back. Add a court or extend the day.',
 	round: 'no free slot is left once the earlier rounds of the same division have finished. Extend the day or add another day.',
 	team: 'the teams involved are already playing in every remaining slot. Add a court or extend the day.',
@@ -394,6 +408,163 @@ function buildWarnings(unplacedReasons) {
 	});
 }
 
+// --- officials --------------------------------------------------------------
+//
+// Assigned as a separate pass over the already-placed schedule, never during
+// placement — docs/schedule.md, Decision 8. Letting officials influence which
+// slot a fixture takes would trade a better schedule for an easier assignment and
+// would restate the priority order next to compareSlots.
+//
+// One team per match. The name is written, which is sufficient ONLY because an
+// official is always from the fixture's own division and team names are unique
+// within a division. If either ever relaxes the field needs a team id.
+
+// Every team of every division, keyed by division id. division.teams carries
+// { id, name } in state.teams order.
+function buildTeamsByDivision(divisions = []) {
+	const byDivision = new Map();
+
+	divisions.forEach((division) => {
+		byDivision.set(division.id, Array.isArray(division.teams) ? division.teams : []);
+	});
+
+	return byDivision;
+}
+
+// teamId -> the pools it plays in, so "officiate within your own pool" can be
+// checked. A team is in a pool when it plays a fixture carrying that poolKey.
+function buildTeamPools(fixtures = []) {
+	const pools = new Map();
+
+	fixtures.forEach((fixture) => {
+		if (!fixture.poolKey) return;
+
+		[fixture.team_1_id, fixture.team_2_id].forEach((teamId) => {
+			if (!teamId) return;
+			const set = pools.get(teamId) || new Set();
+			set.add(fixture.poolKey);
+			pools.set(teamId, set);
+		});
+	});
+
+	return pools;
+}
+
+// teamId -> the times it is playing, in minutes, per day. Built from the placed
+// fixture entries so overlap is arithmetic.
+function buildTeamPlay(entries, fixturesById) {
+	const play = new Map();
+
+	entries.forEach((entry) => {
+		if (entry.type !== 'fixture' || !entry.fixtureId) return;
+		const fixture = fixturesById.get(entry.fixtureId);
+		if (!fixture) return;
+
+		const interval = {
+			day: entry.day,
+			startMinutes: timeToMinutes(entry.startTime),
+			endMinutes: timeToMinutes(entry.endTime),
+		};
+
+		[fixture.team_1_id, fixture.team_2_id].forEach((teamId) => {
+			if (!teamId) return;
+			const intervals = play.get(teamId) || [];
+			intervals.push(interval);
+			play.set(teamId, intervals);
+		});
+	});
+
+	return play;
+}
+
+function teamPlaysOverlapping(play, teamId, entry) {
+	const intervals = play.get(teamId);
+	if (!intervals) return false;
+
+	const start = timeToMinutes(entry.startTime);
+	const end = timeToMinutes(entry.endTime);
+
+	return intervals.some(
+		(interval) => interval.day === entry.day && interval.startMinutes < end && interval.endMinutes > start
+	);
+}
+
+// Plays in the slot beginning exactly where this entry ends, on the same day.
+function teamPlaysNext(play, teamId, entry) {
+	const intervals = play.get(teamId);
+	if (!intervals) return false;
+
+	const nextStart = timeToMinutes(entry.endTime);
+
+	return intervals.some((interval) => interval.day === entry.day && interval.startMinutes === nextStart);
+}
+
+// Walks the placed fixture entries earliest first, giving each an officiating
+// team. Mutates entry.officials in place and returns the number of matches left
+// with no eligible team, for the warnings. See docs/schedule.md.
+function assignOfficialsPass(entries, fixturesById, divisions) {
+	const teamsByDivision = buildTeamsByDivision(divisions);
+	const teamPools = buildTeamPools([...fixturesById.values()]);
+	const play = buildTeamPlay(entries, fixturesById);
+	const officiatedCount = new Map();
+
+	const ordered = entries
+		.filter((entry) => entry.type === 'fixture' && entry.fixtureId)
+		.sort((left, right) => (left.day === right.day ? compareTimes(left.startTime, right.startTime) : left.day.localeCompare(right.day)));
+
+	let unassigned = 0;
+
+	for (const entry of ordered) {
+		const fixture = fixturesById.get(entry.fixtureId);
+		if (!fixture) continue;
+
+		const candidates = (teamsByDivision.get(fixture.division_id) || []).filter(
+			// Hard rule: a team never officiates a match overlapping one it is
+			// playing, on any court. (The division rule is already met — the
+			// candidates are that division's own teams.)
+			(team) => !teamPlaysOverlapping(play, team.id, entry)
+		);
+
+		if (candidates.length === 0) {
+			entry.officials = '';
+			unassigned += 1;
+			continue;
+		}
+
+		// Preferences, applied only after the hard filter and each able to yield:
+		//   1. not playing in the immediately following slot;
+		//   2. in the same pool as the fixture;
+		//   3. has officiated fewer times so far.
+		// The team id is the final tiebreak, so the pass is deterministic.
+		const best = candidates
+			.map((team) => ({
+				team,
+				playsNext: teamPlaysNext(play, team.id, entry) ? 1 : 0,
+				samePool: fixture.poolKey && teamPools.get(team.id)?.has(fixture.poolKey) ? 0 : 1,
+				officiated: officiatedCount.get(team.id) || 0,
+			}))
+			.sort(
+				(a, b) =>
+					a.playsNext - b.playsNext ||
+					a.samePool - b.samePool ||
+					a.officiated - b.officiated ||
+					a.team.id.localeCompare(b.team.id)
+			)[0].team;
+
+		entry.officials = best.name;
+		officiatedCount.set(best.id, (officiatedCount.get(best.id) || 0) + 1);
+	}
+
+	return unassigned;
+}
+
+function buildOfficialsWarning(unassigned) {
+	if (unassigned === 0) return [];
+
+	const noun = unassigned === 1 ? 'match' : 'matches';
+	return [`${unassigned} ${noun} could not be assigned an official: no eligible team was free.`];
+}
+
 // --- generation -------------------------------------------------------------
 
 export function generateAutomaticSchedule({
@@ -406,6 +577,7 @@ export function generateAutomaticSchedule({
 	dailyStartTime,
 	dailyEndTime,
 	fixtureDurationMinutes,
+	assignOfficials = false,
 }) {
 	const durationMinutes = Number(fixtureDurationMinutes);
 
@@ -419,6 +591,18 @@ export function generateAutomaticSchedule({
 
 	const normalised = normaliseSchedule(baseSchedule, { startDate, endDate });
 	const preservedBreaks = normalised.entries.filter((entry) => entry.type === 'break');
+
+	// The generator reassigns every slot, so the placement does not survive — but
+	// the fixture-scoped text the organiser typed does. Keyed by fixtureId, so it
+	// rides along to wherever the fixture is placed this run, even a different
+	// court or time. A fixture left unplaced has no entry to carry it, which is
+	// correct. Without this every officials value is destroyed on every
+	// regeneration.
+	const carriedText = new Map(
+		normalised.entries
+			.filter((entry) => entry.type === 'fixture' && entry.fixtureId)
+			.map((entry) => [entry.fixtureId, { officials: entry.officials, notes: entry.notes }])
+	);
 	const courts = buildCourtList(Number(courtCount), normalised.courts);
 	const schedule = {
 		...normalised,
@@ -490,6 +674,7 @@ export function generateAutomaticSchedule({
 			continue;
 		}
 
+		const carried = carriedText.get(fixture.id) || {};
 		schedule.entries.push(
 			createFixtureEntry({
 				day: best.day,
@@ -497,6 +682,8 @@ export function generateAutomaticSchedule({
 				startTime: best.startTime,
 				endTime: best.endTime,
 				fixtureId: fixture.id,
+				officials: carried.officials || '',
+				notes: carried.notes || '',
 			})
 		);
 
@@ -510,9 +697,19 @@ export function generateAutomaticSchedule({
 		return (left.courtId || '').localeCompare(right.courtId || '');
 	});
 
+	// Officials are assigned over the finished schedule, only when asked. Off — the
+	// default — leaves the officials carried from the previous run untouched
+	// (Decision 8, and the toggle's honest off state).
+	let officialsWarnings = [];
+	if (assignOfficials) {
+		const fixturesById = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+		const unassigned = assignOfficialsPass(schedule.entries, fixturesById, divisions || []);
+		officialsWarnings = buildOfficialsWarning(unassigned);
+	}
+
 	return {
 		schedule,
 		unscheduledFixtures,
-		warnings: buildWarnings(unplacedReasons),
+		warnings: [...buildWarnings(unplacedReasons), ...officialsWarnings],
 	};
 }

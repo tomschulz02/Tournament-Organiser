@@ -432,6 +432,7 @@ describe("tournamentService.updateSchedule", () => {
         );
         divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([makeDivision({ id: "div-1" })]);
         fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-1" }]);
+        divisionsRepository.getTeamsByIds.mockResolvedValue([]);
     }
 
     it("names the not-found condition rather than reporting zero rows affected", async () => {
@@ -451,7 +452,7 @@ describe("tournamentService.updateSchedule", () => {
         expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
     });
 
-    it("validates against the tournament's dates, divisions and fixtures, then writes", async () => {
+    it("validates against the tournament's dates, divisions, fixtures and teams, then writes", async () => {
         owned();
 
         expect(await tournamentService.updateSchedule("tour-1", "user-1", schedule))
@@ -461,12 +462,36 @@ describe("tournamentService.updateSchedule", () => {
             startDate: "2026-08-01",
             endDate: "2026-08-03",
             divisions: [makeDivision({ id: "div-1" })],
-            fixtures: [{ id: "f1", division_id: "div-1" }]
+            fixtures: [{ id: "f1", division_id: "div-1" }],
+            teamsByDivisionId: new Map([["div-1", []]])
         });
         expect(fixturesRepository.getFixturesByDivisionIds).toHaveBeenCalledWith(["div-1"]);
         expect(tournamentRepository.updateSchedule).toHaveBeenCalledWith("tour-1", schedule, dbMock.client);
         expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
         expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    // The officials rule needs team names, so each division's teams are resolved
+    // from its own state.teams and handed to the validator keyed by division.
+    it("resolves each division's teams and passes them to the validator", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(
+            makeTournament({ created_by: "user-1", start_date: "2026-08-01", end_date: "2026-08-03" })
+        );
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([
+            makeDivision({ id: "div-1", state: makeState({ teams: ["t1", "t2"] }) })
+        ]);
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([]);
+        divisionsRepository.getTeamsByIds.mockResolvedValue([{ id: "t1", name: "Team 1", division_id: "div-1" }]);
+
+        await tournamentService.updateSchedule("tour-1", "user-1", schedule);
+
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledWith(["t1", "t2"]);
+        expect(validateSchedule).toHaveBeenCalledWith(
+            schedule,
+            expect.objectContaining({
+                teamsByDivisionId: new Map([["div-1", [{ id: "t1", name: "Team 1", division_id: "div-1" }]]])
+            })
+        );
     });
 
     // The lock comes first on purpose. A division rebuild repairs this column

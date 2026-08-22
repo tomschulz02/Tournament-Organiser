@@ -199,12 +199,18 @@ async function updateSchedule(tournamentId, userId, schedule) {
         const fixtures = await fixturesRepository.getFixturesByDivisionIds(
             divisions.map((division) => division.id)
         );
+        // The officials rule needs team names, which the validator has no other
+        // way to reach. Loaded here, inside the transaction and after the lock —
+        // moving it before getScheduleForUpdate would reopen the window the lock
+        // ordering closes. Same resolution getTeamsByDivision performs.
+        const teamsByDivisionId = await getTeamsByDivision(divisions);
 
         validateSchedule(schedule, {
             startDate: tournament.start_date,
             endDate: tournament.end_date,
             divisions,
-            fixtures
+            fixtures,
+            teamsByDivisionId
         });
 
         await tournamentRepository.updateSchedule(tournamentId, schedule, client);

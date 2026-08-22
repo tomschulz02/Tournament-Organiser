@@ -766,14 +766,19 @@ Both are done, 2026-08-17.
 
 ### Schedule maker
 
-- **Courts can be assigned to divisions**, stored on the schedule so the constraint
-  survives a reload and the generator honours it on every run. Changes `docs/schedule.md`;
-  the validator should enforce it. Unassigned courts behave as now.
-- **Courts can be removed** from the schedule overview, not only added.
-- **Officials can be auto-assigned**, behind a toggle in the generation settings. One team
-  per match. A team never officiates a match overlapping its own — a hard constraint, not
-  a preference. Prefer not to officiate immediately before their own game, prefer to
-  officiate within their pool, and **never** outside their division.
+- ~~**Courts can be assigned to divisions**~~ — **done 2026-08-22.** Stored on each court
+  as a `divisions` array so the constraint survives a reload, the generator honours it on
+  every run (a hard constraint), and the validator enforces it on write
+  (`SCHEDULE_COURT_DIVISION`). Unassigned courts behave as before. See `docs/schedule.md`.
+- ~~**Courts can be removed**~~ — **done 2026-08-22.** The overview panel has a remove
+  control per court; removal never regenerates the list, so surviving courts keep their
+  ids and entries, and a removed court's entries resurface below the grid.
+- ~~**Officials can be auto-assigned**~~ — **done 2026-08-22.** Behind a toggle in the
+  generation settings, off by default. One team per match, assigned after placement. A team
+  never officiates a match overlapping its own and never one outside its division — both
+  hard, the second also enforced by the validator. Prefers not to officiate immediately
+  before its own game, prefers its own pool, and spreads the load across the division. A
+  match with no eligible team is left blank and counted in the warnings.
 
 ### Smaller UI
 

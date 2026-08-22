@@ -188,6 +188,10 @@ export function buildCourtList(count, existingCourts = []) {
 		return {
 			id: existing?.id || `court-${index + 1}`,
 			name: existing?.name || `Court ${index + 1}`,
+			// A court may be restricted to a set of division ids. Absent or empty
+			// means unrestricted; normalising to [] lets every consumer read
+			// court.divisions.length without a guard.
+			divisions: Array.isArray(existing?.divisions) ? existing.divisions : [],
 		};
 	});
 }
@@ -224,6 +228,9 @@ export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
 			? rawSchedule.courts.map((court, index) => ({
 					id: court.id || `court-${index + 1}`,
 					name: court.name || `Court ${index + 1}`,
+					// Absent or non-array means unrestricted. An old saved schedule
+					// has no divisions key on any court and loads as [].
+					divisions: Array.isArray(court.divisions) ? court.divisions : [],
 			  }))
 			: [],
 		entries: sortScheduleEntries(
@@ -470,6 +477,7 @@ export function serialiseScheduleForSave(schedule) {
 		courts: schedule.courts.map((court) => ({
 			id: court.id,
 			name: court.name,
+			divisions: Array.isArray(court.divisions) ? court.divisions : [],
 		})),
 		entries: sortScheduleEntries(schedule.entries).map((entry) => ({
 			id: entry.id,

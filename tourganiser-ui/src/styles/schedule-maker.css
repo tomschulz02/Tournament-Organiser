@@ -488,6 +488,27 @@ body.dark {
 	max-height: 420px;
 }
 
+/* While a placed entry is dragged, the whole list becomes a drop target that
+   unschedules it. */
+.schedule-maker-fixture-list.unschedule-target {
+	outline: 2px dashed var(--schedule-fixture);
+	outline-offset: -4px;
+	border-radius: 12px;
+}
+
+.schedule-unschedule-hint {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: var(--space-2) var(--space-3);
+	border-radius: 12px;
+	background: var(--schedule-surface-soft);
+	border: 1px dashed var(--schedule-fixture);
+	color: var(--schedule-text);
+	font-size: 0.82rem;
+	text-align: center;
+}
+
 .schedule-fixture-pill {
 	border: 1px solid var(--schedule-border);
 	border-radius: 16px;
@@ -618,6 +639,63 @@ body.dark {
 	font-weight: 700;
 }
 
+/* The court header doubles as the division-restriction control when editable.
+   Reset the button chrome so it still reads as a header, and stack the optional
+   restriction label under the name. */
+button.schedule-grid-header-court {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+	border: none;
+	text-align: left;
+	color: inherit;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+button.schedule-grid-header-court:hover {
+	color: var(--schedule-accent, inherit);
+}
+
+.schedule-grid-header-court-divisions {
+	font-weight: 500;
+	font-size: 0.72rem;
+	color: var(--schedule-muted);
+}
+
+.schedule-court-division-list {
+	display: grid;
+	gap: var(--space-2);
+}
+
+.schedule-court-division-option {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	background: var(--schedule-surface);
+	border: 1px solid var(--schedule-border);
+	border-radius: 12px;
+	cursor: pointer;
+}
+
+.schedule-generator-toggle {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	margin: var(--space-3) 0;
+	font-size: 0.85rem;
+	line-height: 1.4;
+	cursor: pointer;
+}
+
+.schedule-generator-toggle input {
+	margin-top: 3px;
+	flex: none;
+}
+
 /* The fourth sanctioned scroller — see docs/architecture.md. A schedule with
    several courts is inherently wide, and squeezing three courts into a 320px
    screen left about 75px each, too narrow for an entry card carrying two team
@@ -701,6 +779,24 @@ body.dark {
 .schedule-grid-entry.snapped {
 	outline: 2px dashed rgba(255, 255, 255, 0.55);
 	outline-offset: -5px;
+}
+
+/* The entry the server named as breaking a rule on the last save. Pulses briefly
+   so the organiser can find it among many, then the highlight is cleared. */
+.schedule-grid-entry.highlighted {
+	outline: 3px solid var(--schedule-danger, #e74c3c);
+	outline-offset: -3px;
+	animation: schedule-entry-flash 1s ease-in-out 3;
+}
+
+@keyframes schedule-entry-flash {
+	0%,
+	100% {
+		box-shadow: 0 12px 20px rgba(0, 0, 0, 0.14);
+	}
+	50% {
+		box-shadow: 0 0 0 4px var(--schedule-danger, #e74c3c);
+	}
 }
 
 /* An organiser can drag a placed entry to another slot; a click still opens the
@@ -836,6 +932,46 @@ body.dark {
 	gap: var(--space-2);
 }
 
+.schedule-panel-section-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.schedule-panel-section-head h4 {
+	margin: 0;
+}
+
+.schedule-panel .schedule-panel-section-action {
+	border: 1px solid var(--schedule-border);
+	border-radius: 10px;
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	color: var(--schedule-text);
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+/* A quiet, left-aligned link back to the overview from a sub-panel. Deliberately
+   not a primary button — it competes with nothing. */
+.schedule-panel .schedule-panel-back {
+	align-self: start;
+	border: none;
+	background: transparent;
+	color: var(--schedule-muted);
+	padding: 0;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.schedule-panel .schedule-panel-back:hover {
+	color: var(--schedule-text);
+	transform: none;
+}
+
 .schedule-stat-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -870,6 +1006,31 @@ body.dark {
 	background: var(--schedule-surface);
 	border: 1px solid var(--schedule-border);
 	border-radius: 12px;
+}
+
+.schedule-court-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.schedule-panel .schedule-court-remove {
+	flex: none;
+	border: 1px solid var(--schedule-border);
+	border-radius: 10px;
+	padding: var(--space-1) var(--space-2);
+	background: transparent;
+	color: var(--schedule-muted);
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.schedule-panel .schedule-court-remove:hover {
+	border-color: var(--schedule-danger, #c0392b);
+	color: var(--schedule-danger, #c0392b);
+	transform: none;
 }
 
 .schedule-inline-form {

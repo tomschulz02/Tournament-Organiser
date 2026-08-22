@@ -546,6 +546,50 @@ describe("validateSchedule — officials", () => {
             run([entry({ type: "break", fixtureId: null, courtId: null, title: "Lunch", officials: "Team 1" })])
         ).not.toThrow();
     });
+
+    it("ignores a non-string officials value", () => {
+        expect(() => run([entry({ fixtureId: "pool-1", officials: 5 })])).not.toThrow();
+    });
+
+    it("does not clash an official against a match on another day", () => {
+        // Team 1 officiates pool-2 on the second day; its own pool-1 sits on the
+        // first, so the day never lines up and there is nothing to clash with.
+        expect(() =>
+            run([
+                entry({ id: "a", fixtureId: "pool-2", day: "2026-09-13", officials: "Team 1" }),
+                entry({ id: "b", fixtureId: "pool-1", day: "2026-09-12" })
+            ])
+        ).not.toThrow();
+    });
+
+    // teamsByDivisionId may arrive as a plain object rather than a Map — the
+    // repository serialises it either way — so resolution has to handle both.
+    it("resolves officials from a plain-object team map", () => {
+        expect(() =>
+            validateSchedule(schedule([entry({ fixtureId: "pool-1", officials: "Team 1" })]), {
+                ...CONTEXT,
+                teamsByDivisionId: { "div-1": [{ id: "t1", name: "Team 1" }] }
+            })
+        ).toThrowError(expect.objectContaining({ code: "SCHEDULE_OFFICIAL_PLAYING" }));
+    });
+
+    it("treats a division whose teams are not an array as having none", () => {
+        expect(() =>
+            validateSchedule(schedule([entry({ fixtureId: "pool-1", officials: "Team 1" })]), {
+                ...CONTEXT,
+                teamsByDivisionId: { "div-1": "not an array" }
+            })
+        ).not.toThrow();
+    });
+
+    it("treats a null team map as resolving nothing", () => {
+        expect(() =>
+            validateSchedule(schedule([entry({ fixtureId: "pool-1", officials: "Team 1" })]), {
+                ...CONTEXT,
+                teamsByDivisionId: null
+            })
+        ).not.toThrow();
+    });
 });
 
 describe("validateSchedule — round order", () => {

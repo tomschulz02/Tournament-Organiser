@@ -1,5 +1,6 @@
 import DatabaseConnection from "../config/db.js";
 import { tournamentRepository } from "../repositories/tournament.repository.js";
+import { userRepository } from "../repositories/users.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { divisionService } from "./divisions.service.js";
@@ -57,12 +58,57 @@ async function createTournament(tournamentData, userId) {
 async function fetchTournaments() {
     const tournaments = await tournamentRepository.getAllTournaments();
 
-    for (const tournament of tournaments){
-        tournament.start_date = getLongDate(tournament.start_date);
-        tournament.end_date = getISODate(tournament.end_date);
+    return groupTournamentsByStatus(formatTournamentDates(tournaments));
+}
+
+// The Profile page's two lists. Both flat, most-recent-first, unlike
+// fetchTournaments' status grouping — Profile's lists are simpler on purpose.
+// See docs/decisions.md.
+
+async function getMyTournaments(userId) {
+    const tournaments = await tournamentRepository.getTournamentsByCreator(userId);
+
+    return formatTournamentDates(tournaments);
+}
+
+async function getSavedTournaments(userId) {
+    const saved = await userRepository.getSavedTournaments(userId);
+    const tournaments = await tournamentRepository.getTournamentsByIds(saved.map((row) => row.tournament_id));
+
+    return formatTournamentDates(tournaments);
+}
+
+// Saving an already-saved tournament is idempotent, not an error — matching
+// "follow" UX elsewhere on the web. saved_tournaments has no unique constraint
+// (see docs/known-limitations.md), so this app-level check is what keeps a
+// double-click from inserting a second row.
+//
+// An organiser cannot save their own tournament: it already appears on their
+// profile as a created tournament, and saving it too would double the card up
+// in the saved-tournaments list for no reason.
+async function saveTournament(tournamentId, userId) {
+    const tournament = await tournamentRepository.getTournamentById(tournamentId);
+    if (!tournament) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
     }
 
-    return groupTournamentsByStatus(tournaments);
+    if (tournament.created_by === userId) {
+        throw new AppError("CANNOT_SAVE_OWN_TOURNAMENT");
+    }
+
+    const saved = await userRepository.getSavedTournaments(userId);
+    const alreadySaved = saved.some((row) => row.tournament_id === tournamentId);
+    if (alreadySaved) {
+        return;
+    }
+
+    await userRepository.joinTournament(userId, tournamentId);
+}
+
+// A DELETE matching zero rows is already a legal no-op, so unsaving a
+// tournament that was never saved needs no existence check.
+async function unsaveTournament(tournamentId, userId) {
+    await userRepository.unfollowTournament(userId, tournamentId);
 }
 
 async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
@@ -244,6 +290,10 @@ export const tournamentService = {
     createTournament,
     fetchTournaments,
     fetchTournamentDetails,
+    getMyTournaments,
+    getSavedTournaments,
+    saveTournament,
+    unsaveTournament,
     startTournament,
     endTournament,
     deleteTournament,
@@ -251,6 +301,15 @@ export const tournamentService = {
     updateSchedule
 }
 
+
+function formatTournamentDates(tournaments) {
+    for (const tournament of tournaments) {
+        tournament.start_date = getLongDate(tournament.start_date);
+        tournament.end_date = getISODate(tournament.end_date);
+    }
+
+    return tournaments;
+}
 
 function groupTournamentsByStatus(tournaments){
     const result = {

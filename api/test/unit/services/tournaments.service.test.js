@@ -10,11 +10,21 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
         createTournament: vi.fn(),
         getAllTournaments: vi.fn(),
         getTournamentById: vi.fn(),
+        getTournamentsByCreator: vi.fn(),
+        getTournamentsByIds: vi.fn(),
         startTournament: vi.fn(),
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
         updateSchedule: vi.fn(),
         getScheduleForUpdate: vi.fn()
+    }
+}));
+
+vi.mock("../../../src/repositories/users.repository.js", () => ({
+    userRepository: {
+        getSavedTournaments: vi.fn(),
+        joinTournament: vi.fn(),
+        unfollowTournament: vi.fn()
     }
 }));
 
@@ -47,6 +57,7 @@ vi.mock("../../../src/utils/tournamentViewFormatter.js", () => ({
 
 const { tournamentService } = await import("../../../src/services/tournaments.service.js");
 const { tournamentRepository } = await import("../../../src/repositories/tournament.repository.js");
+const { userRepository } = await import("../../../src/repositories/users.repository.js");
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { divisionService } = await import("../../../src/services/divisions.service.js");
@@ -61,6 +72,11 @@ beforeEach(() => {
     vi.mocked(tournamentRepository.createTournament).mockReset();
     vi.mocked(tournamentRepository.getAllTournaments).mockReset();
     vi.mocked(tournamentRepository.getTournamentById).mockReset();
+    vi.mocked(tournamentRepository.getTournamentsByCreator).mockReset();
+    vi.mocked(tournamentRepository.getTournamentsByIds).mockReset();
+    vi.mocked(userRepository.getSavedTournaments).mockReset();
+    vi.mocked(userRepository.joinTournament).mockReset().mockResolvedValue(undefined);
+    vi.mocked(userRepository.unfollowTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(tournamentRepository.startTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(tournamentRepository.endTournament).mockReset().mockResolvedValue(undefined);
     vi.mocked(tournamentRepository.deleteTournament).mockReset().mockResolvedValue(undefined);
@@ -253,6 +269,130 @@ describe("tournamentService.fetchTournaments", () => {
         tournamentRepository.getAllTournaments.mockRejectedValue(failure);
 
         await expect(tournamentService.fetchTournaments()).rejects.toBe(failure);
+    });
+});
+
+describe("tournamentService.getMyTournaments", () => {
+    it("formats the dates on the creator's own tournaments", async () => {
+        tournamentRepository.getTournamentsByCreator.mockResolvedValue([
+            { id: "tour-1", start_date: "2026-08-01", end_date: "2026-08-03" }
+        ]);
+
+        const result = await tournamentService.getMyTournaments("user-1");
+
+        expect(tournamentRepository.getTournamentsByCreator).toHaveBeenCalledWith("user-1");
+        expect(result).toEqual([{ id: "tour-1", start_date: "1 August 2026", end_date: "2026-08-03" }]);
+    });
+
+    it("returns an empty list rather than an error when the caller has created nothing", async () => {
+        tournamentRepository.getTournamentsByCreator.mockResolvedValue([]);
+
+        expect(await tournamentService.getMyTournaments("user-1")).toEqual([]);
+    });
+
+    it("lets a repository failure propagate untouched", async () => {
+        const failure = new Error("connection lost");
+        tournamentRepository.getTournamentsByCreator.mockRejectedValue(failure);
+
+        await expect(tournamentService.getMyTournaments("user-1")).rejects.toBe(failure);
+    });
+});
+
+describe("tournamentService.getSavedTournaments", () => {
+    it("resolves the saved ids into tournaments and formats the dates", async () => {
+        userRepository.getSavedTournaments.mockResolvedValue([{ tournament_id: "tour-1" }, { tournament_id: "tour-2" }]);
+        tournamentRepository.getTournamentsByIds.mockResolvedValue([
+            { id: "tour-1", start_date: "2026-08-01", end_date: "2026-08-03" },
+            { id: "tour-2", start_date: "2026-09-01", end_date: "2026-09-03" }
+        ]);
+
+        const result = await tournamentService.getSavedTournaments("user-1");
+
+        expect(tournamentRepository.getTournamentsByIds).toHaveBeenCalledWith(["tour-1", "tour-2"]);
+        expect(result.map((t) => t.id)).toEqual(["tour-1", "tour-2"]);
+        expect(result[0].start_date).toBe("1 August 2026");
+    });
+
+    it("returns an empty list rather than an error when nothing is saved", async () => {
+        userRepository.getSavedTournaments.mockResolvedValue([]);
+        tournamentRepository.getTournamentsByIds.mockResolvedValue([]);
+
+        expect(await tournamentService.getSavedTournaments("user-1")).toEqual([]);
+        expect(tournamentRepository.getTournamentsByIds).toHaveBeenCalledWith([]);
+    });
+
+    it("lets a repository failure propagate untouched", async () => {
+        const failure = new Error("connection lost");
+        userRepository.getSavedTournaments.mockRejectedValue(failure);
+
+        await expect(tournamentService.getSavedTournaments("user-1")).rejects.toBe(failure);
+    });
+});
+
+describe("tournamentService.saveTournament", () => {
+    it("names the not-found condition rather than saving a row for nothing", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(null);
+
+        await expect(tournamentService.saveTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+        expect(userRepository.joinTournament).not.toHaveBeenCalled();
+    });
+
+    it("saves a tournament that is not already saved", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ id: "tour-1", created_by: "user-1" }));
+        userRepository.getSavedTournaments.mockResolvedValue([{ tournament_id: "tour-9" }]);
+
+        await tournamentService.saveTournament("tour-1", "user-2");
+
+        expect(userRepository.joinTournament).toHaveBeenCalledWith("user-2", "tour-1");
+    });
+
+    // saved_tournaments has no unique constraint (docs/known-limitations.md), so
+    // this app-level check is what stops a second row for the same pair.
+    it("no-ops on an already-saved tournament rather than inserting a duplicate", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ id: "tour-1", created_by: "user-1" }));
+        userRepository.getSavedTournaments.mockResolvedValue([{ tournament_id: "tour-1" }]);
+
+        await tournamentService.saveTournament("tour-1", "user-2");
+
+        expect(userRepository.joinTournament).not.toHaveBeenCalled();
+    });
+
+    // The organiser's own tournament already appears on their profile as a
+    // created tournament, so saving it too would just double the card up.
+    it("refuses the tournament's own creator", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ id: "tour-1", created_by: "user-1" }));
+
+        await expect(tournamentService.saveTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "CANNOT_SAVE_OWN_TOURNAMENT", status: 409 });
+        expect(userRepository.getSavedTournaments).not.toHaveBeenCalled();
+        expect(userRepository.joinTournament).not.toHaveBeenCalled();
+    });
+
+    it("permits a different signed-in user to save it", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ id: "tour-1", created_by: "user-1" }));
+        userRepository.getSavedTournaments.mockResolvedValue([]);
+
+        await expect(tournamentService.saveTournament("tour-1", "user-2")).resolves.toBeUndefined();
+        expect(userRepository.joinTournament).toHaveBeenCalledWith("user-2", "tour-1");
+    });
+});
+
+describe("tournamentService.unsaveTournament", () => {
+    // A DELETE matching zero rows is already a legal no-op, so this needs no
+    // existence check of its own.
+    it("unsaves without checking whether the tournament was saved", async () => {
+        await tournamentService.unsaveTournament("tour-1", "user-1");
+
+        expect(userRepository.unfollowTournament).toHaveBeenCalledWith("user-1", "tour-1");
+        expect(tournamentRepository.getTournamentById).not.toHaveBeenCalled();
+    });
+
+    it("lets a repository failure propagate untouched", async () => {
+        const failure = new Error("connection lost");
+        userRepository.unfollowTournament.mockRejectedValue(failure);
+
+        await expect(tournamentService.unsaveTournament("tour-1", "user-1")).rejects.toBe(failure);
     });
 });
 

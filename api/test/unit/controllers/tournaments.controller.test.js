@@ -8,12 +8,15 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         startTournament: vi.fn(),
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
-        updateSchedule: vi.fn()
+        updateSchedule: vi.fn(),
+        saveTournament: vi.fn(),
+        unsaveTournament: vi.fn()
     }
 }));
 
 const { tournamentController } = await import("../../../src/controllers/tournaments.controller.js");
 const { tournamentService } = await import("../../../src/services/tournaments.service.js");
+const { AppError } = await import("../../../src/errors.js");
 const { makeReq, makeRes } = await import("../../helpers/http.js");
 
 const VALID_UUID = "45bb764e-c07d-474e-8d01-9d9711d39a3a";
@@ -26,6 +29,8 @@ beforeEach(() => {
     vi.mocked(tournamentService.endTournament).mockReset();
     vi.mocked(tournamentService.deleteTournament).mockReset();
     vi.mocked(tournamentService.updateSchedule).mockReset();
+    vi.mocked(tournamentService.saveTournament).mockReset();
+    vi.mocked(tournamentService.unsaveTournament).mockReset();
 });
 
 // The controllers no longer catch. A rejected service call propagates to the
@@ -367,6 +372,54 @@ describe.each([
         await expect(
             tournamentController[method](
                 makeReq({ params: { tournamentId: VALID_UUID }, user: { id: "user-2" } }),
+                res
+            )
+        ).rejects.toBe(failure);
+
+        expect(res.json).not.toHaveBeenCalled();
+    });
+});
+
+// Save and unsave carry no ownership check — any authenticated user may save
+// any tournament. Both build data from the id in the URL rather than whatever
+// the service returns.
+describe.each([
+    ["saveTournament", "Tournament saved"],
+    ["unsaveTournament", "Tournament unsaved"]
+])("tournamentController.%s", (method, message) => {
+    it("passes the id and the session user to the service", async () => {
+        tournamentService[method].mockResolvedValue(undefined);
+        const res = makeRes();
+
+        await tournamentController[method](
+            makeReq({ params: { tournamentId: VALID_UUID }, user: { id: "user-1" } }),
+            res
+        );
+
+        expect(tournamentService[method]).toHaveBeenCalledWith(VALID_UUID, "user-1");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ success: true, message, data: { tournamentId: VALID_UUID } });
+    });
+
+    it("rejects an id that is not a UUID without calling the service", async () => {
+        const res = makeRes();
+
+        await expect(
+            tournamentController[method](makeReq({ params: { tournamentId: "12345" }, user: { id: "user-1" } }), res)
+        ).rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+
+        expect(tournamentService[method]).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it("lets the service's refusal propagate", async () => {
+        const failure = new AppError("TOURNAMENT_NOT_FOUND");
+        tournamentService[method].mockRejectedValue(failure);
+        const res = makeRes();
+
+        await expect(
+            tournamentController[method](
+                makeReq({ params: { tournamentId: VALID_UUID }, user: { id: "user-1" } }),
                 res
             )
         ).rejects.toBe(failure);

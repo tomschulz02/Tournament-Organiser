@@ -15,7 +15,9 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
         addDivision: vi.fn(),
-        updateSchedule: vi.fn()
+        updateSchedule: vi.fn(),
+        saveTournament: vi.fn(),
+        unsaveTournament: vi.fn()
     }
 }));
 
@@ -35,6 +37,8 @@ beforeEach(() => {
     vi.mocked(tournamentService.deleteTournament).mockReset();
     vi.mocked(tournamentService.addDivision).mockReset();
     vi.mocked(tournamentService.updateSchedule).mockReset();
+    vi.mocked(tournamentService.saveTournament).mockReset();
+    vi.mocked(tournamentService.unsaveTournament).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -365,33 +369,96 @@ describe("lifecycle transitions the tournament is not in", () => {
     });
 });
 
-// Declared but not built. These exist so the paths are settled and the UI can
-// wire to them properly; each answers 501 in the standard envelope. requireAuth
-// is already on them so the auth shape does not change when they are implemented.
-describe.each([
-    ["post", `/api/tournaments/${VALID_UUID}/save`, "follow"],
-    ["delete", `/api/tournaments/${VALID_UUID}/save`, "unfollow"]
-])("%s %s", (method, path, purpose) => {
+// No ownership check — any authenticated user may save any tournament,
+// including their own. Only requireAuth applies at this layer; existence is
+// the service's job, covered in its own suite.
+describe("POST /api/tournaments/:tournamentId/save", () => {
+    const path = `/api/tournaments/${VALID_UUID}/save`;
+
     it("requires a session", async () => {
-        const response = await request(app)[method](path);
+        const response = await request(app).post(path);
 
         expect(response.status).toBe(401);
+        expect(tournamentService.saveTournament).not.toHaveBeenCalled();
+    });
+
+    it("saves the tournament for the signed-in user", async () => {
+        tournamentService.saveTournament.mockResolvedValue(undefined);
+
+        const response = await request(app).post(path).set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Tournament saved",
+            data: { tournamentId: VALID_UUID }
+        });
+        expect(tournamentService.saveTournament).toHaveBeenCalledWith(VALID_UUID, "user-1");
+    });
+
+    it("answers 404 for a malformed id without reaching the service", async () => {
+        const response = await request(app)
+            .post("/api/tournaments/not-a-uuid/save")
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual({ success: false, message: "Tournament not found", data: null });
+        expect(tournamentService.saveTournament).not.toHaveBeenCalled();
+    });
+
+    it("answers 404 when the tournament does not exist", async () => {
+        tournamentService.saveTournament.mockRejectedValue(new AppError("TOURNAMENT_NOT_FOUND"));
+
+        const response = await request(app).post(path).set("Cookie", authCookie());
+
+        expect(response.status).toBe(404);
+    });
+
+    it("answers 409 when the caller created the tournament", async () => {
+        tournamentService.saveTournament.mockRejectedValue(new AppError("CANNOT_SAVE_OWN_TOURNAMENT"));
+
+        const response = await request(app).post(path).set("Cookie", authCookie());
+
+        expect(response.status).toBe(409);
         expect(response.body).toEqual({
             success: false,
-            message: "You must be logged in to do that",
+            message: "You cannot save a tournament you created",
             data: null
         });
     });
+});
 
-    it(`answers 501 for ${purpose}`, async () => {
-        const response = await request(app)[method](path).set("Cookie", authCookie());
+describe("DELETE /api/tournaments/:tournamentId/save", () => {
+    const path = `/api/tournaments/${VALID_UUID}/save`;
 
-        expect(response.status).toBe(501);
+    it("requires a session", async () => {
+        const response = await request(app).delete(path);
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.unsaveTournament).not.toHaveBeenCalled();
+    });
+
+    it("unsaves the tournament for the signed-in user", async () => {
+        tournamentService.unsaveTournament.mockResolvedValue(undefined);
+
+        const response = await request(app).delete(path).set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(response.status).toBe(200);
         expect(response.body).toEqual({
-            success: false,
-            message: "This feature is not available yet",
-            data: null
+            success: true,
+            message: "Tournament unsaved",
+            data: { tournamentId: VALID_UUID }
         });
+        expect(tournamentService.unsaveTournament).toHaveBeenCalledWith(VALID_UUID, "user-1");
+    });
+
+    it("answers 404 for a malformed id without reaching the service", async () => {
+        const response = await request(app)
+            .delete("/api/tournaments/not-a-uuid/save")
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(404);
+        expect(tournamentService.unsaveTournament).not.toHaveBeenCalled();
     });
 });
 

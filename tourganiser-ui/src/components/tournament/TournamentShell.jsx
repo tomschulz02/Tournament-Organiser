@@ -11,7 +11,7 @@ import '../../styles/tournament-view.css';
 // Subheader and navigation. Both render on mount, before any data arrives — only
 // the content area waits. See the handover, decision A1: one request feeds the
 // page, so loading is section-level but error isolation cannot be.
-export default function TournamentShell({ tournamentId, name, children }) {
+export default function TournamentShell({ tournamentId, name, creator, children }) {
 	const { activeTab, selectTab } = useTournamentTab();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -40,7 +40,9 @@ export default function TournamentShell({ tournamentId, name, children }) {
 
 					<h1 className="tv-title">{name || <span className="tv-skeleton tv-skeleton-title" aria-label="Loading" />}</h1>
 
-					<FollowButton tournamentId={tournamentId} />
+					{/* An organiser's own tournament is already on their profile as a
+					    created tournament — saving it too would double it up there. */}
+					{!creator && <FollowButton tournamentId={tournamentId} />}
 				</div>
 
 				<TournamentNav activeTab={activeTab} onSelect={selectTab} />

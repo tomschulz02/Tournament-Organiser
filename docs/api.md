@@ -153,7 +153,9 @@ Implemented:
 | POST | `/api/users/login` | public | Authenticate, set cookie |
 | POST | `/api/users/logout` | any | Clear cookie |
 | GET | `/api/users/check-login` | any | Report login state |
-| GET | `/api/users/profile/:id` | required | Fetch user profile — **not implemented, returns 501** |
+| GET | `/api/users/profile` | required | Fetch the caller's own profile, self-scoped from `req.user` |
+| GET | `/api/users/profile/tournaments` | required | The caller's created tournaments, flat, `start_date DESC` |
+| GET | `/api/users/profile/saved-tournaments` | required | The caller's saved tournaments, flat, `start_date DESC` |
 | POST | `/api/tournaments/create` | required | Create tournament and divisions |
 | GET | `/api/divisions/:divisionId/progression` | required + owner | Proposed ranking and qualifiers for the current round. Read only. |
 | POST | `/api/divisions/:divisionId/progression` | required + owner | Commit the confirmed ranking and advance the round |
@@ -163,16 +165,10 @@ Implemented:
 | PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
 | GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. Cached — see below. |
+| POST | `/api/tournaments/:tournamentId/save` | required | Save a tournament to the caller's profile. Idempotent — saving twice is not an error. Refuses the caller's own tournament with `CANNOT_SAVE_OWN_TOURNAMENT` (409). |
+| DELETE | `/api/tournaments/:tournamentId/save` | required | Unsave. A tournament that was never saved is also not an error. |
 
-Declared, routed, and answering **501** in the standard envelope. Added 2026-08-08 so the
-paths are settled and the frontend can wire to them for real. `requireAuth` is already
-applied, so the auth shape does not change when they are built; each will additionally
-need the service-level ownership check described under Security.
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| POST | `/api/tournaments/:tournamentId/save` | required | Follow a tournament |
-| DELETE | `/api/tournaments/:tournamentId/save` | required | Unfollow |
+Both save endpoints answer `{ success: true, message, data: { tournamentId } }`.
 
 `PUT /:tournamentId/schedule` left this table on 2026-08-10 and is described below. It
 was a stub only because the validation had not been written, and an endpoint that accepts
@@ -410,9 +406,12 @@ Server Has Authority Over Tournament State".
 `/api/collection/create` and `/api/collections` are also gone. Collections were replaced
 by a single tournament holding multiple divisions, and the feature is removed.
 
-`GET /api/users/profile/:id` throws `NOT_IMPLEMENTED` and returns 501 in the standard
-envelope. It previously had an empty `try` block and never called `res`, so an
-authenticated request hung until the client timed out.
+`GET /api/users/profile/:id` — the `NOT_IMPLEMENTED` stub that previously had an empty
+`try` block and never called `res`, so an authenticated request hung until the client
+timed out — is gone. It is now `GET /api/users/profile`, self-scoped via `req.user.id`:
+the frontend had no way to obtain another user's id (only `username` and `loggedIn`
+travel in `AuthContext`), so the `:id` param could never have been called with a real
+value in the first place.
 
 ### Path convention
 
@@ -456,9 +455,9 @@ Cleared by that work:
 
 Implemented:
 
-- `requireAuth` middleware, applied to `POST /api/tournaments/create`,
-  `GET /api/users/profile/:id`, both progression endpoints, `PUT /api/divisions/:divisionId`
-  and the three 501 stubs remaining from 2026-08-08. The other live endpoints are
+- `requireAuth` middleware, applied to `POST /api/tournaments/create`, the three
+  `/api/users/profile*` routes, both progression endpoints, `PUT /api/divisions/:divisionId`,
+  and `POST`/`DELETE /api/tournaments/:tournamentId/save`. The other live endpoints are
   intentionally anonymous: browsing and viewing a tournament do not need an account.
 - Session lifetime unified at 24 hours in `api/src/config/auth.js`.
 - CORS `allowedHeaders` corrected — it was previously spelled `headers`, which `cors()`

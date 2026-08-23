@@ -7,8 +7,16 @@ vi.mock("../../../src/services/users.service.js", () => ({
     }
 }));
 
+vi.mock("../../../src/services/tournaments.service.js", () => ({
+    tournamentService: {
+        getMyTournaments: vi.fn(),
+        getSavedTournaments: vi.fn()
+    }
+}));
+
 const { userController } = await import("../../../src/controllers/users.controller.js");
 const { userService } = await import("../../../src/services/users.service.js");
+const { tournamentService } = await import("../../../src/services/tournaments.service.js");
 const { AppError } = await import("../../../src/errors.js");
 const { makeReq, makeRes } = await import("../../helpers/http.js");
 
@@ -24,6 +32,8 @@ const EXPECTED_COOKIE = {
 beforeEach(() => {
     vi.mocked(userService.createUser).mockReset();
     vi.mocked(userService.loginUser).mockReset();
+    vi.mocked(tournamentService.getMyTournaments).mockReset();
+    vi.mocked(tournamentService.getSavedTournaments).mockReset();
 });
 
 // The controllers no longer catch. A rejected service call propagates to the
@@ -136,13 +146,84 @@ describe("userController.checkLogin", () => {
 });
 
 describe("userController.getUserProfile", () => {
-    it("rejects with 501 rather than hanging the request", async () => {
+    it("responds from req.user alone, with no service or repository call", async () => {
         const res = makeRes();
 
-        await expect(
-            userController.getUserProfile(makeReq({ params: { id: "user-1" } }), res)
-        ).rejects.toMatchObject({ code: "NOT_IMPLEMENTED", status: 501 });
+        await userController.getUserProfile(
+            makeReq({ user: { id: "user-1", username: "tom", email: "tom@example.com", admin: false } }),
+            res
+        );
 
-        expect(res.json).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Profile fetched",
+            data: { id: "user-1", username: "tom", email: "tom@example.com", admin: false }
+        });
+    });
+
+    it("carries an admin flag when the caller is an admin", async () => {
+        const res = makeRes();
+
+        await userController.getUserProfile(
+            makeReq({ user: { id: "user-1", username: "tom", email: "tom@example.com", admin: true } }),
+            res
+        );
+
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ admin: true }) }));
+    });
+});
+
+describe("userController.getMyTournaments", () => {
+    it("returns the caller's created tournaments in data", async () => {
+        const tournaments = [{ id: "tour-1" }];
+        tournamentService.getMyTournaments.mockResolvedValue(tournaments);
+        const res = makeRes();
+
+        await userController.getMyTournaments(makeReq({ user: { id: "user-1" } }), res);
+
+        expect(tournamentService.getMyTournaments).toHaveBeenCalledWith("user-1");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Tournaments fetched",
+            data: tournaments
+        });
+    });
+
+    it("lets a failure propagate", async () => {
+        const failure = new Error("connection lost");
+        tournamentService.getMyTournaments.mockRejectedValue(failure);
+
+        await expect(
+            userController.getMyTournaments(makeReq({ user: { id: "user-1" } }), makeRes())
+        ).rejects.toBe(failure);
+    });
+});
+
+describe("userController.getMySavedTournaments", () => {
+    it("returns the caller's saved tournaments in data", async () => {
+        const tournaments = [{ id: "tour-2" }];
+        tournamentService.getSavedTournaments.mockResolvedValue(tournaments);
+        const res = makeRes();
+
+        await userController.getMySavedTournaments(makeReq({ user: { id: "user-1" } }), res);
+
+        expect(tournamentService.getSavedTournaments).toHaveBeenCalledWith("user-1");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Saved tournaments fetched",
+            data: tournaments
+        });
+    });
+
+    it("lets a failure propagate", async () => {
+        const failure = new Error("connection lost");
+        tournamentService.getSavedTournaments.mockRejectedValue(failure);
+
+        await expect(
+            userController.getMySavedTournaments(makeReq({ user: { id: "user-1" } }), makeRes())
+        ).rejects.toBe(failure);
     });
 });

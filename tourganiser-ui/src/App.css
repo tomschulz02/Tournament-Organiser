@@ -2449,6 +2449,32 @@ Tournaments page styles
 	display: grid;
 	gap: var(--space-3);
 	min-width: 0;
+	position: relative;
+}
+
+/* Profile's saved-tournaments list only — Browse's cards never pass onRemove.
+   Positioned over the card rather than inline, so it does not disturb the
+   name/status layout every other caller of TournamentCard already relies on. */
+.tournament-card-remove {
+	position: absolute;
+	top: var(--space-2);
+	right: var(--space-2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.tournament-card-remove:hover,
+.tournament-card-remove:focus-visible {
+	background: rgb(from var(--secondary-text-color) r g b / 0.2);
 }
 
 .tournament-card-name {
@@ -2686,7 +2712,103 @@ Tournament Creation styles
 	margin-top: 80px;
 }
 
-/* 
+/*
+Profile page
+*/
+
+.profile-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-6);
+	max-width: 900px;
+	margin: 0 auto;
+	padding: var(--space-4);
+	/* body sets color: var(--text-color), which is fixed white in both themes —
+	   meant for the header/footer's own dark backgrounds, not a themed panel on
+	   --background-color. Every heading and paragraph in this page needs the
+	   theme-adaptive token instead, same as .browse-groups does for Browse's. */
+	color: var(--secondary-text-color);
+}
+
+.profile-account {
+	background: var(--background-color);
+	border: 1px solid var(--card-border-color);
+	border-radius: 12px;
+	box-shadow: 0 2px 4px var(--card-shadow-color);
+	padding: var(--space-4);
+	color: var(--secondary-text-color);
+}
+
+.profile-account-heading {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.profile-account-heading h2 {
+	margin: 0;
+}
+
+.profile-account-email {
+	margin: var(--space-1) 0 0;
+	color: rgb(from var(--secondary-text-color) r g b / 0.8);
+}
+
+.profile-admin-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	border-radius: 999px;
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+	border: 1px solid rgb(from var(--main-color) r g b / 0.18);
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+
+.profile-section h3 {
+	margin: 0 0 var(--space-3);
+}
+
+.profile-empty-message {
+	color: var(--secondary-text-color);
+}
+
+.profile-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-4);
+	margin-top: var(--space-4);
+}
+
+.profile-pagination-button {
+	padding: var(--space-2) var(--space-4);
+	border: 1px solid var(--card-border-color);
+	border-radius: 8px;
+	background: var(--background-color);
+	color: var(--secondary-text-color);
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.profile-pagination-button:hover:not(:disabled) {
+	background: rgb(from var(--secondary-text-color) r g b / 0.08);
+}
+
+.profile-pagination-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.profile-pagination-status {
+	font-size: 0.9em;
+	color: var(--secondary-text-color);
+}
+
+/*
 Styles for the name change popup
 */
 

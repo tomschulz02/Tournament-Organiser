@@ -42,6 +42,35 @@ async function getTournamentById(tournamentId) {
     }
 }
 
+// Tournaments created by one user, for the Profile page's "Created Tournaments"
+// list. schedule is deliberately not selected — it is a JSONB blob the card
+// never reads. See docs/database.md.
+async function getTournamentsByCreator(userId) {
+    try {
+        const sql = "SELECT id, name, start_date, end_date, location, description, status, created_by FROM tournaments WHERE created_by = $1 ORDER BY start_date DESC";
+        return await db.query(sql, [userId]);
+    } catch (err) {
+        throw new Error("Failed to fetch tournaments by creator", { cause: err });
+    }
+}
+
+// Tournaments by id, for resolving a user's saved_tournaments rows into the
+// tournaments themselves. Mirrors divisions.repository.js#getTeamsByIds: same
+// explicit column list as getTournamentsByCreator, same empty-array
+// short-circuit so an empty saved list needs no query at all.
+async function getTournamentsByIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return [];
+    }
+
+    try {
+        const sql = "SELECT id, name, start_date, end_date, location, description, status, created_by FROM tournaments WHERE id = ANY($1::uuid[]) ORDER BY start_date DESC";
+        return await db.query(sql, [ids]);
+    } catch (err) {
+        throw new Error("Failed to fetch tournaments by id", { cause: err });
+    }
+}
+
 // The three lifecycle statements. Each is a single statement, so none of them
 // needs a transaction of its own, and none of them filters on created_by:
 // ownership is the service's to decide, because a repository that returns zero
@@ -128,6 +157,8 @@ export const tournamentRepository = {
     createTournament,
     getAllTournaments,
     getTournamentById,
+    getTournamentsByCreator,
+    getTournamentsByIds,
     startTournament,
     endTournament,
     deleteTournament,

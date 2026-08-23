@@ -70,10 +70,7 @@ async function getFriends(userId) {
 async function joinTournament(userId, tournamentId) {
 	try {
 		const sql = "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES ($1, $2)";
-		const result = await db.query(sql, [userId, tournamentId]);
-		
-		if (!result.success) throw new Error("JOIN_TOURNAMENT_ERROR");
-		return result.message;
+		return await db.query(sql, [userId, tournamentId]);
 	} catch (err) {
 		throw new Error(err.message || "JOIN_TOURNAMENT_ERROR");
 	}
@@ -83,10 +80,7 @@ async function joinTournament(userId, tournamentId) {
 async function getSavedTournaments(userId) {
 	try {
 		const sql = "SELECT tournament_id FROM saved_tournaments WHERE user_id = $1";
-		const result = await db.query(sql, [userId]);
-		
-		if (!result.success) throw new Error("GET_SAVED_TOURNAMENTS_ERROR");
-		return result.message;
+		return await db.query(sql, [userId]);
 	} catch (err) {
 		throw new Error(err.message || "GET_SAVED_TOURNAMENTS_ERROR");
 	}
@@ -96,10 +90,7 @@ async function getSavedTournaments(userId) {
 async function unfollowTournament(userId, tournamentId) {
 	try {
 		const sql = "DELETE FROM saved_tournaments WHERE user_id = $1 AND tournament_id = $2";
-		const result = await db.query(sql, [userId, tournamentId]);
-		
-		if (!result.success) throw new Error("UNFOLLOW_TOURNAMENT_ERROR");
-		return result.message;
+		return await db.query(sql, [userId, tournamentId]);
 	} catch (err) {
 		throw new Error(err.message || "UNFOLLOW_TOURNAMENT_ERROR");
 	}

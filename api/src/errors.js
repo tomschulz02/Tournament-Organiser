@@ -83,6 +83,9 @@ export const ERRORS = {
 	TOURNAMENT_ALREADY_STARTED: [409, "This tournament has already started"],
 	TOURNAMENT_NOT_STARTED: [409, "This tournament has not started yet"],
 	TOURNAMENT_FINISHED: [409, "This tournament has already finished"],
+	// Saving a tournament. An organiser's own tournament is already on their
+	// profile as a created tournament, so saving it too would just double it up.
+	CANNOT_SAVE_OWN_TOURNAMENT: [409, "You cannot save a tournament you created"],
 
 	// Saving a schedule. One code per rule rather than one INVALID_SCHEDULE: the
 	// message is display-ready by contract, and "that schedule is invalid" tells

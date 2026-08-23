@@ -14,10 +14,12 @@ items are identified, and remove them as they are fixed.
 - The frontend calls endpoints that do not exist. `docs/api.md` lists them; start, end,
   delete and score entry came off that list on 2026-08-09, and team editing on
   2026-08-10.
-- `users.controller.js` `getUserProfile` is not implemented. It now returns 501 rather
-  than hanging.
-- Join and leave tournament are still stubs answering 501. Start, end and delete were
-  built on 2026-08-09 and are live on the resource-first paths in `docs/api.md`.
+- ~~`users.controller.js` `getUserProfile` is not implemented.~~ — **done 2026-08-23.**
+  `GET /api/users/profile` is self-scoped from `req.user`, with two companion list
+  endpoints for created and saved tournaments. See `docs/api.md`.
+- ~~Join and leave tournament are still stubs answering 501.~~ — **done 2026-08-23.**
+  `POST`/`DELETE /api/tournaments/:tournamentId/save` are real. Start, end and delete
+  were built on 2026-08-09 and are live on the resource-first paths in `docs/api.md`.
 
 ## Code and Schema Drift
 
@@ -55,23 +57,32 @@ Nothing outstanding here.
 
 ## Stale Response Envelope In Repositories
 
-`db.query` returns `res.rows`, a plain array. Five functions in
-`users.repository.js` still test `result.success` and read `result.message`, which are
-leftovers from an older response shape. On an array both are `undefined`, so every one
-of these throws unconditionally:
+`db.query` returns `res.rows`, a plain array. Five functions in `users.repository.js`
+used to test `result.success` and read `result.message`, leftovers from an older
+response shape that made them throw unconditionally on an array, where both are
+`undefined`. Fixed for `joinTournament`, `getSavedTournaments` and `unfollowTournament`
+on 2026-08-23, when the Profile page wired up the endpoints that call them. Still broken,
+and still unreachable:
 
 - `addFriend`
 - `getFriends`
-- `joinTournament`
-- `getSavedTournaments`
-- `unfollowTournament`
 
-None are reachable yet — `friends` does not exist as a table, and no route is wired to
-the others — so they are latent rather than live. Fix each when wiring up the endpoint
-that calls it, not as a batch.
+Neither is reachable — `friends` does not exist as a table — so they are latent rather
+than live. Fix when the friends/editors-and-scorers feature wires up the endpoint that
+calls them.
 
 The same bug in `loginUser` was live and broke every login attempt. It has been fixed;
 that function is now `findUserByEmail`.
+
+## Saved Tournaments Has No Uniqueness Constraint
+
+`saved_tournaments (user_id, tournament_id)` has no `UNIQUE` constraint — nothing at the
+database level stops the same pair being inserted twice. `tournamentService.saveTournament`
+checks for an existing row before inserting and no-ops if one exists, which is what keeps
+the app-visible behaviour idempotent, but a query that bypasses the service (a script, a
+future endpoint) could still create a duplicate row. Worth a migration; not done here
+because `CLAUDE.md` requires explicit approval for schema changes and that has not been
+sought.
 
 ## Authentication
 

@@ -101,17 +101,30 @@ async function deleteTournament(req, res) {
     res.status(200).json({ success: true, message: "Tournament deleted", data });
 }
 
-// Declared but not built. The routes exist so the paths are fixed and the UI can
-// wire to them properly; each answers 501 through the standard envelope. See
-// docs/api.md for the paths and why they are stubs rather than omissions.
-// Replace the throw with a service call when the feature lands.
+// Save/unsave a tournament to the caller's profile. No ownership check —
+// any authenticated user may save any tournament, including their own; only
+// requireAuth plus "the tournament exists" (for save) apply. See
+// docs/decisions.md.
+async function saveTournament(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
 
-async function saveTournament() {
-    throw new AppError("NOT_IMPLEMENTED");
+    await tournamentService.saveTournament(tournamentId, req.user.id);
+
+    res.status(200).json({ success: true, message: "Tournament saved", data: { tournamentId } });
 }
 
-async function unsaveTournament() {
-    throw new AppError("NOT_IMPLEMENTED");
+async function unsaveTournament(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    await tournamentService.unsaveTournament(tournamentId, req.user.id);
+
+    res.status(200).json({ success: true, message: "Tournament unsaved", data: { tournamentId } });
 }
 
 // The schedule is sent whole, under `schedule`, exactly as the client holds it.

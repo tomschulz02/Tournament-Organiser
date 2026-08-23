@@ -269,7 +269,7 @@ export default function ViewPage() {
 				</Suspense>
 			)}
 
-			<TournamentShell tournamentId={id} name={title}>
+			<TournamentShell tournamentId={id} name={title} creator={result.data?.creator}>
 				{loading && <SectionState variant="loading" />}
 				{!loading && result.error && (
 					<SectionState

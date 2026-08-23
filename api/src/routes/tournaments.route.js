@@ -14,10 +14,10 @@ tournamentRouter.post('/:tournamentId/start', requireAuth, tournamentController.
 tournamentRouter.post('/:tournamentId/end', requireAuth, tournamentController.endTournament);
 tournamentRouter.delete('/:tournamentId', requireAuth, tournamentController.deleteTournament);
 
-// Declared, not implemented: both answer 501. The routes exist so the paths are
-// settled and the frontend can wire to them for real. requireAuth is on them now
-// so the auth shape does not change when they are built; the service will
-// additionally have to check ownership, per docs/decisions.md.
+// Save/unsave a tournament to the caller's profile. Any authenticated user may
+// save any tournament except one they created themselves — the service refuses
+// that with CANNOT_SAVE_OWN_TOURNAMENT, since a creator's own tournament is
+// already on their profile as a created tournament.
 tournamentRouter.post('/:tournamentId/save', requireAuth, tournamentController.saveTournament);
 tournamentRouter.delete('/:tournamentId/save', requireAuth, tournamentController.unsaveTournament);
 

@@ -12,6 +12,7 @@ import About from './pages/About';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 import NotYetImplemented from './pages/NotYetImplemented';
+import Profile from './pages/Profile';
 import LegalPage from './pages/Legal';
 import ScrollToTop from './components/ScrollToTop';
 import { AuthProvider } from './AuthProvider';
@@ -38,9 +39,9 @@ function RoutesComponent() {
 					<Route path="/tournaments/create" element={<CreateTournament />} />
 					<Route path="/about" element={<About />} />
 					<Route path="/terms" element={<LegalPage />} />
-					{/* Reached from the account menu's Profile/Settings items before
-					    either page exists — a real, reachable route rather than a 404. */}
-					<Route path="/profile" element={<NotYetImplemented title="Profile" />} />
+					<Route path="/profile" element={<Profile />} />
+					{/* Reached from the account menu's Settings item before the page
+					    exists — a real, reachable route rather than a 404. */}
 					<Route path="/settings" element={<NotYetImplemented title="Settings" />} />
 					<Route path="*" element={<NotFound />} />
 				</Route>

@@ -9,9 +9,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // file and stays there as the regression guard. A comment is left in its place
 // here saying where it went.
 //
-// Only bug 10 is left, and it is deferred rather than outstanding: it covers
-// five functions nothing calls, for a `friends` table that is not in the schema.
+// Only bug 10 is left, and it is deferred rather than outstanding: it now covers
+// two functions nothing calls, for a `friends` table that is not in the schema.
 // It is fixed when the friends feature is built. Everything above it is done.
+// joinTournament, getSavedTournaments and unfollowTournament were fixed for the
+// Profile page — their regression guard now lives in
+// test/integration/repositories/users.repository.test.js, asserting each
+// resolves the rows db.query produced rather than throwing.
 //
 // Run this suite alone with `npm run test:bugs`; api/vitest.config.js excludes it
 // from `npm test` so the default run stays a usable signal.
@@ -68,16 +72,13 @@ beforeEach(() => {
 // under generateFixtures, asserting the UNSUPPORTED_ROUND_TYPE code and the
 // round type it reports in `details`.
 
-describe("bug 10: the friends and saved-tournament queries always throw", () => {
-    // api/src/repositories/users.repository.js:49, 62, 75, 88 and 101 test
-    // `result.success` on the value returned by db.query, which is a rows array
-    // and has no such property. The guard therefore fires on every call.
+describe("bug 10: the friends queries always throw", () => {
+    // api/src/repositories/users.repository.js:44 and 57 test `result.success`
+    // on the value returned by db.query, which is a rows array and has no such
+    // property. The guard therefore fires on every call.
     it.each([
         ["addFriend", ["user-1", "user-2"]],
-        ["getFriends", ["user-1"]],
-        ["joinTournament", ["user-1", "tour-1"]],
-        ["getSavedTournaments", ["user-1"]],
-        ["unfollowTournament", ["user-1", "tour-1"]]
+        ["getFriends", ["user-1"]]
     ])("%s returns the rows the query produced", async (method, args) => {
         const rows = [{ user_id: "user-1" }];
         dbMock.instance.query.mockResolvedValueOnce(rows);

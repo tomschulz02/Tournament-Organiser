@@ -328,12 +328,17 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 	);
 }
 
-export function TournamentCard({ details, action }) {
+export function TournamentCard({ details, action, onRemove }) {
 	const tournamentStatus = getTournamentStatus(details);
 	const tournamentType = formatTournamentType(getTournamentFormat(details));
 	const { startDate, endDate } = getTournamentDateRange(details);
 	const location = details.location || 'Location to be confirmed';
 	const statusVariant = getTournamentStatusVariant(details);
+
+	const handleRemove = (e) => {
+		e.stopPropagation();
+		onRemove();
+	};
 
 	return (
 		<button
@@ -352,6 +357,15 @@ export function TournamentCard({ details, action }) {
 			    --background-color) so the pattern never fights readability. */}
 			<div className="tournament-card-body">
 				<div className="tournament-card-content">
+					{onRemove && (
+						<button
+							type="button"
+							className="tournament-card-remove"
+							onClick={handleRemove}
+							aria-label="Remove from saved tournaments">
+							<Icon name={'delete'} size={16} />
+						</button>
+					)}
 					<div className="tournament-card-topline">
 						<div className="tournament-card-name">{details.name}</div>
 						{tournamentStatus && <div className={`tournament-card-status ${statusVariant}`}>{tournamentStatus}</div>}

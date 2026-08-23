@@ -101,6 +101,56 @@ describe("getTournamentById", () => {
     });
 });
 
+describe("getTournamentsByCreator", () => {
+    it("selects the card columns for one creator, newest start date first", async () => {
+        db.query.mockResolvedValueOnce([{ id: "tour-1" }]);
+
+        expect(await tournamentRepository.getTournamentsByCreator("user-1")).toEqual([{ id: "tour-1" }]);
+        expect(squash(db.query.mock.calls[0][0])).toBe(
+            "SELECT id, name, start_date, end_date, location, description, status, created_by FROM tournaments WHERE created_by = $1 ORDER BY start_date DESC"
+        );
+        expect(db.query.mock.calls[0][1]).toEqual(["user-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.getTournamentsByCreator("user-1").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch tournaments by creator");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+describe("getTournamentsByIds", () => {
+    it("returns an empty list without querying when given no ids", async () => {
+        expect(await tournamentRepository.getTournamentsByIds([])).toEqual([]);
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("selects the card columns for the given ids, newest start date first", async () => {
+        db.query.mockResolvedValueOnce([{ id: "tour-1" }, { id: "tour-2" }]);
+
+        expect(await tournamentRepository.getTournamentsByIds(["tour-1", "tour-2"]))
+            .toEqual([{ id: "tour-1" }, { id: "tour-2" }]);
+        expect(squash(db.query.mock.calls[0][0])).toBe(
+            "SELECT id, name, start_date, end_date, location, description, status, created_by FROM tournaments WHERE id = ANY($1::uuid[]) ORDER BY start_date DESC"
+        );
+        expect(db.query.mock.calls[0][1]).toEqual([["tour-1", "tour-2"]]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.getTournamentsByIds(["tour-1"]).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch tournaments by id");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
 describe("updateSchedule", () => {
     it("writes the schedule to the tournament's own column", async () => {
         expect(await tournamentRepository.updateSchedule("tour-1", { slots: [] }))

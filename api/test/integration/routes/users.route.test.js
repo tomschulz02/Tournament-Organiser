@@ -10,8 +10,13 @@ vi.mock("../../../src/services/users.service.js", () => ({
     userService: { createUser: vi.fn(), loginUser: vi.fn() }
 }));
 
+vi.mock("../../../src/services/tournaments.service.js", () => ({
+    tournamentService: { getMyTournaments: vi.fn(), getSavedTournaments: vi.fn() }
+}));
+
 const app = (await import("../../../src/app.js")).default;
 const { userService } = await import("../../../src/services/users.service.js");
+const { tournamentService } = await import("../../../src/services/tournaments.service.js");
 const { AppError } = await import("../../../src/errors.js");
 const { authCookie } = await import("../../helpers/auth.js");
 const { resetAuthLimiter, AUTH_MAX_ATTEMPTS } = await import("../../../src/middleware/rateLimit.js");
@@ -19,6 +24,8 @@ const { resetAuthLimiter, AUTH_MAX_ATTEMPTS } = await import("../../../src/middl
 beforeEach(() => {
     vi.mocked(userService.createUser).mockReset();
     vi.mocked(userService.loginUser).mockReset();
+    vi.mocked(tournamentService.getMyTournaments).mockReset();
+    vi.mocked(tournamentService.getSavedTournaments).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
     // Signup and login are rate limited per IP, and every test here comes from
     // the same one. Without this the file spends its own budget and later cases
@@ -256,21 +263,93 @@ describe("GET /api/users/check-login", () => {
     });
 });
 
-describe("GET /api/users/profile/:id", () => {
+describe("GET /api/users/profile", () => {
     it("requires a session", async () => {
-        const response = await request(app).get("/api/users/profile/user-1");
+        const response = await request(app).get("/api/users/profile");
 
         expect(response.status).toBe(401);
     });
 
-    it("answers 501 with a session rather than hanging the request", async () => {
-        const response = await request(app).get("/api/users/profile/user-1").set("Cookie", authCookie());
+    it("returns the session's own id, username, email and admin flag", async () => {
+        const response = await request(app)
+            .get("/api/users/profile")
+            .set("Cookie", authCookie({ id: "user-1", username: "tom", email: "tom@example.com", admin: true }));
 
-        expect(response.status).toBe(501);
+        expect(response.status).toBe(200);
         expect(response.body).toEqual({
-            success: false,
-            message: "This feature is not available yet",
-            data: null
+            success: true,
+            message: "Profile fetched",
+            data: { id: "user-1", username: "tom", email: "tom@example.com", admin: true }
         });
+    });
+});
+
+describe("GET /api/users/profile/tournaments", () => {
+    it("requires a session", async () => {
+        const response = await request(app).get("/api/users/profile/tournaments");
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.getMyTournaments).not.toHaveBeenCalled();
+    });
+
+    it("returns the caller's created tournaments", async () => {
+        tournamentService.getMyTournaments.mockResolvedValue([{ id: "tour-1" }]);
+
+        const response = await request(app)
+            .get("/api/users/profile/tournaments")
+            .set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Tournaments fetched",
+            data: [{ id: "tour-1" }]
+        });
+        expect(tournamentService.getMyTournaments).toHaveBeenCalledWith("user-1");
+    });
+
+    it("reports a failure as 500", async () => {
+        tournamentService.getMyTournaments.mockRejectedValue(new Error("connection lost"));
+
+        const response = await request(app)
+            .get("/api/users/profile/tournaments")
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(500);
+    });
+});
+
+describe("GET /api/users/profile/saved-tournaments", () => {
+    it("requires a session", async () => {
+        const response = await request(app).get("/api/users/profile/saved-tournaments");
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.getSavedTournaments).not.toHaveBeenCalled();
+    });
+
+    it("returns the caller's saved tournaments", async () => {
+        tournamentService.getSavedTournaments.mockResolvedValue([{ id: "tour-2" }]);
+
+        const response = await request(app)
+            .get("/api/users/profile/saved-tournaments")
+            .set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Saved tournaments fetched",
+            data: [{ id: "tour-2" }]
+        });
+        expect(tournamentService.getSavedTournaments).toHaveBeenCalledWith("user-1");
+    });
+
+    it("reports a failure as 500", async () => {
+        tournamentService.getSavedTournaments.mockRejectedValue(new Error("connection lost"));
+
+        const response = await request(app)
+            .get("/api/users/profile/saved-tournaments")
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(500);
     });
 });

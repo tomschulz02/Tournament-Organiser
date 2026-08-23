@@ -303,8 +303,10 @@ The generator stays in the client and the server validates on write — settled
 
 **Complete 2026-08-11.** The coverage gate is back at 100 and CI now runs both packages.
 Six of the seven known bugs are fixed and their tests moved into the regular suites, so
-`npm run test:bugs` reports only bug 10 — the friends and saved-tournament queries, which
-cover unreachable code for a feature that has no schema.
+`npm run test:bugs` reported only bug 10 — the friends and saved-tournament queries,
+which covered unreachable code for a feature that had no schema. The Profile page (below)
+fixed three of bug 10's five cases; `npm run test:bugs` now reports only `addFriend` and
+`getFriends`, tied to the future Friends/Editors-and-scorers feature.
 
 `helmet` and `express-rate-limit` are installed, login and signup are throttled with a
 429 that goes through the error catalogue like everything else, and `saltRounds` is 12.
@@ -806,9 +808,11 @@ properly or the stub is removed.
   `users.repository.js`, the menu item, and known bug 10's cases for them empties
   `npm run test:bugs`, which has never been green. The saved-tournament functions in bug 10
   stay until the Profile page uses them.
-- **Profile and Saved Tournaments** — settled 2026-08-11 as a **future feature**, not a
-  stub to remove. They belong together: a saved-tournaments list needs somewhere to live,
-  and that somewhere is the Profile page in `docs/future-features.md`. Both stay as inert
-  menu items, and the follow button keeps reporting its 501, until that page is built.
+- ~~**Profile and Saved Tournaments**~~ — **done 2026-08-23.** `GET /api/users/profile`
+  (self-scoped, no `:id`), `GET /api/users/profile/tournaments` and
+  `GET /api/users/profile/saved-tournaments`, plus real `POST`/`DELETE
+  /api/tournaments/:tournamentId/save`. `Profile.jsx` replaces the `/profile`
+  placeholder: a read-only account panel, a Created Tournaments list and a Saved
+  Tournaments list with a remove control, both reusing `TournamentCard`.
 - Live scoring, officials assignment, configurable ranking basis, and the rest of
   `docs/future-features.md`.

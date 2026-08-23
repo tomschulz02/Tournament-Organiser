@@ -212,7 +212,10 @@ The backend is mid-rebuild. Treat this section as the map of what actually works
 Last reviewed 2026-08-08.
 
 Complete:
-- `users` — routes, controller, service, repository, apart from `getUserProfile` below.
+- `users` — routes, controller, service, repository, including the self-scoped profile
+  and saved-tournaments endpoints added 2026-08-23. `MenuBar.jsx` was fully retired in
+  favour of `App.jsx`'s `DesktopNav`/`BottomNav`/`AccountSheet` before that date; nothing
+  here still references it.
 - `tournaments` — create, list, and detail only. Join, leave, start, end and delete are
   commented out in `tournaments.route.js`.
 - `divisions` — round progression only. `divisions.controller.js` and
@@ -229,7 +232,6 @@ Incomplete:
   `NOT_IMPLEMENTED`.
 - `fixtures` — `fixtures.route.js` is an empty router and `fixtures.controller.js` is an
   empty file, so no fixture endpoint exists. The service and repository do.
-- `users.controller.js` `getUserProfile` is an empty stub with a live route.
 
 The frontend already calls the missing endpoints. `docs/api.md` lists which ones.
 

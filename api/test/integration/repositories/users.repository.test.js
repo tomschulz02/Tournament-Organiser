@@ -88,15 +88,13 @@ describe("findUserByEmail", () => {
     });
 });
 
-// These five all check `result.success` on the value returned by db.query, which
-// is a rows array and has no such property — so in production they always throw.
-// test/known-bugs asserts the behaviour they were written to have.
+// These two still check `result.success` on the value returned by db.query,
+// which is a rows array and has no such property — so in production they
+// always throw. test/known-bugs asserts the behaviour they were written to
+// have; both are deferred until the friends feature is built.
 describe.each([
     ["addFriend", ["user-1", "user-2"], "INSERT INTO friends (user_id, friend_id) VALUES ($1, $2)", "ADD_FRIEND_ERROR"],
-    ["getFriends", ["user-1"], "SELECT * FROM friends WHERE user_id = $1", "GET_FRIENDS_ERROR"],
-    ["joinTournament", ["user-1", "tour-1"], "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES ($1, $2)", "JOIN_TOURNAMENT_ERROR"],
-    ["getSavedTournaments", ["user-1"], "SELECT tournament_id FROM saved_tournaments WHERE user_id = $1", "GET_SAVED_TOURNAMENTS_ERROR"],
-    ["unfollowTournament", ["user-1", "tour-1"], "DELETE FROM saved_tournaments WHERE user_id = $1 AND tournament_id = $2", "UNFOLLOW_TOURNAMENT_ERROR"]
+    ["getFriends", ["user-1"], "SELECT * FROM friends WHERE user_id = $1", "GET_FRIENDS_ERROR"]
 ])("%s", (method, args, expectedSql, errorCode) => {
     it("issues the expected statement", async () => {
         await userRepository[method](...args).catch(() => {});
@@ -124,5 +122,84 @@ describe.each([
 
         db.query.mockRejectedValueOnce(new Error(""));
         await expect(userRepository[method](...args)).rejects.toThrow(errorCode);
+    });
+});
+
+// joinTournament, getSavedTournaments and unfollowTournament used to share the
+// same broken `result.success` guard as addFriend/getFriends above (known-bug
+// 10). Fixed for the Profile page: each now resolves what db.query produces,
+// the same shape findUserByEmail's tests above assert.
+describe("joinTournament", () => {
+    it("resolves the rows db.query produced", async () => {
+        const rows = [{ user_id: "user-1", tournament_id: "tour-1" }];
+        db.query.mockResolvedValueOnce(rows);
+
+        expect(await userRepository.joinTournament("user-1", "tour-1")).toBe(rows);
+        expect(db.query).toHaveBeenCalledWith(
+            "INSERT INTO saved_tournaments (user_id, tournament_id) VALUES ($1, $2)",
+            ["user-1", "tour-1"]
+        );
+    });
+
+    it("throws on failure, keeping the underlying message", async () => {
+        db.query.mockRejectedValueOnce(new Error("duplicate key value"));
+
+        await expect(userRepository.joinTournament("user-1", "tour-1")).rejects.toThrow("duplicate key value");
+    });
+
+    it("falls back to a generic message when the underlying error carries none", async () => {
+        db.query.mockRejectedValueOnce(new Error(""));
+
+        await expect(userRepository.joinTournament("user-1", "tour-1")).rejects.toThrow("JOIN_TOURNAMENT_ERROR");
+    });
+});
+
+describe("getSavedTournaments", () => {
+    it("resolves the rows db.query produced", async () => {
+        const rows = [{ tournament_id: "tour-1" }, { tournament_id: "tour-2" }];
+        db.query.mockResolvedValueOnce(rows);
+
+        expect(await userRepository.getSavedTournaments("user-1")).toBe(rows);
+        expect(db.query).toHaveBeenCalledWith(
+            "SELECT tournament_id FROM saved_tournaments WHERE user_id = $1",
+            ["user-1"]
+        );
+    });
+
+    it("throws on failure, keeping the underlying message", async () => {
+        db.query.mockRejectedValueOnce(new Error("connection lost"));
+
+        await expect(userRepository.getSavedTournaments("user-1")).rejects.toThrow("connection lost");
+    });
+
+    it("falls back to a generic message when the underlying error carries none", async () => {
+        db.query.mockRejectedValueOnce(new Error(""));
+
+        await expect(userRepository.getSavedTournaments("user-1")).rejects.toThrow("GET_SAVED_TOURNAMENTS_ERROR");
+    });
+});
+
+describe("unfollowTournament", () => {
+    it("resolves the rows db.query produced", async () => {
+        const rows = [];
+        db.query.mockResolvedValueOnce(rows);
+
+        expect(await userRepository.unfollowTournament("user-1", "tour-1")).toBe(rows);
+        expect(db.query).toHaveBeenCalledWith(
+            "DELETE FROM saved_tournaments WHERE user_id = $1 AND tournament_id = $2",
+            ["user-1", "tour-1"]
+        );
+    });
+
+    it("throws on failure, keeping the underlying message", async () => {
+        db.query.mockRejectedValueOnce(new Error("connection lost"));
+
+        await expect(userRepository.unfollowTournament("user-1", "tour-1")).rejects.toThrow("connection lost");
+    });
+
+    it("falls back to a generic message when the underlying error carries none", async () => {
+        db.query.mockRejectedValueOnce(new Error(""));
+
+        await expect(userRepository.unfollowTournament("user-1", "tour-1")).rejects.toThrow("UNFOLLOW_TOURNAMENT_ERROR");
     });
 });

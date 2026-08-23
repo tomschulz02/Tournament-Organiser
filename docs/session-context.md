@@ -193,13 +193,14 @@ letting a schedule be built without generating one first. Eight steps, not start
 table, and set-score outcome columns derived per division. Client-side caching that
 survives a refresh. The knockout bracket's node spacing.
 
-**Deliberately deferred.** Everything in `future-features.md`, including the Profile page
-that Saved Tournaments depends on. Friends was removed outright on 2026-08-11 — it was a
-step towards editors and scorers, and a per-tournament permission is a better shape.
+**Deliberately deferred.** Everything in `future-features.md`. The Profile page and Saved
+Tournaments are done — 2026-08-23 — and no longer belong on this list. Friends was removed
+outright on 2026-08-11 — it was a step towards editors and scorers, and a per-tournament
+permission is a better shape.
 
-**One thing that has never been green.** `npm run test:bugs` still reports bug 10, five
-cases covering unreachable saved-tournament functions. It empties when the Profile page is
-built.
+**One thing that has never been green.** `npm run test:bugs` still reports bug 10, now only
+two cases — `addFriend` and `getFriends`, covering unreachable code for the `friends` table
+that has no schema. It empties when Friends/Editors-and-scorers is built.
 
 ---
 

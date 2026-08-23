@@ -88,6 +88,14 @@ export const registerUser = (username, email, password, confirmPassword) =>
 
 export const checkLoginStatus = () => request('users/check-login');
 
+// Self-scoped only — the caller cannot address another user's profile. See
+// docs/decisions.md.
+export const getMyProfile = () => request('users/profile');
+
+export const getMyTournaments = () => request('users/profile/tournaments');
+
+export const getMySavedTournaments = () => request('users/profile/saved-tournaments');
+
 export const logoutUser = () => request('users/logout', { method: 'POST' });
 
 // Tournaments
@@ -252,8 +260,8 @@ export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous'
 export const createTournament = (tournamentData) =>
 	request('tournaments/create', { method: 'POST', body: tournamentData });
 
-// Follow and unfollow. The backend routes exist but answer 501, so these throw an
-// ApiError whose message is display-ready — pass it straight to showMessage.
+// Follow and unfollow, used by both the tournament view's follow button and
+// Profile's saved-tournaments list.
 export const saveTournament = (tournamentId) => request(`tournaments/${tournamentId}/save`, { method: 'POST' });
 
 export const unsaveTournament = (tournamentId) => request(`tournaments/${tournamentId}/save`, { method: 'DELETE' });

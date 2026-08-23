@@ -1,6 +1,6 @@
 import { userService } from "../services/users.service.js";
+import { tournamentService } from "../services/tournaments.service.js";
 import { SESSION_TTL_MS, sessionCookieOptions } from "../config/auth.js";
-import { AppError } from "../errors.js";
 
 // Controllers do not catch. Express 5 forwards a rejected promise from an async
 // handler to the error middleware, which is the single place that maps a failure
@@ -35,10 +35,27 @@ async function logout(req, res) {
     res.status(200).json({ success: true, message: 'User logged out', data: null });
 }
 
-// Not implemented. Returning 501 is what stops the route hanging: the handler
-// used to have an empty try block and never called res at all.
+// Self-scoped only — see docs/decisions.md. req.user already carries
+// everything a basic profile needs, decoded from the JWT by the global auth
+// middleware, so this needs no service or repository call of its own.
 async function getUserProfile(req, res) {
-    throw new AppError("NOT_IMPLEMENTED");
+    res.status(200).json({
+        success: true,
+        message: 'Profile fetched',
+        data: { id: req.user.id, username: req.user.username, email: req.user.email, admin: req.user.admin }
+    });
+}
+
+async function getMyTournaments(req, res) {
+    const tournaments = await tournamentService.getMyTournaments(req.user.id);
+
+    res.status(200).json({ success: true, message: 'Tournaments fetched', data: tournaments });
+}
+
+async function getMySavedTournaments(req, res) {
+    const tournaments = await tournamentService.getSavedTournaments(req.user.id);
+
+    res.status(200).json({ success: true, message: 'Saved tournaments fetched', data: tournaments });
 }
 
 async function checkLogin(req, res) {
@@ -56,5 +73,7 @@ export const userController = {
     login,
     logout,
     getUserProfile,
+    getMyTournaments,
+    getMySavedTournaments,
     checkLogin
 }

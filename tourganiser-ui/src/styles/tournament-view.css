@@ -277,6 +277,9 @@ body.dark {
 }
 
 .tv-division-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
 	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
 	border-radius: 999px;
@@ -288,16 +291,31 @@ body.dark {
 	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
+/* Set inline per pill from getDivisionAccent, so a pill carries its division's
+   colour before it is ever selected — the same colour the badge and the fixture
+   rows use, so a reader learns "the teal pills are Division 2" from any of them. */
+.tv-division-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+	background: var(--tv-division-color, var(--main-color));
+}
+
 .tv-division-pill:hover {
-	border-color: var(--main-color);
-	color: var(--main-color);
+	border-color: var(--tv-division-color, var(--main-color));
+	color: var(--tv-division-color, var(--main-color));
 }
 
 .tv-division-pill.active {
-	background: var(--main-color);
-	border-color: var(--main-color);
+	background: var(--tv-division-color, var(--main-color));
+	border-color: var(--tv-division-color, var(--main-color));
 	/* Filled surface, so the white token is the right one here. */
 	color: var(--text-color);
+}
+
+.tv-division-pill.active .tv-division-dot {
+	background: var(--text-color);
 }
 
 .tv-division-dropdown {
@@ -428,10 +446,33 @@ body.dark .tv-division-badge {
 }
 
 .tv-info-card {
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
 	border-radius: 14px;
 	padding: var(--space-4);
+}
+
+/* The tournament's generated identity, behind the card's real content — the
+   "event header" treatment. Same mechanism as .tournament-card-identity on
+   Browse; kept as its own rule because this card's padding means the pattern
+   layer has to ignore it rather than inherit it. */
+.tv-info-identity {
+	position: absolute;
+	inset: 0;
+	z-index: var(--z-below);
+	background: linear-gradient(160deg, rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.14), transparent 70%);
+	pointer-events: none;
+}
+
+.tv-info-identity .tournament-pattern {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	color: var(--tournament-accent, var(--main-color));
 }
 
 .tv-info-header {
@@ -459,18 +500,16 @@ body.dark .tv-division-badge {
 	border-radius: 999px;
 	font-size: 0.78rem;
 	font-weight: 600;
-	background: rgb(from var(--secondary-color) r g b / 0.15);
-	color: var(--secondary-color);
+	background: rgb(from var(--secondary-color) r g b / 0.9);
+	color: var(--background-color);
 }
 
 .tv-status-pill--ongoing {
-	background: rgb(from var(--success-color) r g b / 0.16);
-	color: var(--success-color);
+	background: rgb(from var(--success-color) r g b / 0.9);
 }
 
 .tv-status-pill--finished {
-	background: rgb(from var(--tv-muted) r g b / 0.16);
-	color: var(--tv-muted);
+	background: rgb(from var(--tv-muted) r g b / 0.9);
 }
 
 .tv-info-format {
@@ -510,6 +549,23 @@ body.dark .tv-division-badge {
 	overflow-wrap: anywhere;
 }
 
+/* Divisions and Teams are counts, not prose — the doc's own example is "22 Teams"
+   read at a glance, so the number outweighs its label the way a stat does. Only
+   these two: Location and Dates stay text-weight, since making every value this
+   size would flatten the hierarchy it is meant to create. */
+.tv-info-item--stat dd {
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+.tv-info-item-icon {
+	display: inline-flex;
+	vertical-align: -3px;
+	margin-right: 4px;
+	fill: var(--tv-muted);
+}
+
 .tv-division-cards {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
@@ -522,6 +578,10 @@ body.dark .tv-division-badge {
 	gap: var(--space-3);
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
+	/* Set inline per card via getDivisionAccent, falling back to the plain border
+	   for the rare case a division somehow has no id. The rest of the card stays
+	   neutral — one accent edge is identity, not decoration. */
+	border-left: 3px solid var(--tv-division-color, var(--tv-border));
 	border-radius: 14px;
 	padding: var(--space-4);
 }
@@ -551,7 +611,7 @@ body.dark .tv-division-badge {
 	display: block;
 	height: 100%;
 	border-radius: 999px;
-	background: var(--main-color);
+	background: var(--tv-division-color, var(--main-color));
 }
 
 .tv-progress-label {
@@ -783,6 +843,46 @@ body.dark .tv-division-badge {
 	color: var(--tv-muted);
 }
 
+/* Modelled on .ct-draft-banner (create-tournament.css) — same shape, own
+   namespace: a round-complete pointer to Standings, not a draft-recovery
+   prompt, so it doesn't reach into that stylesheet. */
+.tv-round-banner {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	margin-bottom: var(--space-4);
+	padding: var(--space-3) var(--space-4);
+	border: 1px solid var(--main-color);
+	border-radius: 10px;
+	background-color: var(--tv-surface);
+}
+
+.tv-round-banner-title {
+	margin: 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.tv-round-banner-detail {
+	margin: var(--space-1) 0 0;
+	font-size: 0.85rem;
+	color: var(--tv-muted);
+}
+
+.tv-round-banner-actions {
+	display: flex;
+	gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+	.tv-round-banner {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+}
+
 /* A plain column of cards. The rows no longer share the list's columns: each one
    owns its own three, and the fixed left column is what lines the courts, badges
    and round labels up down the list. */
@@ -808,7 +908,11 @@ body.dark .tv-division-badge {
 	padding: var(--space-4) var(--space-3);
 	background: var(--tv-surface);
 	border: 1px solid var(--tv-border);
-	border-left: 3px solid var(--tv-border);
+	/* --tv-division-color is set inline by FixtureRow only in a multi-division
+	   tournament (showDivision); a single-division tournament has nothing to
+	   differentiate and keeps the plain border, matching doc §6's "same component
+	   structure" — the accent is additive, not a restyle. */
+	border-left: 3px solid var(--tv-division-color, var(--tv-border));
 	border-radius: 10px;
 }
 

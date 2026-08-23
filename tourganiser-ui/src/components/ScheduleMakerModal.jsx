@@ -32,6 +32,7 @@ import {
 	validateScheduleEntry,
 } from '../utils/scheduleUtils';
 import { flattenFixtures } from './tournament/fixtureUtils';
+import { divisionColorStyle } from '../utils/divisionColors';
 
 function scheduleReducer(state, action) {
 	switch (action.type) {
@@ -116,6 +117,30 @@ function getEntryOfficials(entry) {
 	if (entry.type === 'break') return '';
 
 	return entry.officials ? 'Officials: ' + entry.officials : '';
+}
+
+// Same colour a fixture's division carries everywhere else in the app (the
+// Overview cards, the division selector, Fixtures & Schedule's own rows) —
+// getDivisionAccent's hash is keyed on division_id, so it is already the same
+// colour without this module knowing anything about the others.
+//
+// Gated on divisionName the same way the text label already is: with a single
+// division there is nothing to tell apart, so buildTournamentSchedule leaves
+// divisionName unset and this withholds the colour too rather than tinting
+// every entry identically.
+function getEntryDivisionStyle(entry, fixturesById) {
+	if (entry.type === 'break') return undefined;
+
+	const fixture = fixturesById[entry.fixtureId];
+	if (!fixture || fixture.divisionName == null) return undefined;
+
+	return divisionColorStyle(fixture.division_id);
+}
+
+function getFixtureDivisionStyle(fixture) {
+	if (!fixture || fixture.divisionName == null) return undefined;
+
+	return divisionColorStyle(fixture.division_id);
 }
 
 function getSlotKey(day, courtId, startTime) {
@@ -1011,12 +1036,14 @@ export default function ScheduleMakerModal({
 						    action set below — nothing here measures a width. */}
 						<div className="schedule-view-toggle">
 							<button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}>
-								<span className="schedule-label-long">Grid View</span>
-								<span className="schedule-label-short">Grid</span>
+								{/* <span className="schedule-label-long"><Icon name='grid'/></span>
+								<span className="schedule-label-short"><Icon name='grid'/></span> */}
+								{viewMode === 'grid' ? <Icon name='grid' fill='white'/> : <Icon name='grid' fill='var(--secondary-text-color)'/>}
 							</button>
 							<button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>
-								<span className="schedule-label-long">List View</span>
-								<span className="schedule-label-short">List</span>
+								{/* <span className="schedule-label-long"><Icon name='list'/></span>
+								<span className="schedule-label-short"><Icon name='list'/></span> */}
+								{viewMode === 'list' ? <Icon name='list' fill='white'/> : <Icon name='list' fill='var(--secondary-text-color)'/>}
 							</button>
 						</div>
 
@@ -1157,6 +1184,7 @@ export default function ScheduleMakerModal({
 											draggable
 											aria-pressed={pendingFixtureId === fixture.id}
 											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
+											style={getFixtureDivisionStyle(fixture)}
 											onDragStart={(event) => event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`)}
 											onClick={() => handleSelectFixtureForPlacement(fixture.id)}>
 											<strong>{fixture.team1}</strong>
@@ -1486,6 +1514,7 @@ function ScheduleGridView({
 							style={{
 								gridColumn: entry.courtId === null ? `2 / span ${schedule.courts.length}` : `${courtIndex + 2}`,
 								gridRow: `${rowStart} / span ${rowSpan}`,
+								...getEntryDivisionStyle(entry, fixturesById),
 							}}
 							onClick={() => onSelectEntry(entry)}>
 							<div className="schedule-grid-entry-time">
@@ -1509,7 +1538,12 @@ function ScheduleGridView({
 					</p>
 					<div className="schedule-grid-unplaceable-list">
 						{unplaceableEntries.map(({ entry, reason }) => (
-							<button key={entry.id} type="button" className="schedule-fixture-pill" onClick={() => onSelectEntry(entry)}>
+							<button
+								key={entry.id}
+								type="button"
+								className="schedule-fixture-pill"
+								style={getEntryDivisionStyle(entry, fixturesById)}
+								onClick={() => onSelectEntry(entry)}>
 								<strong>{getEntryLabel(entry, fixturesById)}</strong>
 								<small>
 									{entry.startTime} - {entry.endTime} - {getCourtName(schedule, entry.courtId)}
@@ -1539,7 +1573,12 @@ function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) 
 	return (
 		<div className="schedule-list-day">
 			{dayEntries.map((entry) => (
-				<button key={entry.id} type="button" className={`schedule-list-entry ${entry.type}`} onClick={() => onSelectEntry(entry)}>
+				<button
+					key={entry.id}
+					type="button"
+					className={`schedule-list-entry ${entry.type}`}
+					style={getEntryDivisionStyle(entry, fixturesById)}
+					onClick={() => onSelectEntry(entry)}>
 					<div className="schedule-list-time">
 						{entry.startTime} - {entry.endTime}
 					</div>
@@ -1664,7 +1703,12 @@ function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign, onBack }) {
 			<div className="schedule-maker-fixture-list compact">
 				{fixtures.length > 0 ? (
 					fixtures.map((fixture) => (
-						<button key={fixture.id} type="button" className="schedule-fixture-pill" onClick={() => onAssign(fixture)}>
+						<button
+							key={fixture.id}
+							type="button"
+							className="schedule-fixture-pill"
+							style={getFixtureDivisionStyle(fixture)}
+							onClick={() => onAssign(fixture)}>
 							<strong>{fixture.team1}</strong>
 							<span>vs</span>
 							<strong>{fixture.team2}</strong>
@@ -1961,103 +2005,191 @@ function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onD
 	);
 }
 
-function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
-	return (
-		<>
-			{schedule.days.map((day) => (
-				<div key={`${type}-${day.id}`} className="schedule-export-page" data-export-page="true">
-					<div className="schedule-export-header">
-						<div>
-							<p>Tourganiser</p>
-							<h2>{tournamentName}</h2>
-							<h3>Tournament Schedule</h3>
-						</div>
-						<div className="schedule-export-date">{formatDateLabel(day.date)}</div>
-					</div>
-					{type === 'grid' ? (
-						<ScheduleExportGridDay schedule={schedule} day={day.date} fixturesById={fixturesById} />
-					) : (
-						<ScheduleExportListDay schedule={schedule} day={day.date} fixturesById={fixturesById} />
-					)}
-				</div>
-			))}
-		</>
-	);
+// How many list rows / grid slot-rows one printed A4 page is estimated to
+// hold, derived from the row heights already governing rendering (the list
+// row's own padding, the grid's min-height: 56px cell) against the @page
+// dimensions (schedule-maker.css) minus margins and the header's own height.
+//
+// Deliberately conservative: the safe failure mode is a page that breaks a
+// little early and prints with some blank space at the foot, not one that
+// overflows and silently reintroduces the bug this exists to fix (every
+// `.schedule-export-page` forces `break-after: page` in print, so an
+// undersized estimate costs whitespace, never a split). Tune these against
+// real printed/PDF output if a page comes out badly under- or over-full.
+const PRINT_LIST_ROWS_PER_PAGE = 14;
+const PRINT_GRID_SLOTS_PER_PAGE = 7;
+
+// Splits into groups of `size`, preserving order. A day with nothing to show
+// still gets one (empty) chunk, matching the one-page-per-day floor the
+// unchunked version always had.
+function chunkList(list, size) {
+	const chunks = [];
+
+	for (let index = 0; index < list.length; index += size) {
+		chunks.push(list.slice(index, index + size));
+	}
+
+	return chunks.length > 0 ? chunks : [[]];
 }
 
-function ScheduleExportGridDay({ schedule, day, fixturesById }) {
-	// The same fixed axis and the same row arithmetic the screen uses, so the
-	// printed page puts an entry in the row the organiser saw it in. Matching on
-	// startTime alone dropped every entry that did not begin exactly on a slot.
-	const dayBounds = getDayBounds(schedule);
-	const slots = buildGridRowTimes(schedule, dayBounds);
-	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: slots.length };
-	const entries = getDayEntries(schedule, day)
-		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
-		.filter((item) => item.inDay);
-
+// The day label is additive: the date this already showed stays, day.label
+// (already on the day object — normaliseTournamentDays, "Day N" by default or
+// a custom one) is added alongside it, same pairing ScheduleTab already shows
+// on screen.
+function ScheduleExportHeader({ tournamentName, dayLabel, date }) {
 	return (
-		<div className="schedule-export-grid">
-			<div
-				className="schedule-export-grid-table"
-				style={{ gridTemplateColumns: `88px repeat(${schedule.courts.length}, minmax(0, 1fr))` }}>
-				<div className="schedule-export-grid-head">Time</div>
-				{schedule.courts.map((court) => (
-					<div key={court.id} className="schedule-export-grid-head">
-						{court.name}
-					</div>
-				))}
-				{slots.map((slot, rowIndex) => (
-					<React.Fragment key={slot}>
-						<div className="schedule-export-grid-time">{slot}</div>
-						{schedule.courts.map((court) => {
-							const placed = entries.find((item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1);
-							const spanningBreak = entries.find(
-								(item) =>
-									item.entry.courtId === null &&
-									item.rowStart <= rowIndex + 1 &&
-									item.rowStart + item.rowSpan > rowIndex + 1
-							);
-
-							return (
-								<div key={`${court.id}-${slot}`} className="schedule-export-grid-cell">
-									{spanningBreak ? (
-										<strong>{spanningBreak.entry.title}</strong>
-									) : placed ? (
-										<>
-											<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
-											<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
-											{getEntryOfficials(placed.entry) && <span style={{color: 'dodgerblue'}}>{getEntryOfficials(placed.entry)}</span>}
-										</>
-									) : null}
-								</div>
-							);
-						})}
-					</React.Fragment>
-				))}
+		<div className="schedule-export-header">
+			<div>
+				<p>Tourganiser</p>
+				<h2>{tournamentName}</h2>
+				<h3>Tournament Schedule</h3>
+			</div>
+			<div className="schedule-export-date">
+				{dayLabel} - {formatDateLabel(date)}
 			</div>
 		</div>
 	);
 }
 
-function ScheduleExportListDay({ schedule, day, fixturesById }) {
-	const entries = getDayEntries(schedule, day);
-
+function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 	return (
-		<div className="schedule-export-list">
-			{entries.map((entry) => (
-				<div key={entry.id} className="schedule-export-list-row">
-					<div>
-						<strong>
-							{entry.startTime} - {entry.endTime}
-						</strong>
-					</div>
-					<div>{getCourtName(schedule, entry.courtId)}</div>
-					<div><strong>{getEntryLabel(entry, fixturesById)}</strong></div>
-					{getEntryOfficials(entry) && <div style={{color: 'dodgerblue'}}>{getEntryOfficials(entry)}</div>}
-					<div>{getEntrySecondary(entry, fixturesById)}</div>
-				</div>
-			))}
-		</div>
+		<>
+			{schedule.days.map((day) =>
+				type === 'grid' ? (
+					<ScheduleExportGridPages
+						key={day.id}
+						schedule={schedule}
+						day={day}
+						fixturesById={fixturesById}
+						tournamentName={tournamentName}
+					/>
+				) : (
+					<ScheduleExportListPages
+						key={day.id}
+						schedule={schedule}
+						day={day}
+						fixturesById={fixturesById}
+						tournamentName={tournamentName}
+					/>
+				),
+			)}
+		</>
 	);
+}
+
+// One `.schedule-export-page` per chunk of time-slot rows that fits one
+// sheet, not one per day — each chunk is a full grid table (head row plus
+// only that chunk's slots) with its own header, so a day spilling onto a
+// second or third sheet still names itself on every one.
+//
+// Entries are placed once against the whole day's axis, exactly as before
+// chunking existed; only which rows get rendered on a given page changes.
+// getEntryRowPlacement's rowStart is a global row number, and slicing the
+// slot list preserves order, so `rowOffset + localIndex` reconstructs the
+// same global row index a chunk's slots always had — placement itself is
+// untouched.
+function ScheduleExportGridPages({ schedule, day, fixturesById, tournamentName }) {
+	// The same fixed axis and the same row arithmetic the screen uses, so the
+	// printed page puts an entry in the row the organiser saw it in. Matching on
+	// startTime alone dropped every entry that did not begin exactly on a slot.
+	const dayBounds = getDayBounds(schedule);
+	const allSlots = buildGridRowTimes(schedule, dayBounds);
+	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: allSlots.length };
+	const entries = getDayEntries(schedule, day.date)
+		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
+		.filter((item) => item.inDay);
+
+	const slotChunks = chunkList(allSlots, PRINT_GRID_SLOTS_PER_PAGE);
+
+	return slotChunks.map((slots, pageIndex) => {
+		const rowOffset = pageIndex * PRINT_GRID_SLOTS_PER_PAGE;
+
+		return (
+			<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
+				<ScheduleExportHeader tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
+				<div className="schedule-export-grid">
+					<div
+						className="schedule-export-grid-table"
+						style={{ gridTemplateColumns: `88px repeat(${schedule.courts.length}, minmax(0, 1fr))` }}>
+						<div className="schedule-export-grid-head">Time</div>
+						{schedule.courts.map((court) => (
+							<div key={court.id} className="schedule-export-grid-head">
+								{court.name}
+							</div>
+						))}
+						{slots.map((slot, localIndex) => {
+							const rowIndex = rowOffset + localIndex;
+
+							return (
+								<React.Fragment key={slot}>
+									<div className="schedule-export-grid-time">{slot}</div>
+									{schedule.courts.map((court) => {
+										const placed = entries.find(
+											(item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1,
+										);
+										const spanningBreak = entries.find(
+											(item) =>
+												item.entry.courtId === null &&
+												item.rowStart <= rowIndex + 1 &&
+												item.rowStart + item.rowSpan > rowIndex + 1,
+										);
+
+										return (
+											<div
+												key={`${court.id}-${slot}`}
+												className="schedule-export-grid-cell"
+												style={placed ? getEntryDivisionStyle(placed.entry, fixturesById) : undefined}>
+												{spanningBreak ? (
+													<strong>{spanningBreak.entry.title}</strong>
+												) : placed ? (
+													<>
+														<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
+														<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
+														{getEntryOfficials(placed.entry) && (
+															<span style={{ color: 'dodgerblue' }}>{getEntryOfficials(placed.entry)}</span>
+														)}
+													</>
+												) : null}
+											</div>
+										);
+									})}
+								</React.Fragment>
+							);
+						})}
+					</div>
+				</div>
+			</div>
+		);
+	});
+}
+
+// Same reasoning as the grid version: one page per chunk of rows, each with
+// its own repeated header. entries is already the flat array the on-screen
+// list uses, so chunking it is a straight array split.
+function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName }) {
+	const entries = getDayEntries(schedule, day.date);
+	const pages = chunkList(entries, PRINT_LIST_ROWS_PER_PAGE);
+
+	return pages.map((pageEntries, pageIndex) => (
+		<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
+			<ScheduleExportHeader tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
+			<div className="schedule-export-list">
+				{pageEntries.map((entry) => (
+					<div key={entry.id} className="schedule-export-list-row" style={getEntryDivisionStyle(entry, fixturesById)}>
+						<div>
+							<strong>
+								{entry.startTime} - {entry.endTime}
+							</strong>
+						</div>
+						<div>{getCourtName(schedule, entry.courtId)}</div>
+						<div>
+							<strong>{getEntryLabel(entry, fixturesById)}</strong>
+						</div>
+						{getEntryOfficials(entry) && <div style={{ color: 'dodgerblue' }}>{getEntryOfficials(entry)}</div>}
+						<div>{getEntrySecondary(entry, fixturesById)}</div>
+					</div>
+				))}
+			</div>
+		</div>
+	));
 }

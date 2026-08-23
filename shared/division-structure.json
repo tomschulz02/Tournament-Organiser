@@ -45,41 +45,138 @@
 			"label": "two qualifiers, a final and the playoff in front of it",
 			"qualifiers": 2,
 			"rounds": [
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [[null, null], [null, null]]
+				}
 			]
 		},
 		{
 			"label": "three qualifiers, one preliminary match feeding an uneven final",
 			"qualifiers": 3,
 			"rounds": [
-				{ "name": "Round of 3", "matches": 1, "groups": [[0], [1, 2]] },
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Round of 3",
+					"matches": 1,
+					"groups": [[0], [1, 2]],
+					"sources": [[null, null]]
+				},
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [
+						[{ "matchId": "Round of 3-1", "matchNo": null, "outcome": "LOSER" }, null],
+						[null, { "matchId": "Round of 3-1", "matchNo": null, "outcome": "WINNER" }]
+					]
+				}
 			]
 		},
 		{
 			"label": "four qualifiers, a power of two",
 			"qualifiers": 4,
 			"rounds": [
-				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Semifinals",
+					"matches": 2,
+					"groups": [[0, 3], [1, 2]],
+					"sources": [[null, null], [null, null]]
+				},
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "LOSER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "LOSER" }
+						],
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				}
 			]
 		},
 		{
 			"label": "six qualifiers, two going straight through on a bye",
 			"qualifiers": 6,
 			"rounds": [
-				{ "name": "Round of 6", "matches": 2, "groups": [[0], [1], [2, 5], [3, 4]] },
-				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Round of 6",
+					"matches": 2,
+					"groups": [[0], [1], [2, 5], [3, 4]],
+					"sources": [[null, null], [null, null]]
+				},
+				{
+					"name": "Semifinals",
+					"matches": 2,
+					"groups": [[0, 3], [1, 2]],
+					"sources": [
+						[null, { "matchId": "Round of 6-3", "matchNo": null, "outcome": "WINNER" }],
+						[null, { "matchId": "Round of 6-2", "matchNo": null, "outcome": "WINNER" }]
+					]
+				},
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "LOSER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "LOSER" }
+						],
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				}
 			]
 		},
 		{
 			"label": "eight qualifiers",
 			"qualifiers": 8,
 			"rounds": [
-				{ "name": "Quarterfinals", "matches": 4, "groups": [[0, 7], [1, 6], [2, 5], [3, 4]] },
-				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Quarterfinals",
+					"matches": 4,
+					"groups": [[0, 7], [1, 6], [2, 5], [3, 4]],
+					"sources": [[null, null], [null, null], [null, null], [null, null]]
+				},
+				{
+					"name": "Semifinals",
+					"matches": 2,
+					"groups": [[0, 3], [1, 2]],
+					"sources": [
+						[
+							{ "matchId": "Quarterfinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Quarterfinals-3", "matchNo": null, "outcome": "WINNER" }
+						],
+						[
+							{ "matchId": "Quarterfinals-1", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Quarterfinals-2", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				},
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "LOSER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "LOSER" }
+						],
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				}
 			]
 		},
 		{
@@ -89,11 +186,50 @@
 				{
 					"name": "Round of 12",
 					"matches": 4,
-					"groups": [[0], [1], [2], [3], [4, 11], [5, 10], [6, 9], [7, 8]]
+					"groups": [[0], [1], [2], [3], [4, 11], [5, 10], [6, 9], [7, 8]],
+					"sources": [[null, null], [null, null], [null, null], [null, null]]
 				},
-				{ "name": "Quarterfinals", "matches": 4, "groups": [[0, 7], [1, 6], [2, 5], [3, 4]] },
-				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Quarterfinals",
+					"matches": 4,
+					"groups": [[0, 7], [1, 6], [2, 5], [3, 4]],
+					"sources": [
+						[null, { "matchId": "Round of 12-7", "matchNo": null, "outcome": "WINNER" }],
+						[null, { "matchId": "Round of 12-6", "matchNo": null, "outcome": "WINNER" }],
+						[null, { "matchId": "Round of 12-5", "matchNo": null, "outcome": "WINNER" }],
+						[null, { "matchId": "Round of 12-4", "matchNo": null, "outcome": "WINNER" }]
+					]
+				},
+				{
+					"name": "Semifinals",
+					"matches": 2,
+					"groups": [[0, 3], [1, 2]],
+					"sources": [
+						[
+							{ "matchId": "Quarterfinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Quarterfinals-3", "matchNo": null, "outcome": "WINNER" }
+						],
+						[
+							{ "matchId": "Quarterfinals-1", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Quarterfinals-2", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				},
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "LOSER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "LOSER" }
+						],
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				}
 			]
 		},
 		{
@@ -103,11 +239,65 @@
 				{
 					"name": "Round of 16",
 					"matches": 8,
-					"groups": [[0, 15], [1, 14], [2, 13], [3, 12], [4, 11], [5, 10], [6, 9], [7, 8]]
+					"groups": [[0, 15], [1, 14], [2, 13], [3, 12], [4, 11], [5, 10], [6, 9], [7, 8]],
+					"sources": [
+						[null, null], [null, null], [null, null], [null, null],
+						[null, null], [null, null], [null, null], [null, null]
+					]
 				},
-				{ "name": "Quarterfinals", "matches": 4, "groups": [[0, 7], [1, 6], [2, 5], [3, 4]] },
-				{ "name": "Semifinals", "matches": 2, "groups": [[0, 3], [1, 2]] },
-				{ "name": "Finals", "matches": 2, "groups": [[2, 3], [0, 1]] }
+				{
+					"name": "Quarterfinals",
+					"matches": 4,
+					"groups": [[0, 7], [1, 6], [2, 5], [3, 4]],
+					"sources": [
+						[
+							{ "matchId": "Round of 16-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Round of 16-7", "matchNo": null, "outcome": "WINNER" }
+						],
+						[
+							{ "matchId": "Round of 16-1", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Round of 16-6", "matchNo": null, "outcome": "WINNER" }
+						],
+						[
+							{ "matchId": "Round of 16-2", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Round of 16-5", "matchNo": null, "outcome": "WINNER" }
+						],
+						[
+							{ "matchId": "Round of 16-3", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Round of 16-4", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				},
+				{
+					"name": "Semifinals",
+					"matches": 2,
+					"groups": [[0, 3], [1, 2]],
+					"sources": [
+						[
+							{ "matchId": "Quarterfinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Quarterfinals-3", "matchNo": null, "outcome": "WINNER" }
+						],
+						[
+							{ "matchId": "Quarterfinals-1", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Quarterfinals-2", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				},
+				{
+					"name": "Finals",
+					"matches": 2,
+					"groups": [[2, 3], [0, 1]],
+					"sources": [
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "LOSER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "LOSER" }
+						],
+						[
+							{ "matchId": "Semifinals-0", "matchNo": null, "outcome": "WINNER" },
+							{ "matchId": "Semifinals-1", "matchNo": null, "outcome": "WINNER" }
+						]
+					]
+				}
 			]
 		}
 	]

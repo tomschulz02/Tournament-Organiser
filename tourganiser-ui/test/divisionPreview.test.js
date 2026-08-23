@@ -47,6 +47,20 @@ describe('previewBracket against the shared expectation fixture', () => {
 				expectation.rounds.map((round) => round.matches),
 			);
 		});
+
+		// sources is what BracketView's own feed-ordering (groupByFeed) reads to
+		// lay a round out in the order the next round actually requires — without
+		// it every round falls back to its own construction order, which is wrong
+		// whenever match numbering and rendering order diverge. Pinned against the
+		// fixture the same way groups and matches are, so a change to either the
+		// round shape or the source arithmetic turns this red.
+		it(`sources each match correctly for ${expectation.label}`, () => {
+			const bracket = previewBracket(expectation.qualifiers);
+
+			expect(bracket.map((round) => round.matches.map((match) => match.sources))).toEqual(
+				expectation.rounds.map((round) => round.sources),
+			);
+		});
 	});
 });
 

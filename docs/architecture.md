@@ -167,7 +167,7 @@ ends. Being on `--z-modal` fixes the ordering, but only `createPortal` onto
 `document.body` guarantees no ancestor creates a containing block above it. All four
 modals do both.
 
-**Five sanctioned horizontal scrollers**, and no others:
+**Six sanctioned horizontal scrollers**, and no others:
 
 | Scroller | Why it is wide |
 |---|---|
@@ -176,6 +176,7 @@ modals do both.
 | `.tv-bracket-scroll` | the knockout bracket |
 | `.schedule-grid-body` | the schedule grid — one column per court |
 | `.schedule-maker-day-tabs` | the schedule maker's day strip — one tab per tournament day |
+| `.ct-schematic-pools` | the creation review's pool preview — a division with eight pools is wider than a phone |
 
 The reasoning is the same in each case: inherently wide content is better scrolled than
 shrunk. On a phone vertical space is the scarce axis and horizontal can be borrowed, so a

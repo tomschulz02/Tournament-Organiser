@@ -112,18 +112,61 @@ export function knockoutRounds(qualifiers) {
 	return rounds;
 }
 
+// Which match, if any, produces the team that lands at `index` in the previous
+// round's results — a straight port of resolveMatchSource in
+// api/src/utils/tournamentViewFormatter.js. See that function's own comment for
+// the index arithmetic; it is not repeated here because it is not allowed to
+// diverge.
+function resolveMatchSource(index, previousRound) {
+	if (!previousRound || !Number.isInteger(index)) return null;
+
+	const { groups, matches } = previousRound;
+
+	if (index >= groups.length) {
+		return describeMatchSource(matches[index - groups.length], 'LOSER');
+	}
+
+	const group = groups[index];
+	if (!Array.isArray(group) || group.length < 2) return null;
+
+	// The matches array skips one-team groups, so the match for group `index`
+	// sits at the number of groups of two or more that precede it.
+	let matchIndex = 0;
+	for (let position = 0; position < index; position += 1) {
+		const earlier = groups[position];
+		if (Array.isArray(earlier) && earlier.length >= 2) matchIndex += 1;
+	}
+
+	return describeMatchSource(matches[matchIndex], 'WINNER');
+}
+
+function describeMatchSource(match, outcome) {
+	if (!match) return null;
+
+	// matchNo is always null here — preview matches have no fixture yet, which
+	// is the same case the server itself falls back to before fixtures exist.
+	return { matchId: match.id, matchNo: match.match_no ?? null, outcome };
+}
+
 // The rounds above in the shape BracketView reads, which is what
 // buildDivisionBracket produces once a division exists.
 //
 // Every participant is a rank placeholder, which BracketView renders natively —
 // a knockout fixture exists before the pool feeding it has finished, so a
 // preview is the same case rather than a special one.
+//
+// Each match also carries `sources`, mirroring buildDivisionBracket exactly:
+// without it, BracketView's own feed-ordering (groupByFeed) has nothing to
+// place matches by and every round falls back to its own construction order,
+// which is wrong whenever match numbering and rendering order diverge (any
+// non-power-of-two qualifier count).
 export function previewBracket(qualifiers) {
-	return knockoutRounds(qualifiers).map((round, index) => ({
-		name: round.name,
-		// Pool Play is round 0 of state.rounds and the knockout follows it.
-		roundIndex: index + 1,
-		matches: round.groups
+	// The knockout round immediately before this one, if there is one — same
+	// role as buildDivisionBracket's own previousRound.
+	let previousRound = null;
+
+	return knockoutRounds(qualifiers).map((round, index) => {
+		const matches = round.groups
 			.map((group, groupIndex) => ({ group, groupIndex }))
 			// A bye generates no fixture, and buildDivisionBracket drops the
 			// group for the same reason. The index is kept from before the drop
@@ -135,14 +178,47 @@ export function previewBracket(qualifiers) {
 				round: round.name,
 				status: 'UPCOMING',
 				participants: [rankPlaceholder(group[0]), rankPlaceholder(group[1])],
+				sources: [resolveMatchSource(group[0], previousRound), resolveMatchSource(group[1], previousRound)],
 				result: [],
 				winner: null,
 				// generateKnockoutFixtures names group 0 of the Finals round the
 				// third place playoff, and BracketView pulls it out of the flow
 				// by this flag. Unflagged, it would draw as a second final.
 				isPlacementMatch: round.name === FINALS && groupIndex === 0,
-			})),
-	}));
+			}));
+
+		previousRound = { groups: round.groups, matches };
+
+		return {
+			name: round.name,
+			// Pool Play is round 0 of state.rounds and the knockout follows it.
+			roundIndex: index + 1,
+			matches,
+		};
+	});
+}
+
+// How many matches this configuration will produce: every pool plays a full
+// round robin among its own members, then the knockout stage adds one match
+// per real (non-bye) group across every round, third-place playoff included —
+// it is a real, played match whenever the knockout stage has 2+ qualifiers,
+// same as any other.
+//
+// `qualifiers` of 0 or 1 is not a bracket (knockoutRounds already returns
+// nothing for it), so a Round Robin division — which has no knockout stage —
+// is just its pool total, passed a poolCount of 1 and no qualifiers.
+export function totalMatches(teamCount, poolCount, qualifiers) {
+	const poolMatches = poolMembership(teamCount, poolCount).reduce(
+		(sum, members) => sum + (members.length * (members.length - 1)) / 2,
+		0,
+	);
+
+	const knockoutMatches = knockoutRounds(qualifiers).reduce(
+		(sum, round) => sum + round.groups.filter((group) => group.length >= 2).length,
+		0,
+	);
+
+	return poolMatches + knockoutMatches;
 }
 
 function rankPlaceholder(rank) {

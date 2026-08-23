@@ -2,6 +2,7 @@ import { useState } from 'react';
 import DivisionSelector from './DivisionSelector';
 import SectionState from './SectionState';
 import BracketView from './BracketView';
+import { canProgress } from './fixtureUtils';
 
 const STAGE_GROUPS = 'groups';
 const STAGE_KNOCKOUT = 'knockout';
@@ -161,32 +162,6 @@ export default function StandingsTab({
 			{activeStage === STAGE_RANKINGS && <FinalStandings rows={finalStandings} />}
 		</div>
 	);
-}
-
-// Whether the division's current round can advance to another one.
-//
-// Deliberately a mirror of isRoundComplete in progression.service.js, down to
-// matching fixtures on `round === round.name` with no third-place special case
-// and treating a round with no fixtures as incomplete. The client's job is to
-// predict the server, not to out-think it: any rule here that the server does
-// not share would show a trigger that 409s, or hide one that would have worked.
-//
-// This computes nothing about rankings or qualifiers. Those are the backend's,
-// per docs/tournament-rules.md, and the modal fetches them.
-function canProgress(division) {
-	const rounds = division.state?.rounds;
-	if (!Array.isArray(rounds)) return false;
-
-	const index = division.state?.currentRound ?? 0;
-	const round = rounds[index];
-	// The last round has nothing to advance to — the server answers NO_NEXT_ROUND.
-	if (!round || !rounds[index + 1]) return false;
-
-	const roundFixtures = (division.fixtures ?? []).filter((fixture) => fixture.round === round.name);
-	if (roundFixtures.length === 0) return false;
-
-	// A cancelled match never happened, so it does not hold the round open.
-	return roundFixtures.every((fixture) => fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED');
 }
 
 // The set-score columns the advanced view shows, taken from the scorelines the

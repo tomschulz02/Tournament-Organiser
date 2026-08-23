@@ -2,6 +2,20 @@ import CreateModal from './CreateModal';
 import FormatSchematic from './FormatSchematic';
 import Icon from '../Icons';
 import { getFormatLabel, isConfigurableFormat } from './divisionFormats';
+import { totalMatches } from './divisionPreview';
+
+// A Round Robin division has no pools or knockout configuration to read, so it
+// is a single pool of everyone and no knockout stage — the same fallback
+// FormatSchematic already uses.
+function divisionMatches(division) {
+	const configurable = isConfigurableFormat(division.type);
+
+	return totalMatches(
+		division.teams.length,
+		configurable ? division.num_groups : 1,
+		configurable ? division.knockout_teams : 0,
+	);
+}
 
 // yyyy-mm-dd from a date input, read as a plain calendar date. Parsed through
 // Date.UTC rather than new Date(value), which shifts the day backwards for
@@ -27,6 +41,7 @@ function formatDate(value) {
 // mounted behind this — closing returns to it untouched.
 export default function ReviewModal({ details, divisions, isCreating, onClose, onCreate }) {
 	const totalTeams = divisions.reduce((sum, division) => sum + division.teams.length, 0);
+	const totalMatchCount = divisions.reduce((sum, division) => sum + divisionMatches(division), 0);
 
 	const footer = (
 		<>
@@ -68,7 +83,8 @@ export default function ReviewModal({ details, divisions, isCreating, onClose, o
 						<span className="ct-review-meta-item">
 							<Icon name="structure" size={18} />
 							<span>
-								{divisions.length} {divisions.length === 1 ? 'division' : 'divisions'}, {totalTeams} teams
+								{divisions.length} {divisions.length === 1 ? 'division' : 'divisions'}, {totalTeams} teams,{' '}
+								{totalMatchCount} {totalMatchCount === 1 ? 'match' : 'matches'}
 							</span>
 						</span>
 					</div>
@@ -114,6 +130,10 @@ function ReviewDivision({ division }) {
 						</div>
 					</>
 				)}
+				<div className="ct-review-fact">
+					<dt>Matches</dt>
+					<dd>{divisionMatches(division)}</dd>
+				</div>
 			</dl>
 
 			{/* Every team appears here, inside the pool it will be drawn into.

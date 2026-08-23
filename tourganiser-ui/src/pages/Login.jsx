@@ -1,7 +1,7 @@
 import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../AuthContext';
 import '../App.css';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { loginUser, registerUser, checkLoginStatus } from '../requests';
 import { useMessage } from '../MessageContext';
 import { MessagePopup } from '../MessageProvider';
@@ -14,10 +14,16 @@ export default function Login() {
 	const [currentForm, setCurrentForm] = useState('login');
 	const { setIsLoggedIn, setUsername } = useContext(AuthContext);
 	const navigate = useNavigate();
+	const location = useLocation();
 	const { showMessage } = useMessage();
 	const { theme, toggleTheme } = useTheme();
 
-	// TODO: Add logic to check if user is already logged in and redirect to home page
+	// Where the reader clicked Sign In from, not history position — navigate(-1)
+	// is only correct when /login was reached by an in-app push from the exact
+	// page being returned to, which a bookmark or typed URL never satisfies.
+	// Missing state (either entry point forgetting to pass it) falls back to home.
+	const from = location.state?.from ?? '/home';
+
 	useEffect(() => {
 		const checkLogin = async () => {
 			try {
@@ -26,21 +32,33 @@ export default function Login() {
 					setIsLoggedIn(true);
 					showMessage('Successfully logged in!', 'success');
 					setUsername(data.username);
-					navigate('/home'); // Redirect to home page if already logged in
+					navigate(from, { replace: true });
 				}
 			} catch {
 				// do nothing
 			}
 		};
 		checkLogin();
+		// from is intentionally left out: it is read once, at the moment this
+		// effect decides whether an already-logged-in session should bounce
+		// straight back to where the reader came from.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [navigate, setIsLoggedIn, setUsername, showMessage]);
 
 	const toggleForm = (formName) => {
 		setCurrentForm(formName);
 	};
 
+	// Cancelling is a different action from succeeding, and nothing has
+	// navigated yet at this point, so popping one history entry is unambiguous.
 	const handleClose = () => {
 		navigate(-1);
+	};
+
+	// After a real login/register, land back on the originating page rather
+	// than on whatever history happens to hold.
+	const handleSuccess = () => {
+		navigate(from, { replace: true });
 	};
 
 	return (
@@ -48,9 +66,19 @@ export default function Login() {
 			<MessagePopup />
 			<div className="login-popup">
 				{currentForm === 'login' ? (
-					<LoginForm onFormSwitch={() => toggleForm('register')} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+					<LoginForm
+						onFormSwitch={() => toggleForm('register')}
+						onClose={handleClose}
+						onSuccess={handleSuccess}
+						setLoggedIn={setIsLoggedIn}
+					/>
 				) : (
-					<RegisterForm onFormSwitch={() => toggleForm('login')} onClose={handleClose} setLoggedIn={setIsLoggedIn} />
+					<RegisterForm
+						onFormSwitch={() => toggleForm('login')}
+						onClose={handleClose}
+						onSuccess={handleSuccess}
+						setLoggedIn={setIsLoggedIn}
+					/>
 				)}
 			</div>
 			<div className="theme-toggle-login">
@@ -68,7 +96,7 @@ export default function Login() {
 	);
 }
 
-function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
+function LoginForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 	const [loginDetails, setLoginDetails] = useState({ email: '', password: '' });
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
@@ -96,7 +124,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 			setLoggedIn(true);
 			showMessage(`Welcome, ${data.username}`, 'success');
 			setUsername(data.username);
-			onClose();
+			onSuccess();
 		} catch (error) {
 			// The server's message is display-ready, so it goes straight to the user.
 			showMessage(error.message, 'error');
@@ -156,7 +184,7 @@ function LoginForm({ onFormSwitch, onClose, setLoggedIn }) {
 	);
 }
 
-function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
+function RegisterForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 	const [registerDetails, setRegisterDetails] = useState({
 		newUsername: '',
 		newEmail: '',
@@ -188,7 +216,7 @@ function RegisterForm({ onFormSwitch, onClose, setLoggedIn }) {
 			setLoggedIn(true);
 			showMessage('Account created successfully!', 'success');
 			setUsername(data.username);
-			onClose();
+			onSuccess();
 		} catch (error) {
 			showMessage(error.message, 'error');
 		} finally {

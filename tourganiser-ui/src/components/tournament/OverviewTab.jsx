@@ -16,6 +16,9 @@ import { useMessage } from '../../MessageContext';
 import DivisionModal from '../create/DivisionModal';
 import { createEmptyDivision, isConfigurableFormat } from '../create/divisionFormats';
 import { addDivision, deleteDivision, deleteTournament, endTournament, startTournament } from '../../requests';
+import TournamentPattern from '../TournamentPattern';
+import { tournamentAccentStyle } from '../../utils/tournamentIdentity';
+import { divisionColorStyle } from '../../utils/divisionColors';
 
 // The tournament dashboard. Three bands: what this tournament is, what its
 // divisions are, and what has just happened or is about to.
@@ -67,7 +70,15 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 
 	return (
 		<section className="tv-band">
-			<div className="tv-info-card">
+			<div className="tv-info-card" style={tournamentAccentStyle(tournament.id)}>
+				{/* The tournament's generated identity — behind everything else in the
+				    card, per .tv-info-identity's z-index: var(--z-below). Purely
+				    decorative, so it carries no id-based key and nothing here reads
+				    it back. */}
+				<div className="tv-info-identity">
+					<TournamentPattern tournamentId={tournament.id} />
+				</div>
+
 				<div className="tv-info-header">
 					<StatusPill status={tournament.status} />
 					{tournament.type && <span className="tv-info-format">{tournament.type}</span>}
@@ -76,10 +87,10 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 				{tournament.description && <p className="tv-info-description">{tournament.description}</p>}
 
 				<dl className="tv-info-grid">
-					{tournament.location && <InfoItem label="Location" value={tournament.location} />}
-					{dates && <InfoItem label="Dates" value={dates} />}
-					<InfoItem label="Divisions" value={dashboard.divisionCount ?? 0} />
-					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} />
+					{tournament.location && <InfoItem label="Location" value={tournament.location} icon="location" />}
+					{dates && <InfoItem label="Dates" value={dates} icon="calendar" />}
+					<InfoItem label="Divisions" value={dashboard.divisionCount ?? 0} icon="structure" stat />
+					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} icon="teams" stat />
 				</dl>
 
 				{creator && (
@@ -175,16 +186,19 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 				className="tv-subtle-action tv-subtle-action--danger"
 				disabled={busy}
 				onClick={handleDelete}>
-				Delete Tournament
+				<Icon name='delete'></Icon>
 			</button>
 		</div>
 	);
 }
 
-function InfoItem({ label, value }) {
+function InfoItem({ label, value, icon = null, stat = false }) {
 	return (
-		<div className="tv-info-item">
-			<dt>{label}</dt>
+		<div className={`tv-info-item ${stat ? 'tv-info-item--stat' : ''}`.trim()}>
+			<dt>
+				{icon && <Icon name={icon} className="tv-info-item-icon" size={16} />}
+				{label}
+			</dt>
 			<dd>{value}</dd>
 		</div>
 	);
@@ -334,7 +348,7 @@ function DivisionCard({ division, onOpenDivision, canRemove = false, busy = fals
 	const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
 	return (
-		<article className="tv-division-card">
+		<article className="tv-division-card" style={divisionColorStyle(division.id)}>
 			{/* A div, not a <header>. App.css styles the bare `header` element for
 			    the site's fixed top bar — position: fixed, width: 100vw, height:
 			    80px — so any <header> anywhere in the app is torn out of its

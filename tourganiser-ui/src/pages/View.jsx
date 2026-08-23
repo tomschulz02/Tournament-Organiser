@@ -11,6 +11,7 @@ import FixturesTab from '../components/tournament/FixturesTab';
 import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
 import TeamsTab from '../components/tournament/TeamsTab';
+import RoundCompleteBanner from '../components/tournament/RoundCompleteBanner';
 import LoadingScreen from '../components/LoadingScreen';
 import Icon from '../components/Icons';
 import ScoreUpdateModal from '../components/ScoreUpdateModal';
@@ -290,6 +291,7 @@ export default function ViewPage() {
 						onDeleted={handleDeleted}
 						renderFixtureAction={renderFixtureAction}
 						onProgressRound={setProgressingDivisionId}
+						onSelectTab={selectTab}
 					/>
 				)}
 			</TournamentShell>
@@ -308,6 +310,7 @@ function TabPanel({
 	onDeleted,
 	renderFixtureAction,
 	onProgressRound,
+	onSelectTab,
 }) {
 	if (tab === 'overview') {
 		return (
@@ -326,21 +329,30 @@ function TabPanel({
 	// no control that switches between them: whether a schedule exists is a fact
 	// about the tournament, not a preference of the reader.
 	if (tab === 'fixtures') {
-		return data.tournament?.schedule ? (
-			<ScheduleTab
-				tournament={data.tournament}
-				divisions={data.divisions ?? []}
-				creator={data.creator}
-				onEditSchedule={onOpenSchedule}
-				renderFixtureAction={renderFixtureAction}
-			/>
-		) : (
-			<FixturesTab
-				divisions={data.divisions ?? []}
-				creator={data.creator}
-				onCreateSchedule={onOpenSchedule}
-				renderFixtureAction={renderFixtureAction}
-			/>
+		return (
+			<>
+				<RoundCompleteBanner
+					divisions={data.divisions ?? []}
+					creator={data.creator}
+					onGoToStandings={() => onSelectTab('standings')}
+				/>
+				{data.tournament?.schedule ? (
+					<ScheduleTab
+						tournament={data.tournament}
+						divisions={data.divisions ?? []}
+						creator={data.creator}
+						onEditSchedule={onOpenSchedule}
+						renderFixtureAction={renderFixtureAction}
+					/>
+				) : (
+					<FixturesTab
+						divisions={data.divisions ?? []}
+						creator={data.creator}
+						onCreateSchedule={onOpenSchedule}
+						renderFixtureAction={renderFixtureAction}
+					/>
+				)}
+			</>
 		);
 	}
 

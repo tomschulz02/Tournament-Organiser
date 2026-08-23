@@ -92,6 +92,20 @@ body.light {
 	--secondary-text-color: rgb(37, 37, 37);
 	--card-border-color: rgba(37, 37, 37, 0.15);
 	--card-shadow-color: rgba(37, 37, 37, 0.2);
+
+	/* Shared 8-colour identity palette. Division colours (divisionColors.js) and
+	   tournament identity (tournamentIdentity.js) both pick from this set, keyed
+	   on different ids, rather than each inventing its own colours — one visual
+	   language across the app. Muted rather than saturated, so an accent reads as
+	   identity rather than as a status or a call to action. */
+	--accent-1: rgb(79, 70, 229); /* indigo */
+	--accent-2: rgb(13, 148, 136); /* teal */
+	--accent-3: rgb(217, 119, 6); /* orange */
+	--accent-4: rgb(147, 51, 234); /* purple */
+	--accent-5: rgb(225, 29, 72); /* rose */
+	--accent-6: rgb(2, 132, 199); /* cyan */
+	--accent-7: rgb(22, 163, 74); /* green */
+	--accent-8: rgb(219, 39, 119); /* pink */
 }
 
 body.dark {
@@ -100,6 +114,18 @@ body.dark {
 	--secondary-text-color: rgb(245, 245, 245);
 	--card-border-color: rgba(245, 245, 245, 0.15);
 	--card-shadow-color: rgba(245, 245, 245, 0.2);
+
+	/* Same eight identities, lightened so they stay legible against the dark
+	   surface — the near-black card would otherwise flatten the light-theme
+	   values the way it already does for --main-color and friends. */
+	--accent-1: rgb(129, 120, 255);
+	--accent-2: rgb(45, 212, 191);
+	--accent-3: rgb(251, 146, 60);
+	--accent-4: rgb(192, 132, 252);
+	--accent-5: rgb(251, 113, 133);
+	--accent-6: rgb(56, 189, 248);
+	--accent-7: rgb(74, 222, 128);
+	--accent-8: rgb(244, 114, 182);
 }
 
 body.noscroll {
@@ -194,10 +220,134 @@ header.scrolled {
 	text-decoration: none;
 }
 
-/* 
+/* Hidden below 769px, where BottomNav is the equivalent instead — see the
+   mobile block further down. */
+.desktop-nav {
+	display: none;
+}
+
+@media (min-width: 769px) {
+	/* The lone auto-margin used to be what centred the title against nothing
+	   else in the header; with a nav bar on the right it would centre against
+	   half of that instead, which reads as off-centre rather than as a
+	   conventional [brand] ... [nav] row. */
+	.website-title {
+		margin: 0;
+	}
+
+	.desktop-nav {
+		display: flex;
+		align-items: center;
+		gap: var(--space-5);
+	}
+
+	.desktop-nav-link {
+		color: var(--text-color);
+		text-decoration: none;
+		font-size: 1em;
+		font-weight: 500;
+		transition: color 0.2s ease;
+	}
+
+	.desktop-nav-link:hover {
+		color: var(--tertiary-color);
+	}
+
+	.desktop-nav-theme {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border: none;
+		border-radius: 50%;
+		background: rgb(from var(--text-color) r g b / 0.15);
+		font-size: 1rem;
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.desktop-nav-theme:hover {
+		background: rgb(from var(--text-color) r g b / 0.25);
+	}
+
+	.desktop-nav-profile {
+		position: relative;
+	}
+
+	.desktop-nav-profile-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border: none;
+		border-radius: 50%;
+		background: rgb(from var(--text-color) r g b / 0.15);
+		color: var(--text-color);
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.desktop-nav-profile-button svg {
+		fill: currentColor;
+	}
+
+	.desktop-nav-profile-button:hover {
+		background: rgb(from var(--text-color) r g b / 0.25);
+	}
+
+	.desktop-nav-menu {
+		position: absolute;
+		top: calc(100% + var(--space-2));
+		right: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		min-width: 160px;
+		padding: var(--space-2);
+		background: var(--background-color);
+		border: 1px solid var(--card-border-color);
+		border-radius: 10px;
+		box-shadow: 0 4px 12px var(--card-shadow-color);
+		z-index: var(--z-menu);
+	}
+
+	.desktop-nav-menu-item {
+		display: block;
+		width: 100%;
+		padding: var(--space-2) var(--space-3);
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--secondary-text-color);
+		font-size: 0.9rem;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.desktop-nav-menu-item:hover {
+		background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	}
+}
+
+/*
 Styles for the footer, which will be persistent on all pages
 */
 
+/* A normal flex-column child, not absolutely positioned: body is already
+   display: flex; flex-direction: column; min-height: 100vh, and main already
+   carries flex: 1, so margin-top: auto here is the whole "stick to the
+   bottom of a short page" mechanism — it needs the footer actually
+   participating in that layout to work. It used to also carry
+   position: absolute; bottom: 0, which pulled it out of the flex flow
+   entirely: main no longer had anything pushing back against it, so a page
+   with enough content (the tournament list's Upcoming/Completed sections,
+   for instance) grew taller than where the footer's own absolute box sat,
+   and the footer simply overlapped the tail of that content instead of
+   following it. */
 .site-footer {
 	background-color: rgb(32, 32, 32);
 	color: var(--text-color);
@@ -207,8 +357,6 @@ Styles for the footer, which will be persistent on all pages
 	height: auto;
 	width: 100%;
 	flex-shrink: 0;
-	position: absolute;
-	bottom: 0;
 	border-top: 2px solid rgb(from var(--text-color) r g b / 0.4);
 	z-index: var(--z-chrome);
 }
@@ -315,15 +463,171 @@ Styles for the footer, which will be persistent on all pages
 		background-color: var(--main-color);
 	}
 
+	/* BOTTOM_NAV_HEIGHT (64px) plus the Create button's own raise above the
+	   bar's flat top (32px, half its 64px diameter) plus a little breathing
+	   room, plus the device's own safe-area inset — sized to the bar this
+	   file actually builds below, not assumed.
+
+	   main's own padding covers a page whose content runs past the viewport
+	   height; .site-footer needs the same clearance separately, since it
+	   renders as App's own sibling after <main>, not inside it — the fixed
+	   bar sits over whichever of the two is actually last on the page. */
 	main {
 		padding-top: 80px;
-		padding-bottom: 220px;
-		/* Space for bottom navigation */
+		padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.site-footer {
+		padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.banner-image {
 		background-position: center;
 		background-size: cover;
+	}
+}
+
+/* Mobile's equivalent of DesktopNav: a fixed bottom bar, five items, Create
+   raised as the primary action. Hidden above 768px, where the header's own
+   .desktop-nav takes over. */
+.bottom-nav {
+	display: none;
+}
+
+.account-sheet-backdrop {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.bottom-nav {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-around;
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 64px;
+		padding: 0 var(--space-2) env(safe-area-inset-bottom, 0px);
+		background-color: var(--main-color);
+		box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+		z-index: calc(var(--z-chrome) + 1);
+		transition: transform 0.25s ease;
+	}
+
+	/* Slid fully off-screen rather than hidden, so the hide/reveal on scroll
+	   animates instead of popping. */
+	.bottom-nav-hidden {
+		transform: translateY(100%);
+	}
+
+	.bottom-nav-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		flex: 1;
+		height: 100%;
+		border: none;
+		background: none;
+		color: rgb(from var(--text-color) r g b / 0.7);
+		font-size: 0.7rem;
+		font-family: var(--main-font-family);
+		text-decoration: none;
+		cursor: pointer;
+		transition: color 0.2s ease;
+	}
+
+	.bottom-nav-item svg {
+		fill: currentColor;
+	}
+
+	.bottom-nav-item.active {
+		color: var(--text-color);
+		font-weight: 600;
+	}
+
+	/* The label sits in the bar's normal row, like the other four items — only
+	   the icon badge itself is raised and enlarged, overlapping the bar's flat
+	   top by half its own height (the standard "primary FAB in a tab bar"
+	   shape) so it still reads as the primary action rather than a sixth peer. */
+	.bottom-nav-create-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 64px;
+		height: 64px;
+		margin-top: -32px;
+		border-radius: 50%;
+		background: var(--tertiary-color);
+		color: var(--text-color);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+	}
+
+	/* Not a route — a lightweight sheet, the closest existing pattern being
+	   ConfirmDialog's own backdrop + centred panel, adapted to slide up from
+	   the edge the bottom bar already occupies. */
+	.account-sheet-backdrop {
+		display: flex;
+		align-items: flex-end;
+		position: fixed;
+		inset: 0;
+		background-color: rgba(0, 0, 0, 0.5);
+		z-index: var(--z-menu);
+	}
+
+	.account-sheet {
+		position: relative;
+		width: 100%;
+		padding: var(--space-5) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+		background: var(--background-color);
+		border-radius: 16px 16px 0 0;
+		box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
+		animation: accountSheetSlideIn 0.2s ease-out;
+	}
+
+	.account-sheet-close {
+		position: absolute;
+		top: var(--space-3);
+		right: var(--space-4);
+		border: none;
+		background: none;
+		font-size: 1.5rem;
+		line-height: 1;
+		color: var(--secondary-text-color);
+		cursor: pointer;
+	}
+
+	.account-sheet-item {
+		display: block;
+		width: 100%;
+		padding: var(--space-3) 0;
+		border: none;
+		border-top: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+		background: none;
+		color: var(--secondary-text-color);
+		font-size: 1rem;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+	}
+
+	/* The close button is the sheet's actual first child (an absolutely
+	   positioned corner control), so the first *item* is whichever element
+	   directly follows it — a Link when logged out, a button when logged in —
+	   not something :first-child can select on its own. */
+	.account-sheet-close + .account-sheet-item {
+		border-top: none;
+	}
+}
+
+@keyframes accountSheetSlideIn {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
 	}
 }
 
@@ -399,6 +703,19 @@ img {
 
 .help-button:active {
 	transform: scale(0.9);
+}
+
+/* Placed after the base rule deliberately: an earlier override at the same
+   specificity here loses the cascade to the unconditional bottom: 10px above,
+   which applies at every width, mobile included, since it carries no media
+   condition of its own to lose to. */
+@media (max-width: 768px) {
+	/* Just above the bar's own flat top (64px) plus a small gap — not the
+	   Create button's raised height, since the button sits centred and the
+	   help button sits in the opposite corner; the two never share a row. */
+	.help-button {
+		bottom: calc(64px + var(--space-2) + env(safe-area-inset-bottom, 0px));
+	}
 }
 
 .help-menu-container {
@@ -2030,6 +2347,7 @@ Tournaments page styles
 	border-radius: 18px;
 	box-shadow: 0 8px 20px rgb(from var(--card-shadow-color) r g b / 0.16);
 	position: relative;
+	isolation: isolate;
 	overflow: hidden;
 	display: grid;
 	grid-template-columns: 12px minmax(0, 1fr) auto;
@@ -2044,6 +2362,40 @@ Tournaments page styles
 		box-shadow 0.2s ease,
 		border-color 0.2s ease,
 		background-color 0.2s ease;
+}
+
+/* The tournament's generated identity: a very soft accent wash plus the pattern
+   drawn on top of it, both behind the card's real content. Clipped by the card's
+   own border-radius via the card's `overflow: hidden` above. Colour, not the
+   status accent bar's meaning: the left bar still says upcoming/ongoing/
+   completed, this says which tournament.
+   Grid items (.tournament-card-accent, .tournament-card-body,
+   .tournament-card-action) paint like inline-blocks regardless of DOM order,
+   which sits above a plain positioned box with z-index: auto — --z-below is
+   what actually guarantees this layer stays behind them. */
+.tournament-card-identity {
+	position: absolute;
+	inset: 0;
+	z-index: var(--z-below);
+	pointer-events: none;
+	background: linear-gradient(160deg, rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.22), transparent 80%);
+}
+
+/* Base rule for TournamentPattern.jsx wherever it is used: never intercepts a
+   click, never distorts to fill its box. Callers position and size the layer
+   that hosts it (here and .tv-info-identity in tournament-view.css); this only
+   sets what the SVG itself always needs. */
+.tournament-pattern {
+	display: block;
+	pointer-events: none;
+}
+
+.tournament-card-identity .tournament-pattern {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	color: var(--tournament-accent, var(--main-color));
 }
 
 .tournament-card:hover,
@@ -2075,8 +2427,25 @@ Tournaments page styles
 	height: 100%;
 }
 
+/* The frame around .tournament-card-content: deliberately thin padding and no
+   background of its own, so the identity pattern behind it (see
+   .tournament-card-identity) is always visible around the text panel's edges —
+   not just on hover, and without needing to fight the text for contrast. */
 .tournament-card-body {
-	padding: var(--space-4) var(--space-4);
+	padding: var(--space-2);
+	display: grid;
+	min-width: 0;
+}
+
+/* The text panel itself. Near-opaque rather than fully solid, so a hint of the
+   pattern still comes through behind the text — --background-color is already
+   the right colour for this: near-white in light mode, dark grey in dark mode,
+   exactly the "background behind the text" the card needs for its numbers and
+   status pill to stay readable regardless of how visible the pattern is. */
+.tournament-card-content {
+	background: rgb(from var(--background-color) r g b / 0.6);
+	border-radius: 12px;
+	padding: var(--space-3);
 	display: grid;
 	gap: var(--space-3);
 	min-width: 0;
@@ -2763,7 +3132,11 @@ Standings Tab styles - temporary from old UI
 	}
 
 	.tournament-card-body {
-		padding: var(--space-4);
+		padding: var(--space-2);
+	}
+
+	.tournament-card-content {
+		padding: var(--space-3);
 		gap: var(--space-2);
 	}
 

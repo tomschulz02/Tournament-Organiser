@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -164,6 +164,7 @@ function buildPayload(details, divisions) {
 
 export default function CreateTournament() {
 	const { isLoggedIn } = useContext(AuthContext);
+	const location = useLocation();
 
 	// Creation is the only authenticated write path in the application, and the
 	// old page turned logged-out visitors away rather than letting them fill in
@@ -177,7 +178,7 @@ export default function CreateTournament() {
 					Please log into your account, or if you are new here you can create an account - it's completely free.
 				</p>
 				<div className="signin-warning-button">
-					<Link to="/login" className="cta-button">
+					<Link to="/login" state={{ from: location }} className="cta-button">
 						Sign In
 					</Link>
 				</div>

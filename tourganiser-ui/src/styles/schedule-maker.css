@@ -519,6 +519,13 @@ body.dark {
 	gap: var(--space-1);
 	text-align: left;
 	cursor: grab;
+	/* Division colour, set inline from divisionColorStyle. An inset shadow
+	   rather than a border-left: .pending below already claims border-color on
+	   every side, and a shadow is a separate property that survives that state
+	   change untouched, clipped to the pill's own border-radius like a real
+	   border would be. transparent when unset (single-division tournament, or a
+	   break entry, which has none). */
+	box-shadow: inset 3px 0 0 0 var(--tv-division-color, transparent);
 }
 
 .schedule-fixture-pill span,
@@ -756,8 +763,17 @@ button.schedule-grid-header-court:hover {
 .schedule-grid-entry {
 	margin: var(--space-1);
 	border: none;
+	/* Set inline per entry from divisionColorStyle, only in a multi-division
+	   tournament — the same colour the badge, the division selector and
+	   Fixtures & Schedule's own rows already use for this division. transparent
+	   when unset, so a single-division tournament keeps the same 3px inset it
+	   would get from any entry that happens not to carry the var. padding-left
+	   is reduced by the same 3px so the content position is unchanged either
+	   way. */
+	border-left: 3px solid var(--tv-division-color, transparent);
 	border-radius: 18px;
 	padding: var(--space-3);
+	padding-left: calc(var(--space-3) - 3px);
 	text-align: left;
 	color: #fff;
 	display: grid;
@@ -855,6 +871,9 @@ button.schedule-grid-header-court:hover {
 	gap: var(--space-4);
 	text-align: left;
 	cursor: pointer;
+	/* Same division-colour treatment as .schedule-fixture-pill above, and for
+	   the same reason: .break below already claims border-color. */
+	box-shadow: inset 3px 0 0 0 var(--tv-division-color, transparent);
 }
 
 .schedule-list-entry.break {
@@ -1200,6 +1219,15 @@ which is the whole point of printing rather than downloading.
 		break-inside: avoid;
 		page-break-inside: avoid;
 	}
+
+	/* Same reasoning for the grid layout: each fixture is one un-spanned grid
+	   cell, so keeping the cell whole is enough to keep a break at a cell
+	   boundary rather than inside a fixture's own content. */
+	.schedule-export-grid-cell,
+	.schedule-export-grid-time {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
 }
 
 .schedule-export-page {
@@ -1257,6 +1285,14 @@ which is the whole point of printing rather than downloading.
 .schedule-export-grid-cell {
 	display: grid;
 	gap: var(--space-1);
+	/* Division colour, set inline from divisionColorStyle — the same accent
+	   the live grid, the badge and every other division-coloured surface use.
+	   A real border rather than a shadow: this is the printed page, and border
+	   colour survives printing without needing print-color-adjust the way a
+	   background fill would not. transparent when unset (a break, or a
+	   single-division tournament) — the border-right rule above already sets
+	   the cell's box-sizing expectations, so this only adds the left edge. */
+	border-left: 3px solid var(--tv-division-color, transparent);
 }
 
 .schedule-export-grid-cell span {
@@ -1276,6 +1312,8 @@ which is the whole point of printing rather than downloading.
 	padding: var(--space-3) var(--space-3);
 	border: 1px solid rgba(31, 41, 55, 0.12);
 	border-radius: 12px;
+	/* Same division-colour treatment as .schedule-export-grid-cell above. */
+	border-left: 3px solid var(--tv-division-color, transparent);
 }
 
 @media (max-width: 1200px) {

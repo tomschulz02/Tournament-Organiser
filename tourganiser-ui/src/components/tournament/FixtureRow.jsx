@@ -1,5 +1,6 @@
 import DivisionBadge from './DivisionBadge';
 import { setScores, setsWon } from './fixtureUtils';
+import { divisionColorStyle } from '../../utils/divisionColors';
 
 // One fixture, shared by both states of the Fixtures & Schedule tab. The
 // scheduled state is the same fixture better informed, not a different thing, so
@@ -24,8 +25,14 @@ export default function FixtureRow({ fixture, showDivision = false, court = null
 	// placeholder.
 	const hasPlace = Boolean(court || showDivision || fixture.round);
 
+	// Only in a multi-division tournament: the left border echoing the division
+	// badge's colour is what makes "Division 1 vs Division 2" readable at a
+	// glance in a flattened list. A single-division tournament has nothing to
+	// differentiate, and the row keeps its plain border (see the CSS fallback).
+	const style = showDivision ? divisionColorStyle(fixture.division_id) : undefined;
+
 	return (
-		<li className={`tv-fixture-row tv-fixture-row--${status}`}>
+		<li className={`tv-fixture-row tv-fixture-row--${status}`} style={style}>
 			<div className="tv-fixture-row-meta">
 				<span className="tv-fixture-row-status">
 					{/* Status is a colour, not a word: it is the least-read text on a row

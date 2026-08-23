@@ -1,4 +1,5 @@
-// Pure helpers shared by the two states of the Fixtures & Schedule tab.
+// Pure helpers shared by the two states of the Fixtures & Schedule tab, and by
+// StandingsTab.
 //
 // A separate module because a file exporting both components and plain functions
 // breaks Fast Refresh, which the lint config enforces.
@@ -96,4 +97,33 @@ export function setScores(result) {
 	if (!Array.isArray(result) || result.length === 0) return null;
 
 	return [result.map(([one]) => one), result.map(([, two]) => two)];
+}
+
+// Whether the division's current round can advance to another one.
+//
+// Deliberately a mirror of isRoundComplete in progression.service.js, down to
+// matching fixtures on `round === round.name` with no third-place special case
+// and treating a round with no fixtures as incomplete. The client's job is to
+// predict the server, not to out-think it: any rule here that the server does
+// not share would show a trigger that 409s, or hide one that would have worked.
+//
+// This computes nothing about rankings or qualifiers. Those are the backend's,
+// per docs/tournament-rules.md, and the modal fetches them.
+//
+// Shared by StandingsTab (per-division "Start Next Round" trigger) and the
+// Fixtures & Schedule round-complete banner.
+export function canProgress(division) {
+	const rounds = division.state?.rounds;
+	if (!Array.isArray(rounds)) return false;
+
+	const index = division.state?.currentRound ?? 0;
+	const round = rounds[index];
+	// The last round has nothing to advance to — the server answers NO_NEXT_ROUND.
+	if (!round || !rounds[index + 1]) return false;
+
+	const roundFixtures = (division.fixtures ?? []).filter((fixture) => fixture.round === round.name);
+	if (roundFixtures.length === 0) return false;
+
+	// A cancelled match never happened, so it does not hold the round open.
+	return roundFixtures.every((fixture) => fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED');
 }

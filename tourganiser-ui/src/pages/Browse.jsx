@@ -5,6 +5,8 @@ import { getTournaments } from '../requests';
 import LoadingScreen from '../components/LoadingScreen';
 import '../App.css';
 import Icon from '../components/Icons';
+import TournamentPattern from '../components/TournamentPattern';
+import { tournamentAccentStyle } from '../utils/tournamentIdentity';
 
 const TOURNAMENT_GROUPS = [
 	{ key: 'ongoing', label: 'Ongoing', emptyMessage: 'There are currently no ongoing tournaments' },
@@ -334,37 +336,51 @@ export function TournamentCard({ details, action }) {
 	const statusVariant = getTournamentStatusVariant(details);
 
 	return (
-		<button type="button" className={`tournament-card tournament-card-${statusVariant}`} onClick={action}>
+		<button
+			type="button"
+			className={`tournament-card tournament-card-${statusVariant}`}
+			style={tournamentAccentStyle(details.id)}
+			onClick={action}>
+			<div className="tournament-card-identity" aria-hidden="true">
+				<TournamentPattern tournamentId={details.id} />
+			</div>
 			<div className="tournament-card-accent" aria-hidden="true" />
+			{/* .tournament-card-body itself stays transparent — it is the frame that
+			    keeps the pattern always visible around the edges of the card, not
+			    just on hover. The text lives in .tournament-card-content, which has
+			    its own near-opaque backing (white in light mode, grey in dark, via
+			    --background-color) so the pattern never fights readability. */}
 			<div className="tournament-card-body">
-				<div className="tournament-card-topline">
-					<div className="tournament-card-name">{details.name}</div>
-					{tournamentStatus && <div className={`tournament-card-status ${statusVariant}`}>{tournamentStatus}</div>}
-				</div>
-				<div className="tournament-card-subline">
-					{tournamentType ? (
-						<div className="tournament-card-type">
-							<Icon name={'structure'} className="tournament-card-meta-icon" size={18} />
-							<span>{tournamentType}</span>
+				<div className="tournament-card-content">
+					<div className="tournament-card-topline">
+						<div className="tournament-card-name">{details.name}</div>
+						{tournamentStatus && <div className={`tournament-card-status ${statusVariant}`}>{tournamentStatus}</div>}
+					</div>
+					<div className="tournament-card-subline">
+						{tournamentType ? (
+							<div className="tournament-card-type">
+								<Icon name={'structure'} className="tournament-card-meta-icon" size={18} />
+								<span>{tournamentType}</span>
+							</div>
+						) : (
+							<div className="tournament-card-type tournament-card-type-empty">Tournament</div>
+						)}
+					</div>
+					<div className="tournament-card-meta">
+						<div className="tournament-card-location">
+							<Icon name={'location'} className="tournament-card-meta-icon" size={18} />
+							<span>{location}</span>
 						</div>
-					) : (
-						<div className="tournament-card-type tournament-card-type-empty">Tournament</div>
-					)}
-				</div>
-				<div className="tournament-card-meta">
-					<div className="tournament-card-location">
-						<Icon name={'location'} className="tournament-card-meta-icon" size={18} />
-						<span>{location}</span>
 					</div>
-				</div>
-				<div className="tournament-card-dates">
-					<div className="tournament-card-date">
-						<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
-						<span>{startDate ? `Starts: ${startDate}` : 'Start date to be confirmed'}</span>
-					</div>
-					<div className="tournament-card-date">
-						<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
-						<span>{endDate ? `Ends: ${endDate}` : 'End date to be confirmed'}</span>
+					<div className="tournament-card-dates">
+						<div className="tournament-card-date">
+							<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
+							<span>{startDate ? `Starts: ${startDate}` : 'Start date to be confirmed'}</span>
+						</div>
+						<div className="tournament-card-date">
+							<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
+							<span>{endDate ? `Ends: ${endDate}` : 'End date to be confirmed'}</span>
+						</div>
 					</div>
 				</div>
 			</div>

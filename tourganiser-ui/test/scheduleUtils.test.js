@@ -474,17 +474,29 @@ describe('scheduled and unscheduled fixtures', () => {
 });
 
 describe('buildCourtList', () => {
-	it('numbers courts from one', () => {
+	it('numbers courts from one, unrestricted by default', () => {
 		expect(buildCourtList(2)).toEqual([
-			{ id: 'court-1', name: 'Court 1' },
-			{ id: 'court-2', name: 'Court 2' },
+			{ id: 'court-1', name: 'Court 1', divisions: [] },
+			{ id: 'court-2', name: 'Court 2', divisions: [] },
 		]);
 	});
 
 	it('keeps a renamed court that already existed', () => {
 		const existing = [{ id: 'court-1', name: 'Centre Court' }];
 
-		expect(buildCourtList(2, existing)[0]).toEqual({ id: 'court-1', name: 'Centre Court' });
+		expect(buildCourtList(2, existing)[0]).toEqual({ id: 'court-1', name: 'Centre Court', divisions: [] });
+	});
+
+	// Reuse is by index, so a restriction on the existing court at that index must
+	// carry through rather than being dropped.
+	it('preserves the divisions of an existing court it reuses by index', () => {
+		const existing = [{ id: 'court-1', name: 'Centre Court', divisions: ['div-1', 'div-2'] }];
+
+		expect(buildCourtList(1, existing)[0]).toEqual({
+			id: 'court-1',
+			name: 'Centre Court',
+			divisions: ['div-1', 'div-2'],
+		});
 	});
 
 	it('drops courts beyond the requested count', () => {
@@ -527,9 +539,27 @@ describe('normaliseSchedule', () => {
 		const raw = { courts: [{ id: 'c1', name: 'Centre' }, {}] };
 
 		expect(normaliseSchedule(raw, dates).courts).toEqual([
-			{ id: 'c1', name: 'Centre' },
-			{ id: 'court-2', name: 'Court 2' },
+			{ id: 'c1', name: 'Centre', divisions: [] },
+			{ id: 'court-2', name: 'Court 2', divisions: [] },
 		]);
+	});
+
+	// An old saved schedule has no divisions key on any court; it must load as
+	// unrestricted rather than undefined.
+	it('normalises a court with no divisions key to an empty restriction', () => {
+		const raw = { courts: [{ id: 'c1', name: 'Centre' }] };
+
+		expect(normaliseSchedule(raw, dates).courts[0].divisions).toEqual([]);
+	});
+
+	it('keeps a stored division restriction on a court', () => {
+		const raw = { courts: [{ id: 'c1', name: 'Centre', divisions: ['div-1'] }] };
+
+		expect(normaliseSchedule(raw, dates).courts[0]).toEqual({
+			id: 'c1',
+			name: 'Centre',
+			divisions: ['div-1'],
+		});
 	});
 
 	it('treats a non-array courts value as no courts', () => {
@@ -1092,12 +1122,31 @@ describe('serialiseScheduleForSave', () => {
 	it('keeps days and courts to their persisted fields', () => {
 		const base = schedule({
 			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', extra: true }],
-			courts: [{ id: 'court-1', name: 'Court 1', extra: true }],
+			courts: [{ id: 'court-1', name: 'Court 1', divisions: ['div-1'], extra: true }],
 		});
 		const saved = serialiseScheduleForSave(base);
 
 		expect(saved.days[0]).toEqual({ id: 'day-1', date: '2026-08-01', label: 'Day 1' });
-		expect(saved.courts[0]).toEqual({ id: 'court-1', name: 'Court 1' });
+		expect(saved.courts[0]).toEqual({ id: 'court-1', name: 'Court 1', divisions: ['div-1'] });
+	});
+
+	it('defaults a court with no divisions key to an empty restriction', () => {
+		const base = schedule({ courts: [{ id: 'court-1', name: 'Court 1' }] });
+
+		expect(serialiseScheduleForSave(base).courts[0]).toEqual({ id: 'court-1', name: 'Court 1', divisions: [] });
+	});
+
+	// A restricted court has to survive normalise → serialise unchanged, or the
+	// restriction would drift on every save.
+	it('round-trips a court restriction through normaliseSchedule unchanged', () => {
+		const base = schedule({ courts: [{ id: 'court-1', name: 'Court 1', divisions: ['div-1', 'div-2'] }] });
+		const once = serialiseScheduleForSave(base);
+		const twice = serialiseScheduleForSave(
+			normaliseSchedule(once, { startDate: '2026-08-01', endDate: '2026-08-01' })
+		);
+
+		expect(once.courts[0]).toEqual({ id: 'court-1', name: 'Court 1', divisions: ['div-1', 'div-2'] });
+		expect(twice).toEqual(once);
 	});
 
 	// Round-tripping must be stable, or every save would look like a change.

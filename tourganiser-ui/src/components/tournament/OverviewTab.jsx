@@ -1,9 +1,24 @@
 import { useState } from 'react';
 import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
+import { isNotStarted } from './tournamentStatus';
+import Icon from '../Icons';
+import LoadingScreen from '../LoadingScreen';
 import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
-import { deleteTournament, endTournament, startTournament } from '../../requests';
+// Imported across from components/create/ deliberately, rather than moved
+// somewhere shared. components/create/ now means "the division editor and its
+// rules, wherever a division is being built" — which is what it always held;
+// only its one caller made it look like a page folder. Moving two files to a
+// third location to avoid the import would touch the creation page for no
+// behavioural gain, and copying the modal would give the application two
+// definitions of what a valid division is.
+import DivisionModal from '../create/DivisionModal';
+import { createEmptyDivision, isConfigurableFormat } from '../create/divisionFormats';
+import { addDivision, deleteDivision, deleteTournament, endTournament, startTournament } from '../../requests';
+import TournamentPattern from '../TournamentPattern';
+import { tournamentAccentStyle } from '../../utils/tournamentIdentity';
+import { divisionColorStyle } from '../../utils/divisionColors';
 
 // The tournament dashboard. Three bands: what this tournament is, what its
 // divisions are, and what has just happened or is about to.
@@ -30,7 +45,14 @@ export default function OverviewTab({
 				onChanged={onChanged}
 				onDeleted={onDeleted}
 			/>
-			<DivisionsBand divisions={divisions} onOpenDivision={onOpenDivision} />
+			<DivisionsBand
+				divisions={divisions}
+				onOpenDivision={onOpenDivision}
+				tournamentId={tournament.id}
+				status={tournament.status}
+				creator={creator}
+				onChanged={onChanged}
+			/>
 			<ActivityBand dashboard={dashboard} />
 		</div>
 	);
@@ -48,7 +70,15 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 
 	return (
 		<section className="tv-band">
-			<div className="tv-info-card">
+			<div className="tv-info-card" style={tournamentAccentStyle(tournament.id)}>
+				{/* The tournament's generated identity — behind everything else in the
+				    card, per .tv-info-identity's z-index: var(--z-below). Purely
+				    decorative, so it carries no id-based key and nothing here reads
+				    it back. */}
+				<div className="tv-info-identity">
+					<TournamentPattern tournamentId={tournament.id} />
+				</div>
+
 				<div className="tv-info-header">
 					<StatusPill status={tournament.status} />
 					{tournament.type && <span className="tv-info-format">{tournament.type}</span>}
@@ -57,10 +87,10 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 				{tournament.description && <p className="tv-info-description">{tournament.description}</p>}
 
 				<dl className="tv-info-grid">
-					{tournament.location && <InfoItem label="Location" value={tournament.location} />}
-					{dates && <InfoItem label="Dates" value={dates} />}
-					<InfoItem label="Divisions" value={dashboard.divisionCount ?? 0} />
-					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} />
+					{tournament.location && <InfoItem label="Location" value={tournament.location} icon="location" />}
+					{dates && <InfoItem label="Dates" value={dates} icon="calendar" />}
+					<InfoItem label="Divisions" value={dashboard.divisionCount ?? 0} icon="structure" stat />
+					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} icon="teams" stat />
 				</dl>
 
 				{creator && (
@@ -104,8 +134,18 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 		}
 	};
 
-	const handleStart = () =>
-		run(() => startTournament(tournamentId), 'Tournament started.', () => onChanged?.());
+	// Starting looks like the least consequential of the three and is the most:
+	// it closes team and division editing for good. The message says both halves
+	// — an organiser who believes the schedule locks too will put off starting,
+	// and the schedule is the tool they most need once things overrun.
+	const handleStart = async () => {
+		const confirmed = await confirm(
+			'Start this tournament? Teams and divisions can no longer be added, removed or reordered. The schedule can still be edited, and results can be entered once it has started.',
+		);
+		if (!confirmed) return;
+
+		await run(() => startTournament(tournamentId), 'Tournament started.', () => onChanged?.());
+	};
 
 	const handleEnd = async () => {
 		const confirmed = await confirm('End this tournament? No further results can be recorded.');
@@ -146,16 +186,19 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 				className="tv-subtle-action tv-subtle-action--danger"
 				disabled={busy}
 				onClick={handleDelete}>
-				Delete Tournament
+				<Icon name='delete'></Icon>
 			</button>
 		</div>
 	);
 }
 
-function InfoItem({ label, value }) {
+function InfoItem({ label, value, icon = null, stat = false }) {
 	return (
-		<div className="tv-info-item">
-			<dt>{label}</dt>
+		<div className={`tv-info-item ${stat ? 'tv-info-item--stat' : ''}`.trim()}>
+			<dt>
+				{icon && <Icon name={icon} className="tv-info-item-icon" size={16} />}
+				{label}
+			</dt>
 			<dd>{value}</dd>
 		</div>
 	);
@@ -171,10 +214,89 @@ function StatusPill({ status }) {
 // One card per division, summarising it and offering a way into the tab that
 // holds the detail. No fixture lists and no standings — a card says how big a
 // division is and how far through it is, and nothing more.
-function DivisionsBand({ divisions, onOpenDivision }) {
+function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creator, onChanged }) {
+	const confirm = useConfirm();
+	const { showMessage } = useMessage();
+	const [busy, setBusy] = useState(false);
+	const [adding, setAdding] = useState(false);
+
+	// A division can only be added or removed before the tournament starts —
+	// afterwards the schedule and the standings are describing a fixed set of
+	// them. Absent entirely for a viewer, and absent once started, rather than
+	// shown and then refused with a 409.
+	const canCompose = creator && isNotStarted(status);
+
+	const run = async (action, successMessage) => {
+		setBusy(true);
+		try {
+			await action();
+			showMessage(successMessage, 'success');
+			onChanged?.();
+		} catch (apiError) {
+			// Display-ready by contract, including both 409s — a started
+			// tournament and the tournament's last division.
+			showMessage(apiError.message, 'error');
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	// The modal hands back its own draft, which carries a local id and no
+	// num_teams. The endpoint reads the same shape the creation page sends, so
+	// the payload is built the way buildPayload builds it: the count added, the
+	// pool and qualifier settings included only for a format that has them, and
+	// the local id dropped.
+	const handleAdd = async (draft) => {
+		setAdding(false);
+
+		await run(
+			() =>
+				addDivision(tournamentId, {
+					name: draft.name,
+					type: draft.type,
+					num_teams: draft.teams.length,
+					...(isConfigurableFormat(draft.type) && {
+						num_groups: Number(draft.num_groups),
+						knockout_teams: Number(draft.knockout_teams),
+					}),
+					teams: draft.teams.map((team) => ({ name: team.name })),
+				}),
+			'Division added.',
+		);
+	};
+
+	// Named in counts rather than adjectives, because the counts are what the
+	// organiser is about to lose. The scheduled slots are not counted: the card
+	// carries how many fixtures a division has, not how many of them are placed.
+	//
+	// The last-division rule is not checked here. The server owns it, and the
+	// client shows its refusal.
+	const handleRemove = async (division) => {
+		const confirmed = await confirm(
+			`Remove ${division.name}? Its ${division.teamCount ?? 0} teams, ${
+				division.fixtureCount ?? 0
+			} fixtures and any scheduled slots are removed too. This cannot be undone.`,
+		);
+		if (!confirmed) return;
+
+		await run(() => deleteDivision(division.id), 'Division removed.');
+	};
+
 	return (
 		<section className="tv-band">
-			<h2 className="tv-band-heading">Divisions</h2>
+			<div className="tv-band-header">
+				<h2 className="tv-band-heading">Divisions</h2>
+
+				{canCompose && (
+					<button
+						type="button"
+						className="tv-primary-action"
+						disabled={busy}
+						onClick={() => setAdding(true)}>
+						Add Division
+					</button>
+				)}
+			</div>
 
 			{divisions.length === 0 ? (
 				<SectionState
@@ -185,22 +307,48 @@ function DivisionsBand({ divisions, onOpenDivision }) {
 			) : (
 				<div className="tv-division-cards">
 					{divisions.map((division) => (
-						<DivisionCard key={division.id} division={division} onOpenDivision={onOpenDivision} />
+						<DivisionCard
+							key={division.id}
+							division={division}
+							onOpenDivision={onOpenDivision}
+							canRemove={canCompose}
+							busy={busy}
+							onRemove={handleRemove}
+						/>
 					))}
 				</div>
+			)}
+
+			{/* Both requests generate or delete fixtures server-side and take long
+			    enough to look like nothing happened. The modal has already closed
+			    and the confirmation is already dismissed by this point, so without
+			    this the page is idle and unchanged until the toast arrives. The
+			    same full-screen loader the rest of the app uses, which also blocks
+			    a second click while the first is in flight. */}
+			{busy && <LoadingScreen />}
+
+			{/* No key: unlike the creation page, which reuses one modal across
+			    several divisions, this only ever opens a fresh empty one. */}
+			{adding && (
+				<DivisionModal
+					division={createEmptyDivision()}
+					isEditing={false}
+					onCancel={() => setAdding(false)}
+					onSave={handleAdd}
+				/>
 			)}
 		</section>
 	);
 }
 
-function DivisionCard({ division, onOpenDivision }) {
+function DivisionCard({ division, onOpenDivision, canRemove = false, busy = false, onRemove }) {
 	const total = division.fixtureCount ?? 0;
 	const completed = division.completedFixtureCount ?? 0;
 	// Guarded: a division with no fixtures yet would otherwise divide by zero.
 	const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
 	return (
-		<article className="tv-division-card">
+		<article className="tv-division-card" style={divisionColorStyle(division.id)}>
 			{/* A div, not a <header>. App.css styles the bare `header` element for
 			    the site's fixed top bar — position: fixed, width: 100vw, height:
 			    80px — so any <header> anywhere in the app is torn out of its
@@ -232,6 +380,24 @@ function DivisionCard({ division, onOpenDivision }) {
 				<button type="button" onClick={() => onOpenDivision(division.id, 'teams')}>
 					Teams
 				</button>
+
+				{/* Red and iconographic, so it reads as destructive at a glance and
+				    is not mistaken for a third way into the division. Sized to the
+				    icon rather than sharing the row evenly with Standings and
+				    Teams, which are the actions this card is actually for.
+				    The name is in the label because the icon alone does not say
+				    which division it belongs to. */}
+				{canRemove && (
+					<button
+						type="button"
+						className="tv-division-card-remove"
+						disabled={busy}
+						title={`Remove ${division.name}`}
+						aria-label={`Remove ${division.name}`}
+						onClick={() => onRemove(division)}>
+						<Icon name="delete" size={18} />
+					</button>
+				)}
 			</div>
 		</article>
 	);
@@ -285,7 +451,7 @@ function FixturePreview({ fixture }) {
 		<li className="tv-fixture-preview">
 			<div className="tv-fixture-preview-meta">
 				{fixture.match_no != null && <span className="tv-match-no">#{fixture.match_no}</span>}
-				<DivisionBadge name={fixture.division_name} />
+				<DivisionBadge id={fixture.division_id} name={fixture.division_name} />
 			</div>
 
 			<div className="tv-fixture-preview-teams">

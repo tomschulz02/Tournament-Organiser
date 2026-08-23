@@ -96,34 +96,135 @@ export const getTournaments = () => request('tournaments/');
 
 // The tournament view is the one cached response.
 //
-// In memory only, deliberately not localStorage: a stale organiser payload
-// surviving a browser restart is worse than no cache at all.
+// It is held in sessionStorage: scoped to the tab, gone when the tab closes, and
+// still there across a reload — which is the one case a cache exists for and the
+// one a module-level Map could not serve, being page state itself. localStorage
+// was rejected because a stale organiser payload surviving a browser restart is
+// worse than no cache at all; sessionStorage meets that objection rather than
+// overriding it.
 //
-// Safety here does not rest on this map. The server's ETag covers the viewer as
+// The application holds the cache rather than leaving it to the browser's own,
+// for a reason that settles it: the browser's HTTP cache cannot be cleared from
+// JavaScript, and a payload carrying `creator` has to be purgeable on logout.
+// Setting `If-None-Match` here also takes the browser's cache out of the
+// picture — a request carrying a conditional header is not served from it — so
+// the two never disagree about which copy is current.
+//
+// Safety does not rest on this store. The server's ETag covers the viewer as
 // well as the data, so a stale entry from another session can never be answered
-// with a 304 — it simply misses and a correct payload comes back. Keying on the
-// session and clearing on a change is the second line, not the first, because
-// the cost of being wrong is showing organiser controls to the wrong person.
-const tournamentCache = new Map();
-let cachedSessionKey = null;
+// with a 304 — it misses and a correct payload comes back. The viewer in the
+// storage key and the clear on session change are the second line, not the
+// first, because the cost of being wrong is showing organiser controls to the
+// wrong person.
+//
+// Everything below follows utils/createDraft.js: getItem and JSON.parse inside
+// one try, a version check before anything is trusted, guarded writes, and a
+// malformed value discarded without a word. A cache miss is never an error.
+const CACHE_KEY_PREFIX = 'tourganiser.tournament-cache.';
 
+// Bump when the stored shape changes. An older entry is discarded rather than
+// migrated — it costs one request to replace.
+const CACHE_VERSION = 1;
+
+// A tournament payload carries every division, fixture and standings row, and
+// sessionStorage holds a few megabytes. Enough to move between a handful of
+// tournaments; not everything a browsing session touches.
+const MAX_CACHED_TOURNAMENTS = 3;
+
+// The viewer is in the key, not merely in the value. Two viewers then cannot
+// collide even in principle, rather than relying on the clear-on-change having
+// run.
+function cacheKeyFor(viewer) {
+	return `${CACHE_KEY_PREFIX}${viewer}`;
+}
+
+// Every entry the tab holds for this viewer, most recently fetched first, or an
+// empty list. Never throws: sessionStorage itself throws on access in a
+// storage-disabled or private-mode browser, which is why even getItem is inside
+// the try.
+function readCache(viewer) {
+	let stored;
+
+	try {
+		stored = window.sessionStorage.getItem(cacheKeyFor(viewer));
+	} catch {
+		return [];
+	}
+
+	if (!stored) return [];
+
+	try {
+		const parsed = JSON.parse(stored);
+
+		if (!parsed || typeof parsed !== 'object' || parsed.version !== CACHE_VERSION || !Array.isArray(parsed.entries)) {
+			clearTournamentCache();
+			return [];
+		}
+
+		const entries = parsed.entries.filter(
+			(entry) => entry && typeof entry.id === 'string' && typeof entry.etag === 'string' && entry.payload,
+		);
+
+		// One bad entry discards the lot rather than being repaired around. A
+		// half-trusted cache holding `creator` is the thing this must not be.
+		if (entries.length !== parsed.entries.length) {
+			clearTournamentCache();
+			return [];
+		}
+
+		return entries;
+	} catch {
+		// Unparseable, or corrupted in a way the checks above did not anticipate.
+		clearTournamentCache();
+		return [];
+	}
+}
+
+function writeCache(viewer, entries) {
+	const key = cacheKeyFor(viewer);
+
+	try {
+		window.sessionStorage.setItem(key, JSON.stringify({ version: CACHE_VERSION, entries }));
+	} catch {
+		// Quota exceeded, or storage unavailable. Discard rather than throw: the
+		// page works either way, it simply has nothing to revalidate with next
+		// time. A partial write is worse than none.
+		try {
+			window.sessionStorage.removeItem(key);
+		} catch {
+			// Storage that cannot be written cannot have held anything to remove.
+		}
+	}
+}
+
+// Every viewer's entries, not just the current one's. Called when the session
+// changes, and what is being removed is precisely the payload belonging to the
+// session that is ending.
 export function clearTournamentCache() {
-	tournamentCache.clear();
-	cachedSessionKey = null;
+	try {
+		const keys = [];
+
+		for (let index = 0; index < window.sessionStorage.length; index += 1) {
+			const key = window.sessionStorage.key(index);
+			if (key?.startsWith(CACHE_KEY_PREFIX)) keys.push(key);
+		}
+
+		// Collected first: removing while iterating shifts the indices under it.
+		for (const key of keys) window.sessionStorage.removeItem(key);
+	} catch {
+		// Nothing to do. Storage that cannot be enumerated cannot have been
+		// written either — both go through the same unavailable API.
+	}
 }
 
 export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous') {
-	const key = String(sessionKey);
+	const viewer = String(sessionKey);
+	const id = String(tournamentId);
 
-	// A session change invalidates everything held, rather than leaving the
-	// previous viewer's payloads to accumulate under old keys.
-	if (cachedSessionKey !== key) {
-		tournamentCache.clear();
-		cachedSessionKey = key;
-	}
+	const entries = readCache(viewer);
+	const cached = entries.find((entry) => entry.id === id);
 
-	const cached = tournamentCache.get(tournamentId);
-	const { notModified, payload, etag } = await requestWithMeta(`tournaments/${tournamentId}`, {
+	const { notModified, payload, etag } = await requestWithMeta(`tournaments/${id}`, {
 		headers: cached?.etag ? { 'If-None-Match': cached.etag } : undefined,
 	});
 
@@ -131,20 +232,19 @@ export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous'
 		if (cached) return cached.payload;
 
 		// Nothing here to validate, so the 304 answered a header this function
-		// did not send — a browser cache revalidating on its own. There is no
-		// body to fall back on, so ask again unconditionally rather than
-		// returning nothing to the page.
-		tournamentCache.delete(tournamentId);
-		return await request(`tournaments/${tournamentId}`);
+		// did not send. There is no body to fall back on, so ask again
+		// unconditionally rather than returning nothing to the page.
+		return await request(`tournaments/${id}`);
 	}
+
+	const others = entries.filter((entry) => entry.id !== id);
 
 	// An ETag-less response is still served; it simply cannot be revalidated
 	// next time, so it is not worth storing.
-	if (etag && payload) {
-		tournamentCache.set(tournamentId, { etag, payload });
-	} else {
-		tournamentCache.delete(tournamentId);
-	}
+	writeCache(
+		viewer,
+		etag && payload ? [{ id, etag, payload }, ...others].slice(0, MAX_CACHED_TOURNAMENTS) : others,
+	);
 
 	return payload;
 }
@@ -166,6 +266,13 @@ export const endTournament = (tournamentId) => request(`tournaments/${tournament
 
 // Cascades to the tournament's divisions, fixtures and saved rows. There is no undo.
 export const deleteTournament = (tournamentId) => request(`tournaments/${tournamentId}`, { method: 'DELETE' });
+
+// Adds a division to an existing tournament. The body is the same shape the
+// creation page sends for one division, num_teams included, and it goes through
+// the same generator — so an added division is indistinguishable from one
+// created with the tournament. Refused with a 409 once the tournament starts.
+export const addDivision = (tournamentId, division) =>
+	request(`tournaments/${tournamentId}/divisions`, { method: 'POST', body: division });
 
 // A schedule spans the tournament, not a division. Sent whole: the server
 // replaces the column rather than merging, and validates before it writes, so a
@@ -203,6 +310,12 @@ export const updateRounds = (divisionId, rounds, qualifiedTeams, standings, fixt
 // so there is nothing here to declare which it is.
 export const updateDivisionTeams = (divisionId, { teams, num_groups, knockout_teams }) =>
 	request(`divisions/${divisionId}`, { method: 'PUT', body: { teams, num_groups, knockout_teams } });
+
+// Removes the division outright. Cascades to its teams and its fixtures, and the
+// tournament's saved schedule is repaired — the removed division's entries go,
+// everything else stays where it was. There is no undo. Refused with a 409 once
+// the tournament starts, and refused for the tournament's last division.
+export const deleteDivision = (divisionId) => request(`divisions/${divisionId}`, { method: 'DELETE' });
 
 // The per-team add, rename and remove requests were removed on 2026-08-10.
 // updateDivisionTeams above replaces all three: a team can only be added or

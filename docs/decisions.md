@@ -294,6 +294,139 @@ The old paths were inconsistent enough that each new endpoint needed a judgement
 Settling the convention before Phase 3 builds these avoids renaming across both tiers
 afterwards.
 
+## The Creation Review Computes Pools And Rounds In The Client
+
+Decided 2026-08-16. **Reverses the illustrative-schematic decision** taken with the
+tournament creation redesign, which held that the review would show a suggestive shape
+rather than the real structure.
+
+The review now shows the actual knockout bracket and lists teams grouped by the pool they
+will be drawn into. Neither can be faked: pool membership comes from `populateGroups`'
+serpentine seeding, and the bracket's round shape from `createClassicState`'s arithmetic.
+Both are server code, and nothing is persisted at review time, so the client computes them
+itself.
+
+**This deliberately duplicates logic `docs/tournament-rules.md` says must not be
+duplicated.** Three options were weighed: a preview endpoint running the real generation
+and persisting nothing; porting the arithmetic to the client; or keeping the schematic and
+dropping pool grouping. The port was chosen.
+
+What is ported is narrow — pool composition and round shape only. `generateFixtures` stays
+on the server; the review never shows individual fixtures.
+
+**The duplication is pinned by a shared expectation fixture.** One file in the repository
+lists, for a spread of team, group and qualifier counts, the pool sizes and round names the
+rules produce. The API suite asserts the server matches it; the UI suite asserts the client
+port matches it. Both import the same file, so neither side can move without its own tests
+failing and naming the input that broke.
+
+Reason:
+The organiser is committing to a structure they cannot change afterwards without a
+rebuild, so the review is the last moment the pools can be checked — and a preview that
+cannot show which teams meet in the pool stage does not answer the question being asked of
+it. The endpoint was declined; the fixture is what makes the alternative safe.
+
+Given up: a single source of truth for seeding. If the ranking or grouping rules change,
+two places must change together, and the fixture is the only thing that will say so.
+
+## Seeding May Only Be Reordered Before A Tournament Starts
+
+Decided 2026-08-16.
+
+`state.teams` order is the seeding, and seeding is the final tiebreak in the ranking chain
+— see `docs/tournament-rules.md`. Reordering it after matches have been played would
+retroactively change who separated from whom, and therefore who qualified, with nothing on
+screen to explain why a standings table had reordered itself.
+
+Reordering is therefore allowed only while `tournaments.status` is `Not Started`, the same
+gate team editing already uses. One rule covers both, and there is nothing new to explain.
+
+Note this is stricter than it strictly needs to be: pools hold team ids and knockout groups
+hold rank indices, so a reorder disturbs neither, and a correction made after starting but
+before any result would be harmless. Consistency with the existing gate was preferred over
+that extra permissiveness.
+
+**Consequence: `PUT /api/divisions/:divisionId` cannot currently express a reorder.** Its
+`sameSet` test — every entry carrying a known id, and the count matching — is satisfied by
+a reordered list, so it routes to `renameTeams`, which writes only changed names and never
+touches `state.teams`. A reorder submitted today does nothing at all. Closing that is part
+of the work.
+
+## Knockout Progression Follows Match Order, Not Seed
+
+Decided 2026-08-17. **This corrects `docs/tournament-rules.md`**, which currently
+documents the behaviour being replaced.
+
+A knockout round's `results` are ordered **by the match each team came from** — winners of
+match 1, 2, 3, 4, then losers of match 1, 2, 3, 4 — not re-sorted by the seed they carried
+into the round.
+
+The next round folds that list bottom-up, which the existing `populateGroups` call already
+does: with four winners the groups are `[[0, 3], [1, 2]]`. Combined with match ordering
+that gives the standard bracket — the winner of the first quarter-final meets the winner of
+the fourth, and the second meets the third. The bronze match becomes the two semi-final
+losers, which is what it should always have been.
+
+`seedKnockoutResults` in `api/src/utils/standings.js` sorts winners and losers by seed.
+That sort is the whole of the fault: the matchups already arrive in match order.
+
+Reason:
+Re-seeding after every round is a legitimate format, but it is not the one this
+application intends. Under it an upset moves the winner into the beaten team's place in the
+ranking rather than in the bracket, so a team that beat the top seed inherits the top
+seed's *ranking* and can be paired against a team it should not meet until later. A fixed
+bracket is what an organiser draws on a wall chart, and it is what the fold implies.
+
+Given up: nothing the application relied on. The documented rule was wrong rather than a
+deliberate choice.
+
+## Qualifiers Are Ordered By Pool Within A Tier
+
+Decided 2026-08-17. **This also corrects `docs/tournament-rules.md`.**
+
+Qualification still fills by tier — every pool winner, then every runner-up, and so on,
+which is what `seedAcrossGroups` already does. What changes is the order **within** a tier:
+by pool, not by stats. Pool A's winner is always the first qualifier, then pool B's, and so
+on; then pool A's runner-up, and so on.
+
+Cross-pool statistics decide only the places a tier cannot fill cleanly. With ten
+qualifiers from four pools the first eight are the top two from each pool in pool order,
+and the remaining two are the best teams not already through, compared across pools by the
+existing chain.
+
+The chain still applies **within** a pool. A tie for a qualifying place inside one pool is
+resolved exactly as `docs/tournament-rules.md` describes.
+
+Reason:
+Pools are themselves seeded serpentine, so pool A already holds the top seed. Ordering
+qualifiers by pool keeps the bracket predictable from the draw rather than dependent on
+scorelines, and it means an organiser can point at the wall chart before the pools finish
+and say which slot each pool winner will take.
+
+Given up: the convention that the strongest qualifier earns the easiest quarter-final.
+
+## The Bracket Payload Carries Its Own Progression
+
+Decided 2026-08-17.
+
+`buildDivisionBracket` includes, for each match, which matches feed it. The bracket stops
+being inferred.
+
+This closes a limitation recorded in `docs/known-limitations.md`: nothing in the payload
+said which match fed which, so `BracketView` guessed from match counts and drew connectors
+only where a round held exactly twice the matches of the next. An uneven round — a
+`Round of 9` holding one real match because seven teams had byes — drew no lines at all.
+
+It also lets the client label later rounds "Winner of #31" instead of repeating the rank
+placeholders, which only apply to the first knockout round. Match numbers are shown in the
+bracket for the same reason.
+
+Reason:
+The alternative was a third client-side copy of structural arithmetic, after
+`populateGroups` and the round shapes. The server already knows the answer; saying it is
+cheaper than deriving it, and it removes an inference that was already producing visibly
+wrong output.
+
 ## Ownership Is Checked In The Service, Not In Middleware
 
 Decided 2026-08-08.
@@ -396,3 +529,49 @@ straight to `showMessage`. There is no machine-readable error code in the envelo
 HTTP status carries that, and the client's `request` helper preserves it on the thrown
 `ApiError` rather than discarding it as `fetchWithRetry` did. If two conditions ever need
 distinguishing within one status, a code goes inside `data` at that point.
+
+## The Tournament Payload Is Cached In `sessionStorage`, By The Application
+
+`GET /api/tournaments/:tournamentId` is the one cached response. `requests.js` stores
+`{ etag, payload }` per tournament, sends the stored validator as `If-None-Match`, and
+serves the stored body when the server answers 304. Three tournaments are kept, most
+recent first, and the viewer is part of the storage key.
+
+**`sessionStorage`, not `localStorage`.** The original decision rejected `localStorage`
+because *a stale organiser payload surviving a browser restart is worse than no cache at
+all*. That objection is about persistence across restarts, not persistence as such.
+`sessionStorage` is scoped to the tab and cleared when it closes, so it survives the reload
+the cache exists for and nothing beyond it. It meets the objection rather than overriding
+it. A module-level `Map` came first and was emptied by every reload — page state cannot
+cache across a page load. Moved 2026-08-17.
+
+**The application holds the cache, not the browser.** `Cache-Control: no-cache` would let
+the browser's own HTTP cache do much the same job invisibly. It is not left to, for one
+reason: the browser's cache cannot be cleared from JavaScript, and a payload carrying
+`creator` has to be droppable on logout. Sending `If-None-Match` from the application also
+takes the browser's cache out of the exchange — per the Fetch standard a request carrying a
+conditional header is not served from it — so the two cannot disagree about which copy is
+current.
+
+Reason:
+The payload carries `creator`, so the question a cache of it has to answer is not "is this
+current" but "whose is this". Three things answer it, in order: the server's ETag covers
+the viewer, so a stale entry can never be revalidated for anyone else; the viewer is in the
+storage key, so two viewers cannot collide even in principle; and `clearTournamentCache`
+runs wherever `sessionVersion` moves — logout, login and signup all pass through
+`setIsLoggedIn` in `AuthProvider`, which is why the clear lives there rather than at the
+three call sites. The first is the line that holds. The others exist so that being wrong
+about the first is not sufficient.
+
+Storage safety follows `utils/createDraft.js` exactly, and for the same reason: this is
+read on the tournament view's first request, so anything that throws there makes the page
+unopenable for that browser. `getItem` and `JSON.parse` inside one `try`, a version check
+before anything is trusted, guarded writes, a malformed or wrong-version value discarded
+without a word, and a quota error discarding rather than throwing. A cache miss is never an
+error; a browser with storage disabled loses the cache, not the page.
+
+Known cost: the page still awaits the response before it renders, because
+`fetchTournamentData` returns the stored body only once the 304 has come back. What this
+buys is the payload, not the round trip. Rendering from storage before the network resolves
+would mean `View.jsx` showing a copy it has not had confirmed — a different decision, and
+one that puts `creator` on screen on the strength of the cache alone.

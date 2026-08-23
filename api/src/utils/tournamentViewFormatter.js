@@ -3,6 +3,7 @@ import {
     applyFixtureToStandings,
     buildHeadToHeadMap,
     buildSeedIndex,
+    compareTeams,
     computeRatios,
     createStandingsRow,
     isCountableFixture,
@@ -74,6 +75,7 @@ function formatDivisionPayload({ division, teams, fixtures }) {
     const bracket = buildDivisionBracket(state, normalizedFixtures, teamLookup);
     const finalStandings = buildFinalStandings({
         division,
+        state,
         fixtures: normalizedFixtures,
         standings,
         bracket,
@@ -238,17 +240,26 @@ function buildDivisionStandings(state, fixtures, teamLookup) {
 function buildDivisionBracket(state, fixtures, teamLookup) {
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
     const bracketRounds = [];
+    // The knockout round immediately before this one, if there is one. A knockout
+    // group holds an index into the previous round's results, and after the bye fix
+    // that layout is deterministic — one team per group in group order, then the
+    // losers in match order — so which match feeds which slot can simply be stated.
+    let previousRound = null;
 
     rounds.forEach((round, roundIndex) => {
         if (round.type !== "knockout") {
+            // A pool round's results are ranked teams, not match outcomes, so the
+            // first knockout round has nothing to name and keeps its placeholders.
+            previousRound = null;
             return;
         }
 
         const roundFixtures = getFixturesForKnockoutRound(fixtures, round.name);
         let fixtureIndex = 0;
         const matches = [];
+        const groups = round.groups || [];
 
-        (round.groups || []).forEach((group, groupIndex) => {
+        groups.forEach((group, groupIndex) => {
             if (!Array.isArray(group) || group.length < 2) {
                 return;
             }
@@ -262,11 +273,13 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
             const participantOne =
                 fixture?.teams?.team_1?.id
                     ? fixture.teams.team_1
-                    : resolveParticipant(group[0], teamLookup, fixture?.team_1_placeholder);
+                    : resolveByeTeam(group[0], previousRound, teamLookup) ||
+                      resolveParticipant(group[0], teamLookup, fixture?.team_1_placeholder);
             const participantTwo =
                 fixture?.teams?.team_2?.id
                     ? fixture.teams.team_2
-                    : resolveParticipant(group[1], teamLookup, fixture?.team_2_placeholder);
+                    : resolveByeTeam(group[1], previousRound, teamLookup) ||
+                      resolveParticipant(group[1], teamLookup, fixture?.team_2_placeholder);
 
             matches.push({
                 id: fixture?.id || `${round.name}-${groupIndex}`,
@@ -274,6 +287,13 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
                 round: fixture?.round || round.name,
                 status: fixture?.status || "UPCOMING",
                 participants: [participantOne, participantTwo],
+                // Parallel to participants, one entry per slot, so the client needs
+                // no cross-round lookup to label an unbound slot or to draw a
+                // connector. Null where nothing feeds the slot.
+                sources: [
+                    resolveMatchSource(group[0], previousRound),
+                    resolveMatchSource(group[1], previousRound)
+                ],
                 result: fixture?.result || [],
                 winner: determineFixtureWinner(fixture),
                 isPlacementMatch: fixture?.round === "3rd Place Playoff"
@@ -285,6 +305,9 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
             roundIndex,
             matches
         });
+
+        // The results this round's groups index into, so a bye can be named.
+        previousRound = { groups, matches, previousResults: rounds[roundIndex - 1]?.results };
     });
 
     return {
@@ -292,11 +315,85 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
     };
 }
 
-function buildFinalStandings({ division, fixtures, standings, bracket, teams }) {
-    if (!isDivisionComplete(fixtures)) {
-        return [];
+// Which match, if any, produces the team that lands at `index` in the previous
+// round's results. Those results are one team per group in group order, then the
+// losers in match order, so with G groups: an index below G is that group's
+// advancing team — its match's winner, or nobody at all if the group was a bye —
+// and an index at or above G is the loser of match `index - G`. That second half
+// indexes the matches array, not the groups array; the two differ exactly when the
+// round has byes.
+function resolveMatchSource(index, previousRound) {
+    if (!previousRound || !Number.isInteger(index)) {
+        return null;
     }
 
+    const { groups, matches } = previousRound;
+
+    if (index >= groups.length) {
+        return describeMatchSource(matches[index - groups.length], "LOSER");
+    }
+
+    const group = groups[index];
+    if (!Array.isArray(group) || group.length < 2) {
+        return null;
+    }
+
+    // The matches array skips one-team groups, so the match for group `index` sits
+    // at the number of groups of two or more that precede it.
+    let matchIndex = 0;
+    for (let position = 0; position < index; position += 1) {
+        const earlier = groups[position];
+        if (Array.isArray(earlier) && earlier.length >= 2) {
+            matchIndex += 1;
+        }
+    }
+
+    return describeMatchSource(matches[matchIndex], "WINNER");
+}
+
+// A slot fed by a bye already knows its team, and showing it "Rank 4" hides a
+// team that is certainly in the match: the previous round's one-team group holds
+// an index into the round before it, whose results were committed when this round
+// was drawn. Nothing is played to change it. Only byes resolve this way — a slot
+// waiting on a match stays a placeholder, because it genuinely is one.
+//
+// It ranks below the fixture in precedence: once progression binds the fixture,
+// the bound team is the answer for the same reason it always was.
+function resolveByeTeam(index, previousRound, teamLookup) {
+    if (!previousRound || !Number.isInteger(index) || index >= previousRound.groups.length) {
+        return null;
+    }
+
+    const group = previousRound.groups[index];
+    if (!Array.isArray(group) || group.length !== 1) {
+        return null;
+    }
+
+    const entry = group[0];
+    const teamId = typeof entry === "string" ? entry : previousRound.previousResults?.[entry];
+    const team = teamId ? teamLookup.get(teamId) : null;
+
+    return team ? { id: team.id, name: team.name, placeholder: null } : null;
+}
+
+function describeMatchSource(match, outcome) {
+    if (!match) {
+        return null;
+    }
+
+    // matchNo travels with the id so the client can label a slot without looking
+    // the match up. It is null until fixtures exist, which is the case the client
+    // falls back on.
+    return { matchId: match.id, matchNo: match.match_no ?? null, outcome };
+}
+
+// Final rankings, filled from the bottom as rounds complete. A team's place is
+// decided by which round eliminated it, not by whether the division has finished:
+// after the quarter-finals, places 5-8 are known and 1-4 are still being played
+// for. A round-robin division has no bracket and keeps today's behaviour exactly —
+// nothing until the last fixture, then the full table, which is what the two
+// fallbacks at the end are gated on.
+function buildFinalStandings({ division, state, fixtures, standings, bracket, teams }) {
     const rankedTeams = [];
     const seenTeams = new Set();
 
@@ -334,10 +431,20 @@ function buildFinalStandings({ division, fixtures, standings, bracket, teams }) 
                 pushFinalStanding(rankedTeams, seenTeams, match.winner, 3, "Third Place");
                 pushFinalStanding(rankedTeams, seenTeams, getFixtureLoser(match), 4, "Fourth Place");
             });
+
+            rankEliminatedTeams({
+                rankedTeams,
+                seenTeams,
+                state,
+                fixtures,
+                bracket,
+                finalRound,
+                teams
+            });
         }
     }
 
-    if (rankedTeams.length === 0 && standings.length > 0) {
+    if (isDivisionComplete(fixtures) && rankedTeams.length === 0 && standings.length > 0) {
         let rank = 1;
         standings.forEach((round) => {
             round.groups.forEach((group) => {
@@ -359,7 +466,7 @@ function buildFinalStandings({ division, fixtures, standings, bracket, teams }) 
         });
     }
 
-    if (rankedTeams.length < teams.length) {
+    if (isDivisionComplete(fixtures) && rankedTeams.length < teams.length) {
         let rank = rankedTeams.length + 1;
         teams.forEach((team) => {
             if (seenTeams.has(team.id)) {
@@ -378,6 +485,164 @@ function buildFinalStandings({ division, fixtures, standings, bracket, teams }) 
     }
 
     return rankedTeams.sort((a, b) => a.rank - b.rank);
+}
+
+// Places are filled from the bottom as rounds complete: the pool round's
+// non-qualifiers take the lowest block, then each knockout round's losers take the
+// next block up. The walk stops at the first block that is not yet determined,
+// because the places above an unfinished round are not determined either.
+function rankEliminatedTeams({ rankedTeams, seenTeams, state, fixtures, bracket, finalRound, teams }) {
+    const teamLookup = new Map(teams.map((team) => [team.id, team]));
+    const seedIndex = buildSeedIndex(teams.map((team) => team.id));
+
+    // A semifinal loser is not ranked by losing the semifinal: the concluding
+    // round's playoff separates third from fourth. Which matches those are is
+    // declared by the concluding round's sources, so no round name is guessed at.
+    const deferred = new Set();
+    finalRound.matches.forEach((match) => {
+        (match.sources || []).forEach((source) => {
+            if (source && source.outcome === "LOSER") deferred.add(source.matchId);
+        });
+    });
+
+    const blocks = [nonQualifyingTeams(state, teamLookup)];
+    bracket.rounds.forEach((round) => {
+        if (round !== finalRound) {
+            blocks.push(teamsEliminatedIn(round, deferred, fixtures, seedIndex));
+        }
+    });
+
+    let floorRank = teams.length;
+
+    for (const block of blocks) {
+        if (!block) return;
+
+        block.participants.forEach((participant, offset) => {
+            pushFinalStanding(
+                rankedTeams,
+                seenTeams,
+                participant,
+                floorRank - block.participants.length + 1 + offset,
+                block.note
+            );
+        });
+
+        floorRank -= block.participants.length;
+    }
+}
+
+// Everyone the pool ranking produced who is not in the list the organiser
+// committed. Both lists are written by progression's commit, in the order the
+// ranking already established, so the block needs no reordering.
+function nonQualifyingTeams(state, teamLookup) {
+    const rounds = Array.isArray(state?.rounds) ? state.rounds : [];
+    const pool = rounds.find((round) => round.type !== "knockout");
+
+    // A knockout-only division has nothing below its bracket.
+    if (!pool) {
+        return { note: null, participants: [] };
+    }
+
+    const qualified = Array.isArray(pool.results) ? pool.results : [];
+    // Until the round is committed nobody has qualified, so nobody has failed to.
+    if (qualified.length === 0) {
+        return null;
+    }
+
+    const computed = Array.isArray(pool.computedResults) ? pool.computedResults : [];
+
+    return {
+        note: pool.name || null,
+        participants: computed
+            .filter((teamId) => !qualified.includes(teamId))
+            .map((teamId) => teamLookup.get(teamId))
+            .filter(Boolean)
+    };
+}
+
+// The losers of the round's matches. A bye is in no match, so a team that sat the
+// round out cannot be eliminated by it.
+function teamsEliminatedIn(round, deferred, fixtures, seedIndex) {
+    const contested = round.matches.filter(
+        (match) => !deferred.has(match.id) && match.status !== "CANCELLED"
+    );
+
+    const losers = [];
+
+    for (const match of contested) {
+        const loser = getFixtureLoser(match);
+        // Undecided, so the round has eliminated nobody yet.
+        if (!loser) {
+            return null;
+        }
+
+        losers.push(loser);
+    }
+
+    return { note: round.name, participants: orderEliminatedTeams(losers, fixtures, seedIndex) };
+}
+
+// Teams eliminated in the same round are tied on elimination and are separated by
+// how they performed in the match they lost — sets, then points, from that match
+// alone. Still level, the comparison steps back a round at a time. If they never
+// separate, seeding resolves it, as it always does.
+function orderEliminatedTeams(losers, fixtures, seedIndex) {
+    const history = new Map(losers.map((loser) => [loser.id, playedFixtures(loser.id, fixtures)]));
+
+    return losers.slice().sort((a, b) => compareEliminatedTeams(a, b, history, seedIndex));
+}
+
+function compareEliminatedTeams(a, b, history, seedIndex) {
+    const aPlayed = history.get(a.id);
+    const bPlayed = history.get(b.id);
+    const depth = Math.max(aPlayed.length, bPlayed.length);
+
+    for (let step = 0; step < depth; step += 1) {
+        // No seed index at this stage, deliberately. Seeding is a total order, so
+        // passing it here would resolve every comparison at the first step and
+        // nothing would ever step back to an earlier round.
+        const verdict = compareTeams(
+            rowFromFixture(a.id, aPlayed[step]),
+            rowFromFixture(b.id, bPlayed[step])
+        );
+
+        if (verdict !== 0) {
+            return verdict;
+        }
+    }
+
+    return compareTeams(rowFromFixture(a.id, null), rowFromFixture(b.id, null), { seedIndex });
+}
+
+// A team's completed fixtures, most recent first, so stepping through them is
+// stepping back a round at a time.
+function playedFixtures(teamId, fixtures) {
+    return fixtures
+        .filter(
+            (fixture) =>
+                isCountableFixture(fixture) &&
+                (fixture.team_1_id === teamId || fixture.team_2_id === teamId)
+        )
+        .sort((a, b) => (b.match_no || 0) - (a.match_no || 0));
+}
+
+// One team's standings row from one fixture, so the ranking chain can be applied
+// to a single match. The opponent's row is discarded.
+function rowFromFixture(teamId, fixture) {
+    const row = createStandingsRow(null, teamId);
+
+    if (fixture) {
+        const opponent = createStandingsRow(null, null);
+
+        if (fixture.team_1_id === teamId) {
+            applyFixtureToStandings(row, opponent, fixture.result);
+        } else {
+            applyFixtureToStandings(opponent, row, fixture.result);
+        }
+    }
+
+    computeRatios(row);
+    return row;
 }
 
 function normalizeDivisionState(state) {

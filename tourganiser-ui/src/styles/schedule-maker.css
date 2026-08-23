@@ -488,6 +488,27 @@ body.dark {
 	max-height: 420px;
 }
 
+/* While a placed entry is dragged, the whole list becomes a drop target that
+   unschedules it. */
+.schedule-maker-fixture-list.unschedule-target {
+	outline: 2px dashed var(--schedule-fixture);
+	outline-offset: -4px;
+	border-radius: 12px;
+}
+
+.schedule-unschedule-hint {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: var(--space-2) var(--space-3);
+	border-radius: 12px;
+	background: var(--schedule-surface-soft);
+	border: 1px dashed var(--schedule-fixture);
+	color: var(--schedule-text);
+	font-size: 0.82rem;
+	text-align: center;
+}
+
 .schedule-fixture-pill {
 	border: 1px solid var(--schedule-border);
 	border-radius: 16px;
@@ -498,6 +519,13 @@ body.dark {
 	gap: var(--space-1);
 	text-align: left;
 	cursor: grab;
+	/* Division colour, set inline from divisionColorStyle. An inset shadow
+	   rather than a border-left: .pending below already claims border-color on
+	   every side, and a shadow is a separate property that survives that state
+	   change untouched, clipped to the pill's own border-radius like a real
+	   border would be. transparent when unset (single-division tournament, or a
+	   break entry, which has none). */
+	box-shadow: inset 3px 0 0 0 var(--tv-division-color, transparent);
 }
 
 .schedule-fixture-pill span,
@@ -618,6 +646,63 @@ body.dark {
 	font-weight: 700;
 }
 
+/* The court header doubles as the division-restriction control when editable.
+   Reset the button chrome so it still reads as a header, and stack the optional
+   restriction label under the name. */
+button.schedule-grid-header-court {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+	border: none;
+	text-align: left;
+	color: inherit;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+button.schedule-grid-header-court:hover {
+	color: var(--schedule-accent, inherit);
+}
+
+.schedule-grid-header-court-divisions {
+	font-weight: 500;
+	font-size: 0.72rem;
+	color: var(--schedule-muted);
+}
+
+.schedule-court-division-list {
+	display: grid;
+	gap: var(--space-2);
+}
+
+.schedule-court-division-option {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	background: var(--schedule-surface);
+	border: 1px solid var(--schedule-border);
+	border-radius: 12px;
+	cursor: pointer;
+}
+
+.schedule-generator-toggle {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	margin: var(--space-3) 0;
+	font-size: 0.85rem;
+	line-height: 1.4;
+	cursor: pointer;
+}
+
+.schedule-generator-toggle input {
+	margin-top: 3px;
+	flex: none;
+}
+
 /* The fourth sanctioned scroller — see docs/architecture.md. A schedule with
    several courts is inherently wide, and squeezing three courts into a 320px
    screen left about 75px each, too narrow for an entry card carrying two team
@@ -678,8 +763,17 @@ body.dark {
 .schedule-grid-entry {
 	margin: var(--space-1);
 	border: none;
+	/* Set inline per entry from divisionColorStyle, only in a multi-division
+	   tournament — the same colour the badge, the division selector and
+	   Fixtures & Schedule's own rows already use for this division. transparent
+	   when unset, so a single-division tournament keeps the same 3px inset it
+	   would get from any entry that happens not to carry the var. padding-left
+	   is reduced by the same 3px so the content position is unchanged either
+	   way. */
+	border-left: 3px solid var(--tv-division-color, transparent);
 	border-radius: 18px;
 	padding: var(--space-3);
+	padding-left: calc(var(--space-3) - 3px);
 	text-align: left;
 	color: #fff;
 	display: grid;
@@ -701,6 +795,24 @@ body.dark {
 .schedule-grid-entry.snapped {
 	outline: 2px dashed rgba(255, 255, 255, 0.55);
 	outline-offset: -5px;
+}
+
+/* The entry the server named as breaking a rule on the last save. Pulses briefly
+   so the organiser can find it among many, then the highlight is cleared. */
+.schedule-grid-entry.highlighted {
+	outline: 3px solid var(--schedule-danger, #e74c3c);
+	outline-offset: -3px;
+	animation: schedule-entry-flash 1s ease-in-out 3;
+}
+
+@keyframes schedule-entry-flash {
+	0%,
+	100% {
+		box-shadow: 0 12px 20px rgba(0, 0, 0, 0.14);
+	}
+	50% {
+		box-shadow: 0 0 0 4px var(--schedule-danger, #e74c3c);
+	}
 }
 
 /* An organiser can drag a placed entry to another slot; a click still opens the
@@ -736,6 +848,10 @@ body.dark {
 	opacity: 0.9;
 }
 
+.schedule-grid-entry-officials {
+	font-size: 0.9rem;
+}
+
 .schedule-list-day {
 	display: grid;
 	gap: var(--space-3);
@@ -755,6 +871,9 @@ body.dark {
 	gap: var(--space-4);
 	text-align: left;
 	cursor: pointer;
+	/* Same division-colour treatment as .schedule-fixture-pill above, and for
+	   the same reason: .break below already claims border-color. */
+	box-shadow: inset 3px 0 0 0 var(--tv-division-color, transparent);
 }
 
 .schedule-list-entry.break {
@@ -832,6 +951,46 @@ body.dark {
 	gap: var(--space-2);
 }
 
+.schedule-panel-section-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.schedule-panel-section-head h4 {
+	margin: 0;
+}
+
+.schedule-panel .schedule-panel-section-action {
+	border: 1px solid var(--schedule-border);
+	border-radius: 10px;
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	color: var(--schedule-text);
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+/* A quiet, left-aligned link back to the overview from a sub-panel. Deliberately
+   not a primary button — it competes with nothing. */
+.schedule-panel .schedule-panel-back {
+	align-self: start;
+	border: none;
+	background: transparent;
+	color: var(--schedule-muted);
+	padding: 0;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.schedule-panel .schedule-panel-back:hover {
+	color: var(--schedule-text);
+	transform: none;
+}
+
 .schedule-stat-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -866,6 +1025,31 @@ body.dark {
 	background: var(--schedule-surface);
 	border: 1px solid var(--schedule-border);
 	border-radius: 12px;
+}
+
+.schedule-court-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.schedule-panel .schedule-court-remove {
+	flex: none;
+	border: 1px solid var(--schedule-border);
+	border-radius: 10px;
+	padding: var(--space-1) var(--space-2);
+	background: transparent;
+	color: var(--schedule-muted);
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.schedule-panel .schedule-court-remove:hover {
+	border-color: var(--schedule-danger, #c0392b);
+	color: var(--schedule-danger, #c0392b);
+	transform: none;
 }
 
 .schedule-inline-form {
@@ -1035,6 +1219,15 @@ which is the whole point of printing rather than downloading.
 		break-inside: avoid;
 		page-break-inside: avoid;
 	}
+
+	/* Same reasoning for the grid layout: each fixture is one un-spanned grid
+	   cell, so keeping the cell whole is enough to keep a break at a cell
+	   boundary rather than inside a fixture's own content. */
+	.schedule-export-grid-cell,
+	.schedule-export-grid-time {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
 }
 
 .schedule-export-page {
@@ -1092,6 +1285,14 @@ which is the whole point of printing rather than downloading.
 .schedule-export-grid-cell {
 	display: grid;
 	gap: var(--space-1);
+	/* Division colour, set inline from divisionColorStyle — the same accent
+	   the live grid, the badge and every other division-coloured surface use.
+	   A real border rather than a shadow: this is the printed page, and border
+	   colour survives printing without needing print-color-adjust the way a
+	   background fill would not. transparent when unset (a break, or a
+	   single-division tournament) — the border-right rule above already sets
+	   the cell's box-sizing expectations, so this only adds the left edge. */
+	border-left: 3px solid var(--tv-division-color, transparent);
 }
 
 .schedule-export-grid-cell span {
@@ -1111,6 +1312,8 @@ which is the whole point of printing rather than downloading.
 	padding: var(--space-3) var(--space-3);
 	border: 1px solid rgba(31, 41, 55, 0.12);
 	border-radius: 12px;
+	/* Same division-colour treatment as .schedule-export-grid-cell above. */
+	border-left: 3px solid var(--tv-division-color, transparent);
 }
 
 @media (max-width: 1200px) {

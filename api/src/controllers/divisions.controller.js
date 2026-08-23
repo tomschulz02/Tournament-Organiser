@@ -35,11 +35,23 @@ async function updateDivision(req, res) {
     res.status(200).json({ success: true, message: "Division updated", data: result });
 }
 
+// Removes the division outright. There is no body: the id and the session are
+// everything the service needs, and what the removal takes with it is not the
+// caller's to choose.
+async function deleteDivision(req, res) {
+    const { divisionId } = req.params;
+
+    const result = await divisionService.deleteDivision(divisionId, req.user.id);
+
+    res.status(200).json({ success: true, message: "Division removed", data: result });
+}
+
 // The addTeam, updateTeam and removeTeam stubs were removed on 2026-08-10.
 // updateDivision replaces all three — see docs/api.md.
 
 export const divisionController = {
     getProgression,
     commitProgression,
-    updateDivision
+    updateDivision,
+    deleteDivision
 };

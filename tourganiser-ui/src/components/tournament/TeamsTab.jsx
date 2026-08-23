@@ -2,9 +2,11 @@ import { useRef, useState } from 'react';
 import DivisionSelector from './DivisionSelector';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
+import { isNotStarted } from './tournamentStatus';
 import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
 import { updateDivisionTeams } from '../../requests';
+import { TEAM_NAME_MAX } from '../create/divisionFormats';
 
 // The teams in one division, in seed order.
 //
@@ -13,11 +15,28 @@ import { updateDivisionTeams } from '../../requests';
 // whether this is a rename or a rebuild, and a division cannot be left
 // half-edited between two requests.
 //
-// No client-side rule about when a team may be edited. The server owns that, and
-// inventing one here would be a second, competing definition of it. The one
-// thing the client does own is the warning before a rebuild — the organiser
-// should know the fixtures are about to be regenerated before they ask for it.
-export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectDivision, creator = false, onChanged }) {
+// The client invents no rule of its own. The server owns when a team may be
+// edited, and a second definition here would be a competing one. What the client
+// does own is the warning before a rebuild — the organiser should know the
+// fixtures are about to be regenerated before they ask for it.
+//
+// It also declines to offer what the server will always refuse. Every control on
+// this tab goes through the one PUT, which is gated on Not Started, so none of
+// them is rendered once the tournament has started. That is presentation; the
+// 409 is still the enforcement. See tournamentStatus.js.
+
+// Prefixed for the same reason the schedule maker's payloads are: a bare index
+// could have come from anywhere on the page.
+const TEAM_DRAG = 'team:';
+
+export default function TeamsTab({
+	divisions = [],
+	selectedDivisionId,
+	onSelectDivision,
+	creator = false,
+	status,
+	onChanged,
+}) {
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 
@@ -30,6 +49,11 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 	const [addName, setAddName] = useState('');
 	const [confirming, setConfirming] = useState(null);
 	const [busy, setBusy] = useState(false);
+
+	// The row being carried and the row it is over. Indices rather than keys,
+	// because a move is expressed as a pair of positions.
+	const [draggingIndex, setDraggingIndex] = useState(null);
+	const [overIndex, setOverIndex] = useState(null);
 
 	// A row that has never been saved has no id, so it needs a key of its own.
 	const nextKey = useRef(0);
@@ -60,6 +84,16 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 
 	const adding = addFor === division.id;
 	const editing = teams.some((row) => row.key === editingKey) ? editingKey : null;
+
+	// One gate for the whole team list, not just the order. Adding, renaming,
+	// removing and reordering all go through the same PUT, and the server refuses
+	// every one of them with a 409 once the tournament has started — seeding is
+	// the final tiebreak in the ranking chain, and a team set that moves under a
+	// played fixture is not a smaller version of the same problem.
+	//
+	// Hidden rather than disabled, and hidden rather than offered-then-refused:
+	// see tournamentStatus.js.
+	const canEditTeams = creator && isNotStarted(status);
 
 	const setTeams = (rows) => setDraft({ divisionId: division.id, teams: rows });
 
@@ -103,6 +137,63 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 	const handleDiscard = () => {
 		setDraft(null);
 		closeForms();
+	};
+
+	// The seeding, and pure draft state. It rides on the tab's existing dirty
+	// state and its Save, like every other edit here: reordering is fiddly, and
+	// a request per drop would be a request per correction.
+	const moveTeam = (from, to) => {
+		if (from === to || to < 0 || to >= teams.length) return;
+
+		const rows = [...teams];
+		const [moved] = rows.splice(from, 1);
+		rows.splice(to, 0, moved);
+
+		setTeams(rows);
+	};
+
+	const endDrag = () => {
+		setDraggingIndex(null);
+		setOverIndex(null);
+	};
+
+	const handleDragStart = (event, index) => {
+		event.dataTransfer.setData('text/plain', `${TEAM_DRAG}${index}`);
+		event.dataTransfer.effectAllowed = 'move';
+		setDraggingIndex(index);
+	};
+
+	const handleDragOver = (event, index) => {
+		// Only a row from this list is a valid drop; without the guard the list
+		// would accept text dragged from anywhere on the page.
+		if (draggingIndex === null) return;
+
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		setOverIndex(index);
+	};
+
+	const handleDrop = (event, index) => {
+		event.preventDefault();
+
+		const payload = event.dataTransfer.getData('text/plain') || '';
+		endDrag();
+
+		if (!payload.startsWith(TEAM_DRAG)) return;
+
+		const from = Number(payload.slice(TEAM_DRAG.length));
+		if (Number.isInteger(from)) moveTeam(from, index);
+	};
+
+	// The handle is a real button, so the order is not a pointer-only fact.
+	// React moves the keyed row rather than rebuilding it, so focus travels with
+	// the team it was on.
+	const handleGripKeyDown = (event, index) => {
+		const step = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+		if (step === 0) return;
+
+		event.preventDefault();
+		moveTeam(index, index + step);
 	};
 
 	// Only a changed set needs the structure confirmed. A rename changes nothing
@@ -177,7 +268,7 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 
 				{/* Prominent, and absent entirely for anyone who is not the creator —
 				    a viewer sees no management affordance at all, not a disabled one. */}
-				{creator && !adding && (
+				{canEditTeams && !adding && (
 					<button type="button" className="tv-primary-action" onClick={startAdding}>
 						Add Team
 					</button>
@@ -224,7 +315,7 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 					variant="empty"
 					title="No teams have been added to this division yet"
 					message="Teams appear here in the order they were seeded.">
-					{creator && !adding && (
+					{canEditTeams && !adding && (
 						<button type="button" className="tv-primary-action" onClick={startAdding}>
 							Add Team
 						</button>
@@ -235,6 +326,15 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 					<p className="tv-fixtures-count">
 						{teams.length} team{teams.length === 1 ? '' : 's'}
 					</p>
+
+					{/* Said rather than left to be discovered. Only the one branch
+					    now: once the tournament has started the handles are not on
+					    screen either, and there is nothing left to explain. */}
+					{canEditTeams && teams.length > 1 && (
+						<p className="tv-teams-seed-note">
+							This order is the seeding. Drag a team by its handle to move it, then Save.
+						</p>
+					)}
 
 					<ul className="tv-team-rows">
 						{teams.map((row, index) =>
@@ -251,13 +351,35 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 									/>
 								</li>
 							) : (
-								<li key={row.key} className="tv-team-row">
+								<li
+									key={row.key}
+									className={`tv-team-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
+										overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
+									}`}
+									onDragOver={(event) => canEditTeams && handleDragOver(event, index)}
+									onDrop={(event) => canEditTeams && handleDrop(event, index)}>
+									{canEditTeams && (
+										<button
+											type="button"
+											className="tv-team-grip"
+											draggable
+											disabled={busy}
+											onDragStart={(event) => handleDragStart(event, index)}
+											onDragEnd={endDrag}
+											onKeyDown={(event) => handleGripKeyDown(event, index)}
+											aria-label={`Move ${row.name} from seed ${
+												index + 1
+											}. Drag, or use the up and down arrow keys.`}>
+											<GripDots />
+										</button>
+									)}
+
 									{/* The list is in seed order, so a row's position is its
 									    seed. No player counts and no logos — the teams table
 									    is (id, name, division_id) and nothing else. */}
 									<TeamIdentity name={row.name} note={`Seed ${index + 1}`} />
 
-									{creator && (
+									{canEditTeams && (
 										<span className="tv-team-actions">
 											<button
 												type="button"
@@ -295,6 +417,22 @@ export default function TeamsTab({ divisions = [], selectedDivisionId, onSelectD
 				/>
 			)}
 		</div>
+	);
+}
+
+// Drawn here rather than added to Icons.jsx: it is the only place in the
+// application that needs a grip, and a glyph such as ⠿ renders as tofu wherever
+// the font has no braille block.
+function GripDots() {
+	return (
+		<svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true" focusable="false">
+			{[3, 8, 13].map((y) => (
+				<g key={y}>
+					<circle cx="3" cy={y} r="1.3" />
+					<circle cx="7" cy={y} r="1.3" />
+				</g>
+			))}
+		</svg>
 	);
 }
 
@@ -408,7 +546,7 @@ function StructureConfirmation({ divisionName, teamCount, knockout, structure, b
 
 // Used for both adding and renaming. Enter submits, Escape cancels — a one-field
 // form where the only alternative is reaching for the mouse.
-function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onCancel }) {
+function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onCancel, maxLength = TEAM_NAME_MAX }) {
 	return (
 		<div className="tv-inline-form">
 			<label className="tv-inline-form-field">
@@ -418,6 +556,7 @@ function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onC
 					value={value}
 					autoFocus
 					disabled={busy}
+					maxLength={maxLength}
 					placeholder="Team name"
 					onChange={(event) => onChange(event.target.value)}
 					onKeyDown={(event) => {

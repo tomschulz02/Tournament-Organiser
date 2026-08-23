@@ -401,6 +401,197 @@ describe("validateSchedule — clashes", () => {
     });
 });
 
+describe("validateSchedule — court division restriction", () => {
+    // A schedule whose courts carry a restriction. pool-1 is div-1, league-1 is
+    // div-2, so a court reserved for div-2 must refuse pool-1 and accept league-1.
+    function withCourts(courts, entries) {
+        return {
+            version: 1,
+            days: [{ id: "day-1", date: "2026-09-12", label: "Day 1" }],
+            courts,
+            entries,
+            settings: { dayStartTime: "09:00", dayEndTime: "18:00", slotMinutes: 30 }
+        };
+    }
+
+    function run(courts, entries) {
+        return validateSchedule(withCourts(courts, entries), CONTEXT);
+    }
+
+    it("accepts a fixture on a court reserved for its own division", () => {
+        expect(() =>
+            run([{ id: "court-1", name: "Court 1", divisions: ["div-1"] }], [entry({ fixtureId: "pool-1" })])
+        ).not.toThrow();
+    });
+
+    it("refuses a fixture on a court reserved for another division", () => {
+        expect(() =>
+            run([{ id: "court-1", name: "Court 1", divisions: ["div-2"] }], [entry({ fixtureId: "pool-1" })])
+        ).toThrowError(expect.objectContaining({ code: "SCHEDULE_COURT_DIVISION", status: 409 }));
+    });
+
+    it("names the offending entry in details", () => {
+        try {
+            run([{ id: "court-1", name: "Court 1", divisions: ["div-2"] }], [entry({ id: "bad", fixtureId: "pool-1" })]);
+            expect.unreachable("should have thrown");
+        } catch (error) {
+            expect(error.details).toEqual({ entryId: "bad" });
+        }
+    });
+
+    it.each([
+        ["an empty array", []],
+        ["a missing key", undefined],
+        ["null", null],
+        ["a non-array", "div-1"]
+    ])("restricts nothing when divisions is %s", (_label, divisions) => {
+        expect(() =>
+            run([{ id: "court-1", name: "Court 1", divisions }], [entry({ fixtureId: "pool-1" })])
+        ).not.toThrow();
+    });
+
+    it("exempts a break placed on a restricted court", () => {
+        expect(() =>
+            run(
+                [{ id: "court-1", name: "Court 1", divisions: ["div-2"] }],
+                [entry({ type: "break", fixtureId: null, title: "Lunch" })]
+            )
+        ).not.toThrow();
+    });
+
+    it("exempts an entry naming a court that does not exist", () => {
+        expect(() =>
+            run([{ id: "court-1", name: "Court 1", divisions: ["div-2"] }], [entry({ fixtureId: "pool-1", courtId: "court-99" })])
+        ).not.toThrow();
+    });
+});
+
+describe("validateSchedule — officials", () => {
+    // pool-1 is t1 v t2 and pool-2 is t3 v t4, both in div-1; league-1 is t5 v t6
+    // in div-2. The names let a bare officials string resolve back to one team.
+    const TEAMS = new Map([
+        ["div-1", [
+            { id: "t1", name: "Team 1" },
+            { id: "t2", name: "Team 2" },
+            { id: "t3", name: "Team 3" },
+            { id: "t4", name: "Team 4" }
+        ]],
+        ["div-2", [
+            { id: "t5", name: "Team 5" },
+            { id: "t6", name: "Team 6" }
+        ]]
+    ]);
+
+    const OFFICIALS = { ...CONTEXT, teamsByDivisionId: TEAMS };
+
+    function run(entries) {
+        return validateSchedule(schedule(entries), OFFICIALS);
+    }
+
+    it("refuses a team officiating a match it is playing in", () => {
+        expect(() => run([entry({ fixtureId: "pool-1", officials: "Team 1" })])).toThrowError(
+            expect.objectContaining({ code: "SCHEDULE_OFFICIAL_PLAYING", status: 409 })
+        );
+    });
+
+    it("refuses a team officiating an overlapping match on another court", () => {
+        expect(() =>
+            run([
+                entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "09:00", endTime: "10:00" }),
+                entry({ id: "b", fixtureId: "pool-2", courtId: "court-2", startTime: "09:30", endTime: "10:30", officials: "Team 1" })
+            ])
+        ).toThrowError(expect.objectContaining({ code: "SCHEDULE_OFFICIAL_PLAYING" }));
+    });
+
+    it("names the offending entry in details", () => {
+        try {
+            run([entry({ id: "bad", fixtureId: "pool-1", officials: "Team 1" })]);
+            expect.unreachable("should have thrown");
+        } catch (error) {
+            expect(error.details).toEqual({ entryId: "bad" });
+        }
+    });
+
+    it("accepts a team officiating a match that does not overlap its own", () => {
+        expect(() =>
+            run([
+                entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "09:00", endTime: "09:30" }),
+                entry({ id: "b", fixtureId: "pool-2", courtId: "court-2", startTime: "10:00", endTime: "10:30", officials: "Team 1" })
+            ])
+        ).not.toThrow();
+    });
+
+    it("accepts an officials string that resolves to no team", () => {
+        expect(() => run([entry({ fixtureId: "pool-1", officials: "Club referee" })])).not.toThrow();
+    });
+
+    // Two divisions may each have a "Team 5"; resolution never crosses a division.
+    it("does not resolve an officials name against another division", () => {
+        // "Team 5" is a div-2 team; pool-1 is div-1, so it resolves to nobody here.
+        expect(() => run([entry({ fixtureId: "pool-1", officials: "Team 5" })])).not.toThrow();
+    });
+
+    it("accepts an empty officials string", () => {
+        expect(() => run([entry({ fixtureId: "pool-1", officials: "" })])).not.toThrow();
+    });
+
+    it("ignores surrounding whitespace and case when resolving", () => {
+        expect(() => run([entry({ fixtureId: "pool-1", officials: "  team 1  " })])).toThrowError(
+            expect.objectContaining({ code: "SCHEDULE_OFFICIAL_PLAYING" })
+        );
+    });
+
+    it("does not check officials on a break", () => {
+        expect(() =>
+            run([entry({ type: "break", fixtureId: null, courtId: null, title: "Lunch", officials: "Team 1" })])
+        ).not.toThrow();
+    });
+
+    it("ignores a non-string officials value", () => {
+        expect(() => run([entry({ fixtureId: "pool-1", officials: 5 })])).not.toThrow();
+    });
+
+    it("does not clash an official against a match on another day", () => {
+        // Team 1 officiates pool-2 on the second day; its own pool-1 sits on the
+        // first, so the day never lines up and there is nothing to clash with.
+        expect(() =>
+            run([
+                entry({ id: "a", fixtureId: "pool-2", day: "2026-09-13", officials: "Team 1" }),
+                entry({ id: "b", fixtureId: "pool-1", day: "2026-09-12" })
+            ])
+        ).not.toThrow();
+    });
+
+    // teamsByDivisionId may arrive as a plain object rather than a Map — the
+    // repository serialises it either way — so resolution has to handle both.
+    it("resolves officials from a plain-object team map", () => {
+        expect(() =>
+            validateSchedule(schedule([entry({ fixtureId: "pool-1", officials: "Team 1" })]), {
+                ...CONTEXT,
+                teamsByDivisionId: { "div-1": [{ id: "t1", name: "Team 1" }] }
+            })
+        ).toThrowError(expect.objectContaining({ code: "SCHEDULE_OFFICIAL_PLAYING" }));
+    });
+
+    it("treats a division whose teams are not an array as having none", () => {
+        expect(() =>
+            validateSchedule(schedule([entry({ fixtureId: "pool-1", officials: "Team 1" })]), {
+                ...CONTEXT,
+                teamsByDivisionId: { "div-1": "not an array" }
+            })
+        ).not.toThrow();
+    });
+
+    it("treats a null team map as resolving nothing", () => {
+        expect(() =>
+            validateSchedule(schedule([entry({ fixtureId: "pool-1", officials: "Team 1" })]), {
+                ...CONTEXT,
+                teamsByDivisionId: null
+            })
+        ).not.toThrow();
+    });
+});
+
 describe("validateSchedule — round order", () => {
     it("refuses a semifinal starting before pool play has finished", () => {
         rejects(

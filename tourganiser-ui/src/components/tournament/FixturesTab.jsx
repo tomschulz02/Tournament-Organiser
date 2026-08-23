@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import SectionState from './SectionState';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
+import FixtureGroup from './FixtureGroup';
 import {
 	EMPTY_FILTERS,
 	distinct,
@@ -9,6 +10,11 @@ import {
 	flattenFixtures,
 	matchesFixtureFilters,
 } from './fixtureUtils';
+
+// Fixed display order for the status groups: Live and Upcoming first (what's
+// happening or about to), then Completed, then Cancelled last. Not derived from
+// distinctStatuses — that helper is unordered and feeds the filter dropdown.
+const STATUS_ORDER = ['LIVE', 'UPCOMING', 'COMPLETED', 'CANCELLED'];
 
 // Fixtures & Schedule in its unscheduled state: every division's fixtures in one
 // list, ordered by match number across the whole tournament.
@@ -33,6 +39,18 @@ export default function FixturesTab({ divisions = [], creator = false, onCreateS
 	);
 
 	const filtered = visible.length !== fixtures.length;
+
+	// One group per status actually present, in fixed order; empty statuses are
+	// skipped, matching how ScheduleTab only renders days that carry an entry.
+	const statusGroups = useMemo(
+		() =>
+			STATUS_ORDER.map((status) => ({
+				status,
+				label: visible.find((fixture) => fixture.status === status)?.statusLabel || status,
+				fixtures: visible.filter((fixture) => fixture.status === status),
+			})).filter((group) => group.fixtures.length > 0),
+		[visible],
+	);
 
 	return (
 		<div className="tv-fixtures">
@@ -76,18 +94,20 @@ export default function FixturesTab({ divisions = [], creator = false, onCreateS
 				</SectionState>
 			)}
 
-			{visible.length > 0 && (
-				<ul className="tv-fixture-rows">
-					{visible.map((fixture) => (
-						<FixtureRow
-							key={fixture.id}
-							fixture={fixture}
-							showDivision={divisions.length > 1}
-							action={creator && renderFixtureAction ? renderFixtureAction(fixture) : null}
-						/>
-					))}
-				</ul>
-			)}
+			{statusGroups.map((group) => (
+				<FixtureGroup key={group.status} title={group.label} meta={`${group.fixtures.length} fixtures`}>
+					<ul className="tv-fixture-rows">
+						{group.fixtures.map((fixture) => (
+							<FixtureRow
+								key={fixture.id}
+								fixture={fixture}
+								showDivision={divisions.length > 1}
+								action={creator && renderFixtureAction ? renderFixtureAction(fixture) : null}
+							/>
+						))}
+					</ul>
+				</FixtureGroup>
+			))}
 		</div>
 	);
 }

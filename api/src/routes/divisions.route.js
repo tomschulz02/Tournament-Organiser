@@ -16,6 +16,13 @@ divisionRouter.post('/:divisionId/progression', requireAuth, divisionController.
 // checks that the caller owns the tournament.
 divisionRouter.put('/:divisionId', requireAuth, divisionController.updateDivision);
 
+// Removing the division. The delete cascades to its teams and its fixtures, and
+// the tournament's saved schedule is repaired in the same transaction — the
+// removed division's entries go, every other division's placements and all
+// breaks stay. The column is never nulled. Only while the tournament is Not
+// Started, and never the last division; the service owns both rules.
+divisionRouter.delete('/:divisionId', requireAuth, divisionController.deleteDivision);
+
 // The per-team add, rename and remove routes were removed on 2026-08-10. Teams
 // and structure cannot change independently, so three routes were three ways to
 // leave a division inconsistent — see docs/api.md.

@@ -798,6 +798,10 @@ textarea.ct-input {
 	color: var(--ct-muted);
 }
 
+.ct-team-order-hint {
+	margin: 0;
+}
+
 .ct-team-list {
 	display: flex;
 	flex-direction: column;
@@ -805,6 +809,14 @@ textarea.ct-input {
 	margin: 0;
 	padding: 0;
 	list-style: none;
+	/* The list scrolls once it overflows instead of growing the modal with
+	   every addition — a thirty-two team division otherwise pushes the footer
+	   off the screen. Released below 768px, where the modal is already the
+	   whole screen and the page scrolls. */
+	max-height: 320px;
+	overflow-y: auto;
+	/* Room for the scrollbar, so it does not sit over the remove buttons. */
+	padding-right: var(--space-1);
 }
 
 /* A row per team, not a card per team — some divisions hold thirty-two. */
@@ -812,6 +824,21 @@ textarea.ct-input {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
+	border-radius: 8px;
+	/* Transparent rather than absent, so the drop indicator below does not
+	   move the row by two pixels when it appears. */
+	border-top: 2px solid transparent;
+}
+
+/* The row being carried. Kept visible — it is still the row being moved, and
+   hiding it makes the list look one shorter than it is. */
+.ct-team-row--dragging {
+	opacity: 0.45;
+}
+
+/* Where it will land. */
+.ct-team-row--over {
+	border-top-color: var(--main-color);
 }
 
 .ct-team-number {
@@ -821,6 +848,24 @@ textarea.ct-input {
 	font-size: 0.8rem;
 	font-variant-numeric: tabular-nums;
 	color: var(--ct-muted);
+}
+
+/* The seed number doubles as the drag handle. A handle rather than the whole
+   row, because the row holds a text input and dragging it would fight with
+   selecting the text inside it. */
+.ct-team-grip {
+	/* No font-size here on purpose: .ct-team-number owns the type, and a
+	   competing declaration in a later rule would win and undo it. */
+	min-height: 44px;
+	padding: 0;
+	border: none;
+	background-color: transparent;
+	font-family: inherit;
+	cursor: grab;
+}
+
+.ct-team-grip:active {
+	cursor: grabbing;
 }
 
 .ct-team-input {
@@ -971,15 +1016,6 @@ textarea.ct-input {
 	background-color: var(--ct-surface);
 }
 
-/* Said plainly and said first. This is an illustration, not a promise. */
-.ct-schematic-caption {
-	margin: 0 0 var(--space-3);
-	font-size: 0.8rem;
-	line-height: 1.5;
-	font-style: italic;
-	color: var(--ct-muted);
-}
-
 .ct-schematic-stage + .ct-schematic-stage {
 	margin-top: var(--space-4);
 	padding-top: var(--space-4);
@@ -1009,9 +1045,12 @@ textarea.ct-input {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	/* Fixed and non-shrinking: these are the children the scroller exists for. */
+	/* Fixed and non-shrinking: these are the children the scroller exists for.
+	   Wide enough for a team name now that the pools name their members rather
+	   than counting them. */
 	flex: 0 0 auto;
-	min-width: 88px;
+	min-width: 150px;
+	max-width: 220px;
 	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--ct-border);
 	border-radius: 8px;
@@ -1028,66 +1067,32 @@ textarea.ct-input {
 	color: var(--ct-muted);
 }
 
-.ct-schematic-rounds {
+/* The teams the serpentine puts in this pool, in the order it puts them. */
+.ct-schematic-pool-teams {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-1);
-	margin: 0;
-	padding: 0;
-	list-style: none;
-	counter-reset: ct-round;
-}
-
-.ct-schematic-round {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 2px var(--space-2);
-	padding: var(--space-2) var(--space-3);
-	border-left: 3px solid var(--main-color);
-	border-radius: 0 6px 6px 0;
-	background-color: var(--ct-surface-alt);
-}
-
-.ct-schematic-round-name {
-	font-size: 0.85rem;
-	font-weight: 600;
-}
-
-.ct-schematic-round-detail {
-	min-width: 0;
-	font-size: 0.78rem;
-	color: var(--ct-muted);
-	overflow-wrap: anywhere;
-}
-
-.ct-review-teams-label {
-	margin: 0 0 var(--space-1);
-	font-size: 0.72rem;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	color: var(--ct-muted);
-}
-
-.ct-review-teams {
-	display: grid;
-	/* min() rather than a bare minmax floor: a 160px minimum wider than the
-	   container overflows instead of shrinking. */
-	grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
-	gap: var(--space-1);
-	margin: 0;
+	gap: 2px;
+	margin: var(--space-1) 0 0;
 	padding: 0;
 	list-style: none;
 }
 
-.ct-review-team {
-	padding: var(--space-1) var(--space-2);
-	border-radius: 6px;
+.ct-schematic-pool-team {
+	padding: 2px var(--space-2);
+	border-radius: 4px;
 	background-color: var(--ct-surface);
-	font-size: 0.875rem;
-	/* The track allows shrinking; this is what makes the child actually do it. */
+	font-size: 0.85rem;
+	/* The pool has a maximum width, so a long name wraps inside it rather than
+	   widening the scroller for every other pool. */
 	overflow-wrap: anywhere;
+}
+
+/* Where a stage has nothing to draw — a Round Robin division, or one where
+   nobody advances. Said plainly rather than rendered as an empty bracket. */
+.ct-schematic-note {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--ct-muted);
 }
 
 @media (min-width: 768px) {
@@ -1136,6 +1141,14 @@ textarea.ct-input {
 
 	.ct-modal-footer-right .ct-button {
 		flex: 1 1 0;
+	}
+
+	/* The modal is already the whole screen here and the body scrolls, so a
+	   second scroller inside it would be a small window inside a large one. */
+	.ct-team-list {
+		max-height: none;
+		overflow-y: visible;
+		padding-right: 0;
 	}
 }
 

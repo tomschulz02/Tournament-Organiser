@@ -21,6 +21,16 @@ export function createStandingsRow(team, fallbackId) {
         setsLost: 0,
         pointsFor: 0,
         pointsAgainst: 0,
+        // How this team's completed matches finished, keyed by the scoreline from
+        // its own perspective — "2-0", "2-1", "1-2", "0-2". A counter for the
+        // standings table and nothing else: it is deliberately absent from
+        // compareTeams, because the ranking chain in docs/tournament-rules.md is
+        // the five criteria there and no sixth.
+        //
+        // The keys are whatever the fixtures produced, so a best-of-five division
+        // yields six of them. Rounds carry no match-format key to assume one from
+        // — see docs/division-state.md.
+        setOutcomes: {},
         setsRatio: 0,
         pointsRatio: 0
     };
@@ -59,6 +69,18 @@ export function applyFixtureToStandings(teamOne, teamTwo, result) {
         teamTwo.won += 1;
         teamOne.lost += 1;
     }
+
+    // Level set counts are already excluded from won and lost above. They get no
+    // scoreline key either, rather than a key invented to hold them.
+    if (teamOneSetsWon !== teamTwoSetsWon) {
+        recordSetOutcome(teamOne, teamOneSetsWon, teamTwoSetsWon);
+        recordSetOutcome(teamTwo, teamTwoSetsWon, teamOneSetsWon);
+    }
+}
+
+function recordSetOutcome(row, setsWon, setsLost) {
+    const key = `${setsWon}-${setsLost}`;
+    row.setOutcomes[key] = (row.setOutcomes[key] || 0) + 1;
 }
 
 // A team that has won sets but lost none has no defined ratio.
@@ -178,29 +200,38 @@ export function rankGroup(rows, context) {
 }
 
 // Cross-pool seeding for a round-robin round.
-// Pool position first: every pool winner (ranked against each other), then every
-// runner-up, and so on. Head-to-head is skipped across pools because teams from
-// different pools have usually not met.
-export function seedAcrossGroups(rankedGroups, seedIndex) {
+// Pool position first: every pool winner, then every runner-up, and so on. A tier
+// that fits entirely inside the qualifying places is taken in array order, which is
+// pool order — A1, B1, C1, D1 — with nothing compared across pools. Only the tier
+// that qualifyingTeams cannot fill cleanly is sorted, and there head-to-head is
+// skipped because teams from different pools have usually not met.
+//
+// The default of 0 makes no tier clean, so every tier sorts: a caller that passes no
+// count keeps the old behaviour untouched.
+export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0) {
     const ordered = [];
     const depth = Math.max(0, ...rankedGroups.map((group) => group.length));
+    const cleanTiers = Math.floor(qualifyingTeams / rankedGroups.length);
 
     for (let position = 0; position < depth; position += 1) {
         const atPosition = rankedGroups
             .map((group) => group[position])
             .filter(Boolean);
 
-        atPosition.sort((a, b) => compareTeams(a, b, { seedIndex }));
+        if (position >= cleanTiers){
+            atPosition.sort((a, b) => compareTeams(a, b, { seedIndex }));
+        }
+
         ordered.push(...atPosition);
     }
 
     return ordered;
 }
 
-// Knockout rounds rank winners first, then losers, each half keeping the seeding
-// order it carried into the round. Produces [w1, w2, l1, l2] for a semifinal, so
+// Knockout rounds rank winners first, then losers, each half keeping the match
+// order because the next round folds them bottom-up. Produces [w1, w2, l1, l2] for a semifinal, so
 // the next round can express bronze as [2, 3] and the final as [0, 1].
-export function seedKnockoutResults(matchups, seedIndex) {
+export function seedKnockoutResults(matchups) {
     const winners = [];
     const losers = [];
 
@@ -208,12 +239,6 @@ export function seedKnockoutResults(matchups, seedIndex) {
         if (winnerId) winners.push(winnerId);
         if (loserId) losers.push(loserId);
     });
-
-    const bySeed = (a, b) =>
-        (seedIndex.get(a) ?? Number.MAX_SAFE_INTEGER) - (seedIndex.get(b) ?? Number.MAX_SAFE_INTEGER);
-
-    winners.sort(bySeed);
-    losers.sort(bySeed);
 
     return [...winners, ...losers];
 }

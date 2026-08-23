@@ -11,7 +11,9 @@ import FixturesTab from '../components/tournament/FixturesTab';
 import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
 import TeamsTab from '../components/tournament/TeamsTab';
+import RoundCompleteBanner from '../components/tournament/RoundCompleteBanner';
 import LoadingScreen from '../components/LoadingScreen';
+import Icon from '../components/Icons';
 import ScoreUpdateModal from '../components/ScoreUpdateModal';
 import NextRoundModal from '../components/NextRoundModal';
 import { flattenFixtures } from '../components/tournament/fixtureUtils';
@@ -154,15 +156,37 @@ export default function ViewPage() {
 		}
 	};
 
-	// Offered only where a result can actually be recorded. A knockout fixture
-	// still showing "Rank 1" has no teams bound, and the server rejects it with a
-	// 400 — better not to offer the action than to explain the refusal.
+	// Offered only where a result can actually be recorded, which is two
+	// conditions rather than one.
+	//
+	// A knockout fixture still showing "Rank 1" has no teams bound, and the
+	// server rejects it with a 400 — better not to offer the action than to
+	// explain the refusal. And a tournament nobody has started cannot have a
+	// result, so the control before kick-off is a lie about what it will do.
+	//
+	// A Finished tournament keeps the action, deliberately. The server accepts a
+	// result whatever the status, and a score entered wrongly would otherwise
+	// have no route to being corrected once the tournament was ended — which is
+	// exactly when somebody notices.
 	const renderFixtureAction = (fixture) => {
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
+		if ((result.data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
+
+		// An icon on the row, where the word would be the widest thing in its
+		// column. aria-label rather than title alone, so the control is named for a
+		// screen reader as well as for a pointer; the label below is the same text
+		// shown when the row has the width for it.
+		const label = fixture.result?.length > 0 ? 'Edit Score' : 'Enter Score';
 
 		return (
-			<button type="button" className="tv-subtle-action" onClick={() => setScoringFixtureId(fixture.id)}>
-				{fixture.result?.length > 0 ? 'Edit Score' : 'Enter Score'}
+			<button
+				type="button"
+				className="tv-row-action"
+				title={label}
+				aria-label={label}
+				onClick={() => setScoringFixtureId(fixture.id)}>
+				<Icon name="edit" size={20} />
+				<span className="tv-row-action-label">{label}</span>
 			</button>
 		);
 	};
@@ -199,7 +223,9 @@ export default function ViewPage() {
 			return { success: true };
 		} catch (apiError) {
 			showMessage(apiError.message, 'error');
-			return { success: false, message: apiError.message };
+			// data carries the rule's details — the offending entry id(s) — which
+			// the modal uses to highlight and scroll to the entry that broke it.
+			return { success: false, message: apiError.message, data: apiError.data };
 		}
 	};
 
@@ -265,6 +291,7 @@ export default function ViewPage() {
 						onDeleted={handleDeleted}
 						renderFixtureAction={renderFixtureAction}
 						onProgressRound={setProgressingDivisionId}
+						onSelectTab={selectTab}
 					/>
 				)}
 			</TournamentShell>
@@ -283,6 +310,7 @@ function TabPanel({
 	onDeleted,
 	renderFixtureAction,
 	onProgressRound,
+	onSelectTab,
 }) {
 	if (tab === 'overview') {
 		return (
@@ -301,21 +329,30 @@ function TabPanel({
 	// no control that switches between them: whether a schedule exists is a fact
 	// about the tournament, not a preference of the reader.
 	if (tab === 'fixtures') {
-		return data.tournament?.schedule ? (
-			<ScheduleTab
-				tournament={data.tournament}
-				divisions={data.divisions ?? []}
-				creator={data.creator}
-				onEditSchedule={onOpenSchedule}
-				renderFixtureAction={renderFixtureAction}
-			/>
-		) : (
-			<FixturesTab
-				divisions={data.divisions ?? []}
-				creator={data.creator}
-				onCreateSchedule={onOpenSchedule}
-				renderFixtureAction={renderFixtureAction}
-			/>
+		return (
+			<>
+				<RoundCompleteBanner
+					divisions={data.divisions ?? []}
+					creator={data.creator}
+					onGoToStandings={() => onSelectTab('standings')}
+				/>
+				{data.tournament?.schedule ? (
+					<ScheduleTab
+						tournament={data.tournament}
+						divisions={data.divisions ?? []}
+						creator={data.creator}
+						onEditSchedule={onOpenSchedule}
+						renderFixtureAction={renderFixtureAction}
+					/>
+				) : (
+					<FixturesTab
+						divisions={data.divisions ?? []}
+						creator={data.creator}
+						onCreateSchedule={onOpenSchedule}
+						renderFixtureAction={renderFixtureAction}
+					/>
+				)}
+			</>
 		);
 	}
 
@@ -337,6 +374,9 @@ function TabPanel({
 			selectedDivisionId={selectedDivisionId}
 			onSelectDivision={onSelectDivision}
 			creator={data.creator}
+			// Reseeding is gated on Not Started, and the tab offers the handle
+			// only where the server would accept the request.
+			status={data.tournament?.status}
 			onChanged={onReload}
 		/>
 	);

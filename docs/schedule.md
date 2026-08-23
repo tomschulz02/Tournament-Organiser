@@ -22,7 +22,7 @@ which records that nothing reads or writes a schedule out of division state.
 |---|---|---|---|
 | `version` | integer | yes | Payload version. `1` is the only version that has existed. `SCHEDULE_VERSION` in `scheduleUtils.js`. |
 | `days` | array of day objects | yes | One per calendar day of the tournament, ascending. Derived, not authored — see below. |
-| `courts` | array of court objects | yes | The playing surfaces available. May be empty; an empty court list means nothing can be placed. |
+| `courts` | array of court objects | yes | The playing surfaces available. May be empty; an empty court list means nothing can be placed. A court may be restricted to a set of divisions. |
 | `entries` | array of entry objects | yes | The placements. May be empty — a schedule that places nothing is valid. |
 | `settings` | settings object | yes | The grid the client draws. Presentation only. |
 
@@ -51,10 +51,17 @@ assume a stored `days` array was the one it last wrote.
 |---|---|---|
 | `id` | string | `court-1`, `court-2`… by generation, but treated as an opaque string. |
 | `name` | string | Display name, `Court 1` by default. |
+| `divisions` | array of division ids | Optional. The divisions this court is reserved for. **Absent or empty means the court takes any division** — only a non-empty array restricts it. A fixture whose `division_id` is not in the array cannot be placed here, and the server rejects a hand-placed one. |
 
 Courts are positional: `buildCourtList` regenerates the list from a count and reuses the
 existing entry at each index. Reducing the court count therefore drops courts from the
 end, and any entry pointing at a dropped court keeps a `courtId` that no longer resolves.
+A court can also be removed from the overview panel directly, which never regenerates the
+list — the removed court's own entries are dropped, so the fixtures among them return to
+the unscheduled list rather than being orphaned.
+
+An old saved schedule has no `divisions` key on any court; it loads as unrestricted, which
+is the correct and only possible reading.
 
 ### Entry
 
@@ -68,12 +75,23 @@ end, and any entry pointing at a dropped court keeps a `courtId` that no longer 
 | `endTime` | string | yes | `HH:MM`, 24-hour. Strictly after `startTime`. |
 | `fixtureId` | string \| `null` | yes | A `fixtures.id` for a fixture entry; `null` on a break. |
 | `title` | string | yes | Free text. `''` when unset. The break's name; unused on a fixture. |
-| `officials` | string | yes | Free text. `''` when unset. Nothing assigns or validates it — see `docs/tournament-rules.md`. |
+| `officials` | string | yes | Free text. `''` when unset. May be assigned by the generator and is validated on write — see the note below. |
 | `notes` | string | yes | Free text. `''` when unset. |
 
 Every key is present on every entry. The optional ones are optional in *meaning*, not in
 presence: `normaliseSchedule` fills each with `''` or `null`, and
 `serialiseScheduleForSave` writes all eleven.
+
+**`officials` holds a team name, and a bare name is sufficient — but only because two
+rules hold together.** The generator can assign an officiating team as a pass over the
+placed schedule (behind a toggle, off by default), and it only ever picks a team from the
+fixture's own division; and team names are unique within a division
+(`validateTeamNames` in `divisions.service.js`). So a name resolves back to exactly one
+team, which is what lets the server reject a team scheduled to officiate a match it is
+playing in (`SCHEDULE_OFFICIAL_PLAYING`). **If either rule relaxes** — an official from
+another division, or duplicate team names within one — **the field needs a team id, and
+the validator stops working before anyone notices.** A string that resolves to no team
+("Club referee", a person's name) is left alone and never rejected.
 
 **`normaliseSchedule` silently drops any entry missing `id`, `day`, `startTime` or
 `endTime`.** The client therefore never sees a malformed entry and cannot report one.
@@ -114,18 +132,23 @@ change to it has to argue with. The generator stays in the client — see
 
 ### Hard constraints
 
-Feasibility, not preference. A slot either satisfies all five or it is not a candidate,
+Feasibility, not preference. A slot either satisfies all six or it is not a candidate,
 and none of them can be traded away for a better score on anything below.
 
 1. **Court exclusivity.** No two entries overlap on one court on one day. An entry with
    `courtId: null` is a break spanning every court and blocks all of them.
-2. **Team exclusivity.** No team plays two matches at the same time.
-3. **Round order.** A fixture of round *n* in a division may not start before every
+2. **Court division restriction.** A court whose `divisions` array is non-empty takes
+   only fixtures of those divisions. A fixture whose `division_id` is not in the array —
+   including one with no `division_id` at all — is not a candidate for that court. Absent
+   or empty means the court takes any division. The server enforces the same rule on
+   write.
+3. **Team exclusivity.** No team plays two matches at the same time.
+4. **Round order.** A fixture of round *n* in a division may not start before every
    fixture of that division's earlier rounds has finished. The server enforces the same
    rule on write; see `docs/tournament-rules.md`.
-4. **Rest.** At least one slot between a team's two matches on the same day. A team never
+5. **Rest.** At least one slot between a team's two matches on the same day. A team never
    plays back to back.
-5. **Day bounds.** Every entry lies within the configured `dayStartTime` and `dayEndTime`.
+6. **Day bounds.** Every entry lies within the configured `dayStartTime` and `dayEndTime`.
 
 A team is only a team when the fixture names one. An unbound knockout slot carries a
 placeholder — `Rank 1`, `TBD` — and constrains nothing, which is how the server's
@@ -186,14 +209,17 @@ Structural, and checked:
 | `entries[].day` | Must fall within the tournament's `start_date`…`end_date`. |
 | `entries[].startTime`, `endTime` | `HH:MM`, and `endTime` strictly after `startTime`. |
 | `entries[].courtId` + times | No two entries may overlap on the same court on the same day. `courtId: null` conflicts with every court that day. |
+| `entries[].courtId` + the court's `divisions` | A fixture may not be placed on a court whose non-empty `divisions` array does not name the fixture's division. A break, and an entry on a `courtId` no court has, are exempt. |
 | the fixture's two teams | No team may be required in two places at once. |
 | round order | A knockout fixture may not start before the round feeding it has finished. |
+| `entries[].officials` | If, and only if, the string resolves to a team of the fixture's own division (trimmed, case-insensitive), that team may not be `team_1` or `team_2` of any overlapping placement — including this one. A string that resolves to no team is accepted untouched. |
 
 Free text, and merely stored:
 
-- `title`, `notes`, `officials` — never inspected.
-- `days`, `courts`, `settings` — stored as given, and `days` is regenerated on read
-  anyway.
+- `title`, `notes` — never inspected.
+- `days`, `settings` — stored as given, and `days` is regenerated on read anyway.
+- `courts` — stored as given, except that each court's `divisions` is read to enforce the
+  court division restriction above.
 - `version` — stored as given.
 
 A partial schedule is legal. Not every fixture has to be placed, and a schedule with no
@@ -210,8 +236,8 @@ Two courts, one day, one break spanning both courts and two fixtures.
     { "id": "day_k3f8a1m2", "date": "2026-09-12", "label": "Day 1" }
   ],
   "courts": [
-    { "id": "court-1", "name": "Court 1" },
-    { "id": "court-2", "name": "Centre Court" }
+    { "id": "court-1", "name": "Court 1", "divisions": [] },
+    { "id": "court-2", "name": "Centre Court", "divisions": [] }
   ],
   "entries": [
     {

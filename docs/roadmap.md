@@ -318,6 +318,9 @@ Client caching is an ETag on `GET /api/tournaments/:tournamentId`, built from th
 payload carries `creator`, a validator built from the timestamp alone would serve an
 organiser's copy to a signed-out reader on a 304. `Vary: Cookie`, `Cache-Control:
 no-cache`, and Express's own automatic ETag disabled so the only one sent is deliberate.
+The client half is `requests.js`, which holds `{ etag, payload }` per tournament in
+`sessionStorage` — a module-level `Map` at first, moved on 2026-08-17 so that it survives
+the reload it exists for. See `docs/decisions.md`.
 
 Making that work took two things beyond the plan:
 
@@ -496,22 +499,38 @@ the slot's instant, it has to come back.
 
 ### Standings
 
-- **Points for and against move into the default table.** Already tracked as `pointsFor`
-  and `pointsAgainst`; this is a display change.
-- **Set-score outcome columns in the advanced view** — how many times a team won 2-0, 2-1,
-  and so on. This is new data: `standings.js` does not bucket results by scoreline.
-  **Derived per division**, decided 2026-08-11 — the columns come from the set counts
-  actually played rather than from an assumed match format, because rounds still have no
+**Complete 2026-08-17.**
+
+- **Points for and against are in the default table.** They were already tracked as
+  `pointsFor` and `pointsAgainst`; this was a display change with no server work.
+- **Set-score outcome columns are in the advanced view** — how many times a team won 2-0,
+  2-1, and so on. `standings.js` now records a `setOutcomes` map per row, keyed by the
+  scoreline from that team's perspective. It is a counter, not a tiebreak: the ranking
+  chain is unchanged and `docs/tournament-rules.md` says so explicitly. **Derived per
+  division**, decided 2026-08-11 — the columns are the union of the scorelines the
+  division's fixtures actually produced, ordered best to worst, so a best-of-five division
+  shows six and a division with nothing completed shows none. Rounds still have no
   match-format key. See `docs/division-state.md`.
-- **The mobile table's sticky columns leak.** The first statistic sits behind the team
-  name, and while scrolling horizontally the hidden statistics reappear in the gap between
-  the two locked columns.
+- **The mobile table's sticky columns no longer leak.** Two independent faults, and either
+  one alone left the table wrong. The offset was a guess: `.tv-col-rank` declared 44px and
+  `.tv-col-team` stuck at a hard-coded `left: 44px`, but under the default
+  `table-layout: auto` a declared cell width is only a suggestion, so a rank column that
+  rendered wider put the team column over it and one that rendered narrower opened a gap
+  for the scrolling cells. The table is now `table-layout: fixed`, every column declares a
+  width, and one custom property drives both the rank width and the team offset. Second,
+  the sticky cells had no `z-index`, so paint order fell back to DOM order and every
+  numeric cell — all of which come after the team cell in the row — painted over them.
+  They now carry a small local stacking value, deliberately not one of the `--z-*` page
+  layers.
 
 ### The knockout bracket is cramped
 
-Nodes sit close enough to clip each other. Spacing only — the connector geometry is
-correct and is what keeps a fed match aligned on the midpoint of its two feeders, so it
-must survive any change to the spacing.
+**Complete 2026-08-17.** `.tv-bracket-slot` went from 84px to 120px (106px below 768px)
+and the match card gained internal padding. The room comes from the slot, never from a
+`gap` on `.tv-bracket-round-body`: the connector geometry depends on every slot's centre
+sitting at its proportional share of the column height, and a uniform gap takes a
+different share in a round of eight than in a round of four, so the lines would go on
+drawing while quietly ceasing to meet the matches they point at.
 
 ### Mobile, application-wide
 
@@ -609,17 +628,171 @@ pattern and the audit method — a container with `overflow-x: hidden` turns ove
 silently clipped content rather than a scrolling page, so check each descendant's right
 edge rather than trusting `scrollWidth`. The schedule grid should join that list.
 
-### Client cache survives a refresh
+### UI polish, raised 2026-08-16
 
-The ETag and `If-None-Match` exchange works, but the cache is a module-level `Map`, so a
-reload empties it and the next request has no validator to send. Move it somewhere that
-outlives a refresh. The server already sends `Cache-Control: no-cache`, `Vary: Cookie` and
-an ETag — which is what tells the browser's own HTTP cache to keep the body and
-revalidate — so check whether the manual layer is preventing that before adding a third
-cache.
+Seven items. The first four are the Standings and Schedule tabs; the rest are spread.
 
-Whatever holds it must stay keyed on the viewer. The payload carries `creator`, and
-`sessionVersion` exists for this.
+- ~~**Officials appear wherever a schedule does**~~ — **done 2026-08-17.** `FixtureRow`
+  renders them as a conditional line and `ScheduleTab` passes them from the entry; the
+  schedule maker's grid and both exports show them too. `docs/tournament-rules.md` was
+  corrected at the same time — it had claimed officials were unimplemented.
+- ~~**Schedule fixture cards are taller**~~ — **superseded 2026-08-17** by the fixture row
+  layout rework, which replaced the aligned-column row with a three-column card and gave
+  the content its own room.
+- ~~**The score action is an icon**~~ — **done 2026-08-17.** `renderFixtureAction` renders
+  `Icon name="edit"` with an `aria-label`, plus a visible label where the row has width for
+  it. ~~The status gate is still outstanding~~ — **closed 2026-08-17**, see below.
+
+<!-- superseded, kept for the reasoning -->
+- **Officials appear wherever a schedule does.** The field is already captured — the entry
+  inspector writes it and the schedule maker's *list* view renders it. Three places ignore
+  it: the schedule maker's grid view, the tournament view's Schedule tab, and both print
+  exports. `docs/tournament-rules.md` claimed officials were unimplemented; corrected
+  2026-08-16.
+- **Schedule fixture cards are taller**, so the added information does not crowd.
+- ~~**Divisions carry a colour**~~ — **done 2026-08-17.** `DivisionBadge` hashes the
+  division id into the four existing accent tokens and sets `--tv-division-color` inline,
+  so adding or removing a division does not recolour the rest and a fifth division wraps
+  rather than introducing a colour that belongs to nothing else on screen. The badge still
+  carries the name; colour is not the only distinguisher. The accents are fills on the
+  marketing surfaces, not 0.75rem text on a card — `--tertiary-color` reads at about 1.7:1
+  on white — so each theme pushes the accent away from its own background, keeping the hue
+  and recovering the contrast. **Still only the badge:** the division pill in
+  `DivisionSelector` fills with `--main-color` under white text, and the same hue there
+  would need a different derivation to stay legible — the badge's light-theme darkening
+  works under white text, its dark-theme lightening does not. Left open deliberately
+  rather than shipped at a contrast the rest of the application does not accept.
+- ~~**The score action appears only once the tournament is `Ongoing`**~~ — **done
+  2026-08-17.** `renderFixtureAction` now takes the tournament's status as well as whether
+  the fixture's teams are bound. A `Finished` tournament keeps the action, deliberately and
+  said so in a comment: the server accepts a result whatever the status, and a score
+  entered wrongly would otherwise have no route to correction once the tournament ended —
+  which is exactly when somebody notices.
+- ~~**The creation modal's team list keeps a fixed height**~~ — **done 2026-08-17.**
+  320px with `overflow-y: auto` above 768px and released below it, where the modal is
+  already the whole screen. The scroll to a newly added team is an instant `scrollTop`
+  assignment and fires only on growth, so removing a team leaves the view where the
+  organiser left it. Measured: sixteen teams, 796px of rows in a 320px window, modal 673px
+  in a 910px viewport.
+- ~~**The creation review shows the real bracket and groups teams by pool**~~ — **done
+  2026-08-17.** `components/create/divisionPreview.js` is the port: `poolMembership`
+  mirrors `populateGroups`, `knockoutRounds` mirrors `createClassicState`'s knockout loop
+  in rank indices, and `previewBracket` shapes them the way `buildDivisionBracket` does so
+  `BracketView` is fed rather than copied. The illustrative caption is gone — the preview
+  is a claim now — and the review's flat team list went with it, because every team appears
+  inside its pool. A Round Robin division says it has no knockout instead of drawing an
+  empty bracket.
+
+  **The pin is `shared/division-structure.json`**, the condition `docs/decisions.md`
+  attached to accepting the duplication. Six pool cases and seven qualifier counts, with
+  membership, round names, match counts and rank pairings. `api/test/unit/services/
+  divisionStructure.test.js` asserts the server produces them; `tourganiser-ui/test/
+  divisionPreview.test.js` asserts the client does. Neither imports the other's code, and
+  both were checked by breaking one side's arithmetic and confirming only that side's suite
+  went red.
+- ~~**Teams can be reordered by dragging**~~ — **done 2026-08-17**, in the creation modal
+  and the Teams tab. HTML5 drag and drop, following the schedule maker; no library. Both
+  lists carry a handle rather than a draggable row, because both rows hold controls that
+  dragging would fight with, and the handle is a real button that also moves its row on
+  ArrowUp/ArrowDown — so the order is not a pointer-only fact. The creation modal's rows
+  were keyed by array index and now carry a stable local key; without that React reuses an
+  element positionally and one team's input ends up holding another's text.
+
+  ~~`PUT /api/divisions/:divisionId` cannot express a reorder~~ — **closed 2026-08-17.**
+  `sameSet` now splits three ways: same order is the unchanged rename, a different order is
+  a reorder, and a different set is the unchanged rebuild. A reorder writes `state.teams`
+  through `divisionsRepository.updateTeamOrder` — a `jsonb_set` on that one key, which
+  stamps `last_update` itself — applies any name changes in the same transaction, and
+  leaves `state.rounds` alone, because pool groups hold team ids and knockout groups hold
+  rank indices. Gated on `Not Started` and nothing else: a reorder destroys nothing, so
+  there is no second condition for the status check to be wrong about.
+
+### ~~Client cache survives a refresh~~ — closed 2026-08-17
+
+The `{ etag, payload }` store moved from a module-level `Map` to `sessionStorage`: keyed on
+the viewer as well as the tournament, bounded to three tournaments, and read through the
+same guards as the creation draft, so a corrupted or unavailable store costs the cache and
+not the page. `clearTournamentCache` now runs inside `AuthProvider`'s `setIsLoggedIn`,
+which is the one place logout, login and signup all reach. `docs/decisions.md` records it.
+
+## Improvements raised 2026-08-17
+
+Twelve items in four groups. Decisions taken on the day are in `docs/decisions.md`; the
+two that change domain rules also require `docs/tournament-rules.md` to be corrected when
+the code lands.
+
+### Knockout correctness
+
+All four are done, 2026-08-17. `docs/tournament-rules.md` carries the corrected rules and
+the three limitations they closed are out of `docs/known-limitations.md`.
+
+- ~~**Crossovers after the first round pair the wrong teams.**~~ — **done 2026-08-17.**
+  The sort by seed is out of `seedKnockoutResults`, so match order survives and the winner
+  of QF1 meets the winner of QF4.
+- ~~**Qualifiers are ordered by pool within a tier**~~ — **done 2026-08-17.** Pool A's
+  winner first, then pool B's; cross-pool statistics decide only the places a tier cannot
+  fill cleanly. The qualifier count is derived from the next round's `groups` rather than
+  read from a key that was never written, and a knockout round's `results` now carry its
+  bye teams — a Round of 12 advances the right eight.
+- ~~**The bracket payload carries its feed links**~~ — **done 2026-08-17.** Each match
+  carries a `sources` array parallel to its participants, so later rounds are labelled
+  "Winner of #31" rather than repeating rank placeholders and the connectors are drawn
+  from what the server declares instead of from match counts.
+- ~~**Final rankings get their own tab**~~ — **done 2026-08-17**, beside Pool/League and
+  Knockout. A round-robin division fills once at the end; a division with knockout rounds
+  fills from the bottom after each round, so places five and below are known before the
+  final. Teams knocked out in the same round are separated by their performance in the
+  match they lost, then by earlier rounds, then by seeding.
+
+### Lifecycle controls
+
+Both are done, 2026-08-17.
+
+- ~~**Add and remove divisions from the Overview tab**~~ — **done 2026-08-17**, organiser
+  only, while `Not Started`. `POST /api/tournaments/:tournamentId/divisions` fills the
+  route stub that used to hang and goes through `divisionService.createDivision`, so an
+  added division is indistinguishable from one created with the tournament. `DELETE
+  /api/divisions/:divisionId` cascades to the division's teams and fixtures and repairs the
+  schedule in the same transaction rather than nulling it, per `docs/decisions.md`; the
+  last division is refused with `LAST_DIVISION`. Adding reuses the creation modal, imported
+  from `components/create/`.
+- ~~**Hide controls that cannot be used**~~ — **done 2026-08-17.** `isNotStarted` in
+  `components/tournament/tournamentStatus.js` is the one rule, and Add Team, Edit, Remove,
+  the reorder handles, Add Division and Remove Division are all absent once the tournament
+  has started. The note explaining why reordering was unavailable went with them. Start
+  Tournament now confirms first, naming both what locks and what does not. **The schedule
+  stays editable after the start** — tournaments overrun, and it is the organiser's main
+  tool. Every server check stayed; hiding is presentation, the 409s are the enforcement.
+
+### Schedule maker
+
+- ~~**Courts can be assigned to divisions**~~ — **done 2026-08-22.** Stored on each court
+  as a `divisions` array so the constraint survives a reload, the generator honours it on
+  every run (a hard constraint), and the validator enforces it on write
+  (`SCHEDULE_COURT_DIVISION`). Unassigned courts behave as before. See `docs/schedule.md`.
+- ~~**Courts can be removed**~~ — **done 2026-08-22.** The overview panel has a remove
+  control per court; removal never regenerates the list, so surviving courts keep their
+  ids and entries, and a removed court's entries resurface below the grid.
+- ~~**Officials can be auto-assigned**~~ — **done 2026-08-22.** Behind a toggle in the
+  generation settings, off by default. One team per match, assigned after placement. A team
+  never officiates a match overlapping its own and never one outside its division — both
+  hard, the second also enforced by the validator. Prefers not to officiate immediately
+  before its own game, prefers its own pool, and spreads the load across the division. A
+  match with no eligible team is left blank and counted in the warnings.
+
+### Smaller UI
+
+- ~~**Fixture groups collapse.**~~ — **done 2026-08-22.** By day when a schedule exists, by
+  status otherwise — Live, Upcoming, Completed, then Cancelled last. A shared
+  `FixtureGroup` component carries the show/hide control, no surrounding borders, everything
+  expanded on load; empty status groups are omitted.
+- ~~**`ScoreUpdateModal` shows progress.**~~ — **done 2026-08-22.** Clicking Save disables
+  both Save and End Match and shows a spinner inside Save; End Match likewise. Add Set and
+  Back stay live. The spinner is scoped to the two buttons and tracks each one's text colour.
+- ~~**Team names get a frontend soft cap**~~ — **done 2026-08-22**, at `TEAM_NAME_MAX` on
+  the Teams tab's add and rename form, and the Overview's up-next and recent-results rows
+  give both team names an equal capped share so one long name stops truncating the short one
+  beside it.
 
 ## Phase 6 — Decide what is real
 

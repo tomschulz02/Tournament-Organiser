@@ -62,9 +62,13 @@ async function createDivision(details, tournamentId, userId, client){
 // inconsistent. The client never declares what it is doing: the incoming ids are
 // compared against state.teams and the intent follows from the data.
 //
-//   same set      — a rename. Names are written and nothing else moves, because
-//                   fixtures reference teams.id and the schedule references
-//                   fixture ids, so nothing structural depends on a name.
+//   same set, same order — a rename. Names are written and nothing else moves,
+//                   because fixtures reference teams.id and the schedule
+//                   references fixture ids, so nothing structural depends on a
+//                   name.
+//   same set, reordered — a reseed. state.teams is written in the submitted
+//                   order, any name changes go with it, and the rounds are left
+//                   alone. Gated on Not Started; see docs/decisions.md.
 //   different set — the division is rebuilt from scratch.
 //
 // A team arriving with no id is new; one in state.teams and absent from the body
@@ -87,10 +91,19 @@ async function updateDivision(divisionId, userId, payload = {}) {
     // Every entry carries an id this division already holds, and no id twice, so
     // matching the stored count is enough to prove the sets are equal.
     const sameSet = entries.length === existingIds.length && entries.every((entry) => entry.id !== null);
+    if (!sameSet) {
+        return await rebuildDivision(division, entries, payload);
+    }
 
-    return sameSet
-        ? await renameTeams(divisionId, entries, existingIds)
-        : await rebuildDivision(division, entries, payload);
+    // The sets match, so the only structural thing left that can have moved is
+    // the order — and the order is the seeding. A reordered list used to satisfy
+    // sameSet and route here as a rename, which never touches state.teams, so
+    // the request succeeded and changed nothing.
+    const reordered = entries.some((entry, index) => entry.id !== existingIds[index]);
+
+    return reordered
+        ? await reorderTeams(division, entries)
+        : await renameTeams(divisionId, entries, existingIds);
 }
 
 // The rename path. No gate: a name has no bearing on results, so there is no
@@ -119,7 +132,49 @@ async function renameTeams(divisionId, entries, existingIds) {
         });
     }
 
-    return { divisionId, rebuilt: false, renamed: changed.length, teams: entries };
+    return { divisionId, rebuilt: false, reordered: false, renamed: changed.length, teams: entries };
+}
+
+// The reorder path. state.teams is the seeding, and seeding is the final
+// tiebreak in the ranking chain — see docs/tournament-rules.md — so reordering
+// it once results exist would retroactively change who separated from whom, and
+// therefore who qualified, with nothing on screen to explain it.
+//
+// Gated on the same Not Started that team editing uses. One rule covers both and
+// there is nothing new to explain; the choice and what it gives up are recorded
+// in docs/decisions.md. No results check alongside it, unlike the rebuild: a
+// reorder destroys nothing, so the status is the whole gate.
+async function reorderTeams(division, entries) {
+    if ((division.tournament_status || "Not Started") !== "Not Started") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    // A reorder and a rename can arrive in the same request. The comparison is
+    // the rename path's, for the same reason: a name that has not moved is not
+    // written.
+    const stored = await divisionsRepository.getTeamsByIds(entries.map((entry) => entry.id));
+    const namesById = new Map(stored.map((team) => [team.id, team.name]));
+    const changed = entries.filter((entry) => namesById.get(entry.id) !== entry.name);
+
+    // One transaction, so a reorder cannot land without the renames that came
+    // with it.
+    await db.withTransaction(async (client) => {
+        for (const entry of changed) {
+            await divisionsRepository.updateTeam(entry.id, entry.name, client);
+        }
+
+        // The narrowest write there is: state.rounds is untouched, because pool
+        // groups hold team ids and knockout groups hold rank indices and
+        // neither depends on this order. It stamps last_update itself, so the
+        // tournament view's ETag moves without a separate touchDivision.
+        await divisionsRepository.updateTeamOrder(
+            division.id,
+            entries.map((entry) => entry.id),
+            client
+        );
+    });
+
+    return { divisionId: division.id, rebuilt: false, reordered: true, renamed: changed.length, teams: entries };
 }
 
 // The rebuild path. Delete-all-and-recreate for the division, not a diff of
@@ -201,6 +256,61 @@ async function rebuildDivision(division, entries, payload) {
     });
 }
 
+// DELETE /api/divisions/:divisionId.
+//
+// Gated on Not Started, like the rebuild: a division removed from a running
+// tournament leaves a schedule and a set of standings describing a tournament
+// that no longer exists. Deleting a whole tournament is allowed at any status
+// because that leaves nothing behind to be inconsistent with.
+//
+// Lives here rather than in tournaments.service.js because repairSchedule is
+// module-private to this file, and because the rebuild path directly below does
+// the same job.
+async function deleteDivision(divisionId, userId) {
+    const division = await divisionsRepository.getDivisionWithOwner(divisionId);
+    if (!division) {
+        throw new AppError("DIVISION_NOT_FOUND");
+    }
+
+    if (division.created_by !== userId) {
+        throw new AppError("NOT_TOURNAMENT_OWNER");
+    }
+
+    if ((division.tournament_status || "Not Started") !== "Not Started") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    const divisions = await divisionsRepository.getDivisionsByTournamentId(division.tournament_id);
+    if (divisions.length <= 1) {
+        throw new AppError("LAST_DIVISION");
+    }
+
+    // One transaction: the fixtures, the division and the schedule repair
+    // together, or none of it.
+    return await db.withTransaction(async (client) => {
+        // First, and explicitly rather than through the cascade: after the
+        // division row goes the fixture ids are gone, and they are what the
+        // schedule references.
+        const deletedFixtureIds = await fixturesRepository.deleteByDivisionId(division.id, client);
+
+        // The team rows go with this, by cascade — see docs/database.md.
+        await divisionsRepository.deleteDivision(division.id, client);
+
+        const scheduleEntriesRemoved = await repairSchedule(
+            division.tournament_id,
+            deletedFixtureIds,
+            client
+        );
+
+        return {
+            divisionId: division.id,
+            tournamentId: division.tournament_id,
+            fixturesRemoved: deletedFixtureIds.length,
+            scheduleEntriesRemoved
+        };
+    });
+}
+
 // Drops the schedule entries that pointed at fixtures which no longer exist, and
 // leaves everything else alone — breaks, and every other division's placements.
 // The column is repaired, never nulled.
@@ -229,7 +339,8 @@ async function repairSchedule(tournamentId, deletedFixtureIds, client) {
 
 export const divisionService = {
     createDivision,
-    updateDivision
+    updateDivision,
+    deleteDivision
 }
 
 
@@ -365,13 +476,17 @@ function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualify
         division.type = "League";
         division.state = createLeagueState(teams, num_teams);
     } else if (format === 'single_elim'){
+        // The ignore spans the throw as well as the two note lines below it:
+        // newer v8 reports the never-taken fall-through after a throw as an
+        // uncovered branch, the same reporting artifact the finally-block
+        // markers in vitest.config.js suppress. The throw itself is exercised.
+        /* v8 ignore next 3 -- unreachable fall-through + notes of the intended shape */
         throw new AppError("FORMAT_NOT_IMPLEMENTED");
-        /* v8 ignore next 2 -- unreachable: kept as a note of the intended shape */
         division.type = "Single Elimination";
         numGroups = Math.ceil(num_teams/2);
     } else if (format === 'double_elim'){
+        /* v8 ignore next 2 -- unreachable fall-through + note of the intended shape */
         throw new AppError("FORMAT_NOT_IMPLEMENTED");
-        /* v8 ignore next -- unreachable: kept as a note of the intended shape */
         division.type = "Double Elimination";
     } else {
         throw new AppError("UNSUPPORTED_FORMAT");

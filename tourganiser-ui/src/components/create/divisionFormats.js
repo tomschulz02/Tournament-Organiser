@@ -57,6 +57,20 @@ export function createDivisionId() {
 	return `d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Also local only, and stripped before a division is saved.
+//
+// A counter rather than the array index: the index stops identifying a row the
+// moment rows can be reordered, and React would then reuse one team's input for
+// another. Exact rather than random, because a team list can grow faster than
+// createDivisionId's millisecond.
+let teamKeyCount = 0;
+
+export function createTeamKey() {
+	teamKeyCount += 1;
+
+	return `team-${teamKeyCount}`;
+}
+
 export function createEmptyDivision() {
 	return {
 		id: createDivisionId(),

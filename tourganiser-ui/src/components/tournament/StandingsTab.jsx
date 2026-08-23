@@ -2,9 +2,11 @@ import { useState } from 'react';
 import DivisionSelector from './DivisionSelector';
 import SectionState from './SectionState';
 import BracketView from './BracketView';
+import { canProgress } from './fixtureUtils';
 
 const STAGE_GROUPS = 'groups';
 const STAGE_KNOCKOUT = 'knockout';
+const STAGE_RANKINGS = 'rankings';
 
 // Standings for one division at a time.
 //
@@ -14,8 +16,10 @@ const STAGE_KNOCKOUT = 'knockout';
 // second, competing definition of the ranking in the codebase, which
 // docs/tournament-rules.md exists to prevent.
 //
-// There is no points column. Tourganiser ranks by matches won; no points system
-// exists to have a column for.
+// There is no league-points column. Tourganiser ranks by matches won; no points
+// system exists to have a column for. Points for and against are a different
+// thing — points scored in play, which is what the point-ratio tiebreak is built
+// from — and those do have columns.
 export default function StandingsTab({
 	divisions = [],
 	selectedDivisionId,
@@ -50,26 +54,36 @@ export default function StandingsTab({
 	);
 	const bracketRounds = division.bracket?.rounds ?? [];
 
+	// One column set for the whole division rather than one per group, so two
+	// tables sitting above each other have the same columns in the same order
+	// even when one group's fixtures happened never to produce a 2-1.
+	const outcomeColumns = deriveOutcomeColumns(rounds);
+
+	const finalStandings = division.finalStandings ?? [];
+
 	// Derived from the division, never a hard-coded pair: a league has no
 	// knockout, and a straight knockout has no tables.
 	const stages = [];
 	if (rounds.length > 0) stages.push({ id: STAGE_GROUPS, label: 'Pool / League' });
 	if (bracketRounds.length > 0) stages.push({ id: STAGE_KNOCKOUT, label: 'Knockout' });
+	// Its own stage rather than a block above the tables: a division can have
+	// rankings and no surviving standings rows, and that used to show the empty
+	// state instead of the rankings. Last, because the order is chronological.
+	if (finalStandings.length > 0) stages.push({ id: STAGE_RANKINGS, label: 'Final Rankings' });
 
 	// Resolved during render rather than corrected in an effect. Switching to a
 	// division that has no knockout has to fall back on the spot, and the lint
 	// config forbids setState in an effect body in any case.
 	const activeStage = stages.some((stage) => stage.id === requestedStage) ? requestedStage : stages[0]?.id;
 
-	const finalStandings = division.finalStandings ?? [];
-
 	return (
 		<div className="tv-standings">
 			<div className="tv-standings-toolbar">
 				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={onSelectDivision} />
 
-				{/* Off by default. Set and point ratio are the tiebreakers rather than
-				    the story, and seven columns already fill a phone. */}
+				{/* Off by default. The ratios and the set-score breakdown are the
+				    tiebreakers rather than the story, and nine columns already fill a
+				    phone without them. */}
 				{activeStage === STAGE_GROUPS && (
 					<label className="tv-advanced-toggle">
 						<input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
@@ -121,10 +135,6 @@ export default function StandingsTab({
 
 			{activeStage === STAGE_GROUPS && (
 				<>
-					{/* Above the tables: once a division is decided, its result is the
-					    first thing a reader wants. */}
-					{finalStandings.length > 0 && <FinalStandings rows={finalStandings} />}
-
 					{rounds.map((round) => (
 						<div key={round.roundIndex} className="tv-standings-round">
 							{/* Named only when there is more than one. A single round's
@@ -138,6 +148,7 @@ export default function StandingsTab({
 										key={group.groupIndex}
 										group={group}
 										advanced={advanced}
+										outcomeColumns={outcomeColumns}
 										showName={round.groups.length > 1}
 									/>
 								))}
@@ -147,39 +158,42 @@ export default function StandingsTab({
 			)}
 
 			{activeStage === STAGE_KNOCKOUT && <BracketView rounds={bracketRounds} />}
+
+			{activeStage === STAGE_RANKINGS && <FinalStandings rows={finalStandings} />}
 		</div>
 	);
 }
 
-// Whether the division's current round can advance to another one.
+// The set-score columns the advanced view shows, taken from the scorelines the
+// division's fixtures actually produced.
 //
-// Deliberately a mirror of isRoundComplete in progression.service.js, down to
-// matching fixtures on `round === round.name` with no third-place special case
-// and treating a round with no fixtures as incomplete. The client's job is to
-// predict the server, not to out-think it: any rule here that the server does
-// not share would show a trigger that 409s, or hide one that would have worked.
-//
-// This computes nothing about rankings or qualifiers. Those are the backend's,
-// per docs/tournament-rules.md, and the modal fetches them.
-function canProgress(division) {
-	const rounds = division.state?.rounds;
-	if (!Array.isArray(rounds)) return false;
+// Not hard-coded and not assumed to be best-of-three: a round carries no
+// match-format key — see docs/division-state.md — so the data is the only thing
+// that knows. A best-of-five division yields six columns and a division with no
+// completed fixtures yields none, both for the same reason.
+function deriveOutcomeColumns(rounds) {
+	const keys = new Set();
 
-	const index = division.state?.currentRound ?? 0;
-	const round = rounds[index];
-	// The last round has nothing to advance to — the server answers NO_NEXT_ROUND.
-	if (!round || !rounds[index + 1]) return false;
+	rounds.forEach((round) =>
+		(round.groups ?? []).forEach((group) =>
+			(group.standings ?? []).forEach((row) =>
+				Object.keys(row.setOutcomes ?? {}).forEach((key) => keys.add(key)),
+			),
+		),
+	);
 
-	const roundFixtures = (division.fixtures ?? []).filter((fixture) => fixture.round === round.name);
-	if (roundFixtures.length === 0) return false;
+	// Best result first: most sets won, then fewest conceded. 2-0, 2-1, 1-2, 0-2.
+	return [...keys].sort((a, b) => {
+		const [aWon, aLost] = a.split('-').map(Number);
+		const [bWon, bLost] = b.split('-').map(Number);
 
-	// A cancelled match never happened, so it does not hold the round open.
-	return roundFixtures.every((fixture) => fixture.status === 'COMPLETED' || fixture.status === 'CANCELLED');
+		return bWon - aWon || aLost - bLost;
+	});
 }
 
 // One table per group. A league is a round with a single group, which is why
 // there is no separate league presentation — it is the same table.
-function StandingsGroup({ group, advanced, showName }) {
+function StandingsGroup({ group, advanced, outcomeColumns, showName }) {
 	return (
 		<div className="tv-standings-group">
 			{showName && <h4 className="tv-standings-group-name">{group.name}</h4>}
@@ -212,10 +226,25 @@ function StandingsGroup({ group, advanced, showName }) {
 							<th scope="col">
 								<abbr title="Sets lost">SL</abbr>
 							</th>
+							<th scope="col">
+								<abbr title="Points for">PF</abbr>
+							</th>
+							<th scope="col">
+								<abbr title="Points against">PA</abbr>
+							</th>
 							{advanced && (
 								<>
-									<th scope="col">Set ratio</th>
-									<th scope="col">Point ratio</th>
+									<th scope="col" className="tv-col-ratio">
+										<abbr title="Set ratio">SR</abbr>
+									</th>
+									<th scope="col" className="tv-col-ratio">
+										<abbr title="Point ratio">PR</abbr>
+									</th>
+									{outcomeColumns.map((key) => (
+										<th key={key} scope="col" className="tv-col-outcome">
+											<abbr title={`Matches finishing ${key}`}>{key}</abbr>
+										</th>
+									))}
 								</>
 							)}
 						</tr>
@@ -234,10 +263,20 @@ function StandingsGroup({ group, advanced, showName }) {
 								<td>{row.lost}</td>
 								<td>{row.setsWon}</td>
 								<td>{row.setsLost}</td>
+								<td>{row.pointsFor}</td>
+								<td>{row.pointsAgainst}</td>
 								{advanced && (
 									<>
-										<td>{formatRatio(row.setsRatio)}</td>
-										<td>{formatRatio(row.pointsRatio)}</td>
+										<td className="tv-col-ratio">{formatRatio(row.setsRatio)}</td>
+										<td className="tv-col-ratio">{formatRatio(row.pointsRatio)}</td>
+										{/* A scoreline this team never produced is a zero, not a
+										    blank — the column exists because some other team in
+										    the division reached it. */}
+										{outcomeColumns.map((key) => (
+											<td key={key} className="tv-col-outcome">
+												{row.setOutcomes?.[key] ?? 0}
+											</td>
+										))}
 									</>
 								)}
 							</tr>

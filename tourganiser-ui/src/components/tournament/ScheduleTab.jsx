@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import SectionState from './SectionState';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
+import FixtureGroup from './FixtureGroup';
 import {
 	EMPTY_FILTERS,
 	distinct,
@@ -117,12 +118,10 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 			)}
 
 			{sections.map((day) => (
-				<section key={day.date} className="tv-schedule-day">
-					<h2 className="tv-schedule-day-heading">
-						<span>{day.label}</span>
-						<span className="tv-schedule-day-date">{formatDateLabel(day.date)}</span>
-					</h2>
-
+				<FixtureGroup
+					key={day.date}
+					title={day.label}
+					meta={formatDateLabel(day.date)}>
 					{day.groups.map((group) => (
 						<div key={group.startTime} className="tv-time-group">
 							<div className="tv-time-group-time">
@@ -139,6 +138,7 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 											fixture={entry.fixture}
 											showDivision={showDivision}
 											court={getCourtName(schedule, entry.courtId)}
+											officials={entry.officials}
 											action={creator && renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
 										/>
 									),
@@ -146,16 +146,11 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 							</ul>
 						</div>
 					))}
-				</section>
+				</FixtureGroup>
 			))}
 
 			{unscheduled.length > 0 && (
-				<section className="tv-schedule-day">
-					<h2 className="tv-schedule-day-heading">
-						<span>Not yet scheduled</span>
-						<span className="tv-schedule-day-date">{unscheduled.length} fixtures</span>
-					</h2>
-
+				<FixtureGroup title="Not yet scheduled" meta={`${unscheduled.length} fixtures`}>
 					<ul className="tv-fixture-rows">
 						{unscheduled.map((fixture) => (
 							<FixtureRow
@@ -166,7 +161,7 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 							/>
 						))}
 					</ul>
-				</section>
+				</FixtureGroup>
 			)}
 		</div>
 	);
@@ -175,17 +170,17 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 // A break belongs to the timetable rather than to any fixture, so it gets a row
 // of its own rather than being dropped. A gap with no explanation reads as a
 // scheduling mistake.
+//
+// Its own markup, not the fixture row's: a break has a title, a court and a time
+// range and no teams, so putting it through the three-column match layout left
+// empty cells where the scores should be. It shares the card's surface and
+// border treatment so it still reads as a sibling of the rows around it.
 function BreakRow({ entry, schedule }) {
 	return (
-		<li className="tv-fixture-row tv-fixture-row--break">
-			<span className="tv-match-no">—</span>
-			<span className="tv-fixture-row-teams">
-				<span>{entry.title || 'Break'}</span>
-			</span>
-			<span className="tv-fixture-row-meta">
-				{entry.courtId && <span className="tv-court-chip">{getCourtName(schedule, entry.courtId)}</span>}
-			</span>
-			<span className="tv-fixture-row-outcome tv-fixture-row-outcome--status">
+		<li className="tv-break-row">
+			<span className="tv-break-row-title">{entry.title || 'Break'}</span>
+			{entry.courtId && <span className="tv-court-chip">{getCourtName(schedule, entry.courtId)}</span>}
+			<span className="tv-break-row-time">
 				{entry.startTime}–{entry.endTime}
 			</span>
 		</li>

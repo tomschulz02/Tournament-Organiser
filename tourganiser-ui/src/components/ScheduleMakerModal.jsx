@@ -22,6 +22,7 @@ import {
 	getScheduleForTournament,
 	getSlotMinutes,
 	getUnscheduledFixtures,
+	isTimeRangeValid,
 	normaliseFixtures,
 	removeScheduleEntry,
 	serialiseScheduleForSave,
@@ -31,6 +32,7 @@ import {
 	validateScheduleEntry,
 } from '../utils/scheduleUtils';
 import { flattenFixtures } from './tournament/fixtureUtils';
+import { divisionColorStyle } from '../utils/divisionColors';
 
 function scheduleReducer(state, action) {
 	switch (action.type) {
@@ -111,8 +113,48 @@ function getEntrySecondary(entry, fixturesById) {
 	return fixture.divisionName ? `${fixture.divisionName} - ${context}` : context;
 }
 
+function getEntryOfficials(entry) {
+	if (entry.type === 'break') return '';
+
+	return entry.officials ? 'Officials: ' + entry.officials : '';
+}
+
+// Same colour a fixture's division carries everywhere else in the app (the
+// Overview cards, the division selector, Fixtures & Schedule's own rows) —
+// getDivisionAccent's hash is keyed on division_id, so it is already the same
+// colour without this module knowing anything about the others.
+//
+// Gated on divisionName the same way the text label already is: with a single
+// division there is nothing to tell apart, so buildTournamentSchedule leaves
+// divisionName unset and this withholds the colour too rather than tinting
+// every entry identically.
+function getEntryDivisionStyle(entry, fixturesById) {
+	if (entry.type === 'break') return undefined;
+
+	const fixture = fixturesById[entry.fixtureId];
+	if (!fixture || fixture.divisionName == null) return undefined;
+
+	return divisionColorStyle(fixture.division_id);
+}
+
+function getFixtureDivisionStyle(fixture) {
+	if (!fixture || fixture.divisionName == null) return undefined;
+
+	return divisionColorStyle(fixture.division_id);
+}
+
 function getSlotKey(day, courtId, startTime) {
 	return `${day}_${courtId}_${startTime}`;
+}
+
+// The division names a court is restricted to, comma-joined, or '' when the court
+// takes any division. An id with no matching division reads as "Unknown" rather
+// than vanishing, so a stale restriction is visible rather than silent.
+function courtDivisionLabel(court, divisions = []) {
+	const ids = Array.isArray(court.divisions) ? court.divisions : [];
+	if (ids.length === 0) return '';
+
+	return ids.map((id) => divisions.find((division) => division.id === id)?.name || 'Unknown').join(', ');
 }
 
 // Two things can be dropped on a cell and they mean different things: a fixture
@@ -140,6 +182,19 @@ function readDragPayload(event) {
 // which aria-modal="true" claims and only a focus trap delivers.
 const FOCUSABLE =
 	'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// The next `court-N` id that no current court already uses. The count of courts
+// is not usable here: removing a middle court and adding one would reproduce an
+// id still in use and orphan its entries. The highest trailing number in use
+// plus one is stable against removals from anywhere in the list.
+function nextCourtId(courts) {
+	const highest = courts.reduce((max, court) => {
+		const match = /(\d+)$/.exec(court.id || '');
+		return match ? Math.max(max, Number(match[1])) : max;
+	}, 0);
+
+	return `court-${highest + 1}`;
+}
 
 function createSlotDraft(day, courtId, startTime, slotMinutes) {
 	return {
@@ -195,11 +250,24 @@ export default function ScheduleMakerModal({
 	const [draggingEntryId, setDraggingEntryId] = useState(null);
 	const [breakDraft, setBreakDraft] = useState(null);
 	const [courtDraft, setCourtDraft] = useState('');
+	// The court whose division restriction is being edited in the inspector. Set
+	// when a court header is clicked; a panelMode of 'court' shows the picker.
+	const [courtConfigId, setCourtConfigId] = useState(null);
+	// A working copy of the day settings while the settings panel is open. Applied
+	// to schedule.settings on save; null when the panel is closed.
+	const [settingsDraft, setSettingsDraft] = useState(null);
+	// The schedule entries the last failed save named as the ones breaking a rule,
+	// highlighted on the grid and scrolled into view. Cleared on the next save or
+	// after a short delay.
+	const [highlightEntryIds, setHighlightEntryIds] = useState([]);
 	const [generatorDraft, setGeneratorDraft] = useState(() => ({
 		courtCount: Math.max(1, initialSchedule.courts.length || 2),
 		dailyStartTime: initialSchedule.settings.dayStartTime,
 		dailyEndTime: initialSchedule.settings.dayEndTime,
 		fixtureDurationMinutes: initialSchedule.settings.slotMinutes,
+		// Off by default: generation preserves whatever officials were typed and
+		// assigns nothing. On, it assigns one team per match after placement.
+		assignOfficials: false,
 	}));
 	const [entryForm, setEntryForm] = useState(null);
 	const initialScheduleRef = useRef(null);
@@ -235,6 +303,20 @@ export default function ScheduleMakerModal({
 	useEffect(() => {
 		initialScheduleRef.current = initialSchedule;
 	}, [initialSchedule]);
+
+	// Scroll the first offending entry into view after a rejected save, then clear
+	// the highlight after a few seconds so it does not linger over an edit. Runs
+	// after the day switch that highlightOffendingEntries requests, so the entry is
+	// on screen to be found.
+	useEffect(() => {
+		if (highlightEntryIds.length === 0) return;
+
+		const node = modalRef.current?.querySelector(`[data-entry-id="${highlightEntryIds[0]}"]`);
+		node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+		const timer = setTimeout(() => setHighlightEntryIds([]), 6000);
+		return () => clearTimeout(timer);
+	}, [highlightEntryIds, activeDay]);
 
 	// Outside click closes the overflow menu. Escape and selection are handled
 	// where they happen; this is the third way, and the only one that needs a
@@ -298,6 +380,7 @@ export default function ScheduleMakerModal({
 	if (!isOpen) return null;
 
 	const divisionList = divisions || [];
+	const courtConfig = courtConfigId ? schedule.courts.find((court) => court.id === courtConfigId) || null : null;
 
 	const markDirty = () => {
 		if (!dirty) setDirty(true);
@@ -366,11 +449,14 @@ export default function ScheduleMakerModal({
 			const result = await onSave(payload);
 
 			if (result?.success === false) {
-				// onSave has already shown the message; this only stops the modal
-				// closing on a failed save.
+				// onSave has already shown the message. A structural rejection names
+				// the offending entry (or pair) in its details; point the organiser
+				// at it rather than leaving them to find which of many broke the rule.
+				highlightOffendingEntries(result.data);
 				return;
 			}
 
+			setHighlightEntryIds([]);
 			initialScheduleRef.current = schedule;
 			setDirty(false);
 			showMessage('Schedule saved successfully.', 'success');
@@ -379,6 +465,22 @@ export default function ScheduleMakerModal({
 		} finally {
 			setSaving(false);
 		}
+	};
+
+	// The server's schedule errors carry the offending entry in `details`, as
+	// `entryId` for a single-entry rule (officials, round order, court division) or
+	// `entryIds` for a clash between two. Switch to the day the first one is on,
+	// show the grid, and mark them; a useEffect scrolls the first into view.
+	const highlightOffendingEntries = (data) => {
+		const ids = [data?.entryId, ...(Array.isArray(data?.entryIds) ? data.entryIds : [])].filter(Boolean);
+		if (ids.length === 0) return;
+
+		const first = schedule.entries.find((entry) => ids.includes(entry.id));
+		if (first) {
+			setActiveDay(first.day);
+			setViewMode('grid');
+		}
+		setHighlightEntryIds(ids);
 	};
 
 	const handleDiscard = async () => {
@@ -437,14 +539,53 @@ export default function ScheduleMakerModal({
 			payload: [
 				...schedule.courts,
 				{
-					id: `court-${schedule.courts.length + 1}`,
+					// Derived from the ids already in use, not the list length:
+					// removing a middle court and then adding one would otherwise
+					// reuse an id still on another court and orphan its entries.
+					id: nextCourtId(schedule.courts),
 					name: nextName,
+					divisions: [],
 				},
 			],
 		});
 		setCourtDraft('');
 		markDirty();
 		showMessage(`${nextName} added to the tournament schedule.`, 'success');
+	};
+
+	// Removing a court never regenerates the list: buildCourtList reuses by index,
+	// so rebuilding after a removal would rename every court after the gap and
+	// orphan every entry beyond it. The court's own entries are dropped rather than
+	// left orphaned — the fixtures among them return to the unscheduled list, and a
+	// break pinned to the court goes with it. An all-courts break (courtId null)
+	// stays.
+	const handleRemoveCourt = async (courtId) => {
+		const court = schedule.courts.find((item) => item.id === courtId);
+		if (!court) return;
+
+		const placedFixtures = schedule.entries.filter(
+			(entry) => entry.courtId === courtId && entry.type === 'fixture'
+		).length;
+
+		if (placedFixtures > 0) {
+			// Name what happens rather than warn that something is wrong: the
+			// fixtures are not lost, they go back to the unscheduled list.
+			const confirmed = await confirm(
+				`Remove ${court.name}? Its ${placedFixtures} scheduled ${placedFixtures === 1 ? 'fixture' : 'fixtures'} will be returned to the unscheduled list.`
+			);
+			if (!confirmed) return;
+		}
+
+		dispatch({
+			type: 'replace',
+			payload: {
+				...schedule,
+				courts: schedule.courts.filter((item) => item.id !== courtId),
+				entries: schedule.entries.filter((entry) => entry.courtId !== courtId),
+			},
+		});
+		markDirty();
+		showMessage(`${court.name} removed from the tournament schedule.`, 'success');
 	};
 
 	const handleAssignFixtureToSlot = (fixture, draft) => {
@@ -568,6 +709,88 @@ export default function ScheduleMakerModal({
 		setMobilePanel('inspector');
 	};
 
+	// Clicking a court header opens its division picker in the inspector — the same
+	// shape as opening a slot draft, reusing the inspector rather than adding a
+	// second kind of popup.
+	const handleOpenCourtConfig = (courtId) => {
+		setSelectedEntryId(null);
+		setSlotDraft(null);
+		setPendingFixtureId(null);
+		setCourtConfigId(courtId);
+		setPanelMode('court');
+		// The picker lives in the inspector. Without this the organiser taps a
+		// court header on a phone and nothing appears to happen.
+		setMobilePanel('inspector');
+	};
+
+	// Toggled per division rather than saved as a batch: the picker writes straight
+	// to schedule.courts and the change is visible on the header. Dirty until the
+	// schedule itself is saved, so Discard still brings the old restriction back.
+	const handleSetCourtDivisions = (courtId, divisions) => {
+		dispatch({
+			type: 'setCourts',
+			payload: schedule.courts.map((court) => (court.id === courtId ? { ...court, divisions } : court)),
+		});
+		markDirty();
+	};
+
+	// Day settings can be edited on their own, not only as a side effect of
+	// automatic generation. The panel writes to schedule.settings, which is the
+	// grid's axis, so changing the slot length or hours after entries exist can
+	// leave some off a boundary — that is visible on the grid and is allowed.
+	const handleOpenSettings = () => {
+		setSettingsDraft({
+			dayStartTime: schedule.settings.dayStartTime,
+			dayEndTime: schedule.settings.dayEndTime,
+			slotMinutes: schedule.settings.slotMinutes,
+		});
+		setSelectedEntryId(null);
+		setPanelMode('settings');
+		setMobilePanel('inspector');
+	};
+
+	const handleSaveSettings = () => {
+		if (!settingsDraft) return;
+
+		const slotMinutes = Number(settingsDraft.slotMinutes);
+		if (!isTimeRangeValid(settingsDraft.dayStartTime, settingsDraft.dayEndTime)) {
+			showMessage('The day must end after it starts.', 'error');
+			return;
+		}
+		if (!slotMinutes || slotMinutes < 5) {
+			showMessage('A slot must be at least 5 minutes.', 'error');
+			return;
+		}
+
+		dispatch({
+			type: 'updateSettings',
+			payload: {
+				dayStartTime: settingsDraft.dayStartTime,
+				dayEndTime: settingsDraft.dayEndTime,
+				slotMinutes,
+			},
+		});
+		setSettingsDraft(null);
+		setPanelMode('overview');
+		markDirty();
+		showMessage('Day settings updated.', 'success');
+	};
+
+	// Closes whatever inspector sub-panel is open and returns to the overview,
+	// without deleting or saving anything. The only way back from the entry editor
+	// used to be Delete or placing another fixture; the generator and the court
+	// picker had no way back at all.
+	const handleBackToOverview = () => {
+		setSelectedEntryId(null);
+		setEntryForm(null);
+		setSlotDraft(null);
+		setBreakDraft(null);
+		setPendingFixtureId(null);
+		setCourtConfigId(null);
+		setSettingsDraft(null);
+		setPanelMode('overview');
+	};
+
 	const handleCreateBreak = () => {
 		if (!breakDraft) return;
 
@@ -592,6 +815,30 @@ export default function ScheduleMakerModal({
 		setMobilePanel('board');
 		markDirty();
 		showMessage('Break added to the schedule.', 'success');
+	};
+
+	// Dropping a placed entry back onto the unscheduled list removes it from the
+	// schedule — the reverse of dragging a fixture out. A fixture returns to the
+	// list it came from; a break simply disappears, since it was never in it. Only
+	// entry drags are handled, so dropping a fixture pill back on the list is a
+	// no-op.
+	const handleUnscheduleDrop = (event) => {
+		event.preventDefault();
+		const payload = readDragPayload(event);
+		if (payload.kind !== 'entry') return;
+
+		const entry = schedule.entries.find((item) => item.id === payload.id);
+		if (!entry) return;
+
+		dispatch({ type: 'removeEntry', payload: payload.id });
+		setDraggingEntryId(null);
+		if (selectedEntryId === payload.id) {
+			handleBackToOverview();
+		}
+		markDirty();
+
+		const label = entry.type === 'break' ? 'Break' : 'Fixture';
+		showMessage(`${label} removed from the schedule.`, 'success');
 	};
 
 	const handleDeleteEntry = async (entryId) => {
@@ -651,6 +898,7 @@ export default function ScheduleMakerModal({
 			dailyStartTime: generatorDraft.dailyStartTime,
 			dailyEndTime: generatorDraft.dailyEndTime,
 			fixtureDurationMinutes: Number(generatorDraft.fixtureDurationMinutes),
+			assignOfficials: generatorDraft.assignOfficials,
 		});
 
 		replaceSchedule(result.schedule);
@@ -788,12 +1036,14 @@ export default function ScheduleMakerModal({
 						    action set below — nothing here measures a width. */}
 						<div className="schedule-view-toggle">
 							<button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}>
-								<span className="schedule-label-long">Grid View</span>
-								<span className="schedule-label-short">Grid</span>
+								{/* <span className="schedule-label-long"><Icon name='grid'/></span>
+								<span className="schedule-label-short"><Icon name='grid'/></span> */}
+								{viewMode === 'grid' ? <Icon name='grid' fill='white'/> : <Icon name='grid' fill='var(--secondary-text-color)'/>}
 							</button>
 							<button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>
-								<span className="schedule-label-long">List View</span>
-								<span className="schedule-label-short">List</span>
+								{/* <span className="schedule-label-long"><Icon name='list'/></span>
+								<span className="schedule-label-short"><Icon name='list'/></span> */}
+								{viewMode === 'list' ? <Icon name='list' fill='white'/> : <Icon name='list' fill='var(--secondary-text-color)'/>}
 							</button>
 						</div>
 
@@ -916,7 +1166,16 @@ export default function ScheduleMakerModal({
 									))}
 								</select>
 							</div>
-							<div className="schedule-maker-fixture-list">
+							<div
+								className={`schedule-maker-fixture-list${draggingEntryId ? ' unschedule-target' : ''}`}
+								// While a placed entry is being dragged the whole list is a
+								// drop target: dropping it here unschedules it, the reverse
+								// of dragging a fixture onto the grid.
+								onDragOver={(event) => draggingEntryId && event.preventDefault()}
+								onDrop={handleUnscheduleDrop}>
+								{draggingEntryId && (
+									<div className="schedule-unschedule-hint">Drop here to remove from the schedule</div>
+								)}
 								{filteredUnscheduledFixtures.length > 0 ? (
 									filteredUnscheduledFixtures.map((fixture) => (
 										<button
@@ -925,6 +1184,7 @@ export default function ScheduleMakerModal({
 											draggable
 											aria-pressed={pendingFixtureId === fixture.id}
 											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
+											style={getFixtureDivisionStyle(fixture)}
 											onDragStart={(event) => event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`)}
 											onClick={() => handleSelectFixtureForPlacement(fixture.id)}>
 											<strong>{fixture.team1}</strong>
@@ -989,8 +1249,11 @@ export default function ScheduleMakerModal({
 								draggingEntryId={draggingEntryId}
 								onSelectEntry={openEntryEditor}
 								onOpenSlot={handleOpenSlotPicker}
+								onOpenCourtConfig={handleOpenCourtConfig}
 								onDropOnSlot={handleDropOnSlot}
 								onDragEntry={setDraggingEntryId}
+								divisions={divisionList}
+								highlightEntryIds={highlightEntryIds}
 							/>
 						) : (
 							<ScheduleListView
@@ -1011,18 +1274,34 @@ export default function ScheduleMakerModal({
 								onChange={setEntryForm}
 								onSave={handleUpdateEntry}
 								onDelete={() => handleDeleteEntry(selectedEntry.id)}
+								onBack={handleBackToOverview}
 							/>
 						) : panelMode === 'generate' ? (
-							<GeneratorPanel draft={generatorDraft} onChange={setGeneratorDraft} onGenerate={handleGenerateSchedule} />
+							<GeneratorPanel
+								draft={generatorDraft}
+								onChange={setGeneratorDraft}
+								onGenerate={handleGenerateSchedule}
+								onBack={handleBackToOverview}
+							/>
 						) : panelMode === 'break' && breakDraft ? (
-							<BreakPanel draft={breakDraft} schedule={schedule} onChange={setBreakDraft} onSave={handleCreateBreak} />
+							<BreakPanel draft={breakDraft} schedule={schedule} onChange={setBreakDraft} onSave={handleCreateBreak} onBack={handleBackToOverview} />
 						) : panelMode === 'slot' && slotDraft ? (
 							<SlotAssignmentPanel
 								draft={slotDraft}
 								schedule={schedule}
 								fixtures={filteredUnscheduledFixtures}
 								onAssign={(fixture) => handleAssignFixtureToSlot(fixture, slotDraft)}
+								onBack={handleBackToOverview}
 							/>
+						) : panelMode === 'court' && courtConfig ? (
+							<CourtConfigPanel
+								court={courtConfig}
+								divisions={divisionList}
+								onSave={(nextDivisions) => handleSetCourtDivisions(courtConfig.id, nextDivisions)}
+								onBack={handleBackToOverview}
+							/>
+						) : panelMode === 'settings' && settingsDraft ? (
+							<SettingsPanel draft={settingsDraft} onChange={setSettingsDraft} onSave={handleSaveSettings} onBack={handleBackToOverview} />
 						) : (
 							<ScheduleOverviewPanel
 								stats={stats}
@@ -1030,6 +1309,8 @@ export default function ScheduleMakerModal({
 								courtDraft={courtDraft}
 								onCourtDraftChange={setCourtDraft}
 								onAddCourt={handleAddCourt}
+								onRemoveCourt={handleRemoveCourt}
+								onEditSettings={handleOpenSettings}
 								canEdit={canEdit}
 							/>
 						)}
@@ -1091,8 +1372,11 @@ function ScheduleGridView({
 	draggingEntryId,
 	onSelectEntry,
 	onOpenSlot,
+	onOpenCourtConfig,
 	onDropOnSlot,
 	onDragEntry,
+	divisions,
+	highlightEntryIds = [],
 }) {
 	// The axis is a function of the settings alone. Nothing an entry does can
 	// change how many rows there are, where they start, or how long each one is.
@@ -1140,7 +1424,7 @@ function ScheduleGridView({
 	// A court column narrower than this cannot hold a two-line entry card, so
 	// below it the grid scrolls sideways rather than shrinking. Both grids take
 	// the same template, which is what keeps the headings over their columns.
-	const gridColumns = `96px repeat(${schedule.courts.length}, minmax(140px, 1fr))`;
+	const gridColumns = `72px repeat(${schedule.courts.length}, minmax(160px, 1fr))`;
 
 	return (
 		<div className="schedule-grid-shell">
@@ -1150,11 +1434,29 @@ function ScheduleGridView({
 			<div className="schedule-grid-body">
 				<div className="schedule-grid-header" style={{ gridTemplateColumns: gridColumns }}>
 					<div className="schedule-grid-header-time">Time</div>
-					{schedule.courts.map((court) => (
-						<div key={court.id} className="schedule-grid-header-court">
-							{court.name}
-						</div>
-					))}
+					{schedule.courts.map((court) => {
+						const label = courtDivisionLabel(court, divisions);
+
+						// A button when editable so the header opens the division
+						// picker, keeping the same class so the grid template is
+						// untouched; a plain div for a viewer.
+						return canEdit ? (
+							<button
+								key={court.id}
+								type="button"
+								className="schedule-grid-header-court"
+								onClick={() => onOpenCourtConfig(court.id)}
+								title="Set which divisions play on this court">
+								<span>{court.name}</span>
+								{label && <small className="schedule-grid-header-court-divisions">{label}</small>}
+							</button>
+						) : (
+							<div key={court.id} className="schedule-grid-header-court">
+								<span>{court.name}</span>
+								{label && <small className="schedule-grid-header-court-divisions">{label}</small>}
+							</div>
+						);
+					})}
 				</div>
 
 				<div
@@ -1165,7 +1467,7 @@ function ScheduleGridView({
 						// minmax(84px, auto) let a row grow to its content, which drew
 						// rows of unequal length at unequal heights and made the time
 						// column impossible to count down.
-						gridTemplateRows: `repeat(${timeSlots.length}, 84px)`,
+						gridTemplateRows: `repeat(${timeSlots.length}, minmax(84px, auto))`,
 					}}>
 					{timeSlots.map((time, rowIndex) => (
 						<React.Fragment key={time}>
@@ -1196,7 +1498,8 @@ function ScheduleGridView({
 						<button
 							key={entry.id}
 							type="button"
-							className={`schedule-grid-entry ${entry.type}${snapped ? ' snapped' : ''}`}
+							data-entry-id={entry.id}
+							className={`schedule-grid-entry ${entry.type}${snapped ? ' snapped' : ''}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}`}
 							// An entry that does not sit on a slot boundary covers the rows
 							// that contain it. Its own times are on the block and unchanged;
 							// this says the block is wider than the entry rather than
@@ -1211,6 +1514,7 @@ function ScheduleGridView({
 							style={{
 								gridColumn: entry.courtId === null ? `2 / span ${schedule.courts.length}` : `${courtIndex + 2}`,
 								gridRow: `${rowStart} / span ${rowSpan}`,
+								...getEntryDivisionStyle(entry, fixturesById),
 							}}
 							onClick={() => onSelectEntry(entry)}>
 							<div className="schedule-grid-entry-time">
@@ -1218,6 +1522,7 @@ function ScheduleGridView({
 							</div>
 							<div className="schedule-grid-entry-title">{getEntryLabel(entry, fixturesById)}</div>
 							<div className="schedule-grid-entry-subtitle">{getEntrySecondary(entry, fixturesById)}</div>
+							{getEntryOfficials(entry) && <div className='schedule-grid-entry-officials'>{getEntryOfficials(entry)}</div>}
 						</button>
 					))}
 				</div>
@@ -1233,7 +1538,12 @@ function ScheduleGridView({
 					</p>
 					<div className="schedule-grid-unplaceable-list">
 						{unplaceableEntries.map(({ entry, reason }) => (
-							<button key={entry.id} type="button" className="schedule-fixture-pill" onClick={() => onSelectEntry(entry)}>
+							<button
+								key={entry.id}
+								type="button"
+								className="schedule-fixture-pill"
+								style={getEntryDivisionStyle(entry, fixturesById)}
+								onClick={() => onSelectEntry(entry)}>
 								<strong>{getEntryLabel(entry, fixturesById)}</strong>
 								<small>
 									{entry.startTime} - {entry.endTime} - {getCourtName(schedule, entry.courtId)}
@@ -1263,7 +1573,12 @@ function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) 
 	return (
 		<div className="schedule-list-day">
 			{dayEntries.map((entry) => (
-				<button key={entry.id} type="button" className={`schedule-list-entry ${entry.type}`} onClick={() => onSelectEntry(entry)}>
+				<button
+					key={entry.id}
+					type="button"
+					className={`schedule-list-entry ${entry.type}`}
+					style={getEntryDivisionStyle(entry, fixturesById)}
+					onClick={() => onSelectEntry(entry)}>
 					<div className="schedule-list-time">
 						{entry.startTime} - {entry.endTime}
 					</div>
@@ -1273,7 +1588,7 @@ function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) 
 							<span>{getCourtName(schedule, entry.courtId)}</span>
 							<span>{getEntrySecondary(entry, fixturesById)}</span>
 						</div>
-						{entry.officials && <div className="schedule-list-extra">Officials: {entry.officials}</div>}
+						{entry.officials && <div className="schedule-list-extra">{getEntryOfficials(entry)}</div>}
 						{entry.notes && <div className="schedule-list-extra">{entry.notes}</div>}
 					</div>
 				</button>
@@ -1282,7 +1597,19 @@ function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) 
 	);
 }
 
-function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange, onAddCourt, canEdit }) {
+// A way back to the overview from any inspector sub-panel, without saving or
+// deleting anything. Every draft panel is otherwise a one-way door.
+function PanelBackButton({ onBack }) {
+	if (!onBack) return null;
+
+	return (
+		<button type="button" className="schedule-panel-back" onClick={onBack}>
+			← Back to overview
+		</button>
+	);
+}
+
+function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange, onAddCourt, onRemoveCourt, onEditSettings, canEdit }) {
 	return (
 		<div className="schedule-panel">
 			<h3>Schedule Overview</h3>
@@ -1306,7 +1633,14 @@ function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange
 			</div>
 
 			<div className="schedule-panel-section">
-				<h4>Day Settings</h4>
+				<div className="schedule-panel-section-head">
+					<h4>Day Settings</h4>
+					{canEdit && (
+						<button type="button" className="schedule-panel-section-action" onClick={onEditSettings}>
+							Edit
+						</button>
+					)}
+				</div>
 				<p>
 					{schedule.settings.dayStartTime} - {schedule.settings.dayEndTime} - {schedule.settings.slotMinutes} minute slots
 				</p>
@@ -1316,7 +1650,25 @@ function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange
 				<h4>Courts & Fields</h4>
 				<div className="schedule-court-list">
 					{schedule.courts.length > 0 ? (
-						schedule.courts.map((court) => <div key={court.id}>{court.name}</div>)
+						schedule.courts.map((court) => {
+							const placedOnCourt = schedule.entries.filter((entry) => entry.courtId === court.id).length;
+
+							return (
+								<div key={court.id} className="schedule-court-row">
+									<span>{court.name}</span>
+									{canEdit && (
+										<button
+											type="button"
+											className="schedule-court-remove"
+											onClick={() => onRemoveCourt(court.id)}
+											aria-label={`Remove ${court.name}`}
+											title={placedOnCourt > 0 ? `${placedOnCourt} scheduled here` : 'Remove'}>
+											Remove
+										</button>
+									)}
+								</div>
+							);
+						})
 					) : (
 						<p>No courts added yet.</p>
 					)}
@@ -1339,9 +1691,10 @@ function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange
 	);
 }
 
-function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign }) {
+function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign, onBack }) {
 	return (
 		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
 			<h3>Assign Fixture</h3>
 			<p>
 				{formatDateLabel(draft.day)} - {draft.startTime} - {draft.endTime}
@@ -1350,7 +1703,12 @@ function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign }) {
 			<div className="schedule-maker-fixture-list compact">
 				{fixtures.length > 0 ? (
 					fixtures.map((fixture) => (
-						<button key={fixture.id} type="button" className="schedule-fixture-pill" onClick={() => onAssign(fixture)}>
+						<button
+							key={fixture.id}
+							type="button"
+							className="schedule-fixture-pill"
+							style={getFixtureDivisionStyle(fixture)}
+							onClick={() => onAssign(fixture)}>
 							<strong>{fixture.team1}</strong>
 							<span>vs</span>
 							<strong>{fixture.team2}</strong>
@@ -1370,9 +1728,87 @@ function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign }) {
 	);
 }
 
-function BreakPanel({ draft, schedule, onChange, onSave }) {
+// The division picker for one court. Multi-select over every division in the
+// tournament; the restriction is written straight to schedule.courts as it is
+// toggled. An empty selection means the court takes any division, which is stated
+// in the panel because "no divisions allowed" is the natural misreading.
+function CourtConfigPanel({ court, divisions, onSave, onBack }) {
+	const selected = Array.isArray(court.divisions) ? court.divisions : [];
+
+	const toggle = (divisionId) => {
+		const next = selected.includes(divisionId)
+			? selected.filter((id) => id !== divisionId)
+			: [...selected, divisionId];
+		onSave(next);
+	};
+
 	return (
 		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
+			<h3>{court.name} Divisions</h3>
+			<p>
+				Choose which divisions can be scheduled on this court. Selecting nothing means the court takes{' '}
+				<strong>any</strong> division.
+			</p>
+			{divisions.length > 0 ? (
+				<div className="schedule-court-division-list">
+					{divisions.map((division) => (
+						<label key={division.id} className="schedule-court-division-option">
+							<input
+								type="checkbox"
+								checked={selected.includes(division.id)}
+								onChange={() => toggle(division.id)}
+							/>
+							<span>{division.name}</span>
+						</label>
+					))}
+				</div>
+			) : (
+				<p>This tournament has no divisions to restrict to.</p>
+			)}
+		</div>
+	);
+}
+
+// Editing the day settings by hand — the grid's start, end and slot length —
+// rather than only through automatic generation. Writes to schedule.settings.
+function SettingsPanel({ draft, onChange, onSave, onBack }) {
+	return (
+		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
+			<h3>Day Settings</h3>
+			<p>These set the grid every day is drawn on. Existing entries are not moved; any that no longer sit on a slot are shown across the slots they cover.</p>
+			<div className="schedule-form-grid">
+				<label>
+					<span>Day Start</span>
+					<input type="time" value={draft.dayStartTime} onChange={(event) => onChange({ ...draft, dayStartTime: event.target.value })} />
+				</label>
+				<label>
+					<span>Day End</span>
+					<input type="time" value={draft.dayEndTime} onChange={(event) => onChange({ ...draft, dayEndTime: event.target.value })} />
+				</label>
+				<label>
+					<span>Slot Length (min)</span>
+					<input
+						type="number"
+						min="5"
+						step="5"
+						value={draft.slotMinutes}
+						onChange={(event) => onChange({ ...draft, slotMinutes: event.target.value })}
+					/>
+				</label>
+			</div>
+			<button type="button" className="primary full-width" onClick={onSave}>
+				Save Settings
+			</button>
+		</div>
+	);
+}
+
+function BreakPanel({ draft, schedule, onChange, onSave, onBack }) {
+	return (
+		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
 			<h3>Add Break</h3>
 			<div className="schedule-form-grid">
 				<label>
@@ -1424,9 +1860,10 @@ function BreakPanel({ draft, schedule, onChange, onSave }) {
 	);
 }
 
-function GeneratorPanel({ draft, onChange, onGenerate }) {
+function GeneratorPanel({ draft, onChange, onGenerate, onBack }) {
 	return (
 		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
 			<h3>Generate Schedule</h3>
 			<p>
 				Fixtures are placed round by round, so a division's knockout matches never start before its pool play
@@ -1466,6 +1903,17 @@ function GeneratorPanel({ draft, onChange, onGenerate }) {
 					/>
 				</label>
 			</div>
+			<label className="schedule-generator-toggle">
+				<input
+					type="checkbox"
+					checked={draft.assignOfficials}
+					onChange={(event) => onChange({ ...draft, assignOfficials: event.target.checked })}
+				/>
+				<span>
+					Assign officials automatically — one team per match, never a team while it is playing and never from
+					another division. Leave off to keep any officials you have already entered.
+				</span>
+			</label>
 			<button type="button" className="primary full-width" onClick={onGenerate}>
 				Generate Schedule
 			</button>
@@ -1473,11 +1921,12 @@ function GeneratorPanel({ draft, onChange, onGenerate }) {
 	);
 }
 
-function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onDelete }) {
+function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onDelete, onBack }) {
 	const fixture = entry.type === 'fixture' ? fixturesById[entry.fixtureId] : null;
 
 	return (
 		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
 			<h3>{entry.type === 'break' ? 'Edit Break' : 'Edit Scheduled Fixture'}</h3>
 			{fixture && (
 				<div className="schedule-panel-section">
@@ -1556,101 +2005,191 @@ function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onD
 	);
 }
 
-function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
-	return (
-		<>
-			{schedule.days.map((day) => (
-				<div key={`${type}-${day.id}`} className="schedule-export-page" data-export-page="true">
-					<div className="schedule-export-header">
-						<div>
-							<p>Tourganiser</p>
-							<h2>{tournamentName}</h2>
-							<h3>Tournament Schedule</h3>
-						</div>
-						<div className="schedule-export-date">{formatDateLabel(day.date)}</div>
-					</div>
-					{type === 'grid' ? (
-						<ScheduleExportGridDay schedule={schedule} day={day.date} fixturesById={fixturesById} />
-					) : (
-						<ScheduleExportListDay schedule={schedule} day={day.date} fixturesById={fixturesById} />
-					)}
-				</div>
-			))}
-		</>
-	);
+// How many list rows / grid slot-rows one printed A4 page is estimated to
+// hold, derived from the row heights already governing rendering (the list
+// row's own padding, the grid's min-height: 56px cell) against the @page
+// dimensions (schedule-maker.css) minus margins and the header's own height.
+//
+// Deliberately conservative: the safe failure mode is a page that breaks a
+// little early and prints with some blank space at the foot, not one that
+// overflows and silently reintroduces the bug this exists to fix (every
+// `.schedule-export-page` forces `break-after: page` in print, so an
+// undersized estimate costs whitespace, never a split). Tune these against
+// real printed/PDF output if a page comes out badly under- or over-full.
+const PRINT_LIST_ROWS_PER_PAGE = 14;
+const PRINT_GRID_SLOTS_PER_PAGE = 7;
+
+// Splits into groups of `size`, preserving order. A day with nothing to show
+// still gets one (empty) chunk, matching the one-page-per-day floor the
+// unchunked version always had.
+function chunkList(list, size) {
+	const chunks = [];
+
+	for (let index = 0; index < list.length; index += size) {
+		chunks.push(list.slice(index, index + size));
+	}
+
+	return chunks.length > 0 ? chunks : [[]];
 }
 
-function ScheduleExportGridDay({ schedule, day, fixturesById }) {
-	// The same fixed axis and the same row arithmetic the screen uses, so the
-	// printed page puts an entry in the row the organiser saw it in. Matching on
-	// startTime alone dropped every entry that did not begin exactly on a slot.
-	const dayBounds = getDayBounds(schedule);
-	const slots = buildGridRowTimes(schedule, dayBounds);
-	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: slots.length };
-	const entries = getDayEntries(schedule, day)
-		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
-		.filter((item) => item.inDay);
-
+// The day label is additive: the date this already showed stays, day.label
+// (already on the day object — normaliseTournamentDays, "Day N" by default or
+// a custom one) is added alongside it, same pairing ScheduleTab already shows
+// on screen.
+function ScheduleExportHeader({ tournamentName, dayLabel, date }) {
 	return (
-		<div className="schedule-export-grid">
-			<div
-				className="schedule-export-grid-table"
-				style={{ gridTemplateColumns: `88px repeat(${schedule.courts.length}, minmax(0, 1fr))` }}>
-				<div className="schedule-export-grid-head">Time</div>
-				{schedule.courts.map((court) => (
-					<div key={court.id} className="schedule-export-grid-head">
-						{court.name}
-					</div>
-				))}
-				{slots.map((slot, rowIndex) => (
-					<React.Fragment key={slot}>
-						<div className="schedule-export-grid-time">{slot}</div>
-						{schedule.courts.map((court) => {
-							const placed = entries.find((item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1);
-							const spanningBreak = entries.find(
-								(item) =>
-									item.entry.courtId === null &&
-									item.rowStart <= rowIndex + 1 &&
-									item.rowStart + item.rowSpan > rowIndex + 1
-							);
-
-							return (
-								<div key={`${court.id}-${slot}`} className="schedule-export-grid-cell">
-									{spanningBreak ? (
-										<strong>{spanningBreak.entry.title}</strong>
-									) : placed ? (
-										<>
-											<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
-											<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
-										</>
-									) : null}
-								</div>
-							);
-						})}
-					</React.Fragment>
-				))}
+		<div className="schedule-export-header">
+			<div>
+				<p>Tourganiser</p>
+				<h2>{tournamentName}</h2>
+				<h3>Tournament Schedule</h3>
+			</div>
+			<div className="schedule-export-date">
+				{dayLabel} - {formatDateLabel(date)}
 			</div>
 		</div>
 	);
 }
 
-function ScheduleExportListDay({ schedule, day, fixturesById }) {
-	const entries = getDayEntries(schedule, day);
-
+function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 	return (
-		<div className="schedule-export-list">
-			{entries.map((entry) => (
-				<div key={entry.id} className="schedule-export-list-row">
-					<div>
-						<strong>
-							{entry.startTime} - {entry.endTime}
-						</strong>
-					</div>
-					<div>{getCourtName(schedule, entry.courtId)}</div>
-					<div>{getEntryLabel(entry, fixturesById)}</div>
-					<div>{getEntrySecondary(entry, fixturesById)}</div>
-				</div>
-			))}
-		</div>
+		<>
+			{schedule.days.map((day) =>
+				type === 'grid' ? (
+					<ScheduleExportGridPages
+						key={day.id}
+						schedule={schedule}
+						day={day}
+						fixturesById={fixturesById}
+						tournamentName={tournamentName}
+					/>
+				) : (
+					<ScheduleExportListPages
+						key={day.id}
+						schedule={schedule}
+						day={day}
+						fixturesById={fixturesById}
+						tournamentName={tournamentName}
+					/>
+				),
+			)}
+		</>
 	);
+}
+
+// One `.schedule-export-page` per chunk of time-slot rows that fits one
+// sheet, not one per day — each chunk is a full grid table (head row plus
+// only that chunk's slots) with its own header, so a day spilling onto a
+// second or third sheet still names itself on every one.
+//
+// Entries are placed once against the whole day's axis, exactly as before
+// chunking existed; only which rows get rendered on a given page changes.
+// getEntryRowPlacement's rowStart is a global row number, and slicing the
+// slot list preserves order, so `rowOffset + localIndex` reconstructs the
+// same global row index a chunk's slots always had — placement itself is
+// untouched.
+function ScheduleExportGridPages({ schedule, day, fixturesById, tournamentName }) {
+	// The same fixed axis and the same row arithmetic the screen uses, so the
+	// printed page puts an entry in the row the organiser saw it in. Matching on
+	// startTime alone dropped every entry that did not begin exactly on a slot.
+	const dayBounds = getDayBounds(schedule);
+	const allSlots = buildGridRowTimes(schedule, dayBounds);
+	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: allSlots.length };
+	const entries = getDayEntries(schedule, day.date)
+		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
+		.filter((item) => item.inDay);
+
+	const slotChunks = chunkList(allSlots, PRINT_GRID_SLOTS_PER_PAGE);
+
+	return slotChunks.map((slots, pageIndex) => {
+		const rowOffset = pageIndex * PRINT_GRID_SLOTS_PER_PAGE;
+
+		return (
+			<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
+				<ScheduleExportHeader tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
+				<div className="schedule-export-grid">
+					<div
+						className="schedule-export-grid-table"
+						style={{ gridTemplateColumns: `88px repeat(${schedule.courts.length}, minmax(0, 1fr))` }}>
+						<div className="schedule-export-grid-head">Time</div>
+						{schedule.courts.map((court) => (
+							<div key={court.id} className="schedule-export-grid-head">
+								{court.name}
+							</div>
+						))}
+						{slots.map((slot, localIndex) => {
+							const rowIndex = rowOffset + localIndex;
+
+							return (
+								<React.Fragment key={slot}>
+									<div className="schedule-export-grid-time">{slot}</div>
+									{schedule.courts.map((court) => {
+										const placed = entries.find(
+											(item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1,
+										);
+										const spanningBreak = entries.find(
+											(item) =>
+												item.entry.courtId === null &&
+												item.rowStart <= rowIndex + 1 &&
+												item.rowStart + item.rowSpan > rowIndex + 1,
+										);
+
+										return (
+											<div
+												key={`${court.id}-${slot}`}
+												className="schedule-export-grid-cell"
+												style={placed ? getEntryDivisionStyle(placed.entry, fixturesById) : undefined}>
+												{spanningBreak ? (
+													<strong>{spanningBreak.entry.title}</strong>
+												) : placed ? (
+													<>
+														<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
+														<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
+														{getEntryOfficials(placed.entry) && (
+															<span style={{ color: 'dodgerblue' }}>{getEntryOfficials(placed.entry)}</span>
+														)}
+													</>
+												) : null}
+											</div>
+										);
+									})}
+								</React.Fragment>
+							);
+						})}
+					</div>
+				</div>
+			</div>
+		);
+	});
+}
+
+// Same reasoning as the grid version: one page per chunk of rows, each with
+// its own repeated header. entries is already the flat array the on-screen
+// list uses, so chunking it is a straight array split.
+function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName }) {
+	const entries = getDayEntries(schedule, day.date);
+	const pages = chunkList(entries, PRINT_LIST_ROWS_PER_PAGE);
+
+	return pages.map((pageEntries, pageIndex) => (
+		<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
+			<ScheduleExportHeader tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
+			<div className="schedule-export-list">
+				{pageEntries.map((entry) => (
+					<div key={entry.id} className="schedule-export-list-row" style={getEntryDivisionStyle(entry, fixturesById)}>
+						<div>
+							<strong>
+								{entry.startTime} - {entry.endTime}
+							</strong>
+						</div>
+						<div>{getCourtName(schedule, entry.courtId)}</div>
+						<div>
+							<strong>{getEntryLabel(entry, fixturesById)}</strong>
+						</div>
+						{getEntryOfficials(entry) && <div style={{ color: 'dodgerblue' }}>{getEntryOfficials(entry)}</div>}
+						<div>{getEntrySecondary(entry, fixturesById)}</div>
+					</div>
+				))}
+			</div>
+		</div>
+	));
 }

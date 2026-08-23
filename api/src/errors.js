@@ -53,6 +53,9 @@ export const ERRORS = {
 	// The second half of the rebuild gate. The status check can be wrong; a
 	// completed fixture cannot.
 	DIVISION_HAS_RESULTS: [409, "This division already has results"],
+	// Removing a division. CreateTournament refuses to build a tournament with no
+	// divisions, so one should not be reducible to zero afterwards either.
+	LAST_DIVISION: [409, "A tournament needs at least one division"],
 	// A group or qualifier count the new team count cannot support. Refused
 	// rather than corrected — the organiser chose these numbers.
 	INVALID_STRUCTURE: [400, "The group and qualifier counts do not fit the number of teams"],
@@ -96,6 +99,8 @@ export const ERRORS = {
 	SCHEDULE_COURT_CLASH: [409, "Two entries use the same court at the same time"],
 	SCHEDULE_TEAM_CLASH: [409, "A team is scheduled in two places at once"],
 	SCHEDULE_ROUND_ORDER: [409, "A match is scheduled before the round feeding it has finished"],
+	SCHEDULE_COURT_DIVISION: [409, "A match is scheduled on a court reserved for other divisions"],
+	SCHEDULE_OFFICIAL_PLAYING: [409, "A team is officiating a match it is playing in"],
 
 	// Fixtures. A status is never one of these: it is derived from the scores
 	// and the organiser's intent, never sent. See docs/decisions.md.

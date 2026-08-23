@@ -23,11 +23,12 @@ const STATUS_LABELS = {
 // carrying only its real matches: a "Round of 9" is a single match feeding a
 // four-match Quarterfinals.
 //
-// That is why connectors are conditional. Nothing in the payload says which
-// match feeds which — progression is by rank, not by bracket position — so the
-// pairing can only be inferred, and only where the counts actually support it.
-// Where they do not, the rounds still render as columns and no line is drawn
-// rather than a wrong one.
+// Each match carries a `sources` array parallel to its participants, one entry
+// per slot, saying which match in the previous round feeds that slot and whether
+// it takes the winner or the loser. The pairing is therefore declared, not
+// inferred from match counts, so an uneven round draws its connectors too. A slot
+// fed by nothing — a bye, or the first knockout round, whose slots hold pool ranks
+// rather than match outcomes — has a null source and keeps its rank placeholder.
 export default function BracketView({ rounds = [] }) {
 	const { flow, placements } = splitPlacements(rounds);
 
@@ -41,12 +42,16 @@ export default function BracketView({ rounds = [] }) {
 		);
 	}
 
-	// Whether round i's matches pair cleanly into round i + 1's. False for the
-	// last round, and false across any gap an uneven round creates.
-	const feeds = flow.map((round, index) => {
-		const next = flow[index + 1];
-		return Boolean(next) && round.matches.length === next.matches.length * 2;
-	});
+	// One entry per round: how its matches group into the pairs the connectors
+	// hang off, taken from what the next round declares feeds it.
+	//
+	// Built right to left, because a column's order is decided by the order of the
+	// column it feeds — a match has to sit on the row of the match it feeds into,
+	// and that row is only known once the next column has been laid out.
+	const layouts = [];
+	for (let index = flow.length - 1; index >= 0; index -= 1) {
+		layouts[index] = groupByFeed(flow[index], layouts[index + 1]);
+	}
 
 	return (
 		<div className="tv-bracket-wrap">
@@ -58,21 +63,29 @@ export default function BracketView({ rounds = [] }) {
 					{flow.map((round, index) => (
 						<div
 							key={round.roundIndex}
-							className={`tv-bracket-round${index > 0 && feeds[index - 1] ? ' tv-bracket-round--fed' : ''}`}>
+							className={`tv-bracket-round${
+								index > 0 && layouts[index - 1].some((item) => item.paired) ? ' tv-bracket-round--fed' : ''
+							}`}>
 							<h4 className="tv-bracket-round-name">{round.name}</h4>
 
 							<div className="tv-bracket-round-body">
-								{feeds[index]
-									? // Pairs exist only where the counts justify them: the vertical
-									  // connector hangs off the pair, so no pair means no line.
-									  toPairs(round.matches).map((pair) => (
-											<div key={pair[0].id} className="tv-bracket-pair">
-												{pair.map((match) => (
-													<Slot key={match.id} match={match} />
-												))}
-											</div>
-									  ))
-									: round.matches.map((match) => <Slot key={match.id} match={match} />)}
+								{/* The vertical connector hangs off the pair, so a match that
+								    feeds nothing renders as a bare slot and draws no line. A
+								    pair of one — a bye round's single match feeding a
+								    quarter-final — needs no vertical either, only its stub. */}
+								{layouts[index].map((item) =>
+									item.paired ? (
+										<div
+											key={item.key}
+											className={`tv-bracket-pair${item.matches.length < 2 ? ' tv-bracket-pair--single' : ''}`}>
+											{item.matches.map((match) => (
+												<Slot key={match.id} match={match} />
+											))}
+										</div>
+									) : (
+										<Slot key={item.key} match={item.matches[0]} />
+									)
+								)}
 							</div>
 						</div>
 					))}
@@ -128,14 +141,52 @@ function splitPlacements(rounds) {
 	return { flow, placements };
 }
 
-function toPairs(matches) {
-	const pairs = [];
+// Groups a round's matches by the next-round match they feed, using the sources
+// the server declares.
+//
+// The groups come out in the order the next column is *rendered* in, not in this
+// round's own match order. That is the whole point: a Round of 12 numbers its
+// matches 25, 26, 27, 28 while the quarter-finals they feed render as 29, 32, 30,
+// 31, so laying the round out by its own numbering puts every match on the wrong
+// row and the connectors point at matches that are not there.
+//
+// Each match renders exactly once, and one that feeds nothing — or the whole
+// round, when there is no round after it — renders alone and draws no line.
+function groupByFeed(round, nextLayout) {
+	const matches = round.matches ?? [];
 
-	for (let index = 0; index < matches.length; index += 2) {
-		pairs.push(matches.slice(index, index + 2));
+	if (!nextLayout) {
+		return matches.map((match) => ({ key: match.id, matches: [match], paired: false }));
 	}
 
-	return pairs;
+	const byId = new Map(matches.map((match) => [match.id, match]));
+	const items = [];
+	const placed = new Set();
+
+	nextLayout.forEach((item) => {
+		item.matches.forEach((nextMatch) => {
+			const feeders = [];
+
+			(nextMatch.sources ?? []).forEach((source) => {
+				const feeder = source ? byId.get(source.matchId) : null;
+				if (feeder && !placed.has(feeder.id) && !feeders.includes(feeder)) feeders.push(feeder);
+			});
+
+			if (feeders.length === 0) return;
+
+			feeders.forEach((feeder) => placed.add(feeder.id));
+			items.push({ key: feeders[0].id, matches: feeders, paired: true });
+		});
+	});
+
+	// Whatever feeds nothing keeps its own order, after the matches that do.
+	matches.forEach((match) => {
+		if (!placed.has(match.id)) {
+			items.push({ key: match.id, matches: [match], paired: false });
+		}
+	});
+
+	return items;
 }
 
 // The slot is the flex cell that owns a match's share of the column height, and
@@ -164,8 +215,16 @@ function MatchCard({ match }) {
 				</div>
 			)}
 
+			{/* The source is passed from here rather than from Slot, because the
+			    placement match renders through MatchCard without one — and it is
+			    the match whose labels this improves most. */}
 			{participants.map((participant, index) => (
-				<Participant key={participant?.id ?? index} participant={participant} winner={match.winner} />
+				<Participant
+					key={participant?.id ?? index}
+					participant={participant}
+					winner={match.winner}
+					source={match.sources?.[index] ?? null}
+				/>
 			))}
 		</article>
 	);
@@ -174,18 +233,28 @@ function MatchCard({ match }) {
 // A participant is a team or a placeholder such as "Rank 3", and both render.
 // That is how a knockout fixture exists before the pool it draws from has
 // finished — see docs/division-state.md.
-function Participant({ participant, winner }) {
+function Participant({ participant, winner, source }) {
 	const placeholder = Boolean(participant?.placeholder);
 	const isWinner = !placeholder && Boolean(winner) && keyOf(winner) === keyOf(participant);
+	// An unbound slot says where its team comes from where the server named a
+	// feeding match, and keeps the rank placeholder where it did not.
+	const label = (placeholder && sourceLabel(source)) || participant?.name || 'TBD';
 
 	return (
 		<div
 			className={`tv-bracket-participant${isWinner ? ' tv-bracket-participant--winner' : ''}${
 				placeholder ? ' tv-bracket-participant--placeholder' : ''
 			}`}>
-			<span>{participant?.name || 'TBD'}</span>
+			<span>{label}</span>
 		</div>
 	);
+}
+
+// Null until the feeding match has a fixture, which is when it gets its number.
+function sourceLabel(source) {
+	if (!source || source.matchNo == null) return null;
+
+	return `${source.outcome === 'LOSER' ? 'Loser' : 'Winner'} of #${source.matchNo}`;
 }
 
 function keyOf(participant) {

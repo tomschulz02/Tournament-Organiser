@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { divisionColorStyle } from '../../utils/divisionColors';
 
 // Beyond this many divisions a pill row stops being scannable regardless of how
 // much room it has, so the count decides on its own before width is consulted.
@@ -63,6 +64,7 @@ export default function DivisionSelector({ divisions = [], selectedId, onSelect,
 				<span className="tv-division-selector-label">{label}</span>
 				{divisions.map((division) => (
 					<span key={division.id} className="tv-division-pill">
+						<span className="tv-division-dot" aria-hidden="true" />
 						{division.name}
 					</span>
 				))}
@@ -87,8 +89,10 @@ export default function DivisionSelector({ divisions = [], selectedId, onSelect,
 							key={division.id}
 							type="button"
 							className={`tv-division-pill ${division.id === selectedId ? 'active' : ''}`}
+							style={divisionColorStyle(division.id)}
 							aria-pressed={division.id === selectedId}
 							onClick={() => onSelect(division.id)}>
+							<span className="tv-division-dot" aria-hidden="true" />
 							{division.name}
 						</button>
 					))}

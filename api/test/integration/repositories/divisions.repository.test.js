@@ -199,6 +199,31 @@ describe("deleteTeamsByIds", () => {
     });
 });
 
+describe("deleteDivision", () => {
+    // One statement. teams.division_id and fixtures.division_id both cascade, so
+    // the division's teams go with the row — there is nothing to delete by hand.
+    it("removes the division row", async () => {
+        expect(await divisionsRepository.deleteDivision("div-1", client))
+            .toEqual({ message: "Division removed" });
+
+        expect(client.query).toHaveBeenCalledWith(
+            "DELETE FROM divisions WHERE id = $1::uuid;",
+            ["div-1"]
+        );
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("foreign key violation");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.deleteDivision("div-1", client),
+            "Failed to remove division",
+            underlying
+        );
+    });
+});
+
 describe("replaceState", () => {
     // Wider than updateStateRounds, which patches part of state. A rebuild
     // regenerates every round from a different set of teams, so there is nothing
@@ -223,6 +248,33 @@ describe("replaceState", () => {
         await expectWrapped(
             divisionsRepository.replaceState("div-1", {}, 0, client),
             "Failed to replace division state",
+            underlying
+        );
+    });
+});
+
+describe("updateTeamOrder", () => {
+    // Narrower than replaceState on purpose. A reorder changes the seeding and
+    // nothing else: pool groups hold team ids and knockout groups hold rank
+    // indices, so neither depends on this order and neither should be rewritten.
+    it("patches state.teams in place and stamps the row", async () => {
+        expect(await divisionsRepository.updateTeamOrder("div-1", ["t3", "t1", "t2"], client))
+            .toEqual({ message: "Team order updated" });
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb), last_update = now() WHERE id = $2::uuid"
+        );
+        expect(params).toEqual([JSON.stringify(["t3", "t1", "t2"]), "div-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("invalid jsonb");
+        client.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.updateTeamOrder("div-1", ["t1"], client),
+            "Failed to update team order",
             underlying
         );
     });

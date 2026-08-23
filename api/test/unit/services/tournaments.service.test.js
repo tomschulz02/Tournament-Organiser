@@ -432,6 +432,7 @@ describe("tournamentService.updateSchedule", () => {
         );
         divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([makeDivision({ id: "div-1" })]);
         fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-1" }]);
+        divisionsRepository.getTeamsByIds.mockResolvedValue([]);
     }
 
     it("names the not-found condition rather than reporting zero rows affected", async () => {
@@ -451,7 +452,7 @@ describe("tournamentService.updateSchedule", () => {
         expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
     });
 
-    it("validates against the tournament's dates, divisions and fixtures, then writes", async () => {
+    it("validates against the tournament's dates, divisions, fixtures and teams, then writes", async () => {
         owned();
 
         expect(await tournamentService.updateSchedule("tour-1", "user-1", schedule))
@@ -461,12 +462,36 @@ describe("tournamentService.updateSchedule", () => {
             startDate: "2026-08-01",
             endDate: "2026-08-03",
             divisions: [makeDivision({ id: "div-1" })],
-            fixtures: [{ id: "f1", division_id: "div-1" }]
+            fixtures: [{ id: "f1", division_id: "div-1" }],
+            teamsByDivisionId: new Map([["div-1", []]])
         });
         expect(fixturesRepository.getFixturesByDivisionIds).toHaveBeenCalledWith(["div-1"]);
         expect(tournamentRepository.updateSchedule).toHaveBeenCalledWith("tour-1", schedule, dbMock.client);
         expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
         expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    // The officials rule needs team names, so each division's teams are resolved
+    // from its own state.teams and handed to the validator keyed by division.
+    it("resolves each division's teams and passes them to the validator", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(
+            makeTournament({ created_by: "user-1", start_date: "2026-08-01", end_date: "2026-08-03" })
+        );
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([
+            makeDivision({ id: "div-1", state: makeState({ teams: ["t1", "t2"] }) })
+        ]);
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([]);
+        divisionsRepository.getTeamsByIds.mockResolvedValue([{ id: "t1", name: "Team 1", division_id: "div-1" }]);
+
+        await tournamentService.updateSchedule("tour-1", "user-1", schedule);
+
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledWith(["t1", "t2"]);
+        expect(validateSchedule).toHaveBeenCalledWith(
+            schedule,
+            expect.objectContaining({
+                teamsByDivisionId: new Map([["div-1", [{ id: "t1", name: "Team 1", division_id: "div-1" }]]])
+            })
+        );
     });
 
     // The lock comes first on purpose. A division rebuild repairs this column
@@ -514,5 +539,80 @@ describe("tournamentService.deleteTournament", () => {
 
         expect(await tournamentService.deleteTournament("tour-1", "user-1")).toEqual({ id: "tour-1" });
         expect(tournamentRepository.deleteTournament).toHaveBeenCalledWith("tour-1");
+    });
+});
+
+describe("tournamentService.addDivision", () => {
+    const division = {
+        name: "Division B",
+        type: "classic",
+        num_teams: 2,
+        teams: [{ name: "Aces" }, { name: "Bears" }]
+    };
+
+    // The whole point of the function: it delegates to the same createDivision
+    // createTournament calls, so a division added afterwards is indistinguishable
+    // from one created with the tournament.
+    it("creates the division through divisionService, inside a transaction", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        expect(await tournamentService.addDivision("tour-1", "user-1", division)).toBe("div-9");
+
+        expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
+    });
+
+    // createDivision writes three tables and has to do it on the transaction's
+    // client; the default connection would commit each write on its own.
+    it("hands createDivision the transaction's client, not the default connection", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        await tournamentService.addDivision("tour-1", "user-1", division);
+
+        expect(divisionService.createDivision)
+            .toHaveBeenCalledWith(division, "tour-1", "user-1", dbMock.client);
+    });
+
+    it("treats a null status as Not Started", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: null }));
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        await tournamentService.addDivision("tour-1", "user-1", division);
+
+        expect(divisionService.createDivision).toHaveBeenCalledOnce();
+    });
+
+    it("refuses an unknown tournament", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(null);
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("refuses a tournament belonging to somebody else", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-2", status: "Not Started" }));
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    // A division added mid-tournament would change what the saved schedule and
+    // the standings are describing.
+    it.each(["Ongoing", "Finished"])("refuses to add to a %s tournament", async (status) => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status }));
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+        expect(clientSql()).toEqual([]);
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
     });
 });

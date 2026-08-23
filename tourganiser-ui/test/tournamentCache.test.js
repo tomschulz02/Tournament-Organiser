@@ -4,7 +4,9 @@ import { fetchTournamentData, clearTournamentCache } from '../src/requests';
 // The client half of the tournament view cache. The server's viewer-aware ETag
 // is what actually makes it safe — a stale entry from another session simply
 // never matches — but these assert the client does its part: it revalidates
-// rather than serving blind, and it does not hoard payloads across sessions.
+// rather than serving blind, it survives a reload, it does not hoard payloads
+// across sessions, and a storage API that is missing, full or corrupted costs a
+// cache rather than the page.
 
 const ORGANISER_BODY = { success: true, data: { creator: true, tournament: { name: 'Summer Open' } } };
 const ANONYMOUS_BODY = { success: true, data: { creator: false, tournament: { name: 'Summer Open' } } };
@@ -29,17 +31,61 @@ function notModified(etag = '"v1"') {
 	};
 }
 
+// A tab's sessionStorage. `throwOn` covers the browsers this has to survive:
+// storage disabled or private mode, where every call throws, and a full quota,
+// where only the write does.
+function createStorage({ throwOn = [] } = {}) {
+	const values = new Map();
+	const guard = (call) => {
+		if (throwOn.includes(call)) throw new Error(`sessionStorage.${call} unavailable`);
+	};
+
+	return {
+		values,
+		get length() {
+			guard('length');
+			return values.size;
+		},
+		key: (index) => {
+			guard('key');
+			return [...values.keys()][index] ?? null;
+		},
+		getItem: (key) => {
+			guard('getItem');
+			return values.has(key) ? values.get(key) : null;
+		},
+		setItem: (key, value) => {
+			guard('setItem');
+			values.set(key, String(value));
+		},
+		removeItem: (key) => {
+			guard('removeItem');
+			values.delete(key);
+		},
+	};
+}
+
 function headerFor(callIndex) {
 	return globalThis.fetch.mock.calls[callIndex][1].headers?.['If-None-Match'];
 }
 
+function storedEntries() {
+	const [stored] = [...globalThis.window.sessionStorage.values.values()];
+	return stored ? JSON.parse(stored).entries : [];
+}
+
+function useStorage(storage) {
+	globalThis.window = { sessionStorage: storage };
+	return storage;
+}
+
 beforeEach(() => {
-	clearTournamentCache();
+	useStorage(createStorage());
 	globalThis.fetch = vi.fn();
 });
 
 afterEach(() => {
-	clearTournamentCache();
+	delete globalThis.window;
 	delete globalThis.fetch;
 });
 
@@ -68,6 +114,36 @@ describe('fetchTournamentData', () => {
 		globalThis.fetch.mockResolvedValueOnce(notModified());
 
 		expect(await fetchTournamentData('tour-1', 1)).toEqual(ORGANISER_BODY);
+	});
+
+	// The whole point of the change. Module state is discarded on a reload;
+	// sessionStorage is not, so the validator is still there to send.
+	it('still holds its validator after a reload', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"v1"' }));
+		await fetchTournamentData('tour-1', 1);
+
+		vi.resetModules();
+		const reloaded = await import('../src/requests');
+
+		globalThis.fetch.mockResolvedValueOnce(notModified('"v1"'));
+
+		expect(await reloaded.fetchTournamentData('tour-1', 1)).toEqual(ORGANISER_BODY);
+		expect(headerFor(1)).toBe('"v1"');
+	});
+
+	// sessionStorage is per tab, so a new tab starts empty. The organiser payload
+	// does not outlive the tab it was fetched in, which is what localStorage
+	// would not have given.
+	it('starts empty in a new tab', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"v1"' }));
+		await fetchTournamentData('tour-1', 1);
+
+		useStorage(createStorage());
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"v1"' }));
+		await fetchTournamentData('tour-1', 1);
+
+		expect(headerFor(1)).toBeUndefined();
 	});
 
 	// The cache never short-circuits the request. A mutation is visible on the
@@ -109,7 +185,7 @@ describe('fetchTournamentData', () => {
 	// The trap, from the client side. Even though the server would refuse to
 	// revalidate the organiser's entry for a signed-out reader, the client must
 	// not present it in the first place.
-	it('does not offer one session\'s validator under another', async () => {
+	it("does not offer one session's validator under another", async () => {
 		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"organiser"' }));
 		await fetchTournamentData('tour-1', 1);
 
@@ -120,30 +196,100 @@ describe('fetchTournamentData', () => {
 		expect(payload.data.creator).toBe(false);
 	});
 
-	it('discards the previous session\'s entries rather than keeping them', async () => {
-		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"organiser"' }));
+	it('forgets every session when the cache is cleared, as it is on logout', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
 		await fetchTournamentData('tour-1', 1);
 
-		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ANONYMOUS_BODY, { etag: '"anon"' }));
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ANONYMOUS_BODY));
 		await fetchTournamentData('tour-1', 2);
 
-		// Back to the first session: the organiser entry must be gone, not revived.
-		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"organiser"' }));
+		clearTournamentCache();
+		expect(globalThis.window.sessionStorage.values.size).toBe(0);
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
 		await fetchTournamentData('tour-1', 1);
 
 		expect(headerFor(2)).toBeUndefined();
 	});
 
-	it('forgets everything when the cache is cleared, as it is on logout', async () => {
+	// A payload carries every division, fixture and standings row, and the tab
+	// has a few megabytes.
+	it('keeps only the most recent few tournaments', async () => {
+		for (const id of ['tour-1', 'tour-2', 'tour-3', 'tour-4']) {
+			globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: `"${id}"` }));
+			await fetchTournamentData(id, 1);
+		}
+
+		expect(storedEntries().map((entry) => entry.id)).toEqual(['tour-4', 'tour-3', 'tour-2']);
+
 		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
 		await fetchTournamentData('tour-1', 1);
 
-		clearTournamentCache();
+		expect(headerFor(4)).toBeUndefined();
+	});
 
-		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ANONYMOUS_BODY));
+	it('stores the validator and the payload, and nothing else', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"v1"' }));
 		await fetchTournamentData('tour-1', 1);
 
+		expect(Object.keys(storedEntries()[0]).sort()).toEqual(['etag', 'id', 'payload']);
+	});
+
+	// Everything from here down is about the storage API failing, and the answer
+	// is the same every time: no cache, and a page that still opens.
+	it('discards a corrupted entry and serves the request anyway', async () => {
+		globalThis.window.sessionStorage.setItem('tourganiser.tournament-cache.1', '{ not json');
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
+
+		expect(await fetchTournamentData('tour-1', 1)).toEqual(ORGANISER_BODY);
+		expect(headerFor(0)).toBeUndefined();
+	});
+
+	it('discards an entry written by an older version', async () => {
+		globalThis.window.sessionStorage.setItem(
+			'tourganiser.tournament-cache.1',
+			JSON.stringify({ version: 0, entries: [{ id: 'tour-1', etag: '"old"', payload: ORGANISER_BODY }] }),
+		);
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
+		await fetchTournamentData('tour-1', 1);
+
+		expect(headerFor(0)).toBeUndefined();
+	});
+
+	it('discards an entry of the wrong shape', async () => {
+		globalThis.window.sessionStorage.setItem(
+			'tourganiser.tournament-cache.1',
+			JSON.stringify({ version: 1, entries: [{ id: 'tour-1' }] }),
+		);
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
+		await fetchTournamentData('tour-1', 1);
+
+		expect(headerFor(0)).toBeUndefined();
+	});
+
+	it('works with storage disabled entirely', async () => {
+		useStorage(createStorage({ throwOn: ['length', 'key', 'getItem', 'setItem', 'removeItem'] }));
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
+		expect(await fetchTournamentData('tour-1', 1)).toEqual(ORGANISER_BODY);
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
+		expect(await fetchTournamentData('tour-1', 1)).toEqual(ORGANISER_BODY);
+
 		expect(headerFor(1)).toBeUndefined();
+		expect(() => clearTournamentCache()).not.toThrow();
+	});
+
+	it('serves the page when the write fails on a full quota', async () => {
+		useStorage(createStorage({ throwOn: ['setItem'] }));
+
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY));
+
+		expect(await fetchTournamentData('tour-1', 1)).toEqual(ORGANISER_BODY);
+		expect(globalThis.window.sessionStorage.values.size).toBe(0);
 	});
 
 	// Nothing to revalidate with next time, so there is no point holding it.
@@ -186,7 +332,7 @@ describe('fetchTournamentData', () => {
 		await fetchTournamentData('tour-1', 1);
 
 		globalThis.fetch.mockResolvedValueOnce(
-			jsonResponse({ success: false, message: 'Tournament not found', data: null }, { status: 404 })
+			jsonResponse({ success: false, message: 'Tournament not found', data: null }, { status: 404 }),
 		);
 
 		await expect(fetchTournamentData('tour-1', 1)).rejects.toMatchObject({

@@ -30,6 +30,7 @@ describe("createStandingsRow", () => {
             setsLost: 0,
             pointsFor: 0,
             pointsAgainst: 0,
+            setOutcomes: {},
             setsRatio: 0,
             pointsRatio: 0
         });
@@ -103,6 +104,57 @@ describe("applyFixtureToStandings", () => {
         expect(one).toMatchObject({ played: 1, won: 0, lost: 0, setsWon: 0, pointsFor: 0 });
         expect(two).toMatchObject({ played: 1, won: 0, lost: 0, setsWon: 0, pointsFor: 0 });
     });
+
+    it("records the scoreline against both teams, each from its own perspective", () => {
+        const [one, two] = pair();
+
+        applyFixtureToStandings(one, two, [[21, 15], [18, 21], [21, 19]]);
+
+        expect(one.setOutcomes).toEqual({ "2-1": 1 });
+        expect(two.setOutcomes).toEqual({ "1-2": 1 });
+    });
+
+    it("accumulates repeat scorelines", () => {
+        const [one, two] = pair();
+
+        applyFixtureToStandings(one, two, [[21, 15], [21, 18]]);
+        applyFixtureToStandings(one, two, [[21, 15], [21, 18]]);
+        applyFixtureToStandings(one, two, [[21, 15], [18, 21], [21, 19]]);
+
+        expect(one.setOutcomes).toEqual({ "2-0": 2, "2-1": 1 });
+        expect(two.setOutcomes).toEqual({ "0-2": 2, "1-2": 1 });
+    });
+
+    it("keys a best-of-five scoreline the same way, with no assumed match format", () => {
+        const [one, two] = pair();
+
+        applyFixtureToStandings(one, two, [[21, 15], [15, 21], [21, 18], [17, 21], [15, 12]]);
+
+        expect(one.setOutcomes).toEqual({ "3-2": 1 });
+        expect(two.setOutcomes).toEqual({ "2-3": 1 });
+    });
+
+    it("records no scoreline when the set counts are level", () => {
+        const [one, two] = pair();
+
+        applyFixtureToStandings(one, two, [[21, 15], [15, 21]]);
+
+        expect(one.setOutcomes).toEqual({});
+        expect(two.setOutcomes).toEqual({});
+    });
+
+    it("counts every recorded scoreline exactly once per match played", () => {
+        const [one, two] = pair();
+
+        applyFixtureToStandings(one, two, [[21, 15], [21, 18]]);
+        applyFixtureToStandings(one, two, [[15, 21], [18, 21]]);
+
+        const total = (row) => Object.values(row.setOutcomes).reduce((sum, count) => sum + count, 0);
+
+        expect(total(one)).toBe(one.played);
+        expect(total(two)).toBe(two.played);
+    });
+
 });
 
 describe("computeRatios", () => {
@@ -312,6 +364,16 @@ describe("compareTeams", () => {
         expect(compareTeams(a, b, { seedIndex })).toBe(-1);
     });
 
+    it("does not rank on setOutcomes — it is a counter, not a sixth criterion", () => {
+        // Level on every criterion in the chain and differing only in how their
+        // wins were scored, so seeding has to be what decides them.
+        const a = makeStandingsRow({ id: "a", won: 2, setOutcomes: { "2-0": 2 } });
+        const b = makeStandingsRow({ id: "b", won: 2, setOutcomes: { "2-1": 2 } });
+
+        expect(compareTeams(a, b, { seedIndex })).toBe(-1);
+        expect(compareTeams(b, a, { seedIndex })).toBe(1);
+    });
+
     it("cannot separate two unseeded teams", () => {
         const a = makeStandingsRow({ id: "unknown-a", won: 2 });
         const b = makeStandingsRow({ id: "unknown-b", won: 2 });
@@ -396,7 +458,7 @@ describe("seedKnockoutResults", () => {
         ];
 
         // [w1, w2, l1, l2] so the next round can express bronze as [2, 3].
-        expect(seedKnockoutResults(matchups, seedIndex)).toEqual(["s1", "s3", "s0", "s2"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["s3", "s1", "s0", "s2"]);
     });
 
     it("takes one side of a matchup when the other is missing", () => {
@@ -405,7 +467,7 @@ describe("seedKnockoutResults", () => {
             { winnerId: undefined, loserId: "s2" }
         ];
 
-        expect(seedKnockoutResults(matchups, seedIndex)).toEqual(["s1", "s2"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["s1", "s2"]);
     });
 
     it("sorts unseeded teams last", () => {
@@ -414,7 +476,7 @@ describe("seedKnockoutResults", () => {
             { winnerId: "s0", loserId: "s2" }
         ];
 
-        expect(seedKnockoutResults(matchups, seedIndex)).toEqual(["s0", "unseeded", "s2", "s3"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["unseeded", "s0", "s3", "s2"]);
     });
 
     it("keeps a stable order when unseeded teams appear on either side of a comparison", () => {
@@ -424,13 +486,13 @@ describe("seedKnockoutResults", () => {
             { winnerId: "u3", loserId: "s1" }
         ];
 
-        const ordered = seedKnockoutResults(matchups, seedIndex);
+        const ordered = seedKnockoutResults(matchups);
 
-        expect(ordered.slice(0, 3)).toEqual(["s0", "u1", "u3"]);
-        expect(ordered.slice(3)).toEqual(["s1", "s3", "u2"]);
+        expect(ordered.slice(0, 3)).toEqual(["u1", "s0", "u3"]);
+        expect(ordered.slice(3)).toEqual(["u2", "s3", "s1"]);
     });
 
     it("returns an empty list when no matches were played", () => {
-        expect(seedKnockoutResults([], seedIndex)).toEqual([]);
+        expect(seedKnockoutResults([])).toEqual([]);
     });
 });

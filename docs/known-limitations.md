@@ -226,11 +226,6 @@ From the redesign of 2026-08-08.
   `buildDivisionBracket` resolved participants from `round.groups`, which hold positional
   indices permanently; progression binds teams to the fixture instead. The bracket now
   prefers the fixture's bound teams. Separate from the connector problem below.
-- **The knockout bracket infers progression rather than reading it.** Nothing in the
-  payload says which match feeds which; knockout groups hold rank indices, not bracket
-  positions. Connectors are drawn only where the match counts halve exactly, and omitted
-  otherwise — an uneven round such as `Round of 9` renders with no lines rather than
-  wrong ones. A real progression link in the data is the only way to close this.
 - **`DivisionSelector`'s live pills-to-dropdown transition is unverified.** It is correct
   at both widths when loaded fresh, but the in-app browser pane delivers neither `resize`
   events nor `ResizeObserver` callbacks, so the transition itself has never been
@@ -247,9 +242,14 @@ validator, the documented payload, round order in the generator, and the schedul
 layout and interaction defects — is recorded in `docs/roadmap.md` and is not repeated
 here. What is left:
 
-- **Officials assignment** is described in `docs/tournament-rules.md` as optional but is
-  not implemented anywhere. An entry carries an `officials` string, it is stored and
-  displayed, and nothing assigns or validates it.
+- ~~**Officials assignment** is described in `docs/tournament-rules.md` as optional but is
+  not implemented anywhere.~~ — **done 2026-08-22.** The generator assigns one team per
+  match as a pass over the placed schedule, behind a toggle in the generation settings that
+  defaults off; a team never officiates a match overlapping one it is playing, nor one
+  outside its own division, and matches with no eligible team are left blank and counted in
+  the warnings. The server validates the overlap rule on write (`SCHEDULE_OFFICIAL_PLAYING`),
+  resolving the `officials` name against the fixture's own division only. A name that
+  resolves to no team is left alone. See `docs/schedule.md`.
 - **A fixture whose round name is not in its division's `state.rounds` is exempt from the
   round-order rule**, in both the generator and the validator. It constrains nothing and
   nothing constrains it. That is drift rather than an impossible schedule, and refusing

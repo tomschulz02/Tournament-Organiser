@@ -1,4 +1,4 @@
-import { checkLoginStatus } from "./requests";
+import { checkLoginStatus, clearTournamentCache } from "./requests";
 import { AuthContext } from "./AuthContext";
 import { useEffect, useState, useRef } from "react";
 
@@ -21,8 +21,16 @@ export function AuthProvider({ children }) {
         setLoggedInState(loggedIn);
     };
 
+    // Logout, login and signup all arrive here, which is why the cached
+    // tournament payload is dropped here rather than at each of the three call
+    // sites. Those bodies were resolved for whoever was signed in and carry
+    // `creator`; the server's viewer-aware ETag would refuse to revalidate one
+    // for the next viewer, but there is no reason to keep it around to find out.
+    // Cleared before the version moves, so nothing can refetch against a stale
+    // entry in between.
     const setIsLoggedIn = (loggedIn) => {
         if (loggedInRef.current !== loggedIn) {
+            clearTournamentCache();
             setSessionVersion((version) => version + 1);
         }
         resolveSession(loggedIn);

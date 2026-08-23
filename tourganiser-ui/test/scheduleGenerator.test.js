@@ -70,7 +70,22 @@ const WARNINGS = {
 		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: no free slot is left once the earlier rounds of the same division have finished. Extend the day or add another day.`,
 	rest: (n) =>
 		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: the only free slots would leave a team playing two matches back to back. Add a court or extend the day.`,
+	division: (n) =>
+		`${n} ${n === 1 ? 'fixture' : 'fixtures'} could not be scheduled: no court is open to the fixture’s division. Open a court to that division, or add one.`,
 };
+
+// A base schedule carrying courts with a division restriction. The generator
+// reuses these courts by index through buildCourtList, so the restriction rides
+// along on every generation.
+function baseWithRestrictedCourts(courts) {
+	return {
+		version: 1,
+		days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }],
+		courts,
+		entries: [],
+		settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+	};
+}
 
 describe('input validation', () => {
 	it.each([
@@ -171,9 +186,9 @@ describe('placing fixtures', () => {
 
 	it('returns the courts it was asked for', () => {
 		expect(generate({ courtCount: 3 }).schedule.courts).toEqual([
-			{ id: 'court-1', name: 'Court 1' },
-			{ id: 'court-2', name: 'Court 2' },
-			{ id: 'court-3', name: 'Court 3' },
+			{ id: 'court-1', name: 'Court 1', divisions: [] },
+			{ id: 'court-2', name: 'Court 2', divisions: [] },
+			{ id: 'court-3', name: 'Court 3', divisions: [] },
 		]);
 	});
 
@@ -715,6 +730,275 @@ describe('warnings name the constraint', () => {
 		});
 
 		expect(warnings).toEqual([WARNINGS.team(2)]);
+	});
+});
+
+// The generator reassigns every slot, but the officials an organiser typed are
+// fixture-scoped and must survive a regeneration. Before this they were destroyed
+// on every run.
+describe('preserving officials', () => {
+	function baseWithOfficials() {
+		return {
+			version: 1,
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }],
+			courts: [{ id: 'court-1', name: 'Court 1', divisions: [] }, { id: 'court-2', name: 'Court 2', divisions: [] }],
+			entries: [
+				{ id: 'e1', type: 'fixture', day: '2026-08-01', courtId: 'court-1', startTime: '09:00', endTime: '10:00', fixtureId: 'f1', officials: 'Ref A', notes: 'bring net' },
+				{ id: 'e2', type: 'fixture', day: '2026-08-01', courtId: 'court-2', startTime: '09:00', endTime: '10:00', fixtureId: 'f2', officials: 'Ref B' },
+			],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+	}
+
+	it('carries officials to wherever the fixture is placed, even a new slot', () => {
+		const fixtures = [fixture('f1'), fixture('f2')];
+		// One court forces f2 onto a different time than it held before.
+		const { schedule } = generate({ baseSchedule: baseWithOfficials(), fixtures, courtCount: 1 });
+
+		expect(entriesFor(schedule, 'f1').officials).toBe('Ref A');
+		expect(entriesFor(schedule, 'f1').notes).toBe('bring net');
+		expect(entriesFor(schedule, 'f2').officials).toBe('Ref B');
+	});
+
+	it('leaves no entry to carry officials when the fixture is unplaced', () => {
+		const fixtures = [fixture('f1', { team1: 'Aces', team2: 'Bears' }), fixture('f2', { team1: 'Aces', team2: 'Cubs' })];
+		// One court, one slot: f2 shares a team with f1 and cannot be placed.
+		const { schedule, unscheduledFixtures } = generate({
+			baseSchedule: baseWithOfficials(),
+			fixtures,
+			courtCount: 1,
+			dailyStartTime: '09:00',
+			dailyEndTime: '10:00',
+		});
+
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f2']);
+		expect(entriesFor(schedule, 'f2')).toBeUndefined();
+	});
+});
+
+// Officials are assigned as a pass over the placed schedule, behind a toggle that
+// defaults off. One team per match, never a team while it is playing, never from
+// another division. See docs/schedule.md.
+describe('automatic officials assignment', () => {
+	// A fixture carrying real team ids, which the officials pass needs to tell who
+	// is playing from who could officiate.
+	function match(id, divisionId, t1, t2) {
+		return {
+			id,
+			division_id: divisionId,
+			round: 'Pool Play',
+			team1: t1.name,
+			team2: t2.name,
+			team_1_id: t1.id,
+			team_2_id: t2.id,
+		};
+	}
+
+	function team(n) {
+		return { id: `t${n}`, name: `T${n}` };
+	}
+
+	function divisionWithTeams(id, teams) {
+		return { id, state: { rounds: [{ name: 'Pool Play' }] }, teams };
+	}
+
+	function officialsById(schedule, teamsByName) {
+		return schedule.entries
+			.filter((e) => e.type === 'fixture')
+			.map((entry) => ({ entry, teamId: teamsByName.get(entry.officials) }));
+	}
+
+	it('leaves officials untouched when the toggle is off', () => {
+		const base = {
+			version: 1,
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }],
+			courts: [{ id: 'court-1', name: 'Court 1', divisions: [] }, { id: 'court-2', name: 'Court 2', divisions: [] }],
+			entries: [
+				{ id: 'e1', type: 'fixture', day: '2026-08-01', courtId: 'court-1', startTime: '09:00', endTime: '10:00', fixtureId: 'm1', officials: 'Kept' },
+			],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+		const teams = [team(1), team(2), team(3), team(4)];
+		const fixtures = [match('m1', 'div-1', teams[0], teams[1])];
+
+		const { schedule } = generate({
+			baseSchedule: base,
+			fixtures,
+			divisions: [divisionWithTeams('div-1', teams)],
+			courtCount: 2,
+			assignOfficials: false,
+		});
+
+		expect(entriesFor(schedule, 'm1').officials).toBe('Kept');
+	});
+
+	it('gives every match an official and never one that is playing', () => {
+		const teams = [team(1), team(2), team(3), team(4), team(5), team(6)];
+		const teamsByName = new Map(teams.map((t) => [t.name, t.id]));
+		// Disjoint teams, so all three can run — but only two courts, so the third
+		// takes a later slot. At 09:00 T5/T6 are free; later everyone but T5/T6 is.
+		const fixtures = [
+			match('m1', 'div-1', teams[0], teams[1]),
+			match('m2', 'div-1', teams[2], teams[3]),
+			match('m3', 'div-1', teams[4], teams[5]),
+		];
+
+		const { schedule, unscheduledFixtures } = generate({
+			baseSchedule: null,
+			fixtures,
+			divisions: [divisionWithTeams('div-1', teams)],
+			courtCount: 2,
+			assignOfficials: true,
+		});
+
+		expect(unscheduledFixtures).toEqual([]);
+
+		officialsById(schedule, teamsByName).forEach(({ entry, teamId }) => {
+			expect(entry.officials).not.toBe('');
+			expect(teamId).toBeDefined();
+			// The officiating team must not be playing in any overlapping entry.
+			schedule.entries
+				.filter((other) => other.type === 'fixture' && other.day === entry.day && other.startTime < entry.endTime && other.endTime > entry.startTime)
+				.forEach((other) => {
+					const fixtureOfOther = fixtures.find((f) => f.id === other.fixtureId);
+					expect([fixtureOfOther.team_1_id, fixtureOfOther.team_2_id]).not.toContain(teamId);
+				});
+		});
+	});
+
+	it('never assigns an official from another division', () => {
+		const divA = [team(1), team(2), team(3), team(4)];
+		const divB = [team(5), team(6)];
+		const namesA = new Set(divA.map((t) => t.name));
+		const fixtures = [
+			match('a1', 'div-1', divA[0], divA[1]),
+			match('a2', 'div-1', divA[2], divA[3]),
+			match('b1', 'div-2', divB[0], divB[1]),
+		];
+
+		const { schedule } = generate({
+			baseSchedule: null,
+			fixtures,
+			divisions: [divisionWithTeams('div-1', divA), divisionWithTeams('div-2', divB)],
+			courtCount: 3,
+			assignOfficials: true,
+		});
+
+		schedule.entries
+			.filter((e) => ['a1', 'a2'].includes(e.fixtureId) && e.officials)
+			.forEach((e) => expect(namesA.has(e.officials)).toBe(true));
+	});
+
+	it('spreads officiating across the division rather than concentrating it', () => {
+		// T5 and T6 never play, so both are always eligible. The fewer-officiated
+		// preference must hand the two 09:00 matches to different teams.
+		const teams = [team(1), team(2), team(3), team(4), team(5), team(6)];
+		const fixtures = [
+			match('m1', 'div-1', teams[0], teams[1]),
+			match('m2', 'div-1', teams[2], teams[3]),
+		];
+
+		const { schedule } = generate({
+			baseSchedule: null,
+			fixtures,
+			divisions: [divisionWithTeams('div-1', teams)],
+			courtCount: 2,
+			assignOfficials: true,
+		});
+
+		const officials = schedule.entries.filter((e) => e.type === 'fixture').map((e) => e.officials);
+		expect(new Set(officials).size).toBe(2);
+	});
+
+	it('leaves a match with no eligible team blank and counts it in the warnings', () => {
+		const teams = [team(1), team(2)];
+		const fixtures = [match('m1', 'div-1', teams[0], teams[1])];
+
+		const { schedule, warnings } = generate({
+			baseSchedule: null,
+			fixtures,
+			divisions: [divisionWithTeams('div-1', teams)],
+			courtCount: 1,
+			assignOfficials: true,
+		});
+
+		expect(entriesFor(schedule, 'm1').officials).toBe('');
+		expect(warnings).toContain('1 match could not be assigned an official: no eligible team was free.');
+	});
+});
+
+// A court whose divisions array is non-empty is a hard constraint, not a
+// preference: a fixture of another division is never a candidate for it, whatever
+// else is free. See docs/schedule.md.
+describe('the court division restriction', () => {
+	it('keeps another division off a restricted court while the rest take anything', () => {
+		const base = baseWithRestrictedCourts([
+			{ id: 'court-1', name: 'Court 1', divisions: ['div-1'] },
+			{ id: 'court-2', name: 'Court 2', divisions: [] },
+		]);
+		const fixtures = [
+			fixture('d1a', { division_id: 'div-1' }),
+			fixture('d1b', { division_id: 'div-1' }),
+			fixture('d2a', { division_id: 'div-2' }),
+			fixture('d2b', { division_id: 'div-2' }),
+		];
+
+		const { schedule, unscheduledFixtures } = generate({ baseSchedule: base, fixtures, courtCount: 2 });
+
+		expect(unscheduledFixtures).toEqual([]);
+		// No div-2 fixture may sit on the court reserved for div-1.
+		schedule.entries
+			.filter((e) => ['d2a', 'd2b'].includes(e.fixtureId))
+			.forEach((e) => expect(e.courtId).toBe('court-2'));
+	});
+
+	it('reports the division constraint, not capacity, when every court is closed to a division', () => {
+		const base = baseWithRestrictedCourts([
+			{ id: 'court-1', name: 'Court 1', divisions: ['div-1'] },
+			{ id: 'court-2', name: 'Court 2', divisions: ['div-1'] },
+		]);
+		const fixtures = [
+			fixture('d1a', { division_id: 'div-1' }),
+			fixture('d2a', { division_id: 'div-2' }),
+		];
+
+		const { schedule, unscheduledFixtures, warnings } = generate({ baseSchedule: base, fixtures, courtCount: 2 });
+
+		expect(entriesFor(schedule, 'd1a')).toBeDefined();
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['d2a']);
+		expect(warnings).toEqual([WARNINGS.division(1)]);
+	});
+
+	it('treats an empty divisions array as unrestricted', () => {
+		const base = baseWithRestrictedCourts([
+			{ id: 'court-1', name: 'Court 1', divisions: [] },
+			{ id: 'court-2', name: 'Court 2', divisions: [] },
+		]);
+		const fixtures = [fixture('d2a', { division_id: 'div-2' }), fixture('d2b', { division_id: 'div-2' })];
+
+		const { schedule, unscheduledFixtures } = generate({ baseSchedule: base, fixtures, courtCount: 2 });
+
+		expect(unscheduledFixtures).toEqual([]);
+		expect(schedule.entries).toHaveLength(2);
+	});
+
+	// The regression guard for every existing tournament: with no divisions key
+	// anywhere, generation must place fixtures exactly as it did before.
+	it('is unchanged when no court carries a restriction', () => {
+		const fixtures = Array.from({ length: 6 }, (_, i) => fixture(`f${i + 1}`));
+		const restricted = generate({
+			baseSchedule: baseWithRestrictedCourts([
+				{ id: 'court-1', name: 'Court 1', divisions: [] },
+				{ id: 'court-2', name: 'Court 2', divisions: [] },
+			]),
+			fixtures,
+			courtCount: 2,
+		}).schedule.entries;
+		const plain = generate({ fixtures, courtCount: 2 }).schedule.entries;
+
+		expect(restricted.map((e) => [e.fixtureId, e.day, e.startTime, e.courtId])).toEqual(
+			plain.map((e) => [e.fixtureId, e.day, e.startTime, e.courtId])
+		);
 	});
 });
 

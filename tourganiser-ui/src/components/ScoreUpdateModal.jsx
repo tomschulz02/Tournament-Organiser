@@ -5,6 +5,12 @@ import '../App.css';
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
 
+	// Which submit action is in flight: null | 'save' | 'end'. onSave/onEndMatch
+	// always resolve (pages/View.jsx catches failures and reports them via
+	// showMessage), so this only needs waiting on, not a catch.
+	const [submitting, setSubmitting] = useState(null);
+	const busy = submitting !== null;
+
 	// Hydrate from the recorded result, but only when there is one. An unplayed
 	// fixture arrives with result: [], which is truthy — testing it directly
 	// replaced the default empty set with nothing, so the modal opened with no
@@ -29,9 +35,25 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 		setSets(newSets);
 	};
 
-	const handleSubmit = (e) => {
+	const handleSubmit = async (e) => {
 		e.preventDefault();
-		onSave(sets);
+		if (busy) return;
+		setSubmitting('save');
+		try {
+			await onSave(sets);
+		} finally {
+			setSubmitting(null);
+		}
+	};
+
+	const handleEndMatch = async () => {
+		if (busy) return;
+		setSubmitting('end');
+		try {
+			await onEndMatch(sets);
+		} finally {
+			setSubmitting(null);
+		}
 	};
 
 	// Portalled onto document.body, the same as ScheduleMakerModal and
@@ -82,11 +104,13 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch }) => {
 							<button type="button" className="cancel-btn" onClick={onClose}>
 								Back
 							</button>
-							<button type="submit" className="save-btn">
-								Save
+							<button type="submit" className="save-btn" disabled={busy}>
+								{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+								<span>Save</span>
 							</button>
-							<button type="button" className="end-match-btn" onClick={() => onEndMatch(sets)}>
-								End Match
+							<button type="button" className="end-match-btn" onClick={handleEndMatch} disabled={busy}>
+								{submitting === 'end' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+								<span>End Match</span>
 							</button>
 						</div>
 					</div>

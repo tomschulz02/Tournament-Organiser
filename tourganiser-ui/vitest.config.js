@@ -27,6 +27,10 @@ export default defineConfig({
                 "src/utils/scheduleUtils.js",
                 "src/utils/scheduleGenerator.js",
                 "src/components/tournament/fixtureUtils.js",
+                // The port of server generation the creation review computes its
+                // pools and bracket from. Pinned to the server's arithmetic by
+                // shared/division-structure.json — see docs/decisions.md.
+                "src/components/create/divisionPreview.js",
                 // Not a pure module — it calls fetch — but the tournament cache
                 // added on 2026-08-11 decides whether one reader can be shown
                 // another's payload, so it is worth the stubbed fetch.

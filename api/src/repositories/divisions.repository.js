@@ -19,9 +19,10 @@ async function createDivision(divisionId, tournamentId, details, userId, client 
     }
 }
 
-// updateTeams was removed on 2026-08-10. It wrote state.teams directly, and
-// nothing called it: seed order now moves only through updateDivision, which
-// rewrites state in full through replaceState.
+// updateTeams was removed on 2026-08-10. It wrote state.teams directly and
+// nothing called it. updateTeamOrder below is its deliberate replacement: seed
+// order moves only through updateDivision, which either rewrites state in full
+// through replaceState or, for a reorder, patches this one key.
 
 // used to create a new team
 //
@@ -95,6 +96,24 @@ async function deleteTeamsByIds(teamIds, client) {
     }
 }
 
+// Removes the division row. teams.division_id and fixtures.division_id both
+// cascade, so this takes the division's teams with it — see docs/database.md.
+//
+// Requires the client for the same reason deleteTeamsByIds does: this commits
+// with the explicit fixture delete and the schedule repair, or not at all. The
+// fixtures are deleted before this rather than left to the cascade, because
+// their ids are the only thing the schedule repair can match on.
+async function deleteDivision(divisionId, client) {
+    try {
+        const sql = "DELETE FROM divisions WHERE id = $1::uuid;";
+        await client.query(sql, [divisionId]);
+
+        return { message: "Division removed" };
+    } catch (error) {
+        throw new Error("Failed to remove division", { cause: error });
+    }
+}
+
 // Replaces divisions.state outright, together with the stored team count.
 //
 // Wider than updateStateRounds and updateRounds, which patch parts of state. A
@@ -108,6 +127,28 @@ async function replaceState(divisionId, state, numTeams, client) {
         return { message: "Division rebuilt" };
     } catch (error) {
         throw new Error("Failed to replace division state", { cause: error });
+    }
+}
+
+// Rewrites state.teams — the seeding — and nothing else.
+//
+// The narrowest write that expresses a reorder, and deliberately narrower than
+// replaceState. A pool group holds team ids and a knockout group holds rank
+// indices, so neither depends on the order of state.teams; rewriting state
+// wholesale would regenerate rounds a reorder has no reason to touch. jsonb_set
+// patches the one key in place.
+//
+// Requires the client: a reorder can carry renames, and the two commit together
+// or not at all. The stamp is here rather than in a separate touchDivision
+// because this statement already writes to the row.
+async function updateTeamOrder(divisionId, teamIds, client) {
+    try {
+        const sql = "UPDATE divisions SET state = jsonb_set(state, '{teams}', $1::jsonb), last_update = now() WHERE id = $2::uuid";
+        await client.query(sql, [JSON.stringify(teamIds), divisionId]);
+
+        return { message: "Team order updated" };
+    } catch (error) {
+        throw new Error("Failed to update team order", { cause: error });
     }
 }
 
@@ -240,7 +281,9 @@ export const divisionsRepository = {
     updateTeam,
     touchDivision,
     deleteTeamsByIds,
+    deleteDivision,
     replaceState,
+    updateTeamOrder,
     updateRounds,
     getStateForUpdate,
     updateStateRounds,

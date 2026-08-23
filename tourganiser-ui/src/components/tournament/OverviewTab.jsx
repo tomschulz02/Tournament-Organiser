@@ -16,8 +16,6 @@ import { useMessage } from '../../MessageContext';
 import DivisionModal from '../create/DivisionModal';
 import { createEmptyDivision, isConfigurableFormat } from '../create/divisionFormats';
 import { addDivision, deleteDivision, deleteTournament, endTournament, startTournament } from '../../requests';
-import TournamentPattern from '../TournamentPattern';
-import { tournamentAccentStyle } from '../../utils/tournamentIdentity';
 import { divisionColorStyle } from '../../utils/divisionColors';
 
 // The tournament dashboard. Three bands: what this tournament is, what its
@@ -70,15 +68,7 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 
 	return (
 		<section className="tv-band">
-			<div className="tv-info-card" style={tournamentAccentStyle(tournament.id)}>
-				{/* The tournament's generated identity — behind everything else in the
-				    card, per .tv-info-identity's z-index: var(--z-below). Purely
-				    decorative, so it carries no id-based key and nothing here reads
-				    it back. */}
-				<div className="tv-info-identity">
-					<TournamentPattern tournamentId={tournament.id} />
-				</div>
-
+			<div className="tv-info-card">
 				<div className="tv-info-header">
 					<StatusPill status={tournament.status} />
 					{tournament.type && <span className="tv-info-format">{tournament.type}</span>}

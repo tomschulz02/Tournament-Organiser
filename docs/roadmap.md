@@ -342,7 +342,7 @@ would be theatre. CI runs the suite, then lint, then build.
 
 ### Outstanding from Phase 5
 
-- **`trg_tournaments_last_updated` has not been applied to the database.** It is recorded
+- **`trg_tournaments_last_updated` has been applied to the database.** It is recorded
   in `docs/database.md` with the statement to run. Until it exists, division-level
   changes invalidate the cache correctly but tournament-level ones — a schedule save,
   start, end — do not, because nothing moves `tournaments.last_update`.

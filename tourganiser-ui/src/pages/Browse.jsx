@@ -219,11 +219,11 @@ function BrowseTournaments() {
 							onChange={handlefilterChange}
 							placeholder="Search tournaments..."
 						/>
-						<select id="filterFormat" value={filter.format} onChange={handlefilterChange}>
+						{/* <select id="filterFormat" value={filter.format} onChange={handlefilterChange}>
 							<option value="all">All</option>
 							<option value="beach">Beach Tournaments</option>
 							<option value="indoor">Indoor Tournaments</option>
-						</select>
+						</select> */}
 					</div>
 					<div className="browse-groups" id="tournamentsGrid">
 						{filteredTournamentGroups.map(({ key, label, emptyMessage, tournaments }) => (

@@ -2,11 +2,13 @@ import React, { startTransition, useDeferredValue, useEffect, useMemo, useReduce
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
+import TournamentPattern from './TournamentPattern';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
 import '../styles/schedule-maker.css';
 import { printSchedule } from '../utils/scheduleExport';
 import { generateAutomaticSchedule } from '../utils/scheduleGenerator';
+import { tournamentAccentStyle } from '../utils/tournamentIdentity';
 import {
 	addMinutesToTime,
 	buildFixtureIndex,
@@ -1320,10 +1322,10 @@ export default function ScheduleMakerModal({
 				{/* Off screen until printed. The print stylesheet shows exactly one of
 				    these, chosen by the attribute printSchedule sets on the body. */}
 				<div className="schedule-export-root" data-export-view="grid">
-					<ScheduleExportPages type="grid" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} />
+					<ScheduleExportPages type="grid" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} tournamentId={tournament?.id} />
 				</div>
 				<div className="schedule-export-root" data-export-view="list">
-					<ScheduleExportPages type="list" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} />
+					<ScheduleExportPages type="list" schedule={schedule} fixturesById={fixturesById} tournamentName={tournamentName} tournamentId={tournament?.id} />
 				</div>
 			</div>
 		</div>,
@@ -2036,9 +2038,13 @@ function chunkList(list, size) {
 // (already on the day object — normaliseTournamentDays, "Day N" by default or
 // a custom one) is added alongside it, same pairing ScheduleTab already shows
 // on screen.
-function ScheduleExportHeader({ tournamentName, dayLabel, date }) {
+function ScheduleExportHeader({ tournamentId, tournamentName, dayLabel, date }) {
 	return (
-		<div className="schedule-export-header">
+		<div className="schedule-export-header" style={tournamentAccentStyle(tournamentId)}>
+			<div className="schedule-export-header-identity" aria-hidden="true">
+				<TournamentPattern tournamentId={tournamentId} />
+			</div>
+
 			<div>
 				<p>Tourganiser</p>
 				<h2>{tournamentName}</h2>
@@ -2051,7 +2057,7 @@ function ScheduleExportHeader({ tournamentName, dayLabel, date }) {
 	);
 }
 
-function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
+function ScheduleExportPages({ type, schedule, fixturesById, tournamentName, tournamentId }) {
 	return (
 		<>
 			{schedule.days.map((day) =>
@@ -2062,6 +2068,7 @@ function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 						day={day}
 						fixturesById={fixturesById}
 						tournamentName={tournamentName}
+						tournamentId={tournamentId}
 					/>
 				) : (
 					<ScheduleExportListPages
@@ -2070,6 +2077,7 @@ function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 						day={day}
 						fixturesById={fixturesById}
 						tournamentName={tournamentName}
+						tournamentId={tournamentId}
 					/>
 				),
 			)}
@@ -2088,7 +2096,7 @@ function ScheduleExportPages({ type, schedule, fixturesById, tournamentName }) {
 // slot list preserves order, so `rowOffset + localIndex` reconstructs the
 // same global row index a chunk's slots always had — placement itself is
 // untouched.
-function ScheduleExportGridPages({ schedule, day, fixturesById, tournamentName }) {
+function ScheduleExportGridPages({ schedule, day, fixturesById, tournamentName, tournamentId }) {
 	// The same fixed axis and the same row arithmetic the screen uses, so the
 	// printed page puts an entry in the row the organiser saw it in. Matching on
 	// startTime alone dropped every entry that did not begin exactly on a slot.
@@ -2106,7 +2114,7 @@ function ScheduleExportGridPages({ schedule, day, fixturesById, tournamentName }
 
 		return (
 			<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
-				<ScheduleExportHeader tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
+				<ScheduleExportHeader tournamentId={tournamentId} tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
 				<div className="schedule-export-grid">
 					<div
 						className="schedule-export-grid-table"
@@ -2166,13 +2174,13 @@ function ScheduleExportGridPages({ schedule, day, fixturesById, tournamentName }
 // Same reasoning as the grid version: one page per chunk of rows, each with
 // its own repeated header. entries is already the flat array the on-screen
 // list uses, so chunking it is a straight array split.
-function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName }) {
+function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, tournamentId }) {
 	const entries = getDayEntries(schedule, day.date);
 	const pages = chunkList(entries, PRINT_LIST_ROWS_PER_PAGE);
 
 	return pages.map((pageEntries, pageIndex) => (
 		<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
-			<ScheduleExportHeader tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
+			<ScheduleExportHeader tournamentId={tournamentId} tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
 			<div className="schedule-export-list">
 				{pageEntries.map((entry) => (
 					<div key={entry.id} className="schedule-export-list-row" style={getEntryDivisionStyle(entry, fixturesById)}>

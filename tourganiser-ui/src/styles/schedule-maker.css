@@ -1236,15 +1236,34 @@ which is the whole point of printing rather than downloading.
 	padding: var(--space-6);
 	display: grid;
 	gap: var(--space-5);
-	min-height: 794px;
+	align-content: start;
 }
 
 .schedule-export-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: flex-start;
-	padding-bottom: var(--space-4);
+	padding: var(--space-4);
 	border-bottom: 2px solid rgba(31, 41, 55, 0.12);
+	position: relative;
+	overflow: hidden;
+	isolation: isolate;
+}
+
+.schedule-export-header-identity {
+	position: absolute;
+	inset: 0;
+	z-index: var(--z-below);
+	background: linear-gradient(160deg, rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.1), transparent 75%);
+	pointer-events: none;
+}
+
+.schedule-export-header-identity .tournament-pattern {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	color: var(--tournament-accent, var(--main-color));
 }
 
 .schedule-export-header p {

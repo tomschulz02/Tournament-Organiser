@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../Icons';
+import TournamentPattern from '../TournamentPattern';
 import { useMessage } from '../../MessageContext';
 import { saveTournament, unsaveTournament } from '../../requests';
+import { tournamentAccentStyle } from '../../utils/tournamentIdentity';
 import { TOURNAMENT_TABS, useTournamentTab } from './tournamentTabs';
 import '../../styles/tournament-view.css';
 
@@ -25,18 +27,24 @@ export default function TournamentShell({ tournamentId, name, children }) {
 
 	return (
 		<div className="tv-shell">
-			<div className="tv-subheader">
-				<button type="button" className="tv-icon-button tv-back" onClick={handleBack}>
-					<Icon name="leftChevron" label="Back" size={22} />
-					<span className="tv-back-label">Browse</span>
-				</button>
+			<div className="tv-header-band" style={tournamentAccentStyle(tournamentId)}>
+				<div className="tv-header-band-identity" aria-hidden="true">
+					<TournamentPattern tournamentId={tournamentId} />
+				</div>
 
-				<h1 className="tv-title">{name || <span className="tv-skeleton tv-skeleton-title" aria-label="Loading" />}</h1>
+				<div className="tv-subheader">
+					<button type="button" className="tv-icon-button tv-back" onClick={handleBack}>
+						<Icon name="leftChevron" label="Back" size={22} />
+						<span className="tv-back-label">Browse</span>
+					</button>
 
-				<FollowButton tournamentId={tournamentId} />
+					<h1 className="tv-title">{name || <span className="tv-skeleton tv-skeleton-title" aria-label="Loading" />}</h1>
+
+					<FollowButton tournamentId={tournamentId} />
+				</div>
+
+				<TournamentNav activeTab={activeTab} onSelect={selectTab} />
 			</div>
-
-			<TournamentNav activeTab={activeTab} onSelect={selectTab} />
 
 			<div className="tv-content">{children}</div>
 		</div>

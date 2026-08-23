@@ -10,6 +10,7 @@ import {
 	flattenFixtures,
 	matchesFixtureFilters,
 } from './fixtureUtils';
+import { useHelpTopic } from '../../HelpContext';
 
 // Fixed display order for the status groups: Live and Upcoming first (what's
 // happening or about to), then Completed, then Cancelled last. Not derived from
@@ -25,6 +26,8 @@ const STATUS_ORDER = ['LIVE', 'UPCOMING', 'COMPLETED', 'CANCELLED'];
 // wholesale when tournament.schedule is non-null — it is not a view the user can
 // toggle.
 export default function FixturesTab({ divisions = [], creator = false, onCreateSchedule, renderFixtureAction }) {
+	useHelpTopic('tournament-fixtures-unscheduled');
+
 	const fixtures = useMemo(() => flattenFixtures(divisions), [divisions]);
 	const [filters, setFilters] = useState(EMPTY_FILTERS);
 

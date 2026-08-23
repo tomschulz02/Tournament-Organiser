@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate } from 'react-router-dom';
 import { useMessage } from '../MessageContext';
+import { useHelpTopic } from '../HelpContext';
 import { getTournaments } from '../requests';
 import LoadingScreen from '../components/LoadingScreen';
 import '../App.css';
@@ -107,6 +108,8 @@ function getTournamentDateRange(details) {
 // hash meant the browser's own history and the post-creation redirect disagreed
 // about where the user was.
 export default function Browse() {
+	useHelpTopic('browse');
+
 	return (
 		<div className="tournament-tabs-container">
 			<div className="tournament-tab-content active">
@@ -363,7 +366,7 @@ export function TournamentCard({ details, action, onRemove }) {
 							className="tournament-card-remove"
 							onClick={handleRemove}
 							aria-label="Remove from saved tournaments">
-							<Icon name={'delete'} size={16} />
+							<Icon name={'delete'} size={16} fill='var(--error-color)' />
 						</button>
 					)}
 					<div className="tournament-card-topline">

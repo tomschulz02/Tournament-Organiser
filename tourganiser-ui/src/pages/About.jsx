@@ -1,7 +1,10 @@
 import React from 'react';
 import '../App.css';
+import { useHelpTopic } from '../HelpContext';
 
 export default function About() {
+	useHelpTopic('about');
+
 	React.useEffect(() => {
 		if (window.location.hash === '#support') {
 			const element = document.getElementById('support');

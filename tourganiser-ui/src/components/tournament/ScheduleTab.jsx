@@ -19,6 +19,7 @@ import {
 	getCourtName,
 	getScheduleForTournament,
 } from '../../utils/scheduleUtils';
+import { useHelpTopic } from '../../HelpContext';
 
 // Fixtures & Schedule in its scheduled state, reached when tournament.schedule
 // is non-null. Same tab, same route, and no way for the reader to choose — the
@@ -29,6 +30,8 @@ import {
 // what makes "what is on now" readable, which is the question actually being
 // asked at a tournament.
 export default function ScheduleTab({ tournament = {}, divisions = [], creator = false, onEditSchedule, renderFixtureAction }) {
+	useHelpTopic('tournament-fixtures-scheduled');
+
 	const schedule = useMemo(() => getScheduleForTournament(tournament), [tournament]);
 	const fixtures = useMemo(() => flattenFixtures(divisions), [divisions]);
 	const fixtureIndex = useMemo(() => indexById(fixtures), [fixtures]);

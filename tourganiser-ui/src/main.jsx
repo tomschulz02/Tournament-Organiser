@@ -19,6 +19,7 @@ import { AuthProvider } from './AuthProvider';
 import { MessageProvider } from './MessageProvider';
 import { ConfirmProvider } from './components/ConfirmDialog';
 import { ThemeProvider } from './ThemeContext';
+import { HelpProvider } from './HelpProvider';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 function RoutesComponent() {
@@ -58,7 +59,9 @@ root.render(
 			<MessageProvider>
 				<AuthProvider>
 					<ConfirmProvider>
-						<RoutesComponent />
+						<HelpProvider>
+							<RoutesComponent />
+						</HelpProvider>
 					</ConfirmProvider>
 				</AuthProvider>
 			</MessageProvider>

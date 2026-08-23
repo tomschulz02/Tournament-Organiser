@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMessage } from '../MessageContext';
+import { useHelpTopic } from '../HelpContext';
 import { getMyProfile, getMyTournaments, getMySavedTournaments, unsaveTournament } from '../requests';
 import LoadingScreen from '../components/LoadingScreen';
 import { TournamentCard } from './Browse';
@@ -48,6 +49,7 @@ export default function Profile() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const { showMessage } = useMessage();
+	useHelpTopic('profile');
 
 	const [isLoading, setIsLoading] = useState(true);
 	const [unauthorized, setUnauthorized] = useState(false);

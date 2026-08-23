@@ -5,6 +5,7 @@ import TeamIdentity from './TeamIdentity';
 import { isNotStarted } from './tournamentStatus';
 import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
+import { useHelpTopic } from '../../HelpContext';
 import { updateDivisionTeams } from '../../requests';
 import { TEAM_NAME_MAX } from '../create/divisionFormats';
 
@@ -37,6 +38,8 @@ export default function TeamsTab({
 	status,
 	onChanged,
 }) {
+	useHelpTopic('tournament-teams');
+
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 

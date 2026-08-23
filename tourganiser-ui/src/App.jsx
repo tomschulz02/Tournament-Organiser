@@ -5,6 +5,8 @@ import { AuthContext } from './AuthContext';
 import { useMessage } from './MessageContext';
 import { MessagePopup } from './MessageProvider';
 import { useTheme } from './ThemeContext';
+import { useHelp } from './HelpContext';
+import { HELP_TOPICS } from './helpContent';
 import { logoutUser } from './requests';
 import LoadingScreen from './components/LoadingScreen';
 import Icon from './components/Icons';
@@ -368,6 +370,9 @@ function Footer() {
 }
 
 function HelpMenu({ onClose }) {
+	const { activeTopic } = useHelp();
+	const { title, paragraphs } = HELP_TOPICS[activeTopic] ?? HELP_TOPICS.fallback;
+
 	const handleClickOutside = (e) => {
 		if (e.target.classList.contains('help-menu-container')) {
 			onClose();
@@ -377,8 +382,10 @@ function HelpMenu({ onClose }) {
 	return (
 		<div className="help-menu-container" onClick={handleClickOutside}>
 			<div className="help-menu">
-				<h1>Help Menu</h1>
-				<p>Here you can find help and support for using Tourganiser.</p>
+				<h1>{title}</h1>
+				{paragraphs.map((paragraph, index) => (
+					<p key={index}>{paragraph}</p>
+				))}
 			</div>
 		</div>
 	);

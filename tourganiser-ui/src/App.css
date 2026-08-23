@@ -733,6 +733,7 @@ img {
 
 .help-menu {
 	background-color: var(--background-color);
+	color: var(--secondary-text-color);
 	padding: var(--space-4);
 	border-radius: 10px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);

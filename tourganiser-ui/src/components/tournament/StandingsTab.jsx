@@ -3,6 +3,7 @@ import DivisionSelector from './DivisionSelector';
 import SectionState from './SectionState';
 import BracketView from './BracketView';
 import { canProgress } from './fixtureUtils';
+import { useHelpTopic } from '../../HelpContext';
 
 const STAGE_GROUPS = 'groups';
 const STAGE_KNOCKOUT = 'knockout';
@@ -32,34 +33,26 @@ export default function StandingsTab({
 	const [requestedStage, setRequestedStage] = useState(null);
 	const [advanced, setAdvanced] = useState(false);
 
-	if (divisions.length === 0) {
-		return (
-			<SectionState
-				variant="empty"
-				title="This tournament has no divisions"
-				message="Standings appear once a division has been added."
-			/>
-		);
-	}
-
 	// The selection lives in View.jsx so an Overview card can set the tab and the
 	// division together. Falling back to the first division happens here rather
-	// than there, so null keeps meaning "not chosen yet".
-	const division = divisions.find((entry) => entry.id === selectedDivisionId) ?? divisions[0];
+	// than there, so null keeps meaning "not chosen yet". Computed even with zero
+	// divisions — rather than behind the early return below — so activeStage is
+	// available to useHelpTopic, which (like every hook) has to run unconditionally.
+	const division = divisions.length > 0 ? (divisions.find((entry) => entry.id === selectedDivisionId) ?? divisions[0]) : null;
 
 	// A round with only empty groups is a round whose fixtures have not been
 	// generated. It would render as a table with headings and no rows.
-	const rounds = (division.standings ?? []).filter((round) =>
+	const rounds = division ? (division.standings ?? []).filter((round) =>
 		(round.groups ?? []).some((group) => (group.standings ?? []).length > 0),
-	);
-	const bracketRounds = division.bracket?.rounds ?? [];
+	) : [];
+	const bracketRounds = division?.bracket?.rounds ?? [];
 
 	// One column set for the whole division rather than one per group, so two
 	// tables sitting above each other have the same columns in the same order
 	// even when one group's fixtures happened never to produce a 2-1.
 	const outcomeColumns = deriveOutcomeColumns(rounds);
 
-	const finalStandings = division.finalStandings ?? [];
+	const finalStandings = division?.finalStandings ?? [];
 
 	// Derived from the division, never a hard-coded pair: a league has no
 	// knockout, and a straight knockout has no tables.
@@ -75,6 +68,17 @@ export default function StandingsTab({
 	// division that has no knockout has to fall back on the spot, and the lint
 	// config forbids setState in an effect body in any case.
 	const activeStage = stages.some((stage) => stage.id === requestedStage) ? requestedStage : stages[0]?.id;
+	useHelpTopic(activeStage ? `tournament-standings-${activeStage}` : null);
+
+	if (!division) {
+		return (
+			<SectionState
+				variant="empty"
+				title="This tournament has no divisions"
+				message="Standings appear once a division has been added."
+			/>
+		);
+	}
 
 	return (
 		<div className="tv-standings">

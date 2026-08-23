@@ -6,6 +6,7 @@ import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
 import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
+import { useHelpTopic } from '../../HelpContext';
 // Imported across from components/create/ deliberately, rather than moved
 // somewhere shared. components/create/ now means "the division editor and its
 // rules, wherever a division is being built" — which is what it always held;
@@ -32,6 +33,8 @@ export default function OverviewTab({
 	onChanged,
 	onDeleted,
 }) {
+	useHelpTopic('tournament-overview');
+
 	const divisions = dashboard.divisions ?? [];
 
 	return (
@@ -176,7 +179,7 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 				className="tv-subtle-action tv-subtle-action--danger"
 				disabled={busy}
 				onClick={handleDelete}>
-				<Icon name='delete'></Icon>
+				<Icon name='delete' fill='var(--error-color)'></Icon>
 			</button>
 		</div>
 	);

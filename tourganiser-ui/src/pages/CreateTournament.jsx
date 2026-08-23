@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
+import { useHelpTopic } from '../HelpContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import { createTournament } from '../requests';
 import DivisionCard from '../components/create/DivisionCard';
@@ -165,6 +166,7 @@ function buildPayload(details, divisions) {
 export default function CreateTournament() {
 	const { isLoggedIn } = useContext(AuthContext);
 	const location = useLocation();
+	useHelpTopic('create-tournament');
 
 	// Creation is the only authenticated write path in the application, and the
 	// old page turned logged-out visitors away rather than letting them fill in

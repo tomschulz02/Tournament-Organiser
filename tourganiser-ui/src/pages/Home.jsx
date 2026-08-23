@@ -2,9 +2,11 @@ import { Link } from 'react-router-dom';
 import '../App.css';
 import { useContext } from 'react';
 import { AuthContext } from '../AuthContext';
+import { useHelpTopic } from '../HelpContext';
 
 export default function Home() {
 	const { isLoggedIn } = useContext(AuthContext);
+	useHelpTopic('home');
 	return (
 		<div className="home">
 			<div className="banner-image"></div>

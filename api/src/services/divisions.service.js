@@ -67,8 +67,11 @@ async function createDivision(details, tournamentId, userId, client){
 //                   references fixture ids, so nothing structural depends on a
 //                   name.
 //   same set, reordered — a reseed. state.teams is written in the submitted
-//                   order, any name changes go with it, and the rounds are left
-//                   alone. Gated on Not Started; see docs/decisions.md.
+//                   order, any name changes go with it, and the pools and
+//                   fixtures are redrawn from the new order — seed order is
+//                   what the serpentine draw uses to place teams into pools.
+//                   Gated on Not Started, and on no results existing yet, the
+//                   same as a rebuild; see docs/decisions.md.
 //   different set — the division is rebuilt from scratch.
 //
 // A team arriving with no id is new; one in state.teams and absent from the body
@@ -102,7 +105,7 @@ async function updateDivision(divisionId, userId, payload = {}) {
     const reordered = entries.some((entry, index) => entry.id !== existingIds[index]);
 
     return reordered
-        ? await reorderTeams(division, entries)
+        ? await reorderTeams(division, entries, payload)
         : await renameTeams(divisionId, entries, existingIds);
 }
 
@@ -138,16 +141,28 @@ async function renameTeams(divisionId, entries, existingIds) {
 // The reorder path. state.teams is the seeding, and seeding is the final
 // tiebreak in the ranking chain — see docs/tournament-rules.md — so reordering
 // it once results exist would retroactively change who separated from whom, and
-// therefore who qualified, with nothing on screen to explain it.
+// therefore who qualified, with nothing on screen to explain it. Seed order is
+// also what the serpentine draw uses to place teams into pools, so a reorder
+// redraws pools and knockout structure and regenerates fixtures from scratch —
+// the same machinery a rebuild uses, just without adding or removing teams.
 //
-// Gated on the same Not Started that team editing uses. One rule covers both and
-// there is nothing new to explain; the choice and what it gives up are recorded
-// in docs/decisions.md. No results check alongside it, unlike the rebuild: a
-// reorder destroys nothing, so the status is the whole gate.
-async function reorderTeams(division, entries) {
+// Gated on the same Not Started that team editing uses, plus the same
+// no-results check a rebuild has, since this now discards and regenerates
+// fixtures the same way a rebuild does. The choice and what it gives up are
+// recorded in docs/decisions.md.
+async function reorderTeams(division, entries, payload) {
     if ((division.tournament_status || "Not Started") !== "Not Started") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");
     }
+
+    const played = await fixturesRepository.getResults(division.id);
+    if (played.length > 0) {
+        throw new AppError("DIVISION_HAS_RESULTS");
+    }
+
+    const numGroups = toCount(payload.num_groups);
+    const knockoutTeams = toCount(payload.knockout_teams);
+    validateStructure(numGroups, knockoutTeams, entries.length);
 
     // A reorder and a rename can arrive in the same request. The comparison is
     // the rename path's, for the same reason: a name that has not moved is not
@@ -156,25 +171,46 @@ async function reorderTeams(division, entries) {
     const namesById = new Map(stored.map((team) => [team.id, team.name]));
     const changed = entries.filter((entry) => namesById.get(entry.id) !== entry.name);
 
-    // One transaction, so a reorder cannot land without the renames that came
-    // with it.
-    await db.withTransaction(async (client) => {
+    // Generation is pure and can fail on its own terms, so it happens before
+    // the transaction opens — same reasoning as rebuildDivision.
+    const { division: generated, fixtures } = buildDivision(
+        formatOf(division.type),
+        entries.map((entry) => entry.id),
+        entries.length,
+        numGroups,
+        knockoutTeams
+    );
+
+    return await db.withTransaction(async (client) => {
         for (const entry of changed) {
             await divisionsRepository.updateTeam(entry.id, entry.name, client);
         }
 
-        // The narrowest write there is: state.rounds is untouched, because pool
-        // groups hold team ids and knockout groups hold rank indices and
-        // neither depends on this order. It stamps last_update itself, so the
-        // tournament view's ETag moves without a separate touchDivision.
-        await divisionsRepository.updateTeamOrder(
-            division.id,
-            entries.map((entry) => entry.id),
+        const deletedFixtureIds = await fixturesRepository.deleteByDivisionId(division.id, client);
+
+        // Full state overwrite, same as a rebuild: generated.state.teams is
+        // already the entries in the submitted order. Stamps last_update
+        // itself, so the tournament view's ETag moves without a separate
+        // touchDivision.
+        await divisionsRepository.replaceState(division.id, generated.state, entries.length, client);
+        await createFixtures(division.id, fixtures, client);
+
+        const scheduleEntriesRemoved = await repairSchedule(
+            division.tournament_id,
+            deletedFixtureIds,
             client
         );
-    });
 
-    return { divisionId: division.id, rebuilt: false, reordered: true, renamed: changed.length, teams: entries };
+        return {
+            divisionId: division.id,
+            rebuilt: false,
+            reordered: true,
+            renamed: changed.length,
+            teams: entries,
+            fixtures: fixtures.length,
+            scheduleEntriesRemoved
+        };
+    });
 }
 
 // The rebuild path. Delete-all-and-recreate for the division, not a diff of

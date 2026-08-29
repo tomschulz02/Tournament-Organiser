@@ -636,7 +636,9 @@ describe("divisionService.updateDivision", () => {
     // The seeding. A reordered list satisfies sameSet exactly — every entry
     // carries a known id and the count matches — so it used to route to
     // renameTeams, which never touches state.teams: the request succeeded and
-    // changed nothing.
+    // changed nothing. It now redraws pools and fixtures from the new order,
+    // the same as a rebuild, because seed order is what the serpentine draw
+    // uses to place teams into pools.
     describe("the reorder path", () => {
         const reordered = () => {
             const teams = unchanged();
@@ -647,26 +649,31 @@ describe("divisionService.updateDivision", () => {
             return teams;
         };
 
-        it("writes state.teams in the submitted order and nothing else", async () => {
+        it("writes state.teams in the submitted order and redraws pools and fixtures", async () => {
+            fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1", "f2"]);
+
             const result = await divisionService.updateDivision("div-1", "user-1", body(reordered()));
 
-            expect(divisionsRepository.updateTeamOrder)
-                .toHaveBeenCalledWith("div-1", ["t3", "t1", "t2", "t4"], dbMock.client);
+            expect(fixturesRepository.deleteByDivisionId).toHaveBeenCalledWith("div-1", dbMock.client);
 
-            // The rounds are untouched: pool groups hold team ids and knockout
-            // groups hold rank indices, so neither depends on this order.
-            expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
-            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
-            expect(tournamentRepository.updateSchedule).not.toHaveBeenCalled();
+            const [divisionId, state, numTeams] = divisionsRepository.replaceState.mock.calls[0];
+            expect(divisionId).toBe("div-1");
+            expect(state.teams).toEqual(["t3", "t1", "t2", "t4"]);
+            expect(numTeams).toBe(4);
+
+            expect(fixturesRepository.createFixture).toHaveBeenCalled();
             expect(divisionsRepository.updateTeam).not.toHaveBeenCalled();
+            expect(divisionsRepository.deleteTeamsByIds).not.toHaveBeenCalled();
+            expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
 
             expect(result).toMatchObject({ divisionId: "div-1", rebuilt: false, reordered: true, renamed: 0 });
             expect(result.teams.map((team) => team.id)).toEqual(["t3", "t1", "t2", "t4"]);
+            expect(result.fixtures).toBeGreaterThan(0);
         });
 
-        // updateTeamOrder writes to `divisions`, which does carry last_update,
-        // so the stamp rides on that statement rather than on touchDivision.
-        it("moves the division's stamp through the order write itself", async () => {
+        // replaceState writes to `divisions`, which does carry last_update, so
+        // the stamp rides on that statement rather than on touchDivision.
+        it("moves the division's stamp through the state write itself", async () => {
             await divisionService.updateDivision("div-1", "user-1", body(reordered()));
 
             expect(divisionsRepository.touchDivision).not.toHaveBeenCalled();
@@ -679,15 +686,14 @@ describe("divisionService.updateDivision", () => {
             const result = await divisionService.updateDivision("div-1", "user-1", body(teams));
 
             expect(divisionsRepository.updateTeam).toHaveBeenCalledWith("t3", "Cardinals", dbMock.client);
-            expect(divisionsRepository.updateTeamOrder)
-                .toHaveBeenCalledWith("div-1", ["t3", "t1", "t2", "t4"], dbMock.client);
+            expect(divisionsRepository.replaceState.mock.calls[0][1].teams).toEqual(["t3", "t1", "t2", "t4"]);
             expect(clientSql()).toEqual(["BEGIN", "COMMIT"]);
             expect(result).toMatchObject({ reordered: true, renamed: 1 });
         });
 
-        it("rolls back when the order write fails", async () => {
-            const failure = new Error("Failed to update team order");
-            divisionsRepository.updateTeamOrder.mockRejectedValueOnce(failure);
+        it("rolls back when the state write fails", async () => {
+            const failure = new Error("Failed to replace division state");
+            divisionsRepository.replaceState.mockRejectedValueOnce(failure);
 
             await expect(divisionService.updateDivision("div-1", "user-1", body(reordered())))
                 .rejects.toBe(failure);
@@ -704,8 +710,28 @@ describe("divisionService.updateDivision", () => {
             await expect(divisionService.updateDivision("div-1", "user-1", body(reordered())))
                 .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
 
-            expect(divisionsRepository.updateTeamOrder).not.toHaveBeenCalled();
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
             expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
+        });
+
+        // A reorder now discards and regenerates fixtures the same way a
+        // rebuild does, so it needs the same no-results gate — otherwise a
+        // completed result's fixture id could be deleted out from under it.
+        it("refuses a division that already holds a result", async () => {
+            fixturesRepository.getResults.mockResolvedValue([{ id: "f1" }]);
+
+            await expect(divisionService.updateDivision("div-1", "user-1", body(reordered())))
+                .rejects.toMatchObject({ code: "DIVISION_HAS_RESULTS", status: 409 });
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
+            expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
+        });
+
+        it("refuses a structure the team count cannot support", async () => {
+            await expect(divisionService.updateDivision("div-1", "user-1", body(reordered(), { num_groups: 9 })))
+                .rejects.toMatchObject({ code: "INVALID_STRUCTURE", status: 400 });
+
+            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
         });
 
         it("treats a null status as Not Started", async () => {
@@ -715,11 +741,10 @@ describe("divisionService.updateDivision", () => {
                 .resolves.toMatchObject({ reordered: true });
         });
 
-        it("is a reorder rather than a rebuild, so no fixture is destroyed", async () => {
+        it("is a reorder rather than a rebuild, so no team is created or removed", async () => {
             await divisionService.updateDivision("div-1", "user-1", body(unchanged().reverse()));
 
-            expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
-            expect(fixturesRepository.createFixture).not.toHaveBeenCalled();
+            expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
             expect(divisionsRepository.deleteTeamsByIds).not.toHaveBeenCalled();
         });
     });

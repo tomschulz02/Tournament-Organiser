@@ -9,6 +9,7 @@ import {
 	createTeamKey,
 	getFormat,
 	isConfigurableFormat,
+	parseBulkTeamNames,
 	validateDivision,
 } from './divisionFormats';
 
@@ -60,6 +61,7 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 	// worth telling someone that a format change makes them irrelevant.
 	const [configurationTouched, setConfigurationTouched] = useState(false);
 	const [newTeamName, setNewTeamName] = useState('');
+	const [bulkTeamText, setBulkTeamText] = useState('');
 	const confirm = useConfirm();
 
 	const screens = useMemo(() => screensFor(draft.type), [draft.type]);
@@ -105,6 +107,18 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 
 		update({ teams: [...draft.teams, { key: createTeamKey(), name }] });
 		setNewTeamName('');
+		setErrors((previous) => ({ ...previous, teams: undefined }));
+	};
+
+	const addBulkTeams = () => {
+		const names = parseBulkTeamNames(
+			bulkTeamText,
+			draft.teams.map((team) => team.name)
+		);
+		if (names.length === 0) return;
+
+		update({ teams: [...draft.teams, ...names.map((name) => ({ key: createTeamKey(), name }))] });
+		setBulkTeamText('');
 		setErrors((previous) => ({ ...previous, teams: undefined }));
 	};
 
@@ -221,6 +235,9 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 					newTeamName={newTeamName}
 					onNewTeamNameChange={setNewTeamName}
 					onAddTeam={addTeam}
+					bulkTeamText={bulkTeamText}
+					onBulkTeamTextChange={setBulkTeamText}
+					onAddBulkTeams={addBulkTeams}
 					onUpdateTeam={updateTeam}
 					onRemoveTeam={removeTeam}
 					onMoveTeam={moveTeam}
@@ -387,13 +404,21 @@ function TeamsScreen({
 	newTeamName,
 	onNewTeamNameChange,
 	onAddTeam,
+	bulkTeamText,
+	onBulkTeamTextChange,
+	onAddBulkTeams,
 	onUpdateTeam,
 	onRemoveTeam,
 	onMoveTeam,
 }) {
 	const addInputRef = useRef(null);
+	const bulkInputRef = useRef(null);
 	const listRef = useRef(null);
 	const teamCount = draft.teams.length;
+
+	// Hidden until asked for, so the common one-at-a-time case isn't sharing the
+	// screen with a control most people won't use.
+	const [showBulkInput, setShowBulkInput] = useState(false);
 
 	// The row being carried, and the row it is currently over. Both are indices
 	// rather than keys, because the move is expressed as a pair of positions.
@@ -498,6 +523,53 @@ function TeamsScreen({
 					<p className="ct-field-hint">Press Enter to add and keep typing.</p>
 				</div>
 			</div>
+
+			{showBulkInput ? (
+				<div className="ct-field">
+					<label className="ct-field-label" htmlFor="ct-team-bulk">
+						<span>Add multiple teams</span>
+					</label>
+					<textarea
+						id="ct-team-bulk"
+						ref={bulkInputRef}
+						className="ct-input"
+						value={bulkTeamText}
+						placeholder={'One team per line, e.g.\nAces\nEagles\nFalcons'}
+						onChange={(event) => onBulkTeamTextChange(event.target.value)}
+					/>
+					<div className="ct-field-foot">
+						<p className="ct-field-hint">One name per line, or separated by commas.</p>
+					</div>
+					<button
+						type="button"
+						className="ct-button ct-button-primary"
+						onClick={() => {
+							onAddBulkTeams();
+							setShowBulkInput(false);
+						}}
+						disabled={bulkTeamText.trim().length === 0}>
+						Add teams
+					</button>
+					<button
+						type="button"
+						className="ct-button ct-button-quiet"
+						onClick={() => setShowBulkInput(false)}>
+						Cancel
+					</button>
+				</div>
+			) : (
+				<button
+					type="button"
+					className="ct-button ct-button-quiet ct-team-bulk-toggle"
+					onClick={() => {
+						setShowBulkInput(true);
+						// Focus doesn't land until the textarea exists, which is the
+						// render after this click.
+						requestAnimationFrame(() => bulkInputRef.current?.focus());
+					}}>
+					Add multiple teams
+				</button>
+			)}
 
 			{errors.teams && <p className="ct-field-error ct-screen-error">{errors.teams}</p>}
 

@@ -147,6 +147,33 @@ export function validateDivision(division) {
 	return errors;
 }
 
+// Parses a pasted block of team names: splits on newlines then commas, trims
+// each piece, drops empty pieces, truncates to TEAM_NAME_MAX, and drops any
+// piece that matches (trimmed, case-insensitive) either existingNames or an
+// earlier piece already kept from this same call. Structural validation
+// (duplicates across separate actions, empty names) still only happens in
+// validateDivision at Save, same as the one-at-a-time addTeam path.
+export function parseBulkTeamNames(text, existingNames) {
+	const seen = new Set(existingNames.map((name) => name.trim().toLowerCase()));
+	const names = [];
+
+	for (const line of text.split('\n')) {
+		for (const piece of line.split(',')) {
+			const trimmed = piece.trim();
+			if (trimmed.length === 0) continue;
+
+			const truncated = trimmed.slice(0, TEAM_NAME_MAX);
+			const key = truncated.toLowerCase();
+			if (seen.has(key)) continue;
+
+			seen.add(key);
+			names.push(truncated);
+		}
+	}
+
+	return names;
+}
+
 export function isDivisionValid(division) {
 	return Object.keys(validateDivision(division)).length === 0;
 }

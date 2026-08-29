@@ -709,6 +709,14 @@ Seven items. The first four are the Standings and Schedule tabs; the rest are sp
   rank indices. Gated on `Not Started` and nothing else: a reorder destroys nothing, so
   there is no second condition for the status check to be wrong about.
 
+  **Revised 2026-08-28: a reorder now redraws pools and regenerates fixtures**, using the
+  same `buildDivision`/`replaceState`/`createFixtures`/`repairSchedule` path a rebuild uses,
+  because seed order is what the pool draw runs on and leaving pools untouched left the
+  organiser's actual intent unmet. `updateTeamOrder` is no longer called from this path.
+  Gained the rebuild's `DIVISION_HAS_RESULTS` gate alongside `Not Started`, since it now
+  destroys and regenerates fixtures too. See `docs/decisions.md`, "Seeding May Only Be
+  Reordered Before A Tournament Starts".
+
 ### ~~Client cache survives a refresh~~ — closed 2026-08-17
 
 The `{ etag, payload }` store moved from a module-level `Map` to `sessionStorage`: keyed on

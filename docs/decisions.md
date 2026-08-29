@@ -341,16 +341,26 @@ screen to explain why a standings table had reordered itself.
 Reordering is therefore allowed only while `tournaments.status` is `Not Started`, the same
 gate team editing already uses. One rule covers both, and there is nothing new to explain.
 
-Note this is stricter than it strictly needs to be: pools hold team ids and knockout groups
-hold rank indices, so a reorder disturbs neither, and a correction made after starting but
-before any result would be harmless. Consistency with the existing gate was preferred over
-that extra permissiveness.
+Note this was originally stricter than it needed to be: pools hold team ids and knockout
+groups hold rank indices, so at the time this was written a reorder disturbed neither, and
+the `Not Started` gate was adopted for consistency with team editing rather than necessity.
 
-**Consequence: `PUT /api/divisions/:divisionId` cannot currently express a reorder.** Its
-`sameSet` test — every entry carrying a known id, and the count matching — is satisfied by
-a reordered list, so it routes to `renameTeams`, which writes only changed names and never
-touches `state.teams`. A reorder submitted today does nothing at all. Closing that is part
-of the work.
+**Revised 2026-08-28: a reorder now redraws pools and regenerates fixtures.** Seed order is
+what the serpentine draw (`populateGroups`) uses to place teams into pools in the first
+place, so leaving pools untouched after a reorder left the organiser's most likely intent —
+reshuffling who plays whom — silently unmet. `reorderTeams` in `divisions.service.js` now
+runs the same generation and persistence machinery `rebuildDivision` does (`buildDivision`,
+`fixturesRepository.deleteByDivisionId`, `divisionsRepository.replaceState`,
+`createFixtures`, `repairSchedule`), just without adding or removing any team. Because this
+now discards and regenerates fixtures, it also gained the rebuild's `DIVISION_HAS_RESULTS`
+gate alongside the existing `Not Started` one — a reorder can no longer be treated as
+harmless once anything has been played, which was already true in practice once fixtures are
+regenerated on every reorder.
+
+`PUT /api/divisions/:divisionId`'s `sameSet` test — every entry carrying a known id, and the
+count matching — correctly detects a reordered list and routes it to `reorderTeams`, distinct
+from `renameTeams` (same order, name-only changes) and `rebuildDivision` (different team
+set).
 
 ## Knockout Progression Follows Match Order, Not Seed
 

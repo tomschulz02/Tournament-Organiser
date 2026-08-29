@@ -1746,8 +1746,23 @@ Confirmation Dialog styles
 }
 
 .confirm-buttons button:first-child {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
 	background-color: var(--main-color);
 	color: var(--text-color);
+}
+
+/* currentColor tracks the button's own text colour under either theme — see
+   the equivalent .save-btn rule above. */
+.confirm-buttons button:first-child .btn-spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
 }
 
 .confirm-buttons button:first-child:hover {

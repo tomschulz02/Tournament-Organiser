@@ -292,7 +292,8 @@ export default function TeamsTab({
 
 					<div className="tv-inline-form-actions">
 						<button type="button" className="tv-primary-action" disabled={busy} onClick={handleSave}>
-							Save Changes
+							{busy && <span className="btn-spinner" aria-hidden="true" />}
+							<span>{busy ? 'Saving…' : 'Save Changes'}</span>
 						</button>
 						<button type="button" className="tv-subtle-action" disabled={busy} onClick={handleDiscard}>
 							Discard
@@ -536,7 +537,8 @@ function StructureConfirmation({ divisionName, teamCount, knockout, structure, b
 
 				<div className="confirm-buttons">
 					<button type="button" disabled={busy || Boolean(error)} onClick={onConfirm}>
-						Rebuild Division
+						{busy && <span className="btn-spinner" aria-hidden="true" />}
+						<span>{busy ? 'Rebuilding…' : 'Rebuild Division'}</span>
 					</button>
 					<button type="button" disabled={busy} onClick={onCancel}>
 						Cancel

@@ -845,6 +845,23 @@ body.dark .tv-division-badge {
 	background: var(--quarternary-color);
 }
 
+.tv-primary-action {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+/* currentColor tracks the button's own text colour under either theme —
+   see the equivalent .save-btn rule in App.css. */
+.tv-primary-action .btn-spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
 .tv-fixtures-count {
 	margin: 0 0 var(--space-2);
 	font-size: 0.78rem;

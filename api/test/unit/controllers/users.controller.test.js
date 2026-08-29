@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("../../../src/services/users.service.js", () => ({
     userService: {
         createUser: vi.fn(),
-        loginUser: vi.fn()
+        loginUser: vi.fn(),
+        changePassword: vi.fn()
     }
 }));
 
@@ -32,6 +33,7 @@ const EXPECTED_COOKIE = {
 beforeEach(() => {
     vi.mocked(userService.createUser).mockReset();
     vi.mocked(userService.loginUser).mockReset();
+    vi.mocked(userService.changePassword).mockReset();
     vi.mocked(tournamentService.getMyTournaments).mockReset();
     vi.mocked(tournamentService.getSavedTournaments).mockReset();
 });
@@ -98,6 +100,30 @@ describe("userController.login", () => {
         await expect(userController.login(makeReq({ body }), res)).rejects.toBe(failure);
 
         expect(res.cookie).not.toHaveBeenCalled();
+    });
+});
+
+describe("userController.changePassword", () => {
+    const body = { currentPassword: "secret", newPassword: "NewSecret1!", confirmNewPassword: "NewSecret1!" };
+
+    it("calls the service with the caller's id and responds with no data", async () => {
+        userService.changePassword.mockResolvedValue(undefined);
+        const res = makeRes();
+
+        await userController.changePassword(makeReq({ body, user: { id: "user-1" } }), res);
+
+        expect(userService.changePassword).toHaveBeenCalledWith("user-1", "secret", "NewSecret1!", "NewSecret1!");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ success: true, message: "Password updated", data: null });
+    });
+
+    it("lets a failure propagate instead of mapping it", async () => {
+        const failure = new AppError("CURRENT_PASSWORD_INCORRECT");
+        userService.changePassword.mockRejectedValue(failure);
+
+        await expect(
+            userController.changePassword(makeReq({ body, user: { id: "user-1" } }), makeRes())
+        ).rejects.toBe(failure);
     });
 });
 

@@ -63,12 +63,12 @@ async function createUser(username, email, password, confirmPassword) {
     return { token: issueToken(user), username: user.username };
 }
 
-async function loginUser(email, password) {
-    if (!email || !password) {
+async function loginUser(identifier, password) {
+    if (!identifier || !password) {
         throw new AppError("MISSING_FIELDS");
     }
 
-    const user = await userRepository.findUserByEmail(email);
+    const user = await userRepository.findUserByEmailOrUsername(identifier);
 
     // Deliberately identical outcomes for "no such user" and "wrong password".
     // Distinguishing them lets an attacker enumerate registered accounts.
@@ -86,7 +86,29 @@ async function loginUser(email, password) {
     return { token: issueToken(user), username: user.username };
 }
 
+async function changePassword(userId, currentPassword, newPassword, confirmNewPassword) {
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+        throw new AppError("MISSING_FIELDS");
+    }
+    if (newPassword !== confirmNewPassword) {
+        throw new AppError("PASSWORDS_DO_NOT_MATCH");
+    }
+
+    // Always exists: userId comes from a verified JWT via requireAuth, unlike
+    // loginUser, which has to handle an unknown identifier.
+    const user = await userRepository.getUserById(userId);
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+        throw new AppError("CURRENT_PASSWORD_INCORRECT");
+    }
+
+    const hash = await bcrypt.hash(newPassword, saltRounds);
+    await userRepository.updatePassword(userId, hash);
+}
+
 export const userService = {
     createUser,
-    loginUser
+    loginUser,
+    changePassword
 }

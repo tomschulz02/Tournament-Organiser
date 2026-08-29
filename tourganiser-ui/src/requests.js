@@ -88,6 +88,9 @@ export const registerUser = (username, email, password, confirmPassword) =>
 
 export const checkLoginStatus = () => request('users/check-login');
 
+export const changePassword = (currentPassword, newPassword, confirmNewPassword) =>
+	request('users/password', { method: 'PUT', body: { currentPassword, newPassword, confirmNewPassword } });
+
 // Self-scoped only — the caller cannot address another user's profile. See
 // docs/decisions.md.
 export const getMyProfile = () => request('users/profile');

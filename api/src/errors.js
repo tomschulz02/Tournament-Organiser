@@ -75,6 +75,7 @@ export const ERRORS = {
 	AUTH_REQUIRED: [401, "You must be logged in to do that"],
 	EMAIL_ALREADY_REGISTERED: [409, "That email is already registered"],
 	USERNAME_TAKEN: [409, "That username is already taken"],
+	CURRENT_PASSWORD_INCORRECT: [401, "Current password is incorrect"],
 
 	// Tournaments.
 	TOURNAMENT_NOT_FOUND: [404, "Tournament not found"],

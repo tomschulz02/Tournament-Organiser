@@ -62,28 +62,79 @@ describe("createUser", () => {
     });
 });
 
-describe("findUserByEmail", () => {
+describe("findUserByEmailOrUsername", () => {
     it("returns the matching user", async () => {
         db.query.mockResolvedValueOnce([{ id: "user-1", email: "tom@example.com" }]);
 
-        expect(await userRepository.findUserByEmail("tom@example.com"))
+        expect(await userRepository.findUserByEmailOrUsername("tom@example.com"))
             .toEqual({ id: "user-1", email: "tom@example.com" });
-        expect(db.query).toHaveBeenCalledWith("SELECT * FROM users WHERE email = $1", ["tom@example.com"]);
+        expect(db.query).toHaveBeenCalledWith(
+            "SELECT * FROM users WHERE email = $1 OR username = $1",
+            ["tom@example.com"]
+        );
     });
 
-    it("returns null when nobody has that email, leaving the caller to decide", async () => {
+    it("returns null when nobody matches, leaving the caller to decide", async () => {
         db.query.mockResolvedValueOnce([]);
 
-        expect(await userRepository.findUserByEmail("nobody@example.com")).toBeNull();
+        expect(await userRepository.findUserByEmailOrUsername("nobody@example.com")).toBeNull();
     });
 
     it("throws on failure, keeping the underlying error as cause", async () => {
         const underlying = new Error("connection lost");
         db.query.mockRejectedValueOnce(underlying);
 
-        const failure = await userRepository.findUserByEmail("tom@example.com").catch((err) => err);
+        const failure = await userRepository.findUserByEmailOrUsername("tom@example.com").catch((err) => err);
 
         expect(failure.message).toBe("Failed to look up user by email");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+describe("getUserById", () => {
+    it("returns the matching user", async () => {
+        db.query.mockResolvedValueOnce([{ id: "user-1", email: "tom@example.com" }]);
+
+        expect(await userRepository.getUserById("user-1")).toEqual({ id: "user-1", email: "tom@example.com" });
+        expect(db.query).toHaveBeenCalledWith("SELECT * FROM users WHERE id = $1", ["user-1"]);
+    });
+
+    it("returns null when nobody has that id", async () => {
+        db.query.mockResolvedValueOnce([]);
+
+        expect(await userRepository.getUserById("nobody")).toBeNull();
+    });
+
+    it("throws on failure, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await userRepository.getUserById("user-1").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to look up user by id");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+describe("updatePassword", () => {
+    it("issues the update statement", async () => {
+        db.query.mockResolvedValueOnce([]);
+
+        await userRepository.updatePassword("user-1", "new-hash");
+
+        expect(db.query).toHaveBeenCalledWith("UPDATE users SET password = $1 WHERE id = $2", [
+            "new-hash",
+            "user-1"
+        ]);
+    });
+
+    it("throws on failure, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await userRepository.updatePassword("user-1", "new-hash").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to update password");
         expect(failure.cause).toBe(underlying);
     });
 });
@@ -128,7 +179,7 @@ describe.each([
 // joinTournament, getSavedTournaments and unfollowTournament used to share the
 // same broken `result.success` guard as addFriend/getFriends above (known-bug
 // 10). Fixed for the Profile page: each now resolves what db.query produces,
-// the same shape findUserByEmail's tests above assert.
+// the same shape findUserByEmailOrUsername's tests above assert.
 describe("joinTournament", () => {
     it("resolves the rows db.query produced", async () => {
         const rows = [{ user_id: "user-1", tournament_id: "tour-1" }];

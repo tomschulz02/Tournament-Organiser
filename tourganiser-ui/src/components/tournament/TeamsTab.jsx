@@ -7,7 +7,7 @@ import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 import { updateDivisionTeams } from '../../requests';
-import { TEAM_NAME_MAX } from '../create/divisionFormats';
+import { TEAM_NAME_MAX, parseBulkTeamNames } from '../create/divisionFormats';
 
 // The teams in one division, in seed order.
 //
@@ -50,6 +50,8 @@ export default function TeamsTab({
 	const [editName, setEditName] = useState('');
 	const [addFor, setAddFor] = useState(null);
 	const [addName, setAddName] = useState('');
+	const [bulkAdding, setBulkAdding] = useState(false);
+	const [bulkText, setBulkText] = useState('');
 	const [confirming, setConfirming] = useState(null);
 	const [busy, setBusy] = useState(false);
 
@@ -104,6 +106,8 @@ export default function TeamsTab({
 		setEditingKey(null);
 		setAddFor(null);
 		setAddName('');
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	const handleAdd = () => {
@@ -117,6 +121,22 @@ export default function TeamsTab({
 		setTeams([...teams, { key: `new-${nextKey.current}`, id: null, name }]);
 		setAddFor(null);
 		setAddName('');
+	};
+
+	const handleAddBulk = () => {
+		const names = parseBulkTeamNames(
+			bulkText,
+			teams.map((row) => row.name)
+		);
+		if (names.length === 0) return;
+
+		const rows = names.map((name) => {
+			nextKey.current += 1;
+			return { key: `new-${nextKey.current}`, id: null, name };
+		});
+		setTeams([...teams, ...rows]);
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	const handleEdit = (row) => {
@@ -256,12 +276,32 @@ export default function TeamsTab({
 		setAddFor(division.id);
 		setAddName('');
 		setEditingKey(null);
+		setBulkAdding(false);
+		setBulkText('');
+	};
+
+	// Switches the open add form between a single name field and a textarea,
+	// rather than being a second way to open the form — there is only ever one
+	// "Add Team" affordance on offer.
+	const toggleBulkMode = () => {
+		setBulkAdding((current) => !current);
+		setAddName('');
+		setBulkText('');
+	};
+
+	const cancelAdding = () => {
+		setAddFor(null);
+		setAddName('');
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	const startEditing = (row) => {
 		setEditingKey(row.key);
 		setEditName(row.name);
 		setAddFor(null);
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	return (
@@ -303,15 +343,57 @@ export default function TeamsTab({
 			)}
 
 			{adding && (
-				<TeamNameForm
-					label={`Add a team to ${division.name}`}
-					value={addName}
-					busy={busy}
-					submitLabel="Add"
-					onChange={setAddName}
-					onSubmit={handleAdd}
-					onCancel={() => setAddFor(null)}
-				/>
+				<div className="tv-inline-form tv-inline-form--stacked">
+					<label className="tv-switch">
+						<input type="checkbox" checked={bulkAdding} disabled={busy} onChange={toggleBulkMode} />
+						<span className="tv-switch-track" aria-hidden="true" />
+						<span>Add multiple teams</span>
+					</label>
+
+					{bulkAdding ? (
+						<label className="tv-inline-form-field">
+							<span>Add multiple teams to {division.name}</span>
+							<textarea
+								className="tv-inline-form-textarea"
+								value={bulkText}
+								autoFocus
+								disabled={busy}
+								placeholder={'One team per line, e.g.\nAces\nEagles\nFalcons'}
+								onChange={(event) => setBulkText(event.target.value)}
+							/>
+						</label>
+					) : (
+						<label className="tv-inline-form-field">
+							<span>Add a team to {division.name}</span>
+							<input
+								type="text"
+								value={addName}
+								autoFocus
+								disabled={busy}
+								maxLength={TEAM_NAME_MAX}
+								placeholder="Team name"
+								onChange={(event) => setAddName(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key === 'Enter') handleAdd();
+									if (event.key === 'Escape') cancelAdding();
+								}}
+							/>
+						</label>
+					)}
+
+					<div className="tv-inline-form-actions">
+						<button
+							type="button"
+							className="tv-primary-action"
+							disabled={busy}
+							onClick={bulkAdding ? handleAddBulk : handleAdd}>
+							{bulkAdding ? 'Add teams' : 'Add'}
+						</button>
+						<button type="button" className="tv-subtle-action" disabled={busy} onClick={cancelAdding}>
+							Cancel
+						</button>
+					</div>
+				</div>
 			)}
 
 			{teams.length === 0 ? (
@@ -549,8 +631,8 @@ function StructureConfirmation({ divisionName, teamCount, knockout, structure, b
 	);
 }
 
-// Used for both adding and renaming. Enter submits, Escape cancels — a one-field
-// form where the only alternative is reaching for the mouse.
+// Used for renaming a team in place. Enter submits, Escape cancels — a
+// one-field form where the only alternative is reaching for the mouse.
 function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onCancel, maxLength = TEAM_NAME_MAX }) {
 	return (
 		<div className="tv-inline-form">

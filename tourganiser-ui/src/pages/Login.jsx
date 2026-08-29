@@ -6,9 +6,9 @@ import { loginUser, registerUser, checkLoginStatus } from '../requests';
 import { useMessage } from '../MessageContext';
 import { MessagePopup } from '../MessageProvider';
 import { useTheme } from '../ThemeContext';
+import { strongPasswordRegex } from '../utils/passwordPolicy';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 export default function Login() {
 	const [currentForm, setCurrentForm] = useState('login');
@@ -97,7 +97,7 @@ export default function Login() {
 }
 
 function LoginForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
-	const [loginDetails, setLoginDetails] = useState({ email: '', password: '' });
+	const [loginDetails, setLoginDetails] = useState({ identifier: '', password: '' });
 	const [isLoading, setIsLoading] = useState(false);
 	const { showMessage } = useMessage();
 	const { setUsername } = useContext(AuthContext);
@@ -110,8 +110,8 @@ function LoginForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 	const handleLogin = async (e) => {
 		e.preventDefault();
 		// validate input fields
-		const { email, password } = loginDetails;
-		const validation = validateLoginDetails(email, password);
+		const { identifier, password } = loginDetails;
+		const validation = validateLoginDetails(identifier, password);
 		if (!validation.success) {
 			// show error message to user
 			showMessage(validation.message, 'error');
@@ -120,7 +120,8 @@ function LoginForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 		setIsLoading(true);
 
 		try {
-			const { data } = await loginUser(email, password);
+			// The wire field name stays `email` — see loginUser in requests.js.
+			const { data } = await loginUser(identifier, password);
 			setLoggedIn(true);
 			showMessage(`Welcome, ${data.username}`, 'success');
 			setUsername(data.username);
@@ -143,12 +144,12 @@ function LoginForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 			</div>
 			<form className="login-form" id="loginForm" onSubmit={handleLogin}>
 				<div className="form-group">
-					<label htmlFor="email">Email</label>
+					<label htmlFor="identifier">Email or Username</label>
 					<input
-						type="email"
-						autoComplete="email"
-						id="email"
-						value={loginDetails.email}
+						type="text"
+						autoComplete="username"
+						id="identifier"
+						value={loginDetails.identifier}
 						onChange={handleChange}
 						required
 					/>
@@ -297,8 +298,8 @@ function RegisterForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 	);
 }
 
-function validateLoginDetails(email, password) {
-	if (!email || !password) {
+function validateLoginDetails(identifier, password) {
+	if (!identifier || !password) {
 		return { message: 'Please fill in all fields', success: false };
 	}
 

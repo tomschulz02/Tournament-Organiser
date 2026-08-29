@@ -89,8 +89,9 @@ export default function StandingsTab({
 				    tiebreakers rather than the story, and nine columns already fill a
 				    phone without them. */}
 				{activeStage === STAGE_GROUPS && (
-					<label className="tv-advanced-toggle">
+					<label className="tv-switch">
 						<input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
+						<span className="tv-switch-track" aria-hidden="true" />
 						<span>Advanced statistics</span>
 					</label>
 				)}

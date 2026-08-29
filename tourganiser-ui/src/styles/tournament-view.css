@@ -848,6 +848,7 @@ body.dark .tv-division-badge {
 .tv-primary-action {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: var(--space-2);
 }
 
@@ -1221,22 +1222,6 @@ body.dark .tv-division-badge {
 	flex-wrap: wrap;
 	gap: var(--space-3);
 	margin-bottom: var(--space-1);
-}
-
-.tv-advanced-toggle {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	font-size: 0.82rem;
-	color: var(--tv-muted);
-	cursor: pointer;
-}
-
-.tv-advanced-toggle input {
-	width: 16px;
-	height: 16px;
-	accent-color: var(--main-color);
-	cursor: pointer;
 }
 
 .tv-stage-tabs {
@@ -1767,7 +1752,8 @@ body.dark .tv-division-badge {
 	color: var(--tv-muted);
 }
 
-.tv-inline-form-field input {
+.tv-inline-form-field input,
+.tv-inline-form-field textarea {
 	min-width: 0;
 	padding: var(--space-2) var(--space-2);
 	border: 1px solid var(--tv-border);
@@ -1775,6 +1761,16 @@ body.dark .tv-division-badge {
 	background: var(--tv-surface);
 	color: var(--secondary-text-color);
 	font-size: 0.9rem;
+	font-family: inherit;
+}
+
+/* Taller than a browser's one-row default, so a pasted list is visible
+   without scrolling first. Resizable vertically only — the field already
+   fills the row's width, and the actions below sit outside this box, so
+   dragging the handle grows the field in place without disturbing them. */
+.tv-inline-form-textarea {
+	min-height: 140px;
+	resize: vertical;
 }
 
 .tv-inline-form-actions {
@@ -1783,10 +1779,77 @@ body.dark .tv-division-badge {
 	gap: var(--space-1);
 }
 
+/* The default row layout bottom-aligns the field and the actions, which
+   reads fine for a single-line input but visibly drags the actions along
+   whenever the textarea variant is resized. Stacked instead: the field
+   takes the full row and the actions sit on their own line below it,
+   unaffected by the field's own height. */
+.tv-inline-form--stacked {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.tv-inline-form--stacked .tv-inline-form-field {
+	flex: 1 1 auto;
+}
+
 /* Inside a row the form is the whole cell, so its margin would double the
    padding. */
 .tv-team-row--editing .tv-inline-form {
 	margin-bottom: 0;
+}
+
+.tv-switch {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+	cursor: pointer;
+}
+
+.tv-switch input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+}
+
+.tv-switch-track {
+	position: relative;
+	flex: 0 0 auto;
+	width: 34px;
+	height: 20px;
+	border-radius: 999px;
+	background: var(--tv-border);
+	transition: background 0.15s ease;
+}
+
+.tv-switch-track::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--tv-surface);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+	transition: transform 0.15s ease;
+}
+
+.tv-switch input:checked + .tv-switch-track {
+	background: var(--main-color);
+}
+
+.tv-switch input:checked + .tv-switch-track::after {
+	transform: translateX(14px);
+}
+
+.tv-switch input:focus-visible + .tv-switch-track {
+	outline: 2px solid var(--main-color);
+	outline-offset: 2px;
 }
 
 /* Edits accumulate and are saved as one request, so there has to be somewhere
@@ -2101,15 +2164,25 @@ body.dark .tv-division-badge {
 		padding-inline: 14px;
 	}
 
-	/* The label is the target — it wraps the checkbox and its text — so the
-	   height belongs on the label rather than on the input. */
-	.tv-advanced-toggle {
+	/* The label is the target — it wraps the switch and its text — so the
+	   height belongs on the label rather than on the (visually hidden)
+	   checkbox. The track grows with it so the tap target isn't just the text. */
+	.tv-switch {
 		min-height: 44px;
 	}
 
-	.tv-advanced-toggle input {
+	.tv-switch-track {
+		width: 40px;
+		height: 24px;
+	}
+
+	.tv-switch-track::after {
 		width: 20px;
 		height: 20px;
+	}
+
+	.tv-switch input:checked + .tv-switch-track::after {
+		transform: translateX(16px);
 	}
 
 	/* Narrower columns and a tighter gap, so two rounds are readable at once

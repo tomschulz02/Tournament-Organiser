@@ -10,6 +10,11 @@ import '../App.css';
 // applyFixtureToStandings uses in api/src/utils/standings.js, kept in sync on
 // purpose — the number shown here should never disagree with what standings
 // will calculate once the match is saved.
+// Kept in sync with MAX_SET_SCORE in api/src/services/fixtures.service.js —
+// generous enough for any real sport's single-set score, forgiving enough
+// that no legitimate score is ever rejected.
+const MAX_SET_SCORE = 999;
+
 function tallySets(sets) {
 	return sets.reduce(
 		(tally, set) => {
@@ -21,14 +26,21 @@ function tallySets(sets) {
 	);
 }
 
-const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch }) => {
+const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch, onSaveChanges }) => {
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
 	const confirm = useConfirm();
 
+	// A match that was already COMPLETED when this modal opened is being
+	// reopened for a correction, not scored live — Cancel/Save/End (which all
+	// assume the match is still in progress) don't fit. Save changes/Discard
+	// changes replace them, and saving keeps the match COMPLETED rather than
+	// reverting it to LIVE the way a plain Save Score would.
+	const wasCompleted = fixture.status === 'COMPLETED';
+
 	// Which submit action is in flight: null | 'save' | 'end' | 'cancel'.
-	// onSave/onEndMatch/onCancelMatch always resolve (pages/View.jsx catches
-	// failures and reports them via showMessage), so this only needs waiting
-	// on, not a catch.
+	// onSave/onEndMatch/onCancelMatch/onSaveChanges always resolve (pages/View.jsx
+	// catches failures and reports them via showMessage), so this only needs
+	// waiting on, not a catch.
 	const [submitting, setSubmitting] = useState(null);
 	const busy = submitting !== null;
 
@@ -59,7 +71,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch 
 
 	const handleScoreChange = (setIndex, team, value) => {
 		const newSets = [...sets];
-		newSets[setIndex][team] = parseInt(value) || 0;
+		newSets[setIndex][team] = Math.min(parseInt(value) || 0, MAX_SET_SCORE);
 		setSets(newSets);
 	};
 
@@ -78,10 +90,22 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch 
 		if (busy) return;
 		setSubmitting('save');
 		try {
-			await onSave(sets);
+			if (wasCompleted) {
+				await onSaveChanges(sets);
+			} else {
+				await onSave(sets);
+			}
 		} finally {
 			setSubmitting(null);
 		}
+	};
+
+	// A completed match is only ever reopened to correct what's already there —
+	// there is nothing in progress to hand back to, so discarding just closes
+	// the modal and drops the edits, the same as the × button always has.
+	const handleDiscardClick = () => {
+		if (busy) return;
+		onClose();
 	};
 
 	const handleEndMatchClick = async () => {
@@ -181,6 +205,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch 
 												<input
 													type="number"
 													min="0"
+													max={MAX_SET_SCORE}
 													value={set.team1}
 													onChange={(e) => handleScoreChange(index, 'team1', e.target.value)}
 													onFocus={handleFocusSelect}
@@ -208,6 +233,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch 
 												<input
 													type="number"
 													min="0"
+													max={MAX_SET_SCORE}
 													value={set.team2}
 													onChange={(e) => handleScoreChange(index, 'team2', e.target.value)}
 													onFocus={handleFocusSelect}
@@ -243,18 +269,32 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch 
 							+ Add Set
 						</button>
 						<div className="action-buttons">
-							<button type="button" className="cancel-match-btn" onClick={handleCancelMatchClick} disabled={busy}>
-								{submitting === 'cancel' ? <span className="btn-spinner" aria-hidden="true" /> : null}
-								<span>Cancel Match</span>
-							</button>
-							<button type="submit" className="save-btn" disabled={busy}>
-								{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
-								<span>Save Score</span>
-							</button>
-							<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy}>
-								{submitting === 'end' ? <span className="btn-spinner" aria-hidden="true" /> : null}
-								<span>End Match</span>
-							</button>
+							{wasCompleted ? (
+								<>
+									<button type="button" className="cancel-match-btn" onClick={handleDiscardClick} disabled={busy}>
+										<span>Discard changes</span>
+									</button>
+									<button type="submit" className="save-btn" disabled={busy}>
+										{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										<span>Save changes</span>
+									</button>
+								</>
+							) : (
+								<>
+									<button type="button" className="cancel-match-btn" onClick={handleCancelMatchClick} disabled={busy}>
+										{submitting === 'cancel' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										<span>Cancel Match</span>
+									</button>
+									<button type="submit" className="save-btn" disabled={busy}>
+										{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										<span>Save Score</span>
+									</button>
+									<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy}>
+										{submitting === 'end' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										<span>End Match</span>
+									</button>
+								</>
+							)}
 						</div>
 					</div>
 				</form>

@@ -167,8 +167,12 @@ function validateSets(sets) {
     });
 }
 
+// 999 is generous enough for any real sport's single-set score while still
+// rejecting fat-fingered or malicious values like 999999999.
+const MAX_SET_SCORE = 999;
+
 function isScore(value) {
-    return Number.isInteger(value) && value >= 0;
+    return Number.isInteger(value) && value >= 0 && value <= MAX_SET_SCORE;
 }
 
 // The four statuses, per docs/tournament-rules.md. CANCELLED is the one the

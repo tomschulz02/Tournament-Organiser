@@ -162,6 +162,17 @@ export default function ViewPage() {
 		}
 	};
 
+	// Reopening an already-COMPLETED match to fix a mis-entered score. This
+	// always sends finished: true, unlike handleSaveScore's false — the point is
+	// to correct a finished match without knocking it back to LIVE and out of
+	// standings until someone remembers to click End Match again.
+	const handleSaveChanges = async (sets) => {
+		if (await saveResult(sets, true)) {
+			showMessage('Changes saved.', 'success');
+			setScoringFixtureId(null);
+		}
+	};
+
 	const handleCancelMatch = async () => {
 		// Mirrors the existing CANCELLED derivation in fixtures.service.js's
 		// deriveStatus: finished === true with exactly one set at 0-0. This is
@@ -400,6 +411,7 @@ export default function ViewPage() {
 					onSave={handleSaveScore}
 					onEndMatch={handleEndMatch}
 					onCancelMatch={handleCancelMatch}
+					onSaveChanges={handleSaveChanges}
 				/>
 			)}
 

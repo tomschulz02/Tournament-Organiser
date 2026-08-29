@@ -16,7 +16,8 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
         updateSchedule: vi.fn(),
-        getScheduleForUpdate: vi.fn()
+        getScheduleForUpdate: vi.fn(),
+        updateScoresheetTemplate: vi.fn()
     }
 }));
 
@@ -88,6 +89,7 @@ beforeEach(() => {
     vi.mocked(tournamentRepository.updateSchedule).mockReset().mockResolvedValue(undefined);
     vi.mocked(tournamentRepository.getScheduleForUpdate).mockReset().mockResolvedValue(null);
     vi.mocked(validateSchedule).mockReset();
+    vi.mocked(tournamentRepository.updateScoresheetTemplate).mockReset().mockResolvedValue(undefined);
 });
 
 describe("tournamentService.createTournament", () => {
@@ -666,6 +668,65 @@ describe("tournamentService.updateSchedule", () => {
 
         expect(await tournamentService.updateSchedule("tour-1", "user-1", { version: 1 }))
             .toEqual({ id: "tour-1", entries: 0 });
+    });
+});
+
+describe("tournamentService.updateScoresheetTemplate", () => {
+    it("names the not-found condition rather than reporting zero rows affected", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(null);
+
+        await expect(tournamentService.updateScoresheetTemplate("tour-1", "user-1", "fivb-indoor-2013"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+        expect(tournamentRepository.updateScoresheetTemplate).not.toHaveBeenCalled();
+    });
+
+    it("refuses another user, distinguishably from a missing tournament", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+
+        await expect(tournamentService.updateScoresheetTemplate("tour-1", "user-2", "fivb-indoor-2013"))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(tournamentRepository.updateScoresheetTemplate).not.toHaveBeenCalled();
+    });
+
+    it("sets a system template key", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+
+        expect(await tournamentService.updateScoresheetTemplate("tour-1", "user-1", "fivb-indoor-2013"))
+            .toEqual({ id: "tour-1", scoresheet_template: "fivb-indoor-2013" });
+        expect(tournamentRepository.updateScoresheetTemplate).toHaveBeenCalledWith("tour-1", "fivb-indoor-2013");
+    });
+
+    it("sets a custom template reference", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+
+        await tournamentService.updateScoresheetTemplate("tour-1", "user-1", "custom:11111111-1111-1111-1111-111111111111");
+
+        expect(tournamentRepository.updateScoresheetTemplate)
+            .toHaveBeenCalledWith("tour-1", "custom:11111111-1111-1111-1111-111111111111");
+    });
+
+    it("clears the selection when the key is null", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+
+        expect(await tournamentService.updateScoresheetTemplate("tour-1", "user-1", null))
+            .toEqual({ id: "tour-1", scoresheet_template: null });
+        expect(tournamentRepository.updateScoresheetTemplate).toHaveBeenCalledWith("tour-1", null);
+    });
+
+    it("rejects a key that is not a string", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+
+        await expect(tournamentService.updateScoresheetTemplate("tour-1", "user-1", 42))
+            .rejects.toMatchObject({ code: "FIELD_INVALID" });
+        expect(tournamentRepository.updateScoresheetTemplate).not.toHaveBeenCalled();
+    });
+
+    it("rejects a key longer than the application limit", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+
+        await expect(tournamentService.updateScoresheetTemplate("tour-1", "user-1", "x".repeat(201)))
+            .rejects.toMatchObject({ code: "FIELD_TOO_LONG" });
+        expect(tournamentRepository.updateScoresheetTemplate).not.toHaveBeenCalled();
     });
 });
 

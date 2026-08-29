@@ -1,17 +1,17 @@
 {
-	"version": "0.0.1",
-	"configurations": [
-		{
-			"name": "tourganiser-api",
-			"runtimeExecutable": "npm",
-			"runtimeArgs": ["start", "--prefix", "api"],
-			"port": 3000
-		},
-		{
-			"name": "tourganiser-ui",
-			"runtimeExecutable": "npm",
-			"runtimeArgs": ["run", "dev", "--prefix", "tourganiser-ui"],
-			"port": 5173
-		}
-	]
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "tourganiser-ui", "run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "api", "start"],
+      "port": 3000
+    }
+  ]
 }

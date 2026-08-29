@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { Suspense, lazy, useContext, useEffect, useState } from 'react';
+import { Suspense, lazy, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchTournamentData } from '../requests';
 import { AuthContext } from '../AuthContext';
 import '../App.css';
@@ -19,6 +19,12 @@ import NextRoundModal from '../components/NextRoundModal';
 import { flattenFixtures } from '../components/tournament/fixtureUtils';
 import { useMessage } from '../MessageContext';
 import { updateFixtureResult, updateTournamentSchedule } from '../requests';
+import { getScheduleForTournament, getCourtName } from '../utils/scheduleUtils';
+
+// Dynamically imported rather than statically: it pulls in pdf-lib, which
+// only the scoresheet feature needs, and every viewer of every tournament
+// page would otherwise pay for it whether or not a template is selected.
+const loadScoresheetPrefill = () => import('../utils/scoresheetPrefill');
 
 // Split out of the main bundle. It is a large screen — a grid, a list, an
 // inspector, a generator and two print layouts — that only an organiser opens,
@@ -156,7 +162,18 @@ export default function ViewPage() {
 		}
 	};
 
-	// Offered only where a result can actually be recorded, which is two
+	const handleCancelMatch = async () => {
+		// Mirrors the existing CANCELLED derivation in fixtures.service.js's
+		// deriveStatus: finished === true with exactly one set at 0-0. This is
+		// the one place that convention should be encoded on the client — the
+		// modal itself no longer knows about it.
+		if (await saveResult([{ team1: 0, team2: 0 }], true)) {
+			showMessage('Match cancelled.', 'success');
+			setScoringFixtureId(null);
+		}
+	};
+
+	// Offered only where a result can actually be recorded, which is three
 	// conditions rather than one.
 	//
 	// A knockout fixture still showing "Rank 1" has no teams bound, and the
@@ -168,9 +185,16 @@ export default function ViewPage() {
 	// result whatever the status, and a score entered wrongly would otherwise
 	// have no route to being corrected once the tournament was ended — which is
 	// exactly when somebody notices.
-	const renderFixtureAction = (fixture) => {
+	//
+	// fixture.locked is the server's own answer to whether this fixture's round
+	// has already been progressed past — see roundHolding in
+	// tournamentViewFormatter.js — so a pool game freezes the moment the
+	// quarterfinals start, while the round it belongs to is still ongoing it
+	// stays editable.
+	const renderScoreAction = (fixture) => {
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
 		if ((result.data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
+		if (fixture.locked) return null;
 
 		// An icon on the row, where the word would be the widest thing in its
 		// column. aria-label rather than title alone, so the control is named for a
@@ -188,6 +212,137 @@ export default function ViewPage() {
 				<Icon name="edit" size={20} />
 				<span className="tv-row-action-label">{label}</span>
 			</button>
+		);
+	};
+
+	// Scoresheets. The template is resolved once per selection rather than on
+	// every click, so the fixture and toolbar buttons can show the
+	// device-bound-miss state up front instead of erroring on click — see
+	// docs/handover-scoresheets.md, Step 7's Don't.
+	const scoresheetTemplateKey = result.data?.tournament?.scoresheet_template ?? null;
+	const [resolvedScoresheetTemplate, setResolvedScoresheetTemplate] = useState(null);
+
+	useEffect(() => {
+		let active = true;
+
+		(async () => {
+			const template = scoresheetTemplateKey
+				? await loadScoresheetPrefill().then(({ resolveTemplate }) => resolveTemplate(scoresheetTemplateKey))
+				: null;
+
+			if (active) setResolvedScoresheetTemplate(template);
+		})();
+
+		return () => {
+			active = false;
+		};
+	}, [scoresheetTemplateKey]);
+
+	// Day, start time and court name per fixture, resolved once from the same
+	// schedule ScheduleTab already reads — not re-derived per fixture.
+	const scoresheetScheduleIndex = useMemo(() => {
+		const schedule = getScheduleForTournament(result.data?.tournament ?? {});
+		const index = new Map();
+
+		schedule.entries.forEach((entry) => {
+			if (entry.type !== 'fixture' || !entry.fixtureId) return;
+
+			index.set(entry.fixtureId, {
+				day: entry.day,
+				startTime: entry.startTime,
+				courtName: getCourtName(schedule, entry.courtId),
+			});
+		});
+
+		return index;
+	}, [result.data?.tournament]);
+
+	const openGeneratedPdf = (bytes) => {
+		const blob = new Blob([bytes], { type: 'application/pdf' });
+		const url = URL.createObjectURL(blob);
+		window.open(url, '_blank', 'noopener');
+		// The new tab needs time to load the blob before the URL is safe to
+		// revoke; there is no load event to hook from here, so a generous
+		// delay stands in for one.
+		setTimeout(() => URL.revokeObjectURL(url), 60000);
+	};
+
+	const handleDownloadScoresheet = async (fixture) => {
+		if (!resolvedScoresheetTemplate) return;
+
+		try {
+			const { buildFieldValues, generateScoresheet } = await loadScoresheetPrefill();
+			const fieldValues = buildFieldValues(
+				fixture,
+				result.data.tournament,
+				null,
+				scoresheetScheduleIndex.get(fixture.id),
+			);
+			openGeneratedPdf(await generateScoresheet(resolvedScoresheetTemplate, fieldValues));
+		} catch {
+			showMessage('The scoresheet could not be generated.', 'error');
+		}
+	};
+
+	// Present whenever the fixture can plausibly get one, gated the same two
+	// ways as the toolbar's "Print all": selected at all, and resolvable on
+	// this device. Absent rather than shown-and-erroring for anything else.
+	const renderScoresheetAction = (fixture) => {
+		if (!scoresheetTemplateKey) return null;
+
+		return (
+			<button
+				type="button"
+				className="tv-row-action"
+				title={resolvedScoresheetTemplate ? 'Download scoresheet' : 'Scoresheet template not available on this device'}
+				aria-label="Download scoresheet"
+				disabled={!resolvedScoresheetTemplate}
+				onClick={() => handleDownloadScoresheet(fixture)}>
+				<Icon name="download" size={20} />
+				<span className="tv-row-action-label">Scoresheet</span>
+			</button>
+		);
+	};
+
+	const handlePrintAllScoresheets = async () => {
+		if (!resolvedScoresheetTemplate) return;
+
+		try {
+			const { buildFieldValues, generateScoresheet, mergeScoresheets } = await loadScoresheetPrefill();
+			const fixtures = flattenFixtures(result.data?.divisions ?? []);
+			const pdfBytesList = [];
+
+			for (const fixture of fixtures) {
+				const fieldValues = buildFieldValues(
+					fixture,
+					result.data.tournament,
+					null,
+					scoresheetScheduleIndex.get(fixture.id),
+				);
+				// Sequential: each fixture's PDF is generated from the same shared
+				// template document, and there is nothing to gain from racing them.
+				pdfBytesList.push(await generateScoresheet(resolvedScoresheetTemplate, fieldValues));
+			}
+
+			openGeneratedPdf(await mergeScoresheets(pdfBytesList));
+		} catch {
+			showMessage('The scoresheets could not be generated.', 'error');
+		}
+	};
+
+	// The row's one action slot, shared by score entry and the scoresheet
+	// download — each independently absent per its own rule above.
+	const renderFixtureAction = (fixture) => {
+		const scoreAction = renderScoreAction(fixture);
+		const scoresheetAction = renderScoresheetAction(fixture);
+
+		if (!scoreAction && !scoresheetAction) return null;
+
+		return (
+			<>
+				{scoreAction}
+				{scoresheetAction}
+			</>
 		);
 	};
 
@@ -244,6 +399,7 @@ export default function ViewPage() {
 					onClose={() => setScoringFixtureId(null)}
 					onSave={handleSaveScore}
 					onEndMatch={handleEndMatch}
+					onCancelMatch={handleCancelMatch}
 				/>
 			)}
 
@@ -292,6 +448,9 @@ export default function ViewPage() {
 						renderFixtureAction={renderFixtureAction}
 						onProgressRound={setProgressingDivisionId}
 						onSelectTab={selectTab}
+						onPrintAllScoresheets={handlePrintAllScoresheets}
+						scoresheetTemplateSelected={Boolean(scoresheetTemplateKey)}
+						scoresheetTemplateReady={Boolean(resolvedScoresheetTemplate)}
 					/>
 				)}
 			</TournamentShell>
@@ -311,6 +470,9 @@ function TabPanel({
 	renderFixtureAction,
 	onProgressRound,
 	onSelectTab,
+	onPrintAllScoresheets,
+	scoresheetTemplateSelected,
+	scoresheetTemplateReady,
 }) {
 	if (tab === 'overview') {
 		return (
@@ -328,7 +490,17 @@ function TabPanel({
 	// One tab, two states, and the tournament decides which. There is deliberately
 	// no control that switches between them: whether a schedule exists is a fact
 	// about the tournament, not a preference of the reader.
+	//
+	// Presence of tournament.schedule is not enough: resetting a schedule and
+	// saving it leaves a non-null schedule with zero entries, and that should
+	// read the same as never having created one — grouped by status, not as a
+	// wall of "Not yet scheduled". At least one fixture actually placed is what
+	// makes it the scheduled state.
 	if (tab === 'fixtures') {
+		const hasScheduledFixture = getScheduleForTournament(data.tournament ?? {}).entries.some(
+			(entry) => entry.type === 'fixture',
+		);
+
 		return (
 			<>
 				<RoundCompleteBanner
@@ -336,13 +508,16 @@ function TabPanel({
 					creator={data.creator}
 					onGoToStandings={() => onSelectTab('standings')}
 				/>
-				{data.tournament?.schedule ? (
+				{hasScheduledFixture ? (
 					<ScheduleTab
 						tournament={data.tournament}
 						divisions={data.divisions ?? []}
 						creator={data.creator}
 						onEditSchedule={onOpenSchedule}
 						renderFixtureAction={renderFixtureAction}
+						onPrintAllScoresheets={onPrintAllScoresheets}
+						scoresheetTemplateSelected={scoresheetTemplateSelected}
+						scoresheetTemplateReady={scoresheetTemplateReady}
 					/>
 				) : (
 					<FixturesTab

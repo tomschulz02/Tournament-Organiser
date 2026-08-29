@@ -29,7 +29,16 @@ import { useHelpTopic } from '../../HelpContext';
 // then the courts running at that time. Grouping by time rather than by court is
 // what makes "what is on now" readable, which is the question actually being
 // asked at a tournament.
-export default function ScheduleTab({ tournament = {}, divisions = [], creator = false, onEditSchedule, renderFixtureAction }) {
+export default function ScheduleTab({
+	tournament = {},
+	divisions = [],
+	creator = false,
+	onEditSchedule,
+	renderFixtureAction,
+	onPrintAllScoresheets,
+	scoresheetTemplateSelected = false,
+	scoresheetTemplateReady = false,
+}) {
 	useHelpTopic('tournament-fixtures-scheduled');
 
 	const schedule = useMemo(() => getScheduleForTournament(tournament), [tournament]);
@@ -95,12 +104,34 @@ export default function ScheduleTab({ tournament = {}, divisions = [], creator =
 					courts={schedule.courts}
 				/>
 
-				{/* In place of Create Schedule, not alongside it. */}
-				{creator && onEditSchedule && (
-					<button type="button" className="tv-primary-action" onClick={onEditSchedule}>
-						Edit Schedule
-					</button>
-				)}
+				<div className="tv-toolbar-actions">
+					{/* Present whenever the tournament has a template selected at all,
+					    disabled with a title naming which of the two reasons applies —
+					    the same distinction the per-fixture button makes — rather than
+					    absent, so an organiser who has not picked one yet knows the
+					    control exists. */}
+					{creator && scoresheetTemplateSelected && onPrintAllScoresheets && (
+						<button
+							type="button"
+							className="tv-primary-action"
+							disabled={!scoresheetTemplateReady}
+							title={
+								scoresheetTemplateReady
+									? undefined
+									: 'The scoresheet template is not available on this device'
+							}
+							onClick={onPrintAllScoresheets}>
+							Print All Scoresheets
+						</button>
+					)}
+
+					{/* In place of Create Schedule, not alongside it. */}
+					{creator && onEditSchedule && (
+						<button type="button" className="tv-primary-action" onClick={onEditSchedule}>
+							Edit Schedule
+						</button>
+					)}
+				</div>
 			</div>
 
 			<p className="tv-fixtures-count">

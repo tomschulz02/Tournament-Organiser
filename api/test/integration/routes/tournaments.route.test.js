@@ -17,7 +17,8 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         addDivision: vi.fn(),
         updateSchedule: vi.fn(),
         saveTournament: vi.fn(),
-        unsaveTournament: vi.fn()
+        unsaveTournament: vi.fn(),
+        updateScoresheetTemplate: vi.fn()
     }
 }));
 
@@ -39,6 +40,7 @@ beforeEach(() => {
     vi.mocked(tournamentService.updateSchedule).mockReset();
     vi.mocked(tournamentService.saveTournament).mockReset();
     vi.mocked(tournamentService.unsaveTournament).mockReset();
+    vi.mocked(tournamentService.updateScoresheetTemplate).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -532,5 +534,59 @@ describe("PUT /api/tournaments/:tournamentId/schedule", () => {
 
         expect(response.status).toBe(status);
         expect(response.body).toEqual({ success: false, message, data: { entryId: "entry-1" } });
+    });
+});
+
+describe("PUT /api/tournaments/:tournamentId/scoresheet-template", () => {
+    const path = `/api/tournaments/${VALID_UUID}/scoresheet-template`;
+
+    it("requires a session", async () => {
+        const response = await request(app).put(path).send({ scoresheetTemplate: "fivb-indoor-2013" });
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.updateScoresheetTemplate).not.toHaveBeenCalled();
+    });
+
+    it("saves the template selection for the owner", async () => {
+        tournamentService.updateScoresheetTemplate.mockResolvedValue({
+            id: VALID_UUID,
+            scoresheet_template: "fivb-indoor-2013"
+        });
+
+        const response = await request(app)
+            .put(path)
+            .set("Cookie", authCookie({ id: "user-1", username: "tom" }))
+            .send({ scoresheetTemplate: "fivb-indoor-2013" });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Scoresheet template updated",
+            data: { id: VALID_UUID, scoresheet_template: "fivb-indoor-2013" }
+        });
+        expect(tournamentService.updateScoresheetTemplate).toHaveBeenCalledWith(VALID_UUID, "user-1", "fivb-indoor-2013");
+    });
+
+    it("answers 404 for a tournament id that is not a UUID", async () => {
+        const response = await request(app)
+            .put("/api/tournaments/12345/scoresheet-template")
+            .set("Cookie", authCookie())
+            .send({ scoresheetTemplate: "fivb-indoor-2013" });
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Tournament not found");
+        expect(tournamentService.updateScoresheetTemplate).not.toHaveBeenCalled();
+    });
+
+    it("answers 403 when the tournament belongs to someone else", async () => {
+        tournamentService.updateScoresheetTemplate.mockRejectedValue(new AppError("NOT_TOURNAMENT_OWNER"));
+
+        const response = await request(app)
+            .put(path)
+            .set("Cookie", authCookie())
+            .send({ scoresheetTemplate: "fivb-indoor-2013" });
+
+        expect(response.status).toBe(403);
+        expect(response.body.message).toBe("You do not own this tournament");
     });
 });

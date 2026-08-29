@@ -219,14 +219,14 @@ describe("buildKnockoutOutcomes", () => {
         });
     }
 
-    it("reports the winner and loser of each match", () => {
+    it("reports the winner and loser of each match, with the sets each took", () => {
         expect(buildKnockoutOutcomes(round, [knockoutFixture()]))
-            .toEqual([{ winnerId: "t1", loserId: "t2" }]);
+            .toEqual([{ winnerId: "t1", loserId: "t2", winnerSets: 1, loserSets: 0 }]);
     });
 
     it("reports team two as the winner when it takes more sets", () => {
         expect(buildKnockoutOutcomes(round, [knockoutFixture({ result: [[15, 21]] })]))
-            .toEqual([{ winnerId: "t2", loserId: "t1" }]);
+            .toEqual([{ winnerId: "t2", loserId: "t1", winnerSets: 1, loserSets: 0 }]);
     });
 
     it("drops a match that ended level, so neither team carries forward", () => {
@@ -251,8 +251,8 @@ describe("buildKnockoutOutcomes", () => {
 
         expect(buildKnockoutOutcomes(byeRound, fixtures, ["t1", "t2", "t3"]))
             .toEqual([
-                { winnerId: "t1", loserId: null },
-                { winnerId: "t2", loserId: "t3" }
+                { winnerId: "t1", loserId: null, winnerSets: 0, loserSets: 0 },
+                { winnerId: "t2", loserId: "t3", winnerSets: 1, loserSets: 0 }
             ]);
     });
 
@@ -265,7 +265,8 @@ describe("buildKnockoutOutcomes", () => {
     it("accepts a group holding a team id directly", () => {
         const byeRound = makeRound({ name: "Round of 12", type: "knockout", groups: [["t7"]] });
 
-        expect(buildKnockoutOutcomes(byeRound, [])).toEqual([{ winnerId: "t7", loserId: null }]);
+        expect(buildKnockoutOutcomes(byeRound, []))
+            .toEqual([{ winnerId: "t7", loserId: null, winnerSets: 0, loserSets: 0 }]);
     });
 });
 
@@ -279,8 +280,9 @@ describe("computeRoundResults", () => {
     it("seeds a round-robin round across pools, pool position first", () => {
         const results = computeRoundResults(poolRound(), state, normalised(completedPoolFixtures()));
 
-        // Round-robin rounds carry the full standings row through; only the
-        // knockout branch reduces to bare ids.
+        // Round-robin rounds carry the full standings row through, including
+        // fields (played, pointsFor, …) a knockout round's outcome has no
+        // equivalent for.
         expect(results.map((row) => row.id)).toEqual(["t1", "t4", "t2", "t3"]);
         expect(results[0]).toMatchObject({ id: "t1", played: 1, won: 1, setsWon: 2, pointsFor: 42 });
     });
@@ -289,7 +291,7 @@ describe("computeRoundResults", () => {
     // groups rather than from its fixtures, so the round has to declare them. The
     // power-of-two answer is unchanged, team for team — with no byes, group order
     // and match order are the same thing.
-    it("puts knockout winners before knockout losers", () => {
+    it("puts knockout winners before knockout losers, each carrying their own set score", () => {
         const round = makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]] });
         const fixtures = normalised([
             makeFixture({ match_no: 1, round: "Semifinals", status: "COMPLETED", team_1: "t1", team_2: "t4", team_1_result: [15], team_2_result: [21] }),
@@ -297,7 +299,10 @@ describe("computeRoundResults", () => {
         ]);
 
         expect(computeRoundResults(round, state, fixtures)).toEqual([
-            { id: "t4" }, { id: "t2" }, { id: "t1" }, { id: "t3" }
+            { id: "t4", won: 1, lost: 0, setsWon: 1, setsLost: 0 },
+            { id: "t2", won: 1, lost: 0, setsWon: 1, setsLost: 0 },
+            { id: "t1", won: 0, lost: 1, setsWon: 0, setsLost: 1 },
+            { id: "t3", won: 0, lost: 1, setsWon: 0, setsLost: 1 }
         ]);
     });
 
@@ -524,7 +529,8 @@ describe("progressionService.getProposal", () => {
             roundType: "roundRobin",
             isFinalRound: false,
             nextRoundName: "Finals",
-            qualifyingTeams: 4
+            qualifyingTeams: 4,
+            nextRound: { name: "Finals", groups: finalsRound().groups }
         });
         expect(proposal.computedResults.map((row) => [row.id, row.name])).toEqual([
             ["t1", "Aces"], ["t4", "Ducks"], ["t2", "Bears"], ["t3", "Cubs"]
@@ -578,7 +584,7 @@ describe("progressionService.getProposal", () => {
 
         const proposal = await progressionService.getProposal("div-1", "user-1");
 
-        expect(proposal).toMatchObject({ isFinalRound: true, nextRoundName: null, qualifyingTeams: 4 });
+        expect(proposal).toMatchObject({ isFinalRound: true, nextRoundName: null, qualifyingTeams: 4, nextRound: null });
     });
 
     it("names a team Unknown when it is not in the teams table", async () => {

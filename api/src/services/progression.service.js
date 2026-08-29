@@ -57,7 +57,12 @@ async function getProposal(divisionId, userId) {
         computedResults: computed,
         qualifiers: computed.slice(0, qualifyingTeams),
         // Teams the organiser is permitted to substitute in.
-        eligibleTeams: computed
+        eligibleTeams: computed,
+        // The same pairing structure commit() uses to bind fixtures (see
+        // bindFixturesToResults), exposed read-only so the client can preview the
+        // next round's matchups from the organiser's current qualifier order,
+        // before anything is confirmed. Null on the final round, which has none.
+        nextRound: nextRound ? { name: nextRound.name, groups: nextRound.groups } : null
     };
 }
 
@@ -217,8 +222,10 @@ function computeRoundResults(round, state, fixtures, { nextRound = null, previou
     const seedIndex = buildSeedIndex(state.teams);
 
     if (round.type === "knockout") {
-        return seedKnockoutResults(buildKnockoutOutcomes(round, fixtures, previousResults))
-            .map((id) => ({ id }));
+        const outcomes = buildKnockoutOutcomes(round, fixtures, previousResults);
+        const stats = knockoutStatsById(outcomes);
+
+        return seedKnockoutResults(outcomes).map((id) => ({ id, ...stats.get(id) }));
     }
 
     const headToHead = buildHeadToHeadMap(fixtures);
@@ -291,10 +298,11 @@ function buildKnockoutOutcomes(round, fixtures, previousResults = []) {
         if (!Array.isArray(group)) return;
 
         // A bye. The group holds one index into the previous round's results and
-        // the team named there carries on without playing.
+        // the team named there carries on without playing, so it has no sets to
+        // report.
         if (group.length < 2) {
             const byeTeamId = resolveGroupTeam(group[0], previousResults);
-            if (byeTeamId) outcomes.push({ winnerId: byeTeamId, loserId: null });
+            if (byeTeamId) outcomes.push({ winnerId: byeTeamId, loserId: null, winnerSets: 0, loserSets: 0 });
             return;
         }
 
@@ -313,12 +321,31 @@ function buildKnockoutOutcomes(round, fixtures, previousResults = []) {
 
         outcomes.push(
             oneSets > twoSets
-                ? { winnerId: fixture.team_1_id, loserId: fixture.team_2_id }
-                : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id }
+                ? { winnerId: fixture.team_1_id, loserId: fixture.team_2_id, winnerSets: oneSets, loserSets: twoSets }
+                : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id, winnerSets: twoSets, loserSets: oneSets }
         );
     });
 
     return outcomes;
+}
+
+// The set score a knockout outcome carries is thrown away by seedKnockoutResults,
+// which only orders ids — so it is collected here, by id, before that happens.
+// Matches computeRatios' row shape (won/lost/setsWon/setsLost) so the frontend's
+// stats display needs no special-casing between a pool round and a knockout one.
+function knockoutStatsById(outcomes) {
+    const stats = new Map();
+
+    outcomes.forEach(({ winnerId, loserId, winnerSets, loserSets }) => {
+        if (winnerId) {
+            stats.set(winnerId, { won: loserId ? 1 : 0, lost: 0, setsWon: winnerSets, setsLost: loserSets });
+        }
+        if (loserId) {
+            stats.set(loserId, { won: 0, lost: 1, setsWon: loserSets, setsLost: winnerSets });
+        }
+    });
+
+    return stats;
 }
 
 // A knockout group entry is an index into the previous round's results. A team id

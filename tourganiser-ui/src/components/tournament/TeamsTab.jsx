@@ -430,7 +430,7 @@ export default function TeamsTab({
 											aria-label={`Move ${row.name} from seed ${
 												index + 1
 											}. Drag, or use the up and down arrow keys.`}>
-											<GripDots />
+											<Icon name="grip" size={16} fill="currentColor" />
 										</button>
 									)}
 
@@ -563,22 +563,6 @@ export default function TeamsTab({
 				/>
 			)}
 		</div>
-	);
-}
-
-// Drawn here rather than added to Icons.jsx: it is the only place in the
-// application that needs a grip, and a glyph such as ⠿ renders as tofu wherever
-// the font has no braille block.
-function GripDots() {
-	return (
-		<svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true" focusable="false">
-			{[3, 8, 13].map((y) => (
-				<g key={y}>
-					<circle cx="3" cy={y} r="1.3" />
-					<circle cx="7" cy={y} r="1.3" />
-				</g>
-			))}
-		</svg>
 	);
 }
 

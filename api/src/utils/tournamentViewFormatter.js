@@ -11,6 +11,7 @@ import {
     rankGroup
 } from "./standings.js";
 import { qualifierCount } from "../services/progression.service.js";
+import { roundHolding } from "../services/fixtures.service.js";
 
 const FIXTURE_STATUS_LABELS = {
     UPCOMING: "Upcoming",
@@ -58,6 +59,7 @@ function formatTournamentDetails(tournament, divisions) {
         // A schedule spans the whole tournament, not one division — divisions
         // share the same courts. Moved from divisions.schedule on 2026-08-08.
         schedule: tournament.schedule ?? null,
+        scoresheet_template: tournament.scoresheet_template ?? null,
         type: divisionTypes.length === 1 ? divisionTypes[0] : null,
         division_count: divisions.length
     };
@@ -67,10 +69,11 @@ function formatDivisionPayload({ division, teams, fixtures }) {
     const state = normalizeDivisionState(division.state);
     const orderedTeams = orderTeamsByState(teams, state.teams);
     const teamLookup = new Map(orderedTeams.map((team) => [team.id, team]));
+    const lockedRoundNames = lockedRoundNamesOf(state);
     const normalizedFixtures = fixtures
         .slice()
         .sort((a, b) => (a.match_no || 0) - (b.match_no || 0))
-        .map((fixture) => normalizeFixture(fixture, teamLookup));
+        .map((fixture) => normalizeFixture(fixture, teamLookup, lockedRoundNames));
 
     const results = normalizedFixtures.filter((fixture) => isResultFixture(fixture));
     const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup);
@@ -509,21 +512,12 @@ function buildFinalStandings({ division, state, fixtures, standings, bracket, te
 function rankEliminatedTeams({ rankedTeams, seenTeams, state, fixtures, bracket, finalRound, teams }) {
     const teamLookup = new Map(teams.map((team) => [team.id, team]));
     const seedIndex = buildSeedIndex(teams.map((team) => team.id));
-
-    // A semifinal loser is not ranked by losing the semifinal: the concluding
-    // round's playoff separates third from fourth. Which matches those are is
-    // declared by the concluding round's sources, so no round name is guessed at.
-    const deferred = new Set();
-    finalRound.matches.forEach((match) => {
-        (match.sources || []).forEach((source) => {
-            if (source && source.outcome === "LOSER") deferred.add(source.matchId);
-        });
-    });
+    const rounds = Array.isArray(state?.rounds) ? state.rounds : [];
 
     const blocks = [nonQualifyingTeams(state, teamLookup)];
     bracket.rounds.forEach((round) => {
         if (round !== finalRound) {
-            blocks.push(teamsEliminatedIn(round, deferred, fixtures, seedIndex));
+            blocks.push(teamsEliminatedIn(round, rounds[round.roundIndex], fixtures, seedIndex, teamLookup));
         }
     });
 
@@ -575,24 +569,27 @@ function nonQualifyingTeams(state, teamLookup) {
     };
 }
 
-// The losers of the round's matches. A bye is in no match, so a team that sat the
-// round out cannot be eliminated by it.
-function teamsEliminatedIn(round, deferred, fixtures, seedIndex) {
-    const contested = round.matches.filter(
-        (match) => !deferred.has(match.id) && match.status !== "CANCELLED"
-    );
-
-    const losers = [];
-
-    for (const match of contested) {
-        const loser = getFixtureLoser(match);
-        // Undecided, so the round has eliminated nobody yet.
-        if (!loser) {
-            return null;
-        }
-
-        losers.push(loser);
+// Everyone this round computed a result for who is not in the list the organiser
+// committed — the knockout equivalent of nonQualifyingTeams. Reading who actually
+// advanced from state.rounds, rather than re-deriving a "loser" from each match's
+// score, is what lets the organiser's own progression override (advancing a team
+// that lost its match, e.g. a walkover) decide who is eliminated. It also settles
+// the semifinal-loses-to-the-playoff case for free: both a finalist and a bronze
+// contestant are in the round's confirmed list, so neither counts as eliminated
+// here — their actual place is decided later, from the concluding round's matches.
+function teamsEliminatedIn(round, stateRound, fixtures, seedIndex, teamLookup) {
+    const confirmed = Array.isArray(stateRound?.results) ? stateRound.results : [];
+    // Until the round is committed nobody has advanced, so nobody has failed to.
+    if (confirmed.length === 0) {
+        return null;
     }
+
+    const computed = Array.isArray(stateRound?.computedResults) ? stateRound.computedResults : [];
+    const advancing = new Set(confirmed);
+    const losers = computed
+        .filter((teamId) => !advancing.has(teamId))
+        .map((teamId) => teamLookup.get(teamId))
+        .filter(Boolean);
 
     return { note: round.name, participants: orderEliminatedTeams(losers, fixtures, seedIndex) };
 }
@@ -695,7 +692,7 @@ function orderTeamsByState(teams, teamOrder = []) {
     return orderedTeams.concat(remainingTeams);
 }
 
-function normalizeFixture(fixture, teamLookup) {
+function normalizeFixture(fixture, teamLookup, lockedRoundNames = new Set()) {
     const teamOne = teamLookup.get(fixture.team_1);
     const teamTwo = teamLookup.get(fixture.team_2);
     const result = normalizeFixtureResult(fixture);
@@ -719,8 +716,22 @@ function normalizeFixture(fixture, teamLookup) {
         },
         result,
         team_1_result: fixture.team_1_result ?? null,
-        team_2_result: fixture.team_2_result ?? null
+        team_2_result: fixture.team_2_result ?? null,
+        // Mirrors fixtures.service.js's assertRoundNotLocked: a round is locked
+        // for editing from the moment progression commits its results, which is
+        // also the moment state.currentRound moves past it.
+        locked: lockedRoundNames.has(roundHolding(fixture.round))
     };
+}
+
+// The set of state.rounds names whose results are already committed, so a
+// fixture's editability can be looked up in one pass rather than re-scanning
+// state.rounds per fixture.
+function lockedRoundNamesOf(state) {
+    const rounds = Array.isArray(state.rounds) ? state.rounds : [];
+    return new Set(
+        rounds.filter((round) => Array.isArray(round.results) && round.results.length > 0).map((round) => round.name)
+    );
 }
 
 function buildFixtureTeam(team, placeholder) {
@@ -947,6 +958,7 @@ export {
     normalizeDivisionState,
     orderTeamsByState,
     normalizeFixture,
+    lockedRoundNamesOf,
     buildFixtureTeam,
     normalizeFixtureResult,
     parseStoredResultValue,

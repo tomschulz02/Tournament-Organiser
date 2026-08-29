@@ -85,24 +85,20 @@ export default function StandingsTab({
 			<div className="tv-standings-toolbar">
 				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={onSelectDivision} />
 
-				{/* Off by default. The ratios and the set-score breakdown are the
-				    tiebreakers rather than the story, and nine columns already fill a
-				    phone without them. */}
-				{activeStage === STAGE_GROUPS && (
-					<label className="tv-switch">
-						<input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
-						<span className="tv-switch-track" aria-hidden="true" />
-						<span>Advanced statistics</span>
-					</label>
-				)}
-
 				{/* Progression is division-scoped, and this is where an organiser
 				    looks at who qualified — so it belongs here rather than on a
 				    fixture row. Organiser only, and only once the round can actually
 				    advance. The server revalidates and answers 409 either way; this
-				    is presentation, not enforcement. */}
+				    is presentation, not enforcement.
+				    margin-left: auto (see CSS) keeps it pinned to the right whether or
+				    not DivisionSelector rendered anything beside it — a single-division
+				    tournament leaves this the toolbar's only child, and justify-content:
+				    space-between alone would then put it on the left. */}
 				{creator && onProgressRound && canProgress(division) && (
-					<button type="button" className="tv-primary-action" onClick={() => onProgressRound(division.id)}>
+					<button
+						type="button"
+						className="tv-primary-action tv-standings-progress-action"
+						onClick={() => onProgressRound(division.id)}>
 						Start Next Round
 					</button>
 				)}
@@ -140,6 +136,18 @@ export default function StandingsTab({
 
 			{activeStage === STAGE_GROUPS && (
 				<>
+					{/* Belongs to this stage alone — the ratios and the set-score
+					    breakdown are tiebreakers for the pool tables, not the bracket or
+					    the final rankings. Off by default: nine columns already fill a
+					    phone without them. */}
+					<div className="tv-standings-groups-toolbar">
+						<label className="tv-switch">
+							<input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
+							<span className="tv-switch-track" aria-hidden="true" />
+							<span>Advanced statistics</span>
+						</label>
+					</div>
+
 					{rounds.map((round) => (
 						<div key={round.roundIndex} className="tv-standings-round">
 							{/* Named only when there is more than one. A single round's

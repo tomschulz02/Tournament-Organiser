@@ -291,6 +291,12 @@ export const addDivision = (tournamentId, division) =>
 export const updateTournamentSchedule = (tournamentId, schedule) =>
 	request(`tournaments/${tournamentId}/schedule`, { method: 'PUT', body: { schedule } });
 
+// Sets or clears the tournament's scoresheet template selection. scoresheetTemplate
+// is either a system template key, a `custom:<uuid>` reference into this browser's
+// IndexedDB, or null to clear it. See utils/scoresheetTemplates.js.
+export const updateTournamentScoresheetTemplate = (tournamentId, scoresheetTemplate) =>
+	request(`tournaments/${tournamentId}/scoresheet-template`, { method: 'PUT', body: { scoresheetTemplate } });
+
 // Fixtures
 
 // Records a result. `sets` is [[teamOneScore, teamTwoScore], ...] and `finished`

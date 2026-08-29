@@ -585,3 +585,67 @@ Known cost: the page still awaits the response before it renders, because
 buys is the payload, not the round trip. Rendering from storage before the network resolves
 would mean `View.jsx` showing a copy it has not had confirmed — a different decision, and
 one that puts `creator` on screen on the strength of the cache alone.
+
+## Login Identifier Lookup Keeps The Wire Field Named `email`
+
+Decided 2026-08-29.
+
+`findUserByEmailOrUsername(identifier)` resolves a login against both `users.email` and
+`users.username`. Internally, `loginUser` and everything downstream renamed its parameter
+from `email` to `identifier`. The HTTP request body did not follow — `POST
+/api/users/login` still reads `req.body.email`, aliased to `identifier` in the controller.
+
+Reason:
+Renaming a request body field is a breaking API contract change for zero behavioural gain
+— the server does not care what the field is called, only what `Login.jsx` sends. Nothing
+else on the wire needed the rename to be honest about what it now accepts. If a documented
+API surface (`docs/api.md`) is ever versioned deliberately, this is a natural point to
+revisit; until then, the wire format and the internal variable name are allowed to differ.
+
+## Scoresheet Templates Store Nothing On The Server
+
+Decided 2026-08-29.
+
+A scoresheet template — whether one of the app's own FIVB defaults or an organiser's own
+upload — is a PDF plus a JSON map of field coordinates. Defaults are bundled as static
+frontend assets, committed to source; custom uploads live entirely in the browser's
+IndexedDB. `tournaments.scoresheet_template` stores only which one is selected, as a plain
+string: a recognised system key, or `custom:<uuid>` pointing into IndexedDB.
+
+This extends an earlier decision to avoid server-side file storage altogether rather than
+overlooking it. It means a custom template is genuinely usable only on the device that
+uploaded it; anyone viewing the tournament elsewhere sees that a custom template is
+selected but cannot render it. See `docs/known-limitations.md`.
+
+Reason:
+Standing up file storage — even something as small as an upload endpoint and a bucket —
+for a feature that is fundamentally a print job was judged disproportionate. The
+alternative considered was a small server-side blob table; it was rejected for adding a
+new kind of persisted data (binary, not JSONB or relational) to a codebase that has none,
+for the sake of a limitation most organisers will never notice, since the FIVB defaults
+need no upload at all.
+
+Given up: a custom template being available from any device the organiser signs into.
+
+## Qualifier Slots Get Pool-Derived Labels When Pool Order Decides Them
+
+Decided 2026-08-29.
+
+`describeQualifierSlot` (`api/src/utils/standings.js`) answers, for a flat rank index from
+a pool round's results, which pool and pool-position produced it — but only for a tier
+`seedAcrossGroups` took in pure pool order. A tier it had to sort across pools returns
+`null`. `buildDivisionBracket` uses this only for the first knockout round's still-unbound
+slots, replacing `Rank N` with e.g. `A1` wherever the answer is a draw position rather than
+a scoreline away.
+
+This mirrors `seedAcrossGroups`'s own tiering logic rather than calling it, since
+`seedAcrossGroups` seeds real team rows and this only needs to know which pool a flat
+index belongs to. The two are coupled by construction: if `seedAcrossGroups`'s iteration
+order or its `cleanTiers` formula ever changes, `describeQualifierSlot` has to change with
+it, or the two will silently disagree about which slot is "clean".
+
+Reason:
+Per `docs/tournament-rules.md`'s instruction not to reimplement any part of the ranking
+chain outside `standings.js`, this lives beside `seedAcrossGroups` rather than inline in
+`tournamentViewFormatter.js`, even though it is presentation-adjacent rather than a
+ranking decision itself.

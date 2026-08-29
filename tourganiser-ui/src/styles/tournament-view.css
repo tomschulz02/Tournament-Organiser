@@ -794,6 +794,12 @@ body.dark .tv-division-badge {
 	margin-bottom: var(--space-3);
 }
 
+.tv-toolbar-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
 /* Compact and inline. The filters wrap onto as many rows as they need rather
    than each taking a full row, so they stay one block of controls. */
 .tv-filters {
@@ -1011,6 +1017,14 @@ body.dark .tv-division-badge {
 	display: none;
 }
 
+/* A row can carry two actions — score entry and the scoresheet download — and
+   they share this slot rather than each claiming their own grid column. */
+.tv-fixture-row-action {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
 /* One dot per row, first thing in the left column, so the statuses read straight
    down the list. Blue upcoming, green live, red completed, muted cancelled. The row's
    left edge stays the neutral border on every status: this is the only place a
@@ -1222,6 +1236,20 @@ body.dark .tv-division-badge {
 	flex-wrap: wrap;
 	gap: var(--space-3);
 	margin-bottom: var(--space-1);
+}
+
+/* auto margin, not just position in the flex row: DivisionSelector renders
+   nothing for a single-division tournament, which can leave this as the
+   toolbar's only child. justify-content: space-between only pins it right
+   when there is something on the other side to space *from*. */
+.tv-standings-progress-action {
+	margin-left: auto;
+}
+
+.tv-standings-groups-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: var(--space-3);
 }
 
 .tv-stage-tabs {
@@ -2246,12 +2274,16 @@ body.dark .tv-division-badge {
 		color: var(--tv-muted);
 	}
 
-	/* The toggle drops below the selector rather than competing with it for the
-	   row. Both stay full width so neither is a small target. */
+	/* The round button drops below the selector rather than competing with it
+	   for the row. Both stay full width so neither is a small target. */
 	.tv-standings-toolbar {
 		align-items: stretch;
 		flex-direction: column;
 		gap: var(--space-2);
+	}
+
+	.tv-standings-progress-action {
+		margin-left: 0;
 	}
 
 	.tv-standings-table th,
@@ -2328,5 +2360,9 @@ body.dark .tv-division-badge {
 	   clear of the card, for the reason on .tv-bracket-slot. */
 	.tv-bracket-slot {
 		min-height: 106px;
+	}
+
+	.tv-toolbar-actions {
+		margin: 0 auto;
 	}
 }

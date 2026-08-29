@@ -25,6 +25,10 @@ tournamentRouter.delete('/:tournamentId/save', requireAuth, tournamentController
 // the server validates on write — see docs/schedule.md for what it checks.
 tournamentRouter.put('/:tournamentId/schedule', requireAuth, tournamentController.updateSchedule);
 
+// Sets or clears the tournament's scoresheet template selection. See
+// docs/handover-scoresheets.md for what a template key means.
+tournamentRouter.put('/:tournamentId/scoresheet-template', requireAuth, tournamentController.updateScoresheetTemplate);
+
 // Route to add a division after a tournament has been created
 tournamentRouter.post('/:tournamentId/divisions', requireAuth, tournamentController.addDivision);
 

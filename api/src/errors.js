@@ -111,6 +111,9 @@ export const ERRORS = {
 	FIXTURE_NOT_FOUND: [404, "Fixture not found"],
 	INVALID_SCORE: [400, "Scores must be whole numbers of zero or more"],
 	FIXTURE_NOT_READY: [400, "This match does not have both teams yet"],
+	// The round this fixture belongs to has already been progressed past —
+	// see roundHolding in fixtures.service.js and commit in progression.service.js.
+	ROUND_LOCKED: [409, "This round has already been progressed and can no longer be edited"],
 
 	// Field-level input failures, raised by assertText in utils/validation.js
 	// before a value reaches Postgres, where an over-length varchar would

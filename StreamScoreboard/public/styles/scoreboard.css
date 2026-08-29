@@ -7,8 +7,8 @@ body {
 }
 
 .scoreboard-container {
-	width: 1000px;
-	height: 60px;
+	width: 80%;
+	height: 5%;
 	display: flex;
 	background: linear-gradient(90deg, #162447 0%, #1f4068 100%);
 	position: fixed;
@@ -96,8 +96,8 @@ body {
 	margin-top: 20px;
 	background: linear-gradient(130deg, #8e3c3c 0%, #2f3871 100%);
 	z-index: 5;
-	width: 300px;
-	height: 70px;
+	width: 16%;
+	height: 6%;
 	position: fixed;
 	bottom: 5px;
 	left: 50%;
@@ -158,4 +158,52 @@ body {
 
 .serve-indicator.left {
 	margin-left: 0.5em;
+}
+
+/* 
+Small scoreboard styles
+*/
+
+.small-scoreboard-container {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 20%;
+	min-width: 100px;
+	border-radius: 5px;
+	background-color: white;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 5px;
+}
+
+.small-scoreboard-container-row {
+	display: grid;
+	grid-template-columns: 3fr 1fr 1fr;
+	border-radius: 5px 5px 0 0;
+	background-color: #c3073f;
+	color: white;
+	padding: 5px;
+}
+
+.small-scoreboard-container .small-scoreboard-container-row:nth-child(even) {
+	border-radius: 0 0 5px 5px;
+	background-color: #1f4068;
+}
+
+.small-scoreboard-team-name {
+	overflow: hidden;
+}
+
+.small-scoreboard-sets {
+	text-align: center;
+	background-color: rgba(0, 0, 0, 0.22);
+	padding: 2px;
+	border-radius: 2px;
+}
+
+.small-scoreboard-points {
+	text-align: center;
+	padding: 2px;
 }

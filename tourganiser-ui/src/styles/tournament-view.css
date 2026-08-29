@@ -1620,6 +1620,56 @@ body.dark .tv-division-badge {
 	gap: var(--space-2);
 }
 
+/* One card per pool, two per row once there's room. Single column below
+   768px, matching the mobile toggle showing one pane at a time. */
+.tv-teams-groups {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-4);
+}
+
+/* Mirrors .tv-bracket-match / .tv-bracket-match-head / .tv-bracket-participant
+   (the knockout MatchCard) rather than reusing those selectors — a pool card
+   has no match outcome or winner to show, and the two stay free to change
+   independently. */
+.tv-teams-group-card {
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+	overflow: hidden;
+}
+
+.tv-teams-group-card-head {
+	padding: var(--space-2) var(--space-3);
+	background: var(--tv-surface-alt);
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.tv-teams-group-card-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	font-size: 0.85rem;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-teams-group-card-row + .tv-teams-group-card-row {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-teams-group-card-seed {
+	flex: 0 0 auto;
+	min-width: 1.5em;
+	color: var(--tv-muted);
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+}
+
 .tv-team-row {
 	display: flex;
 	align-items: center;
@@ -1896,6 +1946,84 @@ body.dark .tv-division-badge {
 .tv-structure-fields .form-group {
 	flex: 1 1 140px;
 	min-width: 0;
+}
+
+/* Classic divisions: Generated Groups beside the Team List, split by a
+   vertical rule so the two read as separate sections rather than one
+   continuous area. Below 768px there's no room for both, so the icon toggle
+   above switches between them instead of stacking. */
+.tv-teams-view-toggle {
+	display: inline-flex;
+	padding: var(--space-1);
+	margin-bottom: var(--space-3);
+	border-radius: 14px;
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+}
+
+.tv-teams-view-toggle button {
+	background: transparent;
+	color: var(--tv-muted);
+	padding: var(--space-2) var(--space-3);
+	border-radius: 10px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: var(--background-color);
+}
+
+.tv-teams-view-toggle button.active {
+	background: var(--main-color);
+}
+
+.tv-teams-columns-groups,
+.tv-teams-columns-list {
+	display: none;
+}
+
+.tv-teams-columns-groups--active,
+.tv-teams-columns-list--active {
+	display: block;
+}
+
+@media (min-width: 768px) {
+	.tv-teams-view-toggle {
+		display: none;
+	}
+
+	/* Unequal on purpose: two group cards per row need more width than the
+	   team list does. */
+	.tv-teams-columns {
+		display: grid;
+		grid-template-columns: 1.15fr 1fr;
+		gap: var(--space-5);
+	}
+
+	.tv-teams-groups {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.tv-teams-columns-groups,
+	.tv-teams-columns-list {
+		display: block;
+	}
+
+	.tv-teams-columns-groups {
+		padding-right: var(--space-5);
+		border-right: 4px solid var(--tv-border);
+	}
+
+	/* Non-Classic divisions: the flat team list splits into two columns,
+	   filled top-to-bottom then left-to-right, once there's room for it. The
+	   DOM order and the `teams` array are untouched — this is pure CSS
+	   positioning over the same list the drag-and-drop already operates on. */
+	.tv-team-rows--columns {
+		display: grid;
+		grid-auto-flow: column;
+		grid-template-columns: 1fr 1fr;
+		grid-template-rows: repeat(var(--tv-team-rows-count, 1), min-content);
+		column-gap: var(--space-4);
+	}
 }
 
 /* --- skeletons ---------------------------------------------------------- */

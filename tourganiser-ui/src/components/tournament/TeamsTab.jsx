@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import DivisionSelector from './DivisionSelector';
+import Icon from '../Icons';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
 import { isNotStarted } from './tournamentStatus';
@@ -54,6 +55,11 @@ export default function TeamsTab({
 	const [bulkText, setBulkText] = useState('');
 	const [confirming, setConfirming] = useState(null);
 	const [busy, setBusy] = useState(false);
+
+	// Below 768px, Groups and Team List take turns rather than stacking — see
+	// the icon toggle in the render. Above that width both are always visible
+	// side by side and this state is simply unused.
+	const [mobileTeamsView, setMobileTeamsView] = useState('groups');
 
 	// The row being carried and the row it is over. Indices rather than keys,
 	// because a move is expressed as a pair of positions.
@@ -304,44 +310,8 @@ export default function TeamsTab({
 		setBulkText('');
 	};
 
-	return (
-		<div className="tv-teams">
-			<div className="tv-standings-toolbar">
-				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={handleSelectDivision} />
-
-				{/* Prominent, and absent entirely for anyone who is not the creator —
-				    a viewer sees no management affordance at all, not a disabled one. */}
-				{canEditTeams && !adding && (
-					<button type="button" className="tv-primary-action" onClick={startAdding}>
-						Add Team
-					</button>
-				)}
-			</div>
-
-			{/* Named here because DivisionSelector renders nothing for a single
-			    division, exactly as in Standings. */}
-			<h2 className="tv-band-heading">{division.name}</h2>
-
-			{creator && dirty && (
-				<div className="tv-teams-pending">
-					<p className="tv-teams-pending-note">
-						{setChanged
-							? 'Unsaved changes. Saving will regenerate this division’s fixtures.'
-							: 'Unsaved changes.'}
-					</p>
-
-					<div className="tv-inline-form-actions">
-						<button type="button" className="tv-primary-action" disabled={busy} onClick={handleSave}>
-							{busy && <span className="btn-spinner" aria-hidden="true" />}
-							<span>{busy ? 'Saving…' : 'Save Changes'}</span>
-						</button>
-						<button type="button" className="tv-subtle-action" disabled={busy} onClick={handleDiscard}>
-							Discard
-						</button>
-					</div>
-				</div>
-			)}
-
+	const teamList = (
+		<>
 			{adding && (
 				<div className="tv-inline-form tv-inline-form--stacked">
 					<label className="tv-switch">
@@ -422,7 +392,11 @@ export default function TeamsTab({
 						</p>
 					)}
 
-					<ul className="tv-team-rows">
+					<ul
+						className={`tv-team-rows${division.type !== 'Classic' ? ' tv-team-rows--columns' : ''}`}
+						style={
+							division.type !== 'Classic' ? { '--tv-team-rows-count': Math.ceil(teams.length / 2) } : undefined
+						}>
 						{teams.map((row, index) =>
 							row.key === editing ? (
 								<li key={row.key} className="tv-team-row tv-team-row--editing">
@@ -489,6 +463,92 @@ export default function TeamsTab({
 					</ul>
 				</>
 			)}
+		</>
+	);
+
+	return (
+		<div className="tv-teams">
+			<div className="tv-standings-toolbar">
+				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={handleSelectDivision} />
+
+				{/* Prominent, and absent entirely for anyone who is not the creator —
+				    a viewer sees no management affordance at all, not a disabled one. */}
+				{canEditTeams && !adding && (
+					<button type="button" className="tv-primary-action" onClick={startAdding}>
+						Add Team
+					</button>
+				)}
+			</div>
+
+			{/* Named here because DivisionSelector renders nothing for a single
+			    division, exactly as in Standings. */}
+			<h2 className="tv-band-heading">{division.name}</h2>
+
+			{creator && dirty && (
+				<div className="tv-teams-pending">
+					<p className="tv-teams-pending-note">
+						{setChanged
+							? 'Unsaved changes. Saving will regenerate this division’s fixtures.'
+							: 'Unsaved changes.'}
+					</p>
+
+					<div className="tv-inline-form-actions">
+						<button type="button" className="tv-primary-action" disabled={busy} onClick={handleSave}>
+							{busy && <span className="btn-spinner" aria-hidden="true" />}
+							<span>{busy ? 'Saving…' : 'Save Changes'}</span>
+						</button>
+						<button type="button" className="tv-subtle-action" disabled={busy} onClick={handleDiscard}>
+							Discard
+						</button>
+					</div>
+				</div>
+			)}
+
+			{division.type === 'Classic' ? (
+				<>
+					{/* Hidden at 768px and up by the stylesheet, where Groups and
+					    List sit side by side and there is nothing to switch
+					    between. Icons only, mirroring the schedule maker's
+					    grid/list view toggle. */}
+					<div className="tv-teams-view-toggle" role="tablist" aria-label="Teams view">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={mobileTeamsView === 'groups'}
+							aria-label="Groups"
+							className={mobileTeamsView === 'groups' ? 'active' : ''}
+							onClick={() => setMobileTeamsView('groups')}>
+							<Icon name="grid" fill={mobileTeamsView === 'groups' ? '#fff' : 'var(--secondary-text-color)'} />
+						</button>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={mobileTeamsView === 'list'}
+							aria-label="Team List"
+							className={mobileTeamsView === 'list' ? 'active' : ''}
+							onClick={() => setMobileTeamsView('list')}>
+							<Icon name="list" fill={mobileTeamsView === 'list' ? '#fff' : 'var(--secondary-text-color)'} />
+						</button>
+					</div>
+
+					<div className="tv-teams-columns">
+						<div
+							className={`tv-teams-columns-groups${
+								mobileTeamsView === 'groups' ? ' tv-teams-columns-groups--active' : ''
+							}`}>
+							<GeneratedGroups division={division} />
+						</div>
+						<div
+							className={`tv-teams-columns-list${
+								mobileTeamsView === 'list' ? ' tv-teams-columns-list--active' : ''
+							}`}>
+							{teamList}
+						</div>
+					</div>
+				</>
+			) : (
+				teamList
+			)}
 
 			{confirming && (
 				<StructureConfirmation
@@ -519,6 +579,43 @@ function GripDots() {
 				</g>
 			))}
 		</svg>
+	);
+}
+
+// Mirrors getGroupLabel in tournamentViewFormatter.js. There is no shared
+// frontend/backend module to import it from, so it's duplicated here — the
+// same reason divisionPreview.js ports server logic instead of importing it.
+function groupLabel(index) {
+	return `Group ${String.fromCharCode(65 + index)}`;
+}
+
+// Read-only: shows what's already saved, not the tab's draft state. A
+// division with no pools yet (no teams) gets the same empty state pattern
+// used elsewhere on this tab.
+function GeneratedGroups({ division }) {
+	const groups = division.state?.rounds?.[0]?.groups ?? [];
+
+	if (groups.length === 0) {
+		return <SectionState variant="empty" title="No pools yet" message="Pools appear once teams have been added." />;
+	}
+
+	const teamNames = new Map((division.teams ?? []).map((team) => [team.id, team.name]));
+
+	return (
+		<div className="tv-teams-groups">
+			{groups.map((group, index) => (
+				<article key={index} className="tv-teams-group-card">
+					<div className="tv-teams-group-card-head">{groupLabel(index)}</div>
+
+					{group.map((teamId, seedIndex) => (
+						<div key={teamId} className="tv-teams-group-card-row">
+							<span className="tv-teams-group-card-seed">{seedIndex + 1}</span>
+							<span>{teamNames.get(teamId) ?? 'Unknown team'}</span>
+						</div>
+					))}
+				</article>
+			))}
+		</div>
 	);
 }
 

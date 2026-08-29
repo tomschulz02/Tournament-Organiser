@@ -6,9 +6,11 @@ import {
     compareTeams,
     computeRatios,
     createStandingsRow,
+    describeQualifierSlot,
     isCountableFixture,
     rankGroup
 } from "./standings.js";
+import { qualifierCount } from "../services/progression.service.js";
 
 const FIXTURE_STATUS_LABELS = {
     UPCOMING: "Upcoming",
@@ -245,12 +247,18 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
     // that layout is deterministic — one team per group in group order, then the
     // losers in match order — so which match feeds which slot can simply be stated.
     let previousRound = null;
+    // The most recently seen pool round's pool sizes, so the first knockout
+    // round can name a clean-tier slot by pool letter instead of "Rank N".
+    let poolGroupSizes = null;
 
     rounds.forEach((round, roundIndex) => {
         if (round.type !== "knockout") {
             // A pool round's results are ranked teams, not match outcomes, so the
             // first knockout round has nothing to name and keeps its placeholders.
             previousRound = null;
+            poolGroupSizes = Array.isArray(round.groups)
+                ? round.groups.map((group) => (Array.isArray(group) ? group.length : 0))
+                : null;
             return;
         }
 
@@ -258,6 +266,13 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
         let fixtureIndex = 0;
         const matches = [];
         const groups = round.groups || [];
+        // Only the round immediately after pool play has slots that are still
+        // pool positions rather than "Winner of #N" — same signal the
+        // sources/previousRound mechanism already uses for that distinction.
+        const poolContext =
+            previousRound === null && poolGroupSizes
+                ? { groupSizes: poolGroupSizes, qualifyingTeams: qualifierCount(round) }
+                : null;
 
         groups.forEach((group, groupIndex) => {
             if (!Array.isArray(group) || group.length < 2) {
@@ -274,12 +289,12 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
                 fixture?.teams?.team_1?.id
                     ? fixture.teams.team_1
                     : resolveByeTeam(group[0], previousRound, teamLookup) ||
-                      resolveParticipant(group[0], teamLookup, fixture?.team_1_placeholder);
+                      resolveParticipant(group[0], teamLookup, fixture?.team_1_placeholder, poolContext);
             const participantTwo =
                 fixture?.teams?.team_2?.id
                     ? fixture.teams.team_2
                     : resolveByeTeam(group[1], previousRound, teamLookup) ||
-                      resolveParticipant(group[1], teamLookup, fixture?.team_2_placeholder);
+                      resolveParticipant(group[1], teamLookup, fixture?.team_2_placeholder, poolContext);
 
             matches.push({
                 id: fixture?.id || `${round.name}-${groupIndex}`,
@@ -784,7 +799,7 @@ function sanitizeSetPairs(result) {
         .map((pair) => [Number(pair[0]) || 0, Number(pair[1]) || 0]);
 }
 
-function resolveParticipant(value, teamLookup, fallbackPlaceholder = null) {
+function resolveParticipant(value, teamLookup, fallbackPlaceholder = null, poolContext = null) {
     if (typeof value === "string") {
         const team = teamLookup.get(value);
         return {
@@ -795,11 +810,14 @@ function resolveParticipant(value, teamLookup, fallbackPlaceholder = null) {
     }
 
     if (Number.isInteger(value)) {
-        return {
-            id: null,
-            name: `Rank ${value + 1}`,
-            placeholder: `Rank ${value + 1}`
-        };
+        const slot = poolContext
+            ? describeQualifierSlot(value, poolContext.groupSizes, poolContext.qualifyingTeams)
+            : null;
+        const name = slot
+            ? `${String.fromCharCode(65 + slot.groupIndex)}${slot.position} (Rank ${value + 1})`
+            : `Rank ${value + 1}`;
+
+        return { id: null, name, placeholder: name };
     }
 
     return {

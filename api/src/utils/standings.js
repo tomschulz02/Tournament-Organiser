@@ -243,4 +243,38 @@ export function seedKnockoutResults(matchups) {
     return [...winners, ...losers];
 }
 
+// The inverse of seedAcrossGroups' tiering, for display purposes: given a flat rank
+// index from a pool round's results, says which pool and pool-position produced it —
+// but only when that index falls inside a tier seedAcrossGroups took in pure pool
+// order. A tier it had to sort across pools returns null, because that slot's occupant
+// is a scoreline away, not a fixed draw position, and has no pool-derived name yet.
+//
+// Walks the same position-by-position, pool-array-order iteration seedAcrossGroups
+// uses, including the same filter of pools too small to have an entry at a given
+// position, so it stays correct when pools are uneven sizes. If seedAcrossGroups'
+// iteration order or its cleanTiers formula ever changes, this must change with it.
+export function describeQualifierSlot(rankIndex, groupSizes, qualifyingTeams) {
+    if (!Number.isInteger(rankIndex) || !Array.isArray(groupSizes) || groupSizes.length === 0) {
+        return null;
+    }
+
+    const numGroups = groupSizes.length;
+    const cleanTiers = Math.floor(qualifyingTeams / numGroups);
+    const depth = Math.max(0, ...groupSizes);
+
+    let cursor = 0;
+    for (let position = 0; position < depth && position < cleanTiers; position += 1) {
+        for (let groupIndex = 0; groupIndex < numGroups; groupIndex += 1) {
+            if (position >= groupSizes[groupIndex]) continue;
+
+            if (cursor === rankIndex) {
+                return { groupIndex, position: position + 1 };
+            }
+            cursor += 1;
+        }
+    }
+
+    return null;
+}
+
 export const RATIO_UNDEFINED = UNDEFINED_RATIO;

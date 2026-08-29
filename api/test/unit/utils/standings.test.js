@@ -7,6 +7,7 @@ import {
     compareTeams,
     computeRatios,
     createStandingsRow,
+    describeQualifierSlot,
     isCountableFixture,
     rankGroup,
     seedAcrossGroups,
@@ -445,6 +446,45 @@ describe("seedAcrossGroups", () => {
 
     it("returns an empty list when there are no pools", () => {
         expect(seedAcrossGroups([], seedIndex)).toEqual([]);
+    });
+});
+
+describe("describeQualifierSlot", () => {
+    it("maps an even split to pool letter and 1-based tier position", () => {
+        // 2 pools of 4, 4 qualifiers -> cleanTiers = 2, both tiers clean.
+        expect(describeQualifierSlot(0, [4, 4], 4)).toEqual({ groupIndex: 0, position: 1 });
+        expect(describeQualifierSlot(1, [4, 4], 4)).toEqual({ groupIndex: 1, position: 1 });
+        expect(describeQualifierSlot(2, [4, 4], 4)).toEqual({ groupIndex: 0, position: 2 });
+        expect(describeQualifierSlot(3, [4, 4], 4)).toEqual({ groupIndex: 1, position: 2 });
+    });
+
+    it("skips pools too small to have an entry at a position, for uneven pools", () => {
+        // 3 pools sized 3/2/2, 9 "qualifiers" -> cleanTiers = 3.
+        // Position 0 and 1: every pool has an entry (A,B,C each twice).
+        // Position 2: only pool A (size 3) has a third entry; B and C are skipped.
+        expect(describeQualifierSlot(0, [3, 2, 2], 9)).toEqual({ groupIndex: 0, position: 1 });
+        expect(describeQualifierSlot(1, [3, 2, 2], 9)).toEqual({ groupIndex: 1, position: 1 });
+        expect(describeQualifierSlot(2, [3, 2, 2], 9)).toEqual({ groupIndex: 2, position: 1 });
+        expect(describeQualifierSlot(3, [3, 2, 2], 9)).toEqual({ groupIndex: 0, position: 2 });
+        expect(describeQualifierSlot(4, [3, 2, 2], 9)).toEqual({ groupIndex: 1, position: 2 });
+        expect(describeQualifierSlot(5, [3, 2, 2], 9)).toEqual({ groupIndex: 2, position: 2 });
+        expect(describeQualifierSlot(6, [3, 2, 2], 9)).toEqual({ groupIndex: 0, position: 3 });
+        expect(describeQualifierSlot(7, [3, 2, 2], 9)).toBeNull();
+    });
+
+    it("returns null for an index in a tier that isn't clean", () => {
+        // 4 pools of 3, 10 qualifiers -> cleanTiers = floor(10/4) = 2, so only
+        // the first two tiers (indices 0-7) are pool-derived.
+        expect(describeQualifierSlot(7, [3, 3, 3, 3], 10)).toEqual({ groupIndex: 3, position: 2 });
+        expect(describeQualifierSlot(8, [3, 3, 3, 3], 10)).toBeNull();
+        expect(describeQualifierSlot(9, [3, 3, 3, 3], 10)).toBeNull();
+    });
+
+    it("returns null for non-integer or missing input", () => {
+        expect(describeQualifierSlot(null, [4, 4], 4)).toBeNull();
+        expect(describeQualifierSlot(1.5, [4, 4], 4)).toBeNull();
+        expect(describeQualifierSlot(0, [], 4)).toBeNull();
+        expect(describeQualifierSlot(0, null, 4)).toBeNull();
     });
 });
 

@@ -1004,6 +1004,126 @@ describe("buildDivisionBracket", () => {
 
         expect(finals.matches[0].sources[1]).toBeNull();
     });
+
+    // --- pool-derived labels for the first knockout round -------------------
+
+    it("labels a clean-tier first-round slot with both its pool position and its rank", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2", "t3", "t4"],
+                        ["t5", "t6", "t7", "t8"]
+                    ]
+                }),
+                // 8 qualifiers from 2 pools of 4 -> every tier is clean.
+                makeRound({ name: "Quarterfinals", type: "knockout", groups: [[0, 7], [1, 6], [2, 5], [3, 4]] })
+            ]
+        });
+
+        const quarters = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(quarters.matches.map((match) => match.participants.map((p) => p.name))).toEqual([
+            ["A1 (Rank 1)", "B4 (Rank 8)"],
+            ["B1 (Rank 2)", "A4 (Rank 7)"],
+            ["A2 (Rank 3)", "B3 (Rank 6)"],
+            ["B2 (Rank 4)", "A3 (Rank 5)"]
+        ]);
+    });
+
+    it("keeps Rank N for a slot in a tier that is not clean, and labels the rest", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2", "t3", "t4"],
+                        ["t5", "t6", "t7", "t8"]
+                    ]
+                }),
+                // Max index 4 -> 5 qualifiers from 2 pools of 4: cleanTiers = 2,
+                // so index 4 (the 3rd tier) is not pool-derived.
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[4, 0]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["Rank 5", "A1 (Rank 1)"]);
+    });
+
+    it("labels clean-tier slots correctly for uneven pool sizes", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2", "t3"],
+                        ["t4", "t5"],
+                        ["t6", "t7"]
+                    ]
+                }),
+                // Max index 8 -> 9 qualifiers from pools of 3/2/2: cleanTiers = 3.
+                // Index 6 is pool A's third-place team; index 8 falls outside the
+                // range seedAcrossGroups can produce this way and is not clean.
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[6, 8]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["A3 (Rank 7)", "Rank 9"]);
+    });
+
+    it("falls back to Rank N when the preceding pool round has no groups key", () => {
+        const state = makeState({
+            rounds: [
+                { name: "Pool Play", type: "roundRobin" },
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 1]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["Rank 1", "Rank 2"]);
+    });
+
+    it("tolerates a malformed pool group when computing pool sizes", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({ name: "Pool Play", groups: [["t1", "t2"], "not-a-group"] }),
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 1]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["A1 (Rank 1)", "Rank 2"]);
+    });
+
+    it("labels both slots of a two-team knockout stage, bronze included", () => {
+        // docs/tournament-rules.md: a two-team knockout still consumes four ranks.
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2"],
+                        ["t3", "t4"]
+                    ]
+                }),
+                makeRound({ name: "Finals", type: "knockout", groups: [[2, 3], [0, 1]] })
+            ]
+        });
+
+        const finals = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(finals.matches.map((match) => match.participants.map((p) => p.name))).toEqual([
+            ["A2 (Rank 3)", "B2 (Rank 4)"],
+            ["A1 (Rank 1)", "B1 (Rank 2)"]
+        ]);
+    });
 });
 
 describe("buildFinalStandings", () => {

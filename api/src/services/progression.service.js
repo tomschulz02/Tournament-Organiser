@@ -422,14 +422,15 @@ export const progressionService = {
     commit
 };
 
-// Exported for unit tests only. Application code goes through getProposal and
-// commit; the helpers below are pure and are tested directly so each rule in
+// Exported for unit tests, and qualifierCount is also used by
+// tournamentViewFormatter.js. The rest are pure and tested directly so each rule in
 // docs/tournament-rules.md has its own case.
 export {
     bindFixturesToResults,
     validateConfirmedTeams,
     sameOrder,
     computeRoundResults,
+    qualifierCount,
     buildKnockoutOutcomes,
     normalizeState,
     normalizeFixtureResult,

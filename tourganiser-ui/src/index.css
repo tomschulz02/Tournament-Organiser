@@ -1,0 +1,33 @@
+body {
+	margin: 0;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans',
+		'Droid Sans', 'Helvetica Neue', sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+code {
+	font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* padding-bottom: 300px used to sit here, reserving room for .site-footer's
+   old position: absolute; bottom: 0 (which used #root — position: relative —
+   as its containing block). Now that the footer is a normal flex-column
+   child again (App.css), it no longer needs a hole to sit in; the leftover
+   padding was just dead space below it on every page.
+
+   display: flex; flex-direction: column is new, and load-bearing: body
+   carries the matching flex rules (App.css), but body's only real child is
+   this div — React mounts everything inside it. Without #root itself being
+   the flex container, main's flex: 1 and .site-footer's margin-top: auto
+   (App.css) have nothing to act on; they apply to elements nested inside
+   #root, not to direct children of the flex container body ends up being.
+   That's why the footer used to need position: absolute to reach the bottom
+   of a short page at all — the "real" sticky-footer mechanism already
+   written in App.css was inert the whole time. */
+#root {
+	position: relative;
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}

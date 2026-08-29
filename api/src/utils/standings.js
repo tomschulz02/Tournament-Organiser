@@ -1,0 +1,280 @@
+// Ranking and progression rules. Pure functions — no Express, no database.
+//
+// This is the single implementation of the rules in docs/tournament-rules.md.
+// Both the standings view (tournamentViewFormatter.js) and round progression
+// (divisions.service.js) must use it, so a table and the qualifiers derived from
+// that table can never disagree.
+
+// Sentinel for a ratio whose denominator is zero. Two of these compare equal and
+// fall through to the next criterion, which is what the rules require. Doing this
+// with Infinity produces Infinity - Infinity = NaN, which sorts unpredictably.
+const UNDEFINED_RATIO = Symbol("undefinedRatio");
+
+export function createStandingsRow(team, fallbackId) {
+    return {
+        id: team?.id || fallbackId,
+        name: team?.name || "TBD",
+        played: 0,
+        won: 0,
+        lost: 0,
+        setsWon: 0,
+        setsLost: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+        // How this team's completed matches finished, keyed by the scoreline from
+        // its own perspective — "2-0", "2-1", "1-2", "0-2". A counter for the
+        // standings table and nothing else: it is deliberately absent from
+        // compareTeams, because the ranking chain in docs/tournament-rules.md is
+        // the five criteria there and no sixth.
+        //
+        // The keys are whatever the fixtures produced, so a best-of-five division
+        // yields six of them. Rounds carry no match-format key to assume one from
+        // — see docs/division-state.md.
+        setOutcomes: {},
+        setsRatio: 0,
+        pointsRatio: 0
+    };
+}
+
+// Applies one completed fixture to two standings rows.
+// A set with equal scores counts for neither team but its points still count.
+export function applyFixtureToStandings(teamOne, teamTwo, result) {
+    let teamOneSetsWon = 0;
+    let teamTwoSetsWon = 0;
+
+    result.forEach(([teamOneScore, teamTwoScore]) => {
+        teamOne.pointsFor += teamOneScore;
+        teamOne.pointsAgainst += teamTwoScore;
+        teamTwo.pointsFor += teamTwoScore;
+        teamTwo.pointsAgainst += teamOneScore;
+
+        if (teamOneScore > teamTwoScore) {
+            teamOne.setsWon += 1;
+            teamTwo.setsLost += 1;
+            teamOneSetsWon += 1;
+        } else if (teamTwoScore > teamOneScore) {
+            teamTwo.setsWon += 1;
+            teamOne.setsLost += 1;
+            teamTwoSetsWon += 1;
+        }
+    });
+
+    teamOne.played += 1;
+    teamTwo.played += 1;
+
+    if (teamOneSetsWon > teamTwoSetsWon) {
+        teamOne.won += 1;
+        teamTwo.lost += 1;
+    } else if (teamTwoSetsWon > teamOneSetsWon) {
+        teamTwo.won += 1;
+        teamOne.lost += 1;
+    }
+
+    // Level set counts are already excluded from won and lost above. They get no
+    // scoreline key either, rather than a key invented to hold them.
+    if (teamOneSetsWon !== teamTwoSetsWon) {
+        recordSetOutcome(teamOne, teamOneSetsWon, teamTwoSetsWon);
+        recordSetOutcome(teamTwo, teamTwoSetsWon, teamOneSetsWon);
+    }
+}
+
+function recordSetOutcome(row, setsWon, setsLost) {
+    const key = `${setsWon}-${setsLost}`;
+    row.setOutcomes[key] = (row.setOutcomes[key] || 0) + 1;
+}
+
+// A team that has won sets but lost none has no defined ratio.
+// A team with nothing recorded at all sits at zero, not undefined.
+export function computeRatios(row) {
+    row.setsRatio = ratio(row.setsWon, row.setsLost);
+    row.pointsRatio = ratio(row.pointsFor, row.pointsAgainst);
+    return row;
+}
+
+function ratio(numerator, denominator) {
+    if (denominator > 0) return numerator / denominator;
+    return numerator > 0 ? UNDEFINED_RATIO : 0;
+}
+
+// Returns a negative number when a should rank above b, positive when below,
+// and zero when this criterion cannot separate them.
+function compareRatio(a, b) {
+    const aUndefined = a === UNDEFINED_RATIO;
+    const bUndefined = b === UNDEFINED_RATIO;
+
+    if (aUndefined && bUndefined) return 0;
+    if (aUndefined) return -1;
+    if (bUndefined) return 1;
+
+    return b - a;
+}
+
+// Head-to-head between exactly the teams still tied. Returns null when it cannot
+// decide — either they never met, or their results form a loop (A beat B, B beat
+// C, C beat A). The rules say do not attempt a mini-league; fall through instead.
+function compareHeadToHead(a, b, headToHead) {
+    const key = `${a.id}|${b.id}`;
+    const reverse = `${b.id}|${a.id}`;
+
+    const aWins = headToHead.get(key) || 0;
+    const bWins = headToHead.get(reverse) || 0;
+
+    if (aWins === bWins) return null;
+    return bWins - aWins;
+}
+
+// Builds a map of "winnerId|loserId" -> matches won, from completed fixtures.
+//
+// Takes normalised fixtures: team ids on team_1_id / team_2_id, scores as set
+// pairs on result. That is the one shape these helpers accept — see
+// makeNormalisedFixture in test/helpers/fixtures.js. Callers holding raw rows
+// from the fixtures table, which name those columns team_1 / team_2, adapt
+// before calling. Do not teach this function to read both: accepting either
+// shape hides the mismatch instead of fixing it, and the mismatch is what made
+// this return an empty map — killing head-to-head — throughout progression.
+export function buildHeadToHeadMap(fixtures) {
+    const map = new Map();
+
+    fixtures.forEach((fixture) => {
+        if (!isCountableFixture(fixture)) return;
+
+        let oneSets = 0;
+        let twoSets = 0;
+        fixture.result.forEach(([one, two]) => {
+            if (one > two) oneSets += 1;
+            else if (two > one) twoSets += 1;
+        });
+
+        if (oneSets === twoSets) return;
+
+        const winner = oneSets > twoSets ? fixture.team_1_id : fixture.team_2_id;
+        const loser = oneSets > twoSets ? fixture.team_2_id : fixture.team_1_id;
+        if (!winner || !loser) return;
+
+        const key = `${winner}|${loser}`;
+        map.set(key, (map.get(key) || 0) + 1);
+    });
+
+    return map;
+}
+
+// Only COMPLETED fixtures count. CANCELLED never happened.
+export function isCountableFixture(fixture) {
+    return (
+        fixture.status === "COMPLETED" &&
+        Array.isArray(fixture.result) &&
+        fixture.result.length > 0
+    );
+}
+
+// The ranking chain from docs/tournament-rules.md:
+//   matches won -> set ratio -> point ratio -> head-to-head -> seeding.
+// Seeding is a total order over the division, so this always resolves.
+export function compareTeams(a, b, { headToHead = new Map(), seedIndex = new Map() } = {}) {
+    if (b.won !== a.won) return b.won - a.won;
+
+    const bySets = compareRatio(a.setsRatio, b.setsRatio);
+    if (bySets !== 0) return bySets;
+
+    const byPoints = compareRatio(a.pointsRatio, b.pointsRatio);
+    if (byPoints !== 0) return byPoints;
+
+    const byHeadToHead = compareHeadToHead(a, b, headToHead);
+    if (byHeadToHead !== null) return byHeadToHead;
+
+    return seedOf(a, seedIndex) - seedOf(b, seedIndex);
+}
+
+function seedOf(row, seedIndex) {
+    const seed = seedIndex.get(row.id);
+    return typeof seed === "number" ? seed : Number.MAX_SAFE_INTEGER;
+}
+
+// Maps team id -> seeding position. state.teams is the seeded order, index 0 top.
+export function buildSeedIndex(teamIds) {
+    return new Map((teamIds || []).map((id, index) => [id, index]));
+}
+
+export function rankGroup(rows, context) {
+    return rows.slice().sort((a, b) => compareTeams(a, b, context));
+}
+
+// Cross-pool seeding for a round-robin round.
+// Pool position first: every pool winner, then every runner-up, and so on. A tier
+// that fits entirely inside the qualifying places is taken in array order, which is
+// pool order — A1, B1, C1, D1 — with nothing compared across pools. Only the tier
+// that qualifyingTeams cannot fill cleanly is sorted, and there head-to-head is
+// skipped because teams from different pools have usually not met.
+//
+// The default of 0 makes no tier clean, so every tier sorts: a caller that passes no
+// count keeps the old behaviour untouched.
+export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0) {
+    const ordered = [];
+    const depth = Math.max(0, ...rankedGroups.map((group) => group.length));
+    const cleanTiers = Math.floor(qualifyingTeams / rankedGroups.length);
+
+    for (let position = 0; position < depth; position += 1) {
+        const atPosition = rankedGroups
+            .map((group) => group[position])
+            .filter(Boolean);
+
+        if (position >= cleanTiers){
+            atPosition.sort((a, b) => compareTeams(a, b, { seedIndex }));
+        }
+
+        ordered.push(...atPosition);
+    }
+
+    return ordered;
+}
+
+// Knockout rounds rank winners first, then losers, each half keeping the match
+// order because the next round folds them bottom-up. Produces [w1, w2, l1, l2] for a semifinal, so
+// the next round can express bronze as [2, 3] and the final as [0, 1].
+export function seedKnockoutResults(matchups) {
+    const winners = [];
+    const losers = [];
+
+    matchups.forEach(({ winnerId, loserId }) => {
+        if (winnerId) winners.push(winnerId);
+        if (loserId) losers.push(loserId);
+    });
+
+    return [...winners, ...losers];
+}
+
+// The inverse of seedAcrossGroups' tiering, for display purposes: given a flat rank
+// index from a pool round's results, says which pool and pool-position produced it —
+// but only when that index falls inside a tier seedAcrossGroups took in pure pool
+// order. A tier it had to sort across pools returns null, because that slot's occupant
+// is a scoreline away, not a fixed draw position, and has no pool-derived name yet.
+//
+// Walks the same position-by-position, pool-array-order iteration seedAcrossGroups
+// uses, including the same filter of pools too small to have an entry at a given
+// position, so it stays correct when pools are uneven sizes. If seedAcrossGroups'
+// iteration order or its cleanTiers formula ever changes, this must change with it.
+export function describeQualifierSlot(rankIndex, groupSizes, qualifyingTeams) {
+    if (!Number.isInteger(rankIndex) || !Array.isArray(groupSizes) || groupSizes.length === 0) {
+        return null;
+    }
+
+    const numGroups = groupSizes.length;
+    const cleanTiers = Math.floor(qualifyingTeams / numGroups);
+    const depth = Math.max(0, ...groupSizes);
+
+    let cursor = 0;
+    for (let position = 0; position < depth && position < cleanTiers; position += 1) {
+        for (let groupIndex = 0; groupIndex < numGroups; groupIndex += 1) {
+            if (position >= groupSizes[groupIndex]) continue;
+
+            if (cursor === rankIndex) {
+                return { groupIndex, position: position + 1 };
+            }
+            cursor += 1;
+        }
+    }
+
+    return null;
+}
+
+export const RATIO_UNDEFINED = UNDEFINED_RATIO;

@@ -1,0 +1,28 @@
+# Normalise line endings so the whole repo does not show as modified when files
+# are touched on Windows. Text files are stored LF in the repository and checked
+# out with the platform's native endings.
+* text=auto
+
+# Explicit for the file types in this project.
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.json  text eol=lf
+*.jsonc text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.svg   text eol=lf
+*.yml   text eol=lf
+*.sql   text eol=lf
+
+# Never touch binaries.
+*.png   binary
+*.jpg   binary
+*.webp  binary
+*.ico   binary
+*.ttf   binary
+*.woff2 binary
+*.pdf   binary
+
+# Lockfiles are generated. Collapse them in diffs and reviews.
+package-lock.json linguist-generated=true -diff

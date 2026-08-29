@@ -1,0 +1,3891 @@
+/* CSS file with all the common styles between pages */
+
+/* Add these viewport breakpoints at the top of your file */
+:root {
+	--main-font-family: 'Segoe UI', 'Roboto', sans-serif;
+	--main-color: rgb(41, 98, 255);
+	--secondary-color: rgb(29, 168, 236);
+	--tertiary-color: rgb(76, 222, 222);
+	--quarternary-color: rgb(123, 128, 246);
+	--mobile-breakpoint: 480px;
+	--tablet-breakpoint: 768px;
+	--desktop-breakpoint: 1024px;
+	--success-color: rgb(76, 175, 80);
+	--error-color: rgb(244, 67, 54);
+
+	/* Spacing scale. A 4px base, seven steps, numbered by position rather than
+	   by pixel value — the mobile block below redefines the larger steps, so a
+	   token called --space-40 would stop being true at 768px.
+
+	       --space-1  4px      --space-5  24px
+	       --space-2  8px      --space-6  32px
+	       --space-3  12px     --space-7  40px
+	       --space-4  16px
+
+	   For whitespace only. A grid column, a tap target, a border or a 1px gap
+	   is doing structural work and keeps its literal value. */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 24px;
+	--space-6: 32px;
+	--space-7: 40px;
+
+	/* Stacking scale. Named by role, because the number never told anyone
+	   anything: the application reached fourteen values across fifteen orders
+	   of magnitude for these nine layers, and a modal backdrop below the site
+	   header. Gaps of 100 so a new layer can be inserted without renumbering;
+	   order two things inside one layer with calc(var(--z-menu) + 1). */
+	--z-below: -1;
+	--z-base: 0;
+	--z-raised: 10;
+	--z-chrome: 100;
+	--z-menu: 200;
+	--z-modal: 300;
+	--z-confirm: 400;
+	--z-toast: 500;
+	--z-tooltip: 600;
+	--z-loading: 700;
+}
+
+/* The one place mobile spacing is tuned.
+
+   The top four steps each drop one place down the scale, so the content gets
+   the room the margins were taking. The bottom three are unchanged: at 4, 8 and
+   12px the space is already doing work, and taking it costs legibility while
+   buying back almost nothing.
+
+   This is spacing only. Where a control would get too small, the answer is a
+   min-height on that control — 44px is the floor on anything tapped. */
+@media (max-width: 768px) {
+	:root {
+		--space-1: 4px;
+		--space-2: 8px;
+		--space-3: 12px;
+		--space-4: 12px;
+		--space-5: 16px;
+		--space-6: 24px;
+		--space-7: 32px;
+	}
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+	font-family: var(--main-font-family);
+}
+
+body {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	background-color: var(--background-color);
+	color: var(--text-color);
+}
+
+body.light {
+	--background-color: rgb(245, 245, 245);
+	--text-color: rgb(255, 255, 255);
+	--secondary-text-color: rgb(37, 37, 37);
+	--card-border-color: rgba(37, 37, 37, 0.15);
+	--card-shadow-color: rgba(37, 37, 37, 0.2);
+
+	/* Shared 8-colour identity palette. Division colours (divisionColors.js) and
+	   tournament identity (tournamentIdentity.js) both pick from this set, keyed
+	   on different ids, rather than each inventing its own colours — one visual
+	   language across the app. Muted rather than saturated, so an accent reads as
+	   identity rather than as a status or a call to action. */
+	--accent-1: rgb(79, 70, 229); /* indigo */
+	--accent-2: rgb(13, 148, 136); /* teal */
+	--accent-3: rgb(217, 119, 6); /* orange */
+	--accent-4: rgb(147, 51, 234); /* purple */
+	--accent-5: rgb(225, 29, 72); /* rose */
+	--accent-6: rgb(2, 132, 199); /* cyan */
+	--accent-7: rgb(22, 163, 74); /* green */
+	--accent-8: rgb(219, 39, 119); /* pink */
+}
+
+body.dark {
+	--background-color: rgb(54, 54, 54);
+	--text-color: rgb(255, 255, 255);
+	--secondary-text-color: rgb(245, 245, 245);
+	--card-border-color: rgba(245, 245, 245, 0.15);
+	--card-shadow-color: rgba(245, 245, 245, 0.2);
+
+	/* Same eight identities, lightened so they stay legible against the dark
+	   surface — the near-black card would otherwise flatten the light-theme
+	   values the way it already does for --main-color and friends. */
+	--accent-1: rgb(129, 120, 255);
+	--accent-2: rgb(45, 212, 191);
+	--accent-3: rgb(251, 146, 60);
+	--accent-4: rgb(192, 132, 252);
+	--accent-5: rgb(251, 113, 133);
+	--accent-6: rgb(56, 189, 248);
+	--accent-7: rgb(74, 222, 128);
+	--accent-8: rgb(244, 114, 182);
+}
+
+body.noscroll {
+	position: fixed;
+	width: 100%;
+	overflow-y: scroll !important;
+}
+
+main {
+	padding-top: 80px;
+	flex: 1;
+}
+
+#app {
+	flex: 1 0 auto;
+}
+
+.banner-image {
+	display: flex;
+	width: 100%;
+	height: 400px;
+	align-content: center;
+	background-image: url('../assets/2.webp');
+	background-origin: content-box;
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-color: #213198;
+}
+
+.about-banner-image {
+	display: flex;
+	width: 100%;
+	height: 200px;
+	align-content: center;
+	background-image: url('../assets/9.webp');
+	background-origin: content-box;
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-color: var(--quarternary-color);
+	margin-top: var(--space-7);
+}
+
+.legal-page-banner-image {
+	display: flex;
+	width: 100%;
+	height: 300px;
+	background-color: var(--secondary-color);
+	background-image: url('../assets/13.webp');
+	background-origin: content-box;
+	background-position: center 63%;
+	background-size: 400px 400px;
+	background-repeat: no-repeat;
+}
+
+/* 
+Styles for the header i.e. navigation bar
+It will be persistent on all pages 
+*/
+
+header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 80px;
+	margin: 0;
+	box-sizing: border-box;
+	padding: var(--space-4) var(--space-5);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background-color: var(--main-color);
+	font-family: var(--main-font-family);
+	backdrop-filter: blur(8px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	z-index: calc(var(--z-chrome) + 1);
+	transition: background-color 0.3s ease;
+	color: var(--text-color);
+}
+
+header.scrolled {
+	background-color: rgba(41, 98, 255, 0.8);
+}
+
+.website-title {
+	margin: 0 auto;
+	font-size: 2em;
+	font-weight: 500;
+	color: var(--text-color);
+	text-decoration: none;
+}
+
+/* Hidden below 769px, where BottomNav is the equivalent instead — see the
+   mobile block further down. */
+.desktop-nav {
+	display: none;
+}
+
+@media (min-width: 769px) {
+	/* The lone auto-margin used to be what centred the title against nothing
+	   else in the header; with a nav bar on the right it would centre against
+	   half of that instead, which reads as off-centre rather than as a
+	   conventional [brand] ... [nav] row. */
+	.website-title {
+		margin: 0;
+	}
+
+	.desktop-nav {
+		display: flex;
+		align-items: center;
+		gap: var(--space-5);
+	}
+
+	.desktop-nav-link {
+		color: var(--text-color);
+		text-decoration: none;
+		font-size: 1em;
+		font-weight: 500;
+		transition: color 0.2s ease;
+	}
+
+	.desktop-nav-link:hover {
+		color: var(--tertiary-color);
+	}
+
+	.desktop-nav-theme {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border: none;
+		border-radius: 50%;
+		background: rgb(from var(--text-color) r g b / 0.15);
+		font-size: 1rem;
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.desktop-nav-theme:hover {
+		background: rgb(from var(--text-color) r g b / 0.25);
+	}
+
+	.desktop-nav-profile {
+		position: relative;
+	}
+
+	.desktop-nav-profile-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border: none;
+		border-radius: 50%;
+		background: rgb(from var(--text-color) r g b / 0.15);
+		color: var(--text-color);
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.desktop-nav-profile-button svg {
+		fill: currentColor;
+	}
+
+	.desktop-nav-profile-button:hover {
+		background: rgb(from var(--text-color) r g b / 0.25);
+	}
+
+	.desktop-nav-menu {
+		position: absolute;
+		top: calc(100% + var(--space-2));
+		right: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		min-width: 160px;
+		padding: var(--space-2);
+		background: var(--background-color);
+		border: 1px solid var(--card-border-color);
+		border-radius: 10px;
+		box-shadow: 0 4px 12px var(--card-shadow-color);
+		z-index: var(--z-menu);
+	}
+
+	.desktop-nav-menu-item {
+		display: block;
+		width: 100%;
+		padding: var(--space-2) var(--space-3);
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--secondary-text-color);
+		font-size: 0.9rem;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.desktop-nav-menu-item:hover {
+		background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	}
+}
+
+/*
+Styles for the footer, which will be persistent on all pages
+*/
+
+/* A normal flex-column child, not absolutely positioned: body is already
+   display: flex; flex-direction: column; min-height: 100vh, and main already
+   carries flex: 1, so margin-top: auto here is the whole "stick to the
+   bottom of a short page" mechanism — it needs the footer actually
+   participating in that layout to work. It used to also carry
+   position: absolute; bottom: 0, which pulled it out of the flex flow
+   entirely: main no longer had anything pushing back against it, so a page
+   with enough content (the tournament list's Upcoming/Completed sections,
+   for instance) grew taller than where the footer's own absolute box sat,
+   and the footer simply overlapped the tail of that content instead of
+   following it. */
+.site-footer {
+	background-color: rgb(32, 32, 32);
+	color: var(--text-color);
+	padding: var(--space-7) var(--space-4) var(--space-4);
+	margin-top: auto;
+	font-family: var(--main-font-family);
+	height: auto;
+	width: 100%;
+	flex-shrink: 0;
+	border-top: 2px solid rgb(from var(--text-color) r g b / 0.4);
+	z-index: var(--z-chrome);
+}
+
+.footer-content {
+	max-width: 1200px;
+	margin: 0 auto;
+	display: flex;
+	justify-content: space-between;
+	gap: var(--space-4);
+	/* flex-wrap: wrap; */
+}
+
+.footer-section {
+	flex: 1;
+	min-width: 200px;
+}
+
+.footer-section h4 {
+	color: var(--secondary-color);
+	font-size: 1.2em;
+	margin-bottom: var(--space-4);
+}
+
+.footer-section nav {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.footer-section a {
+	color: var(--text-color);
+	text-decoration: none;
+	transition: color 0.3s ease;
+	cursor: pointer;
+}
+
+.footer-section a:hover {
+	color: var(--tertiary-color);
+}
+
+.social-links {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.social-links i {
+	width: 20px;
+	margin-right: var(--space-2);
+}
+
+.footer-bottom {
+	max-width: 1200px;
+	margin: var(--space-7) auto 0;
+	padding-top: var(--space-4);
+	border-top: 1px solid rgb(from var(--text-color) r g b / 0.6);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+}
+
+.footer-bottom a {
+	text-decoration: none;
+	color: var(--text-color);
+}
+
+.legal-links {
+	display: flex;
+	gap: var(--space-4);
+}
+
+.legal-links a {
+	color: #888;
+	text-decoration: none;
+	transition: color 0.3s ease;
+}
+
+.legal-links a:hover {
+	color: #fff;
+}
+
+@media (max-width: 768px) {
+	.footer-content {
+		flex-direction: column;
+		text-align: center;
+	}
+
+	.footer-bottom {
+		flex-direction: column;
+		text-align: center;
+	}
+}
+
+/* Update header styles for mobile */
+@media (max-width: 768px) {
+	header {
+		flex-direction: column;
+		align-items: center;
+		padding: var(--space-4);
+		height: 80px;
+		background-color: var(--main-color);
+	}
+
+	/* BOTTOM_NAV_HEIGHT (64px) plus the Create button's own raise above the
+	   bar's flat top (32px, half its 64px diameter) plus a little breathing
+	   room, plus the device's own safe-area inset — sized to the bar this
+	   file actually builds below, not assumed.
+
+	   main's own padding covers a page whose content runs past the viewport
+	   height; .site-footer needs the same clearance separately, since it
+	   renders as App's own sibling after <main>, not inside it — the fixed
+	   bar sits over whichever of the two is actually last on the page. */
+	main {
+		padding-top: 80px;
+		padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.site-footer {
+		padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.banner-image {
+		background-position: center;
+		background-size: cover;
+	}
+}
+
+/* Mobile's equivalent of DesktopNav: a fixed bottom bar, five items, Create
+   raised as the primary action. Hidden above 768px, where the header's own
+   .desktop-nav takes over. */
+.bottom-nav {
+	display: none;
+}
+
+.account-sheet-backdrop {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.bottom-nav {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-around;
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 64px;
+		padding: 0 var(--space-2) env(safe-area-inset-bottom, 0px);
+		background-color: var(--main-color);
+		box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+		z-index: calc(var(--z-chrome) + 1);
+		transition: transform 0.25s ease;
+	}
+
+	/* Slid fully off-screen rather than hidden, so the hide/reveal on scroll
+	   animates instead of popping. */
+	.bottom-nav-hidden {
+		transform: translateY(100%);
+	}
+
+	.bottom-nav-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		flex: 1;
+		height: 100%;
+		border: none;
+		background: none;
+		color: rgb(from var(--text-color) r g b / 0.7);
+		font-size: 0.7rem;
+		font-family: var(--main-font-family);
+		text-decoration: none;
+		cursor: pointer;
+		transition: color 0.2s ease;
+	}
+
+	.bottom-nav-item svg {
+		fill: currentColor;
+	}
+
+	.bottom-nav-item.active {
+		color: var(--text-color);
+		font-weight: 600;
+	}
+
+	/* The label sits in the bar's normal row, like the other four items — only
+	   the icon badge itself is raised and enlarged, overlapping the bar's flat
+	   top by half its own height (the standard "primary FAB in a tab bar"
+	   shape) so it still reads as the primary action rather than a sixth peer. */
+	.bottom-nav-create-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 64px;
+		height: 64px;
+		margin-top: -32px;
+		border-radius: 50%;
+		background: var(--tertiary-color);
+		color: var(--text-color);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+	}
+
+	/* Not a route — a lightweight sheet, the closest existing pattern being
+	   ConfirmDialog's own backdrop + centred panel, adapted to slide up from
+	   the edge the bottom bar already occupies. */
+	.account-sheet-backdrop {
+		display: flex;
+		align-items: flex-end;
+		position: fixed;
+		inset: 0;
+		background-color: rgba(0, 0, 0, 0.5);
+		z-index: var(--z-menu);
+	}
+
+	.account-sheet {
+		position: relative;
+		width: 100%;
+		padding: var(--space-5) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+		background: var(--background-color);
+		border-radius: 16px 16px 0 0;
+		box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
+		animation: accountSheetSlideIn 0.2s ease-out;
+	}
+
+	.account-sheet-close {
+		position: absolute;
+		top: var(--space-3);
+		right: var(--space-4);
+		border: none;
+		background: none;
+		font-size: 1.5rem;
+		line-height: 1;
+		color: var(--secondary-text-color);
+		cursor: pointer;
+	}
+
+	.account-sheet-item {
+		display: block;
+		width: 100%;
+		padding: var(--space-3) 0;
+		border: none;
+		border-top: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+		background: none;
+		color: var(--secondary-text-color);
+		font-size: 1rem;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+	}
+
+	/* The close button is the sheet's actual first child (an absolutely
+	   positioned corner control), so the first *item* is whichever element
+	   directly follows it — a Link when logged out, a button when logged in —
+	   not something :first-child can select on its own. */
+	.account-sheet-close + .account-sheet-item {
+		border-top: none;
+	}
+}
+
+@keyframes accountSheetSlideIn {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
+	}
+}
+
+/* Ensure images are responsive */
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+.message-popup {
+	position: fixed;
+	top: 20px;
+	right: calc(50% - 150px);
+	width: 300px;
+	background: var(--background-color);
+	color: var(--text-color);
+	padding: var(--space-3) var(--space-4);
+	border-radius: 8px;
+	z-index: var(--z-toast);
+	text-align: center;
+	text-wrap: normal;
+	animation: fadeInOut 3s ease-in-out;
+}
+
+.message-popup.success {
+	background: var(--success-color);
+	color: var(--text-color);
+}
+.message-popup.error {
+	background: var(--error-color);
+	color: var(--text-color);
+}
+
+@keyframes fadeInOut {
+	0% {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	10% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	90% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+}
+
+.help-button {
+	position: fixed;
+	bottom: 10px;
+	right: 10px;
+	color: var(--secondary-color);
+	border: none;
+	border-radius: 50%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	font-size: 32px;
+	cursor: pointer;
+	z-index: calc(var(--z-chrome) + 1);
+	transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.help-button:hover {
+	background-color: darken(var(--main-color), 10%);
+	transform: scale(1.1);
+}
+
+.help-button:active {
+	transform: scale(0.9);
+}
+
+/* Placed after the base rule deliberately: an earlier override at the same
+   specificity here loses the cascade to the unconditional bottom: 10px above,
+   which applies at every width, mobile included, since it carries no media
+   condition of its own to lose to. */
+@media (max-width: 768px) {
+	/* Just above the bar's own flat top (64px) plus a small gap — not the
+	   Create button's raised height, since the button sits centred and the
+	   help button sits in the opposite corner; the two never share a row. */
+	.help-button {
+		bottom: calc(64px + var(--space-2) + env(safe-area-inset-bottom, 0px));
+	}
+}
+
+.help-menu-container {
+	position: fixed;
+	inset: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: flex-end;
+	z-index: var(--z-menu);
+}
+
+.help-menu {
+	display: flex;
+	flex-direction: column;
+	width: min(420px, 100%);
+	height: 100%;
+	background-color: var(--background-color);
+	color: var(--secondary-text-color);
+	border-radius: 16px 0 0 16px;
+	box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
+	font-family: var(--main-font-family);
+	animation: helpPanelSlideIn 0.2s ease-out;
+}
+
+@keyframes helpPanelSlideIn {
+	from { transform: translateX(100%); }
+	to { transform: translateX(0); }
+}
+
+.help-menu-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-5) var(--space-4) var(--space-4);
+	border-bottom: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+}
+
+.help-menu-header h1 {
+	flex: 1;
+	margin: 0;
+	font-size: 1.25rem;
+}
+
+.help-menu-close {
+	border: none;
+	background: none;
+	font-size: 1.5rem;
+	line-height: 1;
+	color: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+.help-menu-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: var(--space-4);
+}
+
+.help-menu-body p {
+	margin: 0 0 var(--space-3);
+	line-height: 1.5;
+}
+
+.help-menu-body p:last-child {
+	margin-bottom: 0;
+}
+
+.menu-bar {
+	position: fixed;
+	top: 80px;
+	left: 0;
+	width: 100%;
+	height: calc(100% - 80px);
+	background-color: rgba(0, 0, 0, 0.5);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(8px);
+	z-index: var(--z-below);
+	transition: all 0.1s ease;
+	opacity: 0;
+	display: flex;
+}
+
+.menu-bar.open {
+	opacity: 1;
+	z-index: var(--z-menu);
+}
+
+.menu-bar.close {
+	opacity: 0;
+	z-index: var(--z-below);
+}
+
+.menu-bar-content {
+	display: flex;
+	flex-direction: column;
+	min-width: 250px;
+	max-width: 500px;
+	height: 100%;
+	margin: 0 0 auto 0;
+	transform: translate(-100%);
+	background-color: var(--background-color);
+	color: var(--secondary-color);
+	border-radius: 0 10px 10px 0;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	transition: all 0.3s ease;
+	z-index: calc(var(--z-menu) + 1);
+}
+
+.menu-bar.open .menu-bar-content {
+	transform: translateX(0%);
+}
+.menu-bar.close .menu-bar-content {
+	transform: translateX(-100%);
+}
+
+.menu-section {
+	display: flex;
+	flex-direction: column;
+	padding: var(--space-2) var(--space-4) var(--space-4);
+	border-bottom: 4px solid var(--quarternary-color);
+}
+
+.menu-section h2 {
+	margin-bottom: var(--space-2);
+	border-bottom: 1px solid rgb(from var(--secondary-text-color) r g b / 0.4);
+}
+
+.menu-item {
+	color: var(--secondary-text-color);
+	text-decoration: none;
+	font-size: 1.1em;
+	margin-bottom: var(--space-2);
+	transition: color 0.3s ease;
+	margin-left: var(--space-4);
+	cursor: pointer;
+	&:hover {
+		color: var(--tertiary-color);
+	}
+}
+
+.menu-section.quick-actions {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	padding: var(--space-2);
+}
+
+.menu-item.quick-action {
+	text-align: center;
+	width: 24px;
+	fill: var(--secondary-text-color);
+	margin: 0;
+	&:hover {
+		fill: var(--tertiary-color);
+	}
+}
+
+.menu-actions-bar {
+	display: flex;
+	flex-direction: row-reverse;
+	justify-content: space-between;
+	padding: var(--space-2) var(--space-4);
+	border-top: 2px solid var(--quarternary-color);
+	margin-top: auto;
+}
+
+.menu-action {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 25px;
+	height: 25px;
+	background-color: rgb(from var(--secondary-text-color) r g b / 0.4);
+	color: var(--text-color);
+	border-radius: 50%;
+	cursor: pointer;
+	transition: background-color 0.3s ease, transform 0.2s ease;
+	&:hover {
+		background-color: rgb(from var(--secondary-text-color) r g b / 0.5);
+	}
+}
+
+.menu-button {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	top: 28px;
+	left: 24px;
+	width: 32px;
+	height: 24px;
+	justify-content: space-between;
+	align-items: center;
+	cursor: pointer;
+	background: none;
+	border: none;
+	padding: 0;
+}
+
+.menu-button span {
+	height: 4px;
+	width: 100%;
+	background-color: var(--text-color);
+	border-radius: 2px;
+	transition: all 0.3s ease;
+	display: block;
+}
+
+.menu-button.open span:nth-child(1) {
+	transform: rotate(45deg) translate(6px, 8px);
+}
+
+.menu-button.open span:nth-child(2) {
+	opacity: 0;
+}
+
+.menu-button.open span:nth-child(3) {
+	transform: rotate(-45deg) translate(6px, -8px);
+}
+
+/* 
+About page styles
+*/
+.about-section {
+	max-width: 900px;
+	margin: var(--space-7) auto;
+	padding: var(--space-6);
+	background: var(--background-color);
+	border-radius: 12px;
+	box-shadow: 0 2px 8px var(--card-shadow-color);
+	border: 1px solid var(--card-border-color);
+}
+
+.about-section h1 {
+	color: var(--secondary-color);
+	margin-bottom: var(--space-5);
+	font-size: 2.2em;
+	position: relative;
+	padding-bottom: var(--space-3);
+	text-shadow: 1px 2px 1px black;
+}
+
+.about-section h1::after {
+	content: '';
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	width: 60px;
+	height: 4px;
+	background: var(--secondary-color);
+	border-radius: 2px;
+}
+
+.description {
+	line-height: 1.8;
+	color: var(--secondary-text-color);
+}
+
+.description p {
+	margin-bottom: var(--space-4);
+	font-size: 1.1em;
+}
+
+.description p:last-child {
+	margin-bottom: 0;
+}
+
+.contact-section {
+	max-width: 900px;
+	margin: var(--space-7) auto;
+	padding: var(--space-6);
+	background: var(--background-color);
+	border-radius: 12px;
+	box-shadow: 0 2px 8px var(--card-shadow-color);
+	border: 1px solid var(--card-border-color);
+	text-align: center;
+}
+
+.contact-section h2 {
+	color: var(--secondary-color);
+	margin-bottom: var(--space-5);
+	font-size: 1.8em;
+}
+
+.contact-details {
+	display: flex;
+	justify-content: center;
+	gap: var(--space-7);
+	margin-top: var(--space-4);
+}
+
+.contact-item {
+	padding: var(--space-4);
+	border-radius: 8px;
+	background: rgb(from var(--secondary-text-color) r g b / 0.05);
+	transition: transform 0.2s ease;
+}
+
+.contact-item:hover {
+	transform: translateY(-2px);
+}
+
+.contact-item h3 {
+	color: var(--secondary-text-color);
+	margin-bottom: var(--space-3);
+}
+
+.contact-item a {
+	color: var(--secondary-color);
+	text-decoration: none;
+	font-size: 1.1em;
+	transition: color 0.2s ease;
+	text-shadow: 1px 1px 0px black;
+}
+
+.contact-item a:hover {
+	color: var(--tertiary-color);
+}
+
+.social-media {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.social-media a {
+	color: var(--main-color);
+	text-decoration: none;
+	padding: var(--space-2) 0;
+	transition: color 0.3s ease;
+}
+
+.social-media a:hover {
+	color: var(--tertiary-color);
+}
+
+.donation-container {
+	display: flex;
+	justify-content: center;
+	margin: var(--space-6) 0;
+}
+
+.coffee-button {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-5);
+	background-color: #ffdd00;
+	color: #000000;
+	text-decoration: none;
+	border-radius: 8px;
+	font-weight: 600;
+	font-size: 1.1em;
+	transition: all 0.2s ease;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.coffee-button:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+	background-color: #ffe333;
+}
+
+.coffee-button:active {
+	transform: translateY(0);
+}
+
+.coffee-icon {
+	width: 24px;
+	height: 24px;
+}
+
+@media (max-width: 768px) {
+	.about-section,
+	.contact-section {
+		margin: var(--space-4);
+		padding: var(--space-4);
+	}
+
+	.about-section h1 {
+		font-size: 1.8em;
+	}
+
+	.description p {
+		font-size: 1em;
+	}
+
+	.contact-details {
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+}
+
+/* 
+Legal page styles
+*/
+
+.legal-page {
+	color: var(--secondary-text-color);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	justify-content: center;
+	padding-top: var(--space-4);
+}
+
+.legal-page-heading {
+	color: var(--main-color);
+	text-shadow: 0 1px 2px black;
+	text-align: center;
+}
+
+.legal-page-nav {
+	display: flex;
+	justify-content: center;
+	padding: 0 var(--space-4) var(--space-4);
+}
+
+.legal-page-nav-links {
+	display: flex;
+	gap: var(--space-2);
+	justify-content: center;
+	width: 100%;
+}
+
+.legal-page-nav-link {
+	text-decoration: underline;
+	color: var(--secondary-color);
+	text-shadow: 0px 1px 0px black;
+	text-align: center;
+}
+
+.legal-page-section {
+	max-width: 1200px;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0 4px 8px var(--card-shadow-color);
+	border-radius: 10px;
+	margin: var(--space-4) auto;
+	padding: var(--space-6);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.legal-page-section-heading {
+	color: var(--secondary-color);
+	text-shadow: 1px 2px 1px black;
+	font-size: 2.2em;
+	&::after {
+		display: block;
+		margin: var(--space-2) 0 var(--space-4);
+		content: '';
+		width: 60px;
+		height: 5px;
+		background-color: var(--secondary-color);
+	}
+}
+
+.legal-page-section p {
+	padding: 0 var(--space-4);
+	font-size: 1.1em;
+	margin-bottom: var(--space-2);
+}
+
+@media (max-width: 768px) {
+	.legal-page-nav-links {
+		flex-direction: column;
+	}
+
+	.legal-page-section {
+		margin: var(--space-4);
+	}
+}
+
+/* 
+Styles for the welcome message section to new users
+*/
+
+#home {
+	padding: var(--space-7);
+	text-align: center;
+	align-content: center;
+	height: 400px;
+}
+
+#home h2 {
+	color: var(--main-color);
+	font-size: clamp(1.5rem, 3vw, 2.5rem);
+	margin-bottom: var(--space-4);
+	font-weight: 600;
+	font-family: var(--main-font-family);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
+}
+
+#home p {
+	font-size: clamp(1rem, 1.5vw, 1.2rem);
+	line-height: 1.6;
+	margin-bottom: var(--space-6);
+	font-family: var(--main-font-family);
+	color: var(--secondary-text-color);
+}
+
+.home {
+	padding: var(--space-2);
+	max-width: 100%;
+	overflow-x: hidden;
+}
+
+/* 
+Styles for the features section on the home page
+This might possibly only be shown to new users who haven't signed up yet. Something else
+might show for users who are already signed in, or that could be in a separate "Dashboard".
+*/
+.features-section {
+	padding: var(--space-7) var(--space-4);
+}
+.features {
+	padding: 45px var(--space-4);
+	max-width: 1200px;
+	margin: 0 auto;
+}
+
+.features-grid {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.feature-card {
+	display: flex;
+	align-items: center;
+	margin: var(--space-2);
+	padding: var(--space-7);
+	background-color: #fff;
+	border-radius: 8px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	position: relative;
+	min-height: 300px;
+	overflow: hidden;
+	transition: all 0.3s ease;
+	background-color: rgba(70, 87, 117, 1);
+}
+
+.feature-card:hover {
+	transform: scale(1.01);
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.feature-card::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-image: linear-gradient(to right, rgba(70, 87, 117, 1) 40%, rgba(70, 87, 117, 0.5) 100%);
+	z-index: var(--z-raised);
+	transition: background 0.3s ease;
+}
+
+.features-grid .feature-card:nth-child(even)::after {
+	flex-direction: row-reverse;
+	background-image: none;
+	background-image: linear-gradient(to left, rgba(70, 87, 117, 1) 40%, rgba(70, 87, 117, 0.5) 100%);
+}
+
+.feature-content {
+	text-align: left;
+	flex: 1;
+	padding: 0 var(--space-6);
+	position: relative;
+	z-index: calc(var(--z-raised) + 1);
+	color: var(--text-color);
+}
+
+.features-grid .feature-card:nth-child(even) .feature-content {
+	text-align: right;
+}
+
+.feature-image {
+	height: 100%;
+	max-height: 300px;
+	border-radius: 6px;
+	width: 70%;
+	object-position: 0px;
+	position: absolute;
+	right: 0;
+}
+
+@media (max-width: 768px) {
+	.feature-image {
+		display: none;
+		width: 100%;
+	}
+}
+
+.feature-image img {
+	height: 100%;
+	width: 100%;
+	object-fit: cover;
+	object-position: right;
+}
+
+.features-grid .feature-card:nth-child(even) .feature-image {
+	left: 0;
+}
+
+.features-grid .feature-card:nth-child(even) .feature-image img {
+	object-position: left;
+}
+
+.feature-card h3 {
+	color: var(--text-color);
+	font-size: 1.8em;
+	margin-bottom: var(--space-4);
+	font-family: var(--main-font-family);
+}
+
+.feature-card p {
+	color: var(--text-color);
+	font-size: 1.1em;
+	line-height: 1.5;
+	font-family: var(--main-font-family);
+}
+
+.section-title {
+	text-align: center;
+	color: var(--main-color);
+	font-size: clamp(1.5rem, 3vw, 2.5rem);
+	margin-bottom: var(--space-4);
+	font-weight: 600;
+	font-family: var(--main-font-family);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
+}
+
+.cta-button {
+	display: inline-block;
+	padding: var(--space-3) var(--space-6);
+	background-color: var(--main-color);
+	color: var(--text-color);
+	text-decoration: none;
+	border-radius: 8px;
+	/* font-size: clamp(1rem, 1.5vw, 1.2rem); */
+	font-weight: 600;
+	margin: var(--space-2) var(--space-4);
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 6px rgba(41, 98, 255, 0.2);
+	width: 150px;
+	text-align: center;
+	font-size: 1.2em;
+}
+
+.cta-button:hover {
+	background-color: var(--secondary-color);
+	transform: translateY(-2px);
+	box-shadow: 0 6px 12px rgba(41, 98, 255, 0.3);
+}
+
+.cta-button:active {
+	transform: translateY(0);
+	box-shadow: 0 2px 4px rgba(41, 98, 255, 0.2);
+}
+
+.donate-button {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-2) var(--space-4);
+	background-color: var(--text-color);
+	color: var(--main-color);
+	border: none;
+	border-radius: 4px;
+	font-size: 1.1rem;
+	font-weight: 600;
+	text-decoration: none;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	white-space: nowrap;
+}
+
+.donate-button:hover {
+	transform: translateY(-1px);
+	text-decoration: none;
+}
+
+.donate-button:active {
+	transform: translateY(0);
+}
+
+.donation-banner {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background-color: #f8f9fa;
+	background: linear-gradient(135deg, var(--main-color), #8b0000);
+	color: white;
+	padding: var(--space-6) var(--space-4);
+	text-align: left;
+	/* Bleeds out through .home's padding to sit flush with the viewport. It has
+	   to track that token: .home is overflow-x: hidden, so an overhang wider
+	   than its padding is clipped silently rather than scrolled. */
+	margin: 0 calc(-1 * var(--space-2));
+	display: flex;
+	font-family: var(--main-font-family);
+	max-height: 160px;
+}
+
+.banner-content {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.banner-content h3 {
+	margin: 0;
+	font-size: 1.1rem;
+}
+
+.banner-content p {
+	margin: 0;
+	font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+	.cta-button {
+		padding: var(--space-3) var(--space-5);
+		font-size: 1em;
+		text-align: center;
+		width: calc(100% - 40px);
+	}
+
+	.donation-banner {
+		flex-direction: column;
+		gap: var(--space-1);
+		text-align: center;
+		padding: var(--space-2);
+		justify-content: center;
+		margin-top: var(--space-4);
+		margin-bottom: var(--space-4);
+	}
+
+	.banner-content {
+		flex: 100%;
+		margin-bottom: var(--space-2);
+	}
+
+	.donate-button {
+		width: 100%;
+		justify-content: center;
+	}
+
+	.features-section {
+		padding: 0px;
+	}
+
+	.feature-card {
+		padding: var(--space-4);
+	}
+
+	.feature-content {
+		padding: 0 var(--space-2);
+	}
+
+	#home {
+		padding: var(--space-2);
+	}
+}
+
+/* 
+Login form styles
+*/
+.login-popup {
+	display: flex;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(5px);
+	z-index: var(--z-modal);
+	justify-content: center;
+	align-items: center;
+}
+
+.login-container {
+	background: var(--background-color);
+	padding: var(--space-6);
+	border-radius: 10px;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0 4px 8px var(--card-shadow-color);
+	width: 100%;
+	max-width: 400px;
+	position: relative;
+}
+
+.login-header {
+	text-align: center;
+	margin-bottom: var(--space-4);
+	color: var(--secondary-text-color);
+}
+
+.login-form {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.login-form .form-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.login-form .form-group label {
+	color: var(--secondary-text-color);
+	font-size: 14px;
+}
+
+.login-form input {
+	padding: var(--space-2);
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	border-radius: 4px;
+	font-size: 16px;
+}
+
+.login-form button {
+	padding: var(--space-3);
+	background: var(--main-color);
+	color: var(--text-color);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 16px;
+	transition: background 0.3s ease;
+}
+
+.login-form button:hover {
+	background: var(--secondary-color);
+}
+
+.close-login {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	border: none;
+	background: none;
+	font-size: 24px;
+	cursor: pointer;
+	color: var(--secondary-text-color);
+}
+
+.login-form-link {
+	margin-top: var(--space-4);
+	text-align: center;
+	color: var(--secondary-text-color);
+}
+
+.login-form-link span {
+	color: var(--main-color);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
+	font-weight: 600;
+	font-size: 1.1em;
+	cursor: pointer;
+	text-decoration: underline;
+}
+
+.theme-toggle-login {
+	position: absolute;
+	bottom: 10px;
+	left: 10px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--secondary-text-color);
+	font-size: 20px;
+	z-index: calc(var(--z-modal) + 1);
+}
+
+.loading-spinner {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 21px;
+	width: 21px;
+	margin: 0 auto;
+	border: 2px solid white;
+	border-top: 2px solid transparent;
+	animation: reverse-spin 1s linear infinite;
+	border-radius: 50%;
+}
+.loading-spinner .spinner {
+	width: 15px;
+	height: 15px;
+	border: 2px solid white;
+	border-top: 2px solid transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	50% {
+		transform: rotate(360deg);
+	}
+	100% {
+		transform: rotate(720deg);
+	}
+}
+@keyframes reverse-spin {
+	0% {
+		transform: rotate(360deg);
+	}
+	100% {
+		transform: rotate(0deg);
+	}
+}
+
+.not-found-container {
+	text-align: center;
+	padding: 50px var(--space-4);
+	max-width: 600px;
+	margin: 0 auto;
+	color: var(--secondary-text-color);
+}
+
+.not-found-title {
+	font-size: 4rem;
+	margin-bottom: 1rem;
+}
+
+.email-link {
+	color: var(--main-color);
+	text-decoration: underline;
+	cursor: pointer;
+	transition: color 0.2s ease;
+}
+
+.email-link:hover {
+	color: var(--secondary-color);
+}
+
+.home-button {
+	display: inline-block;
+	margin-top: var(--space-4);
+	padding: var(--space-2) var(--space-4);
+	background-color: var(--main-color);
+	color: white;
+	text-decoration: none;
+	border-radius: 5px;
+	transition: background-color 0.2s ease;
+}
+
+.home-button:hover {
+	background-color: var(--secondary-color);
+}
+
+/* 
+Loading Screen styles
+*/
+.loading-container {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background-color: rgb(from var(--background-color) r g b / 0.5);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(8px);
+	z-index: var(--z-loading);
+}
+
+.lds-ring-container {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.lds-ring {
+	display: inline-block;
+	position: relative;
+	width: 80px;
+	height: 80px;
+}
+.lds-ring div {
+	box-sizing: border-box;
+	display: block;
+	position: absolute;
+	width: 64px;
+	height: 64px;
+	margin: var(--space-2);
+	border: 8px solid var(--secondary-color);
+	border-radius: 50%;
+	animation: lds-ring 1.2s linear infinite;
+	border-color: var(--secondary-color) transparent transparent transparent;
+}
+.lds-ring div:nth-child(1) {
+	animation-delay: -0.45s;
+}
+.lds-ring div:nth-child(2) {
+	animation-delay: -0.3s;
+}
+.lds-ring div:nth-child(3) {
+	animation-delay: -0.15s;
+}
+@keyframes lds-ring {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+/*
+Confirmation Dialog styles
+*/
+.confirm-backdrop {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	/* Above every modal, because a confirmation is always asked ON BEHALF of one:
+	   the schedule maker's own Discard and close-with-unsaved-changes prompts are
+	   asked from inside a backdrop at 1100, and at 1000 this sat underneath it,
+	   leaving that modal looking frozen. Below the toast and the loading screen. */
+	z-index: var(--z-confirm);
+}
+
+.confirm-modal {
+	background: var(--background-color);
+	padding: var(--space-5);
+	border-radius: 8px;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0 4px 6px var(--card-shadow-color);
+	width: 90%;
+	max-width: 400px;
+	animation: slideIn 0.3s ease-out;
+}
+
+.confirm-modal p {
+	margin: 0 0 var(--space-4) 0;
+	color: var(--secondary-text-color);
+	font-size: 1.1em;
+	line-height: 1.5;
+}
+
+.confirm-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-3);
+}
+
+.confirm-buttons button {
+	padding: var(--space-2) var(--space-4);
+	border: none;
+	border-radius: 4px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.confirm-buttons button:first-child {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	background-color: var(--main-color);
+	color: var(--text-color);
+}
+
+/* currentColor tracks the button's own text colour under either theme — see
+   the equivalent .save-btn rule above. */
+.confirm-buttons button:first-child .btn-spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+.confirm-buttons button:first-child:hover {
+	background-color: var(--secondary-color);
+}
+
+.confirm-buttons button:last-child {
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	background-color: var(--background-color);
+	color: var(--secondary-text-color);
+}
+
+.confirm-buttons button:last-child:hover {
+	background-color: rgb(from var(--secondary-text-color) r g b / 0.1);
+}
+
+@keyframes slideIn {
+	from {
+		opacity: 0;
+		transform: translateY(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (max-width: 768px) {
+	.confirm-modal {
+		width: calc(100% - 40px);
+		margin: var(--space-4);
+	}
+}
+
+/* 
+Score Update Modal styles
+*/
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: var(--z-modal);
+}
+
+.score-modal {
+	background: var(--background-color);
+	padding: var(--space-6);
+	border-radius: 16px;
+	width: 90%;
+	max-width: 500px;
+	/* Matches .next-round-modal: a set count is open-ended (+ Add Set has no
+	   ceiling), so the modal has to stop growing with the content at some
+	   point and let the sets table scroll internally instead of pushing the
+	   action buttons below the bottom of the viewport. */
+	max-height: 90vh;
+	overflow-y: auto;
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0 4px 6px var(--card-shadow-color);
+	/* Established here, matching .next-round-modal, rather than left to fall
+	   back to body's --text-color — that token is the inverse (white,
+	   for text on a coloured button) not a readable default, and anything
+	   inside this modal that doesn't set its own colour, like TeamIdentity's
+	   name text, would otherwise render unreadable against this background. */
+	color: var(--secondary-text-color);
+}
+
+.score-modal-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin-bottom: var(--space-2);
+}
+
+.score-modal-header h3 {
+	flex: 1;
+	margin: 0;
+	color: var(--secondary-text-color);
+}
+
+.score-modal-close {
+	border: none;
+	background: none;
+	font-size: 1.5rem;
+	line-height: 1;
+	color: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+/* The scoreboard band: team / tally / team, weighted like a real scoreboard
+   rather than a form label — the set tally is the number an organiser glances
+   at first, so it gets the most visual weight on the row. */
+.scoreboard-header {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: var(--space-4);
+	padding: var(--space-5) 0 var(--space-6);
+	margin-bottom: var(--space-4);
+	border-bottom: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+}
+
+.scoreboard-team.scoreboard-team--left {
+	justify-self: end;
+	text-align: end;
+}
+
+.scoreboard-team.scoreboard-team--right {
+	justify-self: start;
+}
+
+.scoreboard-tally {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+}
+
+.scoreboard-tally-label {
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--secondary-text-color);
+}
+
+.scoreboard-tally-score {
+	font-size: 2rem;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--main-color);
+}
+
+.vs {
+	color: var(--secondary-text-color);
+	text-align: center;
+}
+
+/* A safety net rather than an expectation: this modal has no width this
+   table should ever need to scroll at, but a scoresheet reads as a table and
+   a table gets the same overflow guard every wide table in this app gets. */
+.scoreboard-table-wrap {
+	overflow-x: auto;
+	margin-bottom: var(--space-4);
+}
+
+.scoreboard-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.scoreboard-table th {
+	padding: var(--space-1) var(--space-2) var(--space-2);
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+	text-align: center;
+}
+
+/* The two team-name headers, not the "Set" label or the blank remove column
+   — an actual team name needs the same readable body colour as everywhere
+   else it appears, not the muted tone a generic column heading gets. */
+.scoreboard-table-teamcol {
+	color: var(--secondary-text-color);
+	font-size: 0.85rem;
+}
+
+.scoreboard-table td {
+	padding: var(--space-2);
+	text-align: center;
+	border-top: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+}
+
+.scoreboard-table-setcol {
+	width: 1%;
+	white-space: nowrap;
+	font-weight: 500;
+	color: var(--secondary-text-color);
+	text-align: left;
+}
+
+.scoreboard-table-removecol {
+	width: 1%;
+}
+
+.score-inputs {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+}
+
+.score-inputs input {
+	width: 56px;
+	padding: var(--space-2) 0;
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	border-radius: 4px;
+	text-align: center;
+	font-size: 1.4em;
+}
+
+.score-step-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	border-radius: 8px;
+	background: var(--background-color);
+	color: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+.score-step-btn:hover {
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+}
+
+/* A correction control, not a primary action — quiet until the organiser
+   actually reaches for it, since a fixed trash icon this close to the
+   steppers would otherwise compete with them on every row. */
+.scoreboard-remove-set-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: none;
+	background: none;
+	border-radius: 8px;
+	color: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+.scoreboard-remove-set-btn:hover {
+	color: var(--error-color);
+	background: rgb(from var(--error-color) r g b / 0.1);
+}
+
+.modal-buttons {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.add-set-btn {
+	padding: var(--space-2);
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+	color: var(--main-color);
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.add-set-btn:hover {
+	background: rgb(from var(--secondary-text-color) r g b / 0.2);
+}
+
+.action-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-2);
+}
+
+.cancel-btn,
+.cancel-match-btn,
+.save-btn,
+.end-match-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-4);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.cancel-match-btn:disabled,
+.save-btn:disabled,
+.end-match-btn:disabled {
+	cursor: default;
+	opacity: 0.8;
+}
+
+/* Scoped to these buttons rather than reusing the dead .loading-spinner:
+   currentColor tracks each button's own text colour under either theme, so we
+   don't have to assume a light-on-colour foreground the way border: white did. */
+.cancel-match-btn .btn-spinner,
+.save-btn .btn-spinner,
+.end-match-btn .btn-spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+.cancel-btn {
+	background: var(--background-color);
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	color: var(--secondary-text-color);
+	margin-right: auto;
+}
+
+/* Takes the old Back button's slot and layout (far left, separated from the
+   routine actions) but not its neutral styling — this is a destructive
+   action now that it is a one-tap button instead of something that took
+   several deliberate edits to trigger by accident. */
+.cancel-match-btn {
+	background: rgb(from var(--error-color) r g b / 0.08);
+	border: 1px solid rgb(from var(--error-color) r g b / 0.4);
+	color: var(--error-color);
+	margin-right: auto;
+}
+
+.save-btn {
+	background: var(--main-color);
+	color: var(--text-color);
+}
+
+.end-match-btn {
+	background: var(--success-color);
+	color: var(--text-color);
+}
+
+.cancel-btn:hover {
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+}
+
+.cancel-match-btn:hover:not(:disabled) {
+	background: rgb(from var(--error-color) r g b / 0.15);
+}
+
+.save-btn:hover {
+	background: var(--secondary-color);
+}
+
+.end-match-btn:hover {
+	background: rgb(from var(--success-color) r g b / 0.85);
+}
+
+@media (max-width: 768px) {
+	/* Save Score and End Match first — the two routine actions, most-used
+	   first — then Cancel Match last, reordered rather than following DOM
+	   order, with extra separation so a thumb scrolling through the stacked
+	   buttons doesn't land on the destructive one first or by proximity to
+	   the others. */
+	.score-modal .action-buttons {
+		flex-direction: column;
+	}
+
+	.score-modal .save-btn {
+		order: 1;
+	}
+
+	.score-modal .end-match-btn {
+		order: 2;
+	}
+
+	.score-modal .cancel-match-btn {
+		order: 3;
+		margin-right: 0;
+		margin-top: var(--space-3);
+		padding-top: var(--space-4);
+		border-top: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+	}
+
+	/* Two flanked score-input groups side by side don't fit a narrow table
+	   cell each — stacking the steppers above/below the input instead of
+	   beside it turns each group's footprint into just the input's own
+	   width, so the row no longer forces the table to scroll. */
+	.score-modal .score-inputs {
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.score-modal .score-step-btn {
+		width: 32px;
+		height: 32px;
+	}
+
+	.score-modal .scoreboard-table th,
+	.score-modal .scoreboard-table td {
+		padding-left: var(--space-1);
+		padding-right: var(--space-1);
+	}
+
+	.score-modal .scoreboard-table-teamcol {
+		font-size: 0.78rem;
+	}
+}
+
+/* 
+Next Round Modal styles
+*/
+
+.modal-backdrop {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: var(--z-modal);
+}
+
+.next-round-modal {
+	background: var(--background-color);
+	border-radius: 16px;
+	padding: var(--space-5);
+	width: 90%;
+	max-width: 800px;
+	max-height: 90vh;
+	overflow-y: auto;
+	color: var(--secondary-text-color);
+}
+
+.next-round-modal-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin-bottom: var(--space-4);
+	padding-bottom: var(--space-4);
+	border-bottom: 2px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+}
+
+.next-round-modal-header h2 {
+	flex: 1;
+	margin: 0;
+	color: var(--secondary-text-color);
+}
+
+.next-round-modal-close {
+	border: none;
+	background: none;
+	font-size: 1.5rem;
+	line-height: 1;
+	color: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+.modal-content {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--space-5);
+}
+
+.qualified-teams .teams-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	max-height: 400px;
+	overflow-y: auto;
+	padding: var(--space-1);
+}
+
+.tv-swap-btn {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--tv-border);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--tv-muted);
+	cursor: pointer;
+}
+
+.tv-swap-btn:hover:not(:disabled) {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+.tv-swap-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* The row's current position — updates live as the organiser drags — sitting
+   ahead of the grip so the row's leading controls read as one group. The
+   W/L/Sets note on TeamIdentity already supplies the why; this supplies the
+   current standing. */
+.tv-qualifier-rank {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	color: var(--secondary-text-color);
+	font-size: 0.85rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* A row the organiser has moved or substituted away from the calculated
+   proposal — a neutral "edited" signal, not a warning, so main-color rather
+   than error-color. */
+.tv-team-row--changed {
+	border-color: var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.06);
+}
+
+.next-round-final-note {
+	padding: var(--space-6) var(--space-3);
+	text-align: center;
+	color: var(--secondary-text-color);
+}
+
+.team-checkbox {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	cursor: pointer;
+}
+
+.preview-fixture {
+	display: grid;
+	grid-template-columns: 2fr 1fr 2fr;
+	gap: var(--space-2);
+	align-items: center;
+	text-align: center;
+	padding: var(--space-2);
+	background: var(--background-color);
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	border-radius: 4px;
+	margin-bottom: var(--space-2);
+	color: var(--secondary-text-color);
+}
+
+/* A matchup has two teams and a "vs", not a rank and a pill — a flex row lets
+   the bye variant (one team, one pill) size itself instead of leaving an empty
+   grid cell where the rank number used to sit. */
+.preview-fixture--matchup {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	text-align: left;
+}
+
+.preview-fixture--matchup .vs {
+	flex: 0 0 auto;
+	font-size: 0.85em;
+}
+
+.modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-3);
+	margin-top: var(--space-5);
+	padding-top: var(--space-4);
+	border-top: 2px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+}
+
+.cancel-btn {
+	padding: var(--space-2) var(--space-4);
+	background: var(--background-color);
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.2);
+	color: var(--secondary-text-color);
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.confirm-btn {
+	padding: var(--space-2) var(--space-4);
+	background: var(--main-color);
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.confirm-btn:disabled {
+	background: rgb(from var(--secondary-text-color) r g b / 0.2);
+	cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+	.modal-content {
+		grid-template-columns: 1fr;
+	}
+
+	/* Both boxes' own fixed max-height/overflow-y exist so a long qualifying
+	   list or a long substitute list doesn't push the modal's footer actions
+	   off-screen — but .next-round-modal already scrolls as a whole (see its
+	   own max-height/overflow-y), so on a phone that's three independent
+	   scroll containers nested inside each other. A touch scroll gesture
+	   only ever drives the innermost one, so the substitute list — sitting a
+	   further scroll down inside a 400px box inside the modal — reads as
+	   "hidden" until the right box is found and scrolled first. Letting both
+	   flow with the modal's one scroll instead means everything opened is
+	   reachable by the same single gesture that reveals the rest of the
+	   modal. */
+	.qualified-teams .teams-list {
+		max-height: none;
+		overflow-y: visible;
+	}
+
+	.tv-substitute-list {
+		max-height: none;
+		overflow-y: visible;
+	}
+}
+
+/* The swap button itself, held open — a visual cue that clicking it again is
+   what closes the list below, rather than the button just having done
+   something once and gone quiet. */
+.tv-swap-btn--open {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+/* The substitute list: clicking the swap button expands this directly under
+   the row, in place of the button opening a native <select> that then still
+   needed a second click to actually see the options. */
+.tv-substitute-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: -2px 0 0;
+	padding: var(--space-2);
+	border: 1px solid var(--tv-border);
+	border-top: none;
+	border-radius: 0 0 10px 10px;
+	background: var(--tv-surface);
+	max-height: 220px;
+	overflow-y: auto;
+}
+
+.tv-substitute-option {
+	padding: var(--space-2) var(--space-3);
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--secondary-text-color);
+	text-align: left;
+	cursor: pointer;
+}
+
+.tv-substitute-option:hover:not(:disabled) {
+	background: var(--tv-surface-alt);
+}
+
+.tv-substitute-option--active {
+	color: var(--main-color);
+	font-weight: 600;
+	background: rgb(from var(--main-color) r g b / 0.08);
+}
+
+.tv-substitute-option:disabled {
+	color: var(--tv-muted);
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+/* 
+Tooltip styles
+*/
+.tooltip-container {
+	position: relative;
+	display: inline-block;
+	vertical-align: middle;
+	width: 24px;
+	height: 24px;
+}
+
+.tooltip-icon {
+	width: 24px;
+	height: 24px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.tooltip-box {
+	position: fixed; /* fixed positioning to follow mouse */
+	background-color: var(--secondary-text-color);
+	color: var(--main-color);
+	text-shadow: 0 1px 2px rgb(0, 0, 0);
+	padding: 0.5em 0.75em;
+	border-radius: 4px;
+	font-size: 0.9em;
+	white-space: normal;
+	max-width: 220px;
+	z-index: var(--z-tooltip);
+	pointer-events: none;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 
+Tournaments page styles
+*/
+.tournament-tabs-container {
+	max-width: 1200px;
+	min-height: 500px;
+	margin: var(--space-4) auto;
+}
+
+/* The .tournament-tab-buttons and .tournament-tab-btn rules were removed when
+   creation moved to /tournaments/create. Browse is no longer two tabs behind a
+   URL hash, so there is nothing left to switch between. The container and
+   content rules below are still Browse's own layout. */
+
+.tournament-tab-content {
+	display: none;
+	height: 100%;
+}
+
+.tournament-tab-content.active {
+	display: block;
+}
+
+@media (max-width: 768px) {
+	.tournament-tab-content {
+		margin: 0 var(--space-4);
+	}
+}
+
+.search-section {
+	display: flex;
+	gap: var(--space-4);
+	margin-bottom: var(--space-6);
+	transition: all 0.5s ease;
+}
+
+.search-section input,
+.search-section select {
+	padding: var(--space-2);
+	border: 1px solid var(--card-border-color);
+	border-radius: 4px;
+}
+
+.search-section input {
+	flex: 1;
+}
+
+/* The filter is a native select, so it will not shrink below the width of its
+   longest option — at 320 the row pushed the whole page sideways by 39px. No
+   spacing token could fix that, and shrinking the search box cannot either.
+   Stacking is the only thing that fits both controls on a phone.
+
+   flex is reset with the direction: flex: 1 sets a basis of 0 on the main axis,
+   which in a column is the height. */
+@media (max-width: 768px) {
+	.search-section {
+		flex-direction: column;
+	}
+
+	.search-section input {
+		flex: 0 0 auto;
+	}
+}
+
+.browse-groups {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	color: var(--secondary-text-color);
+}
+
+.browse-group {
+	background: var(--background-color);
+	border: 1px solid var(--card-border-color);
+	border-radius: 12px;
+	box-shadow: 0 2px 4px var(--card-shadow-color);
+	overflow: hidden;
+}
+
+.browse-group-header {
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: var(--space-4) var(--space-4);
+	border: none;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.browse-group-header:hover {
+	background: rgb(from var(--secondary-text-color) r g b / 0.05);
+}
+
+.browse-group-heading {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.browse-group-heading h3 {
+	margin: 0;
+	font-size: 1.1em;
+}
+
+.browse-group-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 32px;
+	padding: var(--space-1) var(--space-2);
+	border-radius: 999px;
+	background: rgb(from var(--secondary-text-color) r g b / 0.12);
+	font-size: 0.9em;
+	font-weight: 600;
+}
+
+.browse-group-header .expand-icon {
+	flex-shrink: 0;
+	transition: transform 0.3s ease;
+	fill: var(--secondary-text-color);
+}
+
+.browse-group-header.expanded .expand-icon {
+	transform: rotate(180deg);
+}
+
+.browse-group-content {
+	max-height: 0;
+	overflow: hidden;
+	transition: max-height 0.3s ease-out;
+}
+
+.browse-group-content.expanded {
+	max-height: 5000px;
+}
+
+.browse-group-grid {
+	padding: 0 var(--space-4) var(--space-4);
+	gap: var(--space-4);
+	min-height: 0;
+}
+
+.tournaments-grid {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	transition: all 5s ease;
+	color: var(--secondary-text-color);
+}
+
+.tournaments-grid.shrink .tournament-card {
+	width: calc(100vw - 450px);
+}
+
+.tournament-card {
+	width: 100%;
+	border: 1px solid var(--card-border-color);
+	padding: 0;
+	border-radius: 18px;
+	box-shadow: 0 8px 20px rgb(from var(--card-shadow-color) r g b / 0.16);
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
+	display: grid;
+	grid-template-columns: 12px minmax(0, 1fr) auto;
+	align-items: stretch;
+	background: var(--background-color);
+	color: var(--secondary-text-color);
+	cursor: pointer;
+	text-align: left;
+	appearance: none;
+	transition:
+		transform 0.2s ease,
+		box-shadow 0.2s ease,
+		border-color 0.2s ease,
+		background-color 0.2s ease;
+}
+
+/* The tournament's generated identity: a very soft accent wash plus the pattern
+   drawn on top of it, both behind the card's real content. Clipped by the card's
+   own border-radius via the card's `overflow: hidden` above. Colour, not the
+   status accent bar's meaning: the left bar still says upcoming/ongoing/
+   completed, this says which tournament.
+   Grid items (.tournament-card-accent, .tournament-card-body,
+   .tournament-card-action) paint like inline-blocks regardless of DOM order,
+   which sits above a plain positioned box with z-index: auto — --z-below is
+   what actually guarantees this layer stays behind them. */
+.tournament-card-identity {
+	position: absolute;
+	inset: 0;
+	z-index: var(--z-below);
+	pointer-events: none;
+	background: linear-gradient(160deg, rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.22), transparent 80%);
+}
+
+/* Base rule for TournamentPattern.jsx wherever it is used: never intercepts a
+   click, never distorts to fill its box. Callers position and size the layer
+   that hosts it (here and .tv-info-identity in tournament-view.css); this only
+   sets what the SVG itself always needs. */
+.tournament-pattern {
+	display: block;
+	pointer-events: none;
+}
+
+.tournament-card-identity .tournament-pattern {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	color: var(--tournament-accent, var(--main-color));
+}
+
+.tournament-card:hover,
+.tournament-card:focus-visible {
+	transform: translateY(-3px);
+	border-color: rgb(from var(--main-color) r g b / 0.32);
+	box-shadow: 0 16px 30px rgb(from var(--card-shadow-color) r g b / 0.24);
+	background: rgb(from var(--background-color) r g b / 0.94);
+}
+
+.tournament-card:focus-visible {
+	outline: 2px solid rgb(from var(--main-color) r g b / 0.5);
+	outline-offset: 3px;
+}
+
+.tournament-card-upcoming .tournament-card-accent {
+	background: linear-gradient(180deg, var(--main-color), rgb(from var(--main-color) r g b / 0.7));
+}
+
+.tournament-card-ongoing .tournament-card-accent {
+	background: linear-gradient(180deg, var(--secondary-color), rgb(from var(--secondary-color) r g b / 0.72));
+}
+
+.tournament-card-completed .tournament-card-accent {
+	background: linear-gradient(180deg, rgb(from var(--quarternary-color) r g b / 0.72), rgb(from var(--secondary-text-color) r g b / 0.28));
+}
+
+.tournament-card-accent {
+	height: 100%;
+}
+
+/* The frame around .tournament-card-content: deliberately thin padding and no
+   background of its own, so the identity pattern behind it (see
+   .tournament-card-identity) is always visible around the text panel's edges —
+   not just on hover, and without needing to fight the text for contrast. */
+.tournament-card-body {
+	padding: var(--space-2);
+	display: grid;
+	min-width: 0;
+}
+
+/* The text panel itself. Near-opaque rather than fully solid, so a hint of the
+   pattern still comes through behind the text — --background-color is already
+   the right colour for this: near-white in light mode, dark grey in dark mode,
+   exactly the "background behind the text" the card needs for its numbers and
+   status pill to stay readable regardless of how visible the pattern is. */
+.tournament-card-content {
+	background: rgb(from var(--background-color) r g b / 0.6);
+	border-radius: 12px;
+	padding: var(--space-3);
+	display: grid;
+	gap: var(--space-3);
+	min-width: 0;
+	position: relative;
+}
+
+/* Profile's saved-tournaments list only — Browse's cards never pass onRemove.
+   Positioned over the card rather than inline, so it does not disturb the
+   name/status layout every other caller of TournamentCard already relies on. */
+.tournament-card-remove {
+	position: absolute;
+	top: var(--space-2);
+	right: var(--space-2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.tournament-card-remove:hover,
+.tournament-card-remove:focus-visible {
+	background: rgb(from var(--secondary-text-color) r g b / 0.2);
+}
+
+.tournament-card-name {
+	font-size: 1.2rem;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.tournament-card-topline {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-3);
+}
+
+.tournament-card-status {
+	flex-shrink: 0;
+	padding: var(--space-1) var(--space-3);
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	border: 1px solid transparent;
+}
+
+.tournament-card-status.upcoming {
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+	border-color: rgb(from var(--main-color) r g b / 0.18);
+}
+
+.tournament-card-status.ongoing {
+	background: rgb(from var(--secondary-color) r g b / 0.14);
+	color: var(--secondary-color);
+	border-color: rgb(from var(--secondary-color) r g b / 0.2);
+}
+
+.tournament-card-status.completed {
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	color: rgb(from var(--secondary-text-color) r g b / 0.8);
+	border-color: rgb(from var(--secondary-text-color) r g b / 0.15);
+}
+
+.tournament-card-subline,
+.tournament-card-meta,
+.tournament-card-dates {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3) var(--space-4);
+}
+
+.tournament-card-type,
+.tournament-card-location,
+.tournament-card-date {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: 0.94rem;
+	color: rgb(from var(--secondary-text-color) r g b / 0.82);
+	min-width: 0;
+}
+
+.tournament-card-type-empty {
+	font-size: 0.9rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: rgb(from var(--secondary-text-color) r g b / 0.58);
+}
+
+.tournament-card-location {
+	max-width: 100%;
+}
+
+.tournament-card-type span,
+.tournament-card-location span,
+.tournament-card-date span {
+	min-width: 0;
+}
+
+.tournament-card-meta-icon {
+	flex-shrink: 0;
+	fill: currentColor;
+}
+
+.tournament-card-action {
+	align-self: center;
+	margin-right: var(--space-4);
+	fill: var(--secondary-text-color);
+	transition: transform 0.2s ease, fill 0.2s ease;
+}
+
+.tournament-card:hover .tournament-card-action,
+.tournament-card:focus-visible .tournament-card-action {
+	transform: translateX(6px);
+	fill: var(--secondary-color);
+}
+
+.browse-group-empty-message {
+	padding: var(--space-1) 0 2px;
+	color: rgb(from var(--secondary-text-color) r g b / 0.72);
+	font-size: 0.96rem;
+}
+
+/* 
+Tournament Creation styles
+*/
+
+.creation-container {
+	max-width: 1200px;
+	margin: var(--space-7) auto;
+	padding: 0 var(--space-4);
+}
+
+.creation-container h2 {
+	text-align: center;
+	margin-bottom: var(--space-7);
+	color: var(--secondary-text-color);
+}
+
+.creation-options {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--space-7);
+	margin: 0 auto;
+}
+
+.creation-option {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: var(--space-7);
+	border: 1px solid var(--card-border-color);
+	box-shadow: 0px 4px 8px var(--card-shadow-color);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	background: var(--background-color);
+}
+
+.creation-option:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	border-color: var(--main-color);
+}
+
+.creation-option.disabled {
+	opacity: 0.7;
+	cursor: not-allowed;
+	position: relative;
+	overflow: hidden;
+}
+
+.coming-soon-badge {
+	position: absolute;
+	top: 20px;
+	right: -60px;
+	background: var(--secondary-color);
+	color: var(--text-color);
+	padding: var(--space-2) var(--space-6);
+	transform: rotate(45deg);
+	font-size: 0.8em;
+	font-weight: 500;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	width: 200px;
+	text-align: center;
+}
+
+.creation-option.disabled:hover {
+	transform: none;
+	border-color: var(--text-color);
+	box-shadow: none;
+}
+
+.option-icon {
+	width: 64px;
+	height: 64px;
+	margin-bottom: var(--space-4);
+	fill: var(--main-color);
+}
+
+.creation-option h3 {
+	margin: 0 0 var(--space-4) 0;
+	color: var(--secondary-text-color);
+	font-size: 1.5em;
+}
+
+.creation-option p {
+	margin: 0;
+	text-align: center;
+	color: var(--secondary-text-color);
+	line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+	.creation-options {
+		grid-template-columns: 1fr;
+	}
+
+	.creation-option {
+		padding: var(--space-6);
+	}
+}
+
+.signin-warning {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: var(--space-4);
+	color: var(--secondary-text-color);
+}
+
+.signin-warning-heading {
+	text-align: center;
+	position: relative;
+	padding-top: 70px;
+	padding-bottom: var(--space-4);
+}
+
+.signin-warning-heading::before {
+	content: '⚠️';
+	font-size: 2em;
+	position: absolute;
+	top: 0;
+	left: calc(50% - 0.7em);
+}
+
+.signin-warning-info {
+	text-align: center;
+}
+
+.signin-warning-button {
+	display: flex;
+	justify-content: center;
+	margin-top: 80px;
+}
+
+/*
+Profile page
+*/
+
+.profile-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-6);
+	max-width: 900px;
+	margin: 0 auto;
+	padding: var(--space-4);
+	/* body sets color: var(--text-color), which is fixed white in both themes —
+	   meant for the header/footer's own dark backgrounds, not a themed panel on
+	   --background-color. Every heading and paragraph in this page needs the
+	   theme-adaptive token instead, same as .browse-groups does for Browse's. */
+	color: var(--secondary-text-color);
+}
+
+.profile-account {
+	background: var(--background-color);
+	border: 1px solid var(--card-border-color);
+	border-radius: 12px;
+	box-shadow: 0 2px 4px var(--card-shadow-color);
+	padding: var(--space-4);
+	color: var(--secondary-text-color);
+}
+
+.profile-account-heading {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.profile-account-heading h2 {
+	margin: 0;
+}
+
+.profile-account-email {
+	margin: var(--space-1) 0 0;
+	color: rgb(from var(--secondary-text-color) r g b / 0.8);
+}
+
+.profile-admin-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	border-radius: 999px;
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+	border: 1px solid rgb(from var(--main-color) r g b / 0.18);
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+
+.profile-section h3 {
+	margin: 0 0 var(--space-3);
+}
+
+.profile-empty-message {
+	color: var(--secondary-text-color);
+}
+
+.profile-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-4);
+	margin-top: var(--space-4);
+}
+
+.profile-pagination-button {
+	padding: var(--space-2) var(--space-4);
+	border: 1px solid var(--card-border-color);
+	border-radius: 8px;
+	background: var(--background-color);
+	color: var(--secondary-text-color);
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.profile-pagination-button:hover:not(:disabled) {
+	background: rgb(from var(--secondary-text-color) r g b / 0.08);
+}
+
+.profile-pagination-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.profile-pagination-status {
+	font-size: 0.9em;
+	color: var(--secondary-text-color);
+}
+
+/*
+Styles for the name change popup
+*/
+
+.team-name-change {
+	display: flex;
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: var(--z-modal);
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(10px);
+	justify-content: center;
+	align-items: center;
+}
+
+.team-name-change-content {
+	position: relative;
+	width: 80%;
+	height: 80%;
+	max-width: 600px;
+	max-height: 350px;
+	border-radius: 10px;
+	background: var(--background-color);
+	border: 1px solid var(--card-border-color);
+	color: var(--secondary-text-color);
+	justify-items: center;
+	padding: var(--space-6) var(--space-5);
+	gap: var(--space-2);
+	display: flex;
+	flex-direction: column;
+}
+
+.team-name-change-content h2 {
+	color: var(--main-color);
+	text-shadow: 0px 1px 1px black;
+	text-align: center;
+}
+
+.close-btn {
+	position: absolute;
+	right: 20px;
+	top: 20px;
+	font-size: 24px;
+	border: none;
+	background: none;
+	cursor: pointer;
+}
+
+.team-name-change-content sub {
+	font-size: 1em;
+	text-align: center;
+}
+
+.name-change-form {
+	display: flex;
+	margin: var(--space-7) var(--space-1);
+	gap: var(--space-2);
+	justify-content: center;
+	width: 100%;
+	flex-direction: column;
+}
+
+.name-change-form .exchange-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.3em;
+	width: 30px;
+	margin-top: var(--space-5);
+}
+
+.name-change-form-inputs {
+	display: flex;
+	gap: var(--space-2);
+	justify-content: center;
+}
+
+.name-change-button {
+	display: inline-block;
+	width: 80%;
+	height: 50px;
+	margin: var(--space-7) auto var(--space-2);
+	background: var(--main-color);
+	border: none;
+	border-radius: 5px;
+	color: var(--text-color);
+	font-size: 1.2em;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.name-change-button:hover {
+	background: var(--secondary-color);
+}
+
+.name-change-input {
+	width: calc(50% - 30px);
+	height: 80px;
+	gap: var(--space-2);
+	display: flex;
+	flex-direction: column;
+}
+
+.name-change-input input {
+	width: 100%;
+	padding: var(--space-2);
+	border: 1px solid var(--card-border-color);
+	border-radius: 4px;
+	font-size: 16px;
+	color: var(--secondary-text-color);
+}
+
+@media (max-width: 768px) {
+	.team-name-change-content {
+		max-height: 450px;
+	}
+
+	.name-change-form {
+		margin: 0px;
+	}
+
+	.name-change-form-inputs {
+		flex-direction: column;
+		gap: 0px;
+	}
+
+	.name-change-input {
+		width: 100%;
+	}
+
+	.exchange-icon {
+		transform: rotate(90deg);
+		margin: var(--space-1) auto 0px !important;
+	}
+}
+
+.overview-tab-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-4);
+	padding: var(--space-4);
+}
+
+.overview-tab-details {
+	position: relative;
+	padding: var(--space-4);
+	background-color: var(--main-color);
+	width: 100%;
+}
+
+.overview-tab-details-title {
+	font-size: 1.5rem;
+	font-weight: 700;
+	max-width: 1000px;
+}
+
+.overview-tab-details-description {
+	max-width: 1000px;
+	padding: var(--space-5);
+}
+
+.overview-tab-details-tags {
+	padding: var(--space-2);
+	display: flex;
+	gap: var(--space-2);
+	overflow-x: auto;
+}
+
+.overview-tab-details-tag {
+	display: flex;
+	gap: var(--space-1);
+	border-radius: 2rem;
+	background-color: var(--background-color);
+	color: var(--secondary-text-color);
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2) var(--space-4);
+	line-height: 1;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+	.overview-tab-details-tag {
+		padding: var(--space-1) var(--space-4);
+	}
+
+	.overview-tab-details-tags {
+		border-bottom: 2px solid var(--text-color);
+		margin-bottom: var(--space-7);
+	}
+
+	.overview-tab-details-actions {
+		top: auto !important;
+		right: auto !important;
+		bottom: 10px;
+		flex-direction: row !important;
+		padding: var(--space-2);
+		gap: var(--space-4);
+	}
+}
+
+.overview-tab-details-tag-icon {
+	fill: var(--secondary-text-color);
+}
+
+.overview-tab-details-actions {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: flex;
+	flex-direction: column;
+}
+
+.overview-tab-links {
+	background-color: blue;
+	height: 100px;
+	width: 100%;
+}
+
+.overview-tab-fixtures {
+	width: 100%;
+	padding: var(--space-2);
+	color: var(--secondary-text-color);
+}
+
+.overview-tab-fixtures-scroll {
+	display: flex;
+	gap: var(--space-2);
+	overflow-x: auto;
+	padding: var(--space-2);
+	width: 100%;
+}
+
+/* 
+Styles for the template for downloading fixtures
+*/
+#fixturesDownloadTemplate {
+	position: fixed;
+	top: 0px;
+	left: -9999px;
+	box-sizing: border-box;
+	width: 210mm;
+	min-height: 297mm;
+	background-color: white;
+	padding: 10mm;
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+.fixtures-doc {
+	color: black;
+	width: 100%;
+	height: 100%;
+}
+
+.fixtures-doc-title {
+	font-size: 2rem;
+	color: var(--main-color);
+}
+
+.tournament-not-found {
+	color: var(--secondary-text-color);
+	text-align: center;
+	margin-top: 50px;
+	font-size: 1.5rem;
+}
+
+/* 
+Standings Tab styles - temporary from old UI
+*/
+.tournament-standings {
+	padding: var(--space-4);
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	color: var(--secondary-text-color);
+}
+
+.tournament-standings h2 {
+	margin-bottom: var(--space-4);
+	padding: var(--space-1) var(--space-2);
+	border-bottom: 4px solid var(--card-border-color);
+	color: var(--main-color);
+	font-size: 2rem;
+	width: fit-content;
+	text-shadow: 1px 1px 0px black;
+}
+
+.pools-standings {
+	display: grid;
+	gap: var(--space-4);
+}
+
+.no-standings-message {
+	text-align: center;
+	padding: var(--space-7);
+	color: var(--secondary-text-color);
+}
+
+@media (max-width: 768px) {
+	.pool-standings {
+		overflow-x: scroll;
+	}
+
+}
+
+.standings-placeholder {
+	/* background: #f8f9fa; */
+	border-radius: 8px;
+	padding: var(--space-7) var(--space-4);
+	text-align: center;
+	/* color: #666; */
+	margin: var(--space-4) 0;
+	border: 2px dashed var(--card-border-color);
+}
+
+.standings-placeholder .placeholder-icon {
+	font-size: 2.5em;
+	margin-bottom: var(--space-4);
+	opacity: 0.7;
+}
+
+.standings-placeholder p {
+	margin: 0;
+	line-height: 1.5;
+}
+
+.standings-placeholder .format-info {
+	margin-top: var(--space-2);
+	font-size: 0.9em;
+	color: #2962ff;
+}
+
+.round-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: var(--space-4) var(--space-4);
+	/* background: #f8f9fa; */
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.round-header h4 {
+	margin: 0;
+	/* color: #333; */
+	font-size: 1.1em;
+}
+
+.round-header .expand-icon {
+	transition: transform 0.3s ease;
+	fill: #666;
+}
+
+.round-header.expanded .expand-icon {
+	transform: rotate(180deg);
+}
+
+.round-content {
+	max-height: 0;
+	overflow: hidden;
+	transition: max-height 0.3s ease-out;
+}
+
+.round-content.expanded {
+	max-height: 2000px; /* Adjust based on your needs */
+}
+
+.pools-standings {
+	padding: var(--space-4);
+}
+
+.empty-round-placeholder {
+	padding: var(--space-7) var(--space-4);
+	text-align: center;
+	background: #f8f9fa;
+	border-radius: 8px;
+	margin: var(--space-4);
+}
+
+.placeholder-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-4);
+	/* color: #666; */
+}
+
+.placeholder-content svg {
+	fill: #999;
+	width: 48px;
+	height: 48px;
+	opacity: 0.7;
+}
+
+.placeholder-content p {
+	margin: 0;
+	font-size: 1.1em;
+}
+
+@media (max-width: 768px) {
+	.empty-round-placeholder {
+		padding: var(--space-4);
+		margin: var(--space-2);
+	}
+
+	.placeholder-content p {
+		font-size: 0.9em;
+	}
+
+	.placeholder-content svg {
+		width: 36px;
+		height: 36px;
+	}
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+	.browse-group-header {
+		padding: var(--space-3) var(--space-4);
+	}
+
+	.browse-group-heading {
+		gap: var(--space-2);
+	}
+
+	.browse-group-heading h3 {
+		font-size: 1em;
+	}
+
+	.browse-group-grid {
+		padding: 0 var(--space-4) var(--space-4);
+	}
+
+	.browse-group-empty-message {
+		font-size: 0.92rem;
+	}
+
+	.tournament-card {
+		grid-template-columns: 10px minmax(0, 1fr);
+	}
+
+	.tournament-card-body {
+		padding: var(--space-2);
+	}
+
+	.tournament-card-content {
+		padding: var(--space-3);
+		gap: var(--space-2);
+	}
+
+	.tournament-card-topline {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.tournament-card-dates {
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.tournament-card-action {
+		margin: 0 var(--space-4) var(--space-4) auto;
+		grid-column: 2;
+	}
+
+	.round-header {
+		padding: var(--space-3) var(--space-4);
+	}
+
+	.pools-standings {
+		padding: var(--space-3);
+	}
+
+	.round-header h4 {
+		font-size: 1em;
+	}
+}
+
+/* 
+Temporary styles for teams page - taken from old version
+*/
+.tournament-teams {
+	/* max-width: 1200px;
+	margin: 0 auto; */
+	padding: var(--space-4);
+	position: relative;
+}
+
+.tournament-teams-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: var(--space-4);
+	width: 100%;
+}
+
+.tournament-teams-header h3 {
+	color: var(--main-color);
+	text-shadow: 1px 1px 0px black;
+	font-size: 2rem;
+	padding: var(--space-1) var(--space-2);
+	border-bottom: 4px solid var(--card-border-color);
+}
+
+.tournament-teams-header .button-group {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.tournament-teams-header button {
+	padding: var(--space-2) var(--space-4);
+	background: var(--main-color);
+	color: var(--text-color);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+	font-weight: 500;
+	margin-bottom: var(--space-2);
+}
+.tournament-teams-header button:nth-child(1):hover {
+	background: var(--secondary-color);
+}
+
+.tournament-teams-header button:nth-child(2) {
+	background: #969696;
+}
+
+.tournament-teams-header button:nth-child(2):hover {
+	background: #dc3545;
+}
+
+.teams-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-auto-flow: row;
+	gap: var(--space-2);
+	padding: var(--space-4);
+}
+
+@media (max-width: 768px) {
+	.teams-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.team-card {
+	position: relative;
+	padding: var(--space-4);
+	border-radius: 8px;
+	box-shadow: 0 2px 4px var(--card-shadow-color);
+	border: 1px solid var(--card-border-color);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	transition: all 0.3s ease;
+	color: var(--secondary-text-color);
+}
+
+.team-card:hover {
+	transform: translateY(-2px);
+}
+
+.team-card svg {
+	fill: var(--secondary-text-color);
+	cursor: pointer;
+	transition: fill 0.2s ease;
+}
+
+.team-card svg:hover {
+	fill: #2962ff;
+}
+
+.team-card.team-name-changed {
+	background: rgba(41, 98, 255, 0.1);
+	border-left: 3px solid #2962ff;
+	animation: highlight 1s ease-out;
+}
+
+.team-card.team-name-changed::after {
+	content: '✏️';
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	font-size: 12px;
+	opacity: 0.7;
+}
+
+@keyframes highlight {
+	from {
+		background: rgba(41, 98, 255, 0.3);
+	}
+	to {
+		background: rgba(41, 98, 255, 0.1);
+	}
+}
+
+.teams-tab-edit-team-icon {
+	fill: var(--secondary-text-color);
+}
+
+.tournament-dashboard {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-5);
+}
+
+.division-schedule-summary {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: var(--space-4);
+	padding: var(--space-4) var(--space-4);
+	border-radius: 20px;
+	border: 1px solid var(--card-border-color);
+	background-color: rgb(from var(--background-color) r g b / 0.7);
+	margin: var(--space-4) var(--space-2) 0;
+}
+
+.division-schedule-summary-copy h3 {
+	margin: 0 0 var(--space-2);
+	color: var(--text-color);
+}
+
+.division-schedule-summary-copy p {
+	margin: 0;
+}
+
+.division-schedule-summary-meta {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.division-schedule-summary-meta span {
+	padding: var(--space-2) var(--space-3);
+	border-radius: 999px;
+	background-color: rgb(from var(--background-color) r g b / 0.86);
+}
+
+.division-schedule-summary-meta button {
+	border: none;
+	border-radius: 999px;
+	background-color: var(--main-color);
+	color: var(--text-color);
+	padding: var(--space-3) var(--space-4);
+	cursor: pointer;
+	font-weight: 600;
+	transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.division-schedule-summary-meta button:hover {
+	transform: translateY(-2px);
+	background-color: var(--secondary-color);
+}
+
+.standings-summary-block {
+	margin-bottom: var(--space-5);
+}
+
+.standings-group-title {
+	margin: 0 0 var(--space-3);
+	color: var(--text-color);
+}
+
+.team-card-subtitle {
+	margin-top: var(--space-1);
+	font-size: 0.82rem;
+	color: rgb(from var(--secondary-text-color) r g b / 0.72);
+	word-break: break-all;
+}
+
+.team-card-rank {
+	font-size: 1.15rem;
+	font-weight: 700;
+	color: var(--main-color);
+}
+
+@media (max-width: 768px) {
+
+	.division-schedule-summary {
+		flex-direction: column;
+		align-items: flex-start;
+		margin: var(--space-4) 0 0;
+	}
+
+	.division-schedule-summary-meta {
+		width: 100%;
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.division-schedule-summary-meta button {
+		width: 100%;
+	}
+}
+
+.form-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.form-group label {
+	color: var(--secondary-text-color);
+	font-weight: 500;
+	font-size: 0.9rem;
+}
+
+.form-input {
+	padding: var(--space-2);
+	border: 1px solid var(--card-border-color);
+	border-radius: 6px;
+	background-color: #ffffff;
+	color: #000000;
+	font-size: 1rem;
+	transition: border-color 0.2s ease;
+	height: 50px;
+}
+
+.form-input:focus {
+	outline: none;
+	border-color: var(--main-color);
+	box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.1);
+}
+
+.form-group.error .form-input {
+	border-color: #ff6b6b;
+}
+
+.form-error {
+	color: #ff6b6b;
+	font-size: 0.85rem;
+}
+
+.teams-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	max-height: 300px;
+	overflow-y: auto;
+	padding: var(--space-2);
+	background-color: rgb(from var(--background-color) r g b / 0.5);
+	border-radius: 4px;
+	border: 1px solid var(--card-border-color);
+}

@@ -142,6 +142,24 @@ async function updateSchedule(req, res) {
     res.status(200).json({ success: true, message: "Schedule saved", data });
 }
 
+// Sets or clears the tournament's scoresheet template selection. What a valid
+// templateKey is belongs to tournamentService.updateScoresheetTemplate; this
+// reads the id and the body and nothing else.
+async function updateScoresheetTemplate(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const data = await tournamentService.updateScoresheetTemplate(
+        tournamentId,
+        req.user.id,
+        req.body?.scoresheetTemplate ?? null
+    );
+
+    res.status(200).json({ success: true, message: "Scoresheet template updated", data });
+}
+
 // add a new division to an already created tournament. The body is the same
 // division payload the creation page sends, and is passed through untouched:
 // what a valid division is belongs to divisionService.createDivision.
@@ -166,5 +184,6 @@ export const tournamentController = {
     saveTournament,
     unsaveTournament,
     updateSchedule,
-    addDivision
+    addDivision,
+    updateScoresheetTemplate
 }

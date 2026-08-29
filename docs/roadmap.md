@@ -6,7 +6,7 @@ application in a better state than it found it.
 Item codes (`C1`, `B7`, `F3`…) refer to `docs/gap-analysis.md`, which describes each one
 in full. This document says what to do and in what order; that one says why.
 
-Last reviewed 2026-08-13.
+Last reviewed 2026-08-29.
 
 ---
 
@@ -824,3 +824,87 @@ properly or the stub is removed.
   Tournaments list with a remove control, both reusing `TournamentCard`.
 - Live scoring, officials assignment, configurable ranking basis, and the rest of
   `docs/future-features.md`.
+
+## Phase 7 — 1.0 release items
+
+Scoped in a design session recorded as `claude/release-plan.md` (not itself part of this
+repository) and implemented via five handover documents. Four of the five shipped in full;
+one shipped with a known gap, noted below.
+
+### Login and account
+
+- ~~**Login by email or username, one input field.**~~ — **done 2026-08-29.**
+  `userRepository.findUserByEmailOrUsername(identifier)` resolves against both
+  `users.email` and `users.username` (`WHERE email = $1 OR username = $1`). `loginUser`
+  and everything downstream renamed its parameter to `identifier`, but the request body's
+  field name deliberately stays `email` — see `docs/decisions.md`, "Login Identifier
+  Lookup Keeps The Wire Field Named `email`". `Login.jsx`'s form is a single text input
+  (`autoComplete="username"`).
+- ~~**Password change (signed-in).**~~ — **done 2026-08-29.** `PUT /api/users/password`
+  (`requireAuth`), a new `userService.changePassword` reusing the existing
+  `PASSWORDS_DO_NOT_MATCH`/`MISSING_FIELDS` codes plus a new `CURRENT_PASSWORD_INCORRECT`.
+  `pages/Settings.jsx` replaces the `NotYetImplemented` placeholder that already sat behind
+  the existing `/settings` route; `utils/passwordPolicy.js` centralises the strength regex
+  that used to live inline in `Login.jsx`. Password reset by email is unaffected — still
+  open in `docs/future-features.md`, waiting on an email-sending decision.
+
+### Fixtures & bracket
+
+- ~~**Knockout tree shows pool-derived labels, not `Rank N`, wherever pool position alone
+  decides the qualifier.**~~ — **done 2026-08-29.** `describeQualifierSlot` (new,
+  `api/src/utils/standings.js`) mirrors `seedAcrossGroups`'s tiering to say which pool and
+  position produced a given flat rank index, returning `null` for any tier
+  `seedAcrossGroups` had to sort across pools. `buildDivisionBracket`
+  (`tournamentViewFormatter.js`) uses it only for the first knockout round's unbound slots
+  — the only place a rank placeholder was ever shown, since every later round already
+  reads `sources`/"Winner of #N". Labels read like `A1`, `B1`, `A2` — pool letter plus
+  1-based qualifying position. A slot in a cross-pool-decided tier still reads `Rank N`.
+  See `docs/decisions.md`.
+
+### Teams tab
+
+- ~~**Teams tab split into pools + seeded list (Classic), two-column list (other
+  formats).**~~ — **done 2026-08-29.** Classic divisions get a read-only
+  `GeneratedGroups` section beside the existing team list (`.tv-teams-columns`, 768px+
+  breakpoint) sourced from `division.state.rounds[0].groups` — last-saved state only, no
+  live unsaved-edit preview. Non-Classic divisions get `tv-team-rows--columns`
+  (`grid-auto-flow: column`), same DOM order and array indices, so drag/keyboard reorder
+  needed no changes.
+- ~~**Bulk-add teams to an existing division from the Teams tab.**~~ — **done
+  2026-08-29.** Was scoped alongside the items above and initially missed; landed as a
+  follow-up. A `tv-switch` toggle ("Add multiple teams") next to the add-team field
+  switches it between the single-name input and a textarea, reusing
+  `parseBulkTeamNames` (`divisionFormats.js`) unchanged — same parsing as the
+  creation-flow bulk add. `TeamsTab.jsx`'s `bulkAdding`/`bulkText` state and
+  `handleAddBulk`.
+
+### Help menu
+
+- ~~**Help menu redesigned as a slide-in side panel.**~~ — **done 2026-08-29.** Replaces
+  the centred `.help-menu-container`/`.help-menu` modal in `App.jsx`. Right-side panel
+  (`width: min(420px, 100%)`, `translateX`-based `helpPanelSlideIn` animation), a visible
+  `×` close plus Escape-to-close, restructured into a sticky `.help-menu-header` and
+  scrollable `.help-menu-body`. Every `HELP_TOPICS` entry in `helpContent.js` got an
+  `icon` field. `.help-button` (the trigger) and `HelpMenu` staying inline in `App.jsx`
+  were both left as they were.
+
+### Scoresheets
+
+- ~~**Download/print scoresheets: default FIVB templates and self-service custom
+  uploads.**~~ — **done 2026-08-29.** One mechanism for both: a PDF plus a JSON map of
+  field coordinates, overlaid with `pdf-lib` rather than requiring a fillable PDF. Default
+  templates (`fivb-indoor-2013`, `fivb-beach-2024`) are bundled as static assets
+  (`tourganiser-ui/public/scoresheet-templates/`), their field maps produced through the
+  same organiser-facing marker-placement screen (`ScoresheetTemplateModal.jsx`) rather
+  than hand-typed. Custom uploads (PDF only) live entirely in the browser's IndexedDB
+  (`utils/scoresheetStorage.js`) — no server-side file storage — which means a custom
+  template is genuinely device-bound; see `docs/known-limitations.md` and
+  `docs/decisions.md`. `tournaments.scoresheet_template` (new column, nullable text) holds
+  either a system template key or `custom:<uuid>`; `PUT
+  /:tournamentId/scoresheet-template` sets it, ownership-checked the same way
+  `updateSchedule` is. Prefill only ever fills the header fields each sheet actually has
+  room for — team names print only once `team_1_id`/`team_2_id` are bound, never from a
+  placeholder string. "Print all" merges every fixture's sheet into one PDF in
+  match-number order.
+
+This closes out 1.0 scope in full.

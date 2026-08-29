@@ -46,6 +46,7 @@ CREATE TABLE "tournaments" (
 	"created_by" uuid NOT NULL,
 	"status" tournament_status DEFAULT 'Not Started',
 	"schedule" jsonb,
+	"scoresheet_template" text,
 	"last_update" timestamp DEFAULT now() NOT NULL
 );
 CREATE TABLE "users" (

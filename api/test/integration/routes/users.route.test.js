@@ -7,7 +7,7 @@ vi.mock("../../../src/config/db.js", async () => {
 });
 
 vi.mock("../../../src/services/users.service.js", () => ({
-    userService: { createUser: vi.fn(), loginUser: vi.fn() }
+    userService: { createUser: vi.fn(), loginUser: vi.fn(), changePassword: vi.fn() }
 }));
 
 vi.mock("../../../src/services/tournaments.service.js", () => ({
@@ -24,6 +24,7 @@ const { resetAuthLimiter, AUTH_MAX_ATTEMPTS } = await import("../../../src/middl
 beforeEach(() => {
     vi.mocked(userService.createUser).mockReset();
     vi.mocked(userService.loginUser).mockReset();
+    vi.mocked(userService.changePassword).mockReset();
     vi.mocked(tournamentService.getMyTournaments).mockReset();
     vi.mocked(tournamentService.getSavedTournaments).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -226,6 +227,54 @@ describe("POST /api/users/login", () => {
         userService.loginUser.mockRejectedValue(new Error("connection lost"));
 
         expect((await request(app).post("/api/users/login").send(body)).status).toBe(500);
+    });
+});
+
+describe("PUT /api/users/password", () => {
+    const body = { currentPassword: "secret", newPassword: "NewSecret1!", confirmNewPassword: "NewSecret1!" };
+
+    it("requires a session", async () => {
+        const response = await request(app).put("/api/users/password").send(body);
+
+        expect(response.status).toBe(401);
+        expect(userService.changePassword).not.toHaveBeenCalled();
+    });
+
+    it("updates the password and responds with no data", async () => {
+        userService.changePassword.mockResolvedValue(undefined);
+
+        const response = await request(app)
+            .put("/api/users/password")
+            .set("Cookie", authCookie({ id: "user-1" }))
+            .send(body);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Password updated", data: null });
+        expect(userService.changePassword).toHaveBeenCalledWith("user-1", "secret", "NewSecret1!", "NewSecret1!");
+    });
+
+    it("reports an incorrect current password as 401", async () => {
+        userService.changePassword.mockRejectedValue(new AppError("CURRENT_PASSWORD_INCORRECT"));
+
+        const response = await request(app)
+            .put("/api/users/password")
+            .set("Cookie", authCookie())
+            .send(body);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({ success: false, message: "Current password is incorrect", data: null });
+    });
+
+    it("reports mismatched new and confirm passwords as 400", async () => {
+        userService.changePassword.mockRejectedValue(new AppError("PASSWORDS_DO_NOT_MATCH"));
+
+        const response = await request(app)
+            .put("/api/users/password")
+            .set("Cookie", authCookie())
+            .send(body);
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ success: false, message: "Passwords do not match", data: null });
     });
 });
 

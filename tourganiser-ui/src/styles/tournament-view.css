@@ -794,6 +794,12 @@ body.dark .tv-division-badge {
 	margin-bottom: var(--space-3);
 }
 
+.tv-toolbar-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
 /* Compact and inline. The filters wrap onto as many rows as they need rather
    than each taking a full row, so they stay one block of controls. */
 .tv-filters {
@@ -848,6 +854,7 @@ body.dark .tv-division-badge {
 .tv-primary-action {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: var(--space-2);
 }
 
@@ -1008,6 +1015,14 @@ body.dark .tv-division-badge {
    to itself. There is not one beside two team names. */
 .tv-row-action-label {
 	display: none;
+}
+
+/* A row can carry two actions — score entry and the scoresheet download — and
+   they share this slot rather than each claiming their own grid column. */
+.tv-fixture-row-action {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
 }
 
 /* One dot per row, first thing in the left column, so the statuses read straight
@@ -1223,20 +1238,18 @@ body.dark .tv-division-badge {
 	margin-bottom: var(--space-1);
 }
 
-.tv-advanced-toggle {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	font-size: 0.82rem;
-	color: var(--tv-muted);
-	cursor: pointer;
+/* auto margin, not just position in the flex row: DivisionSelector renders
+   nothing for a single-division tournament, which can leave this as the
+   toolbar's only child. justify-content: space-between only pins it right
+   when there is something on the other side to space *from*. */
+.tv-standings-progress-action {
+	margin-left: auto;
 }
 
-.tv-advanced-toggle input {
-	width: 16px;
-	height: 16px;
-	accent-color: var(--main-color);
-	cursor: pointer;
+.tv-standings-groups-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: var(--space-3);
 }
 
 .tv-stage-tabs {
@@ -1635,6 +1648,56 @@ body.dark .tv-division-badge {
 	gap: var(--space-2);
 }
 
+/* One card per pool, two per row once there's room. Single column below
+   768px, matching the mobile toggle showing one pane at a time. */
+.tv-teams-groups {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-4);
+}
+
+/* Mirrors .tv-bracket-match / .tv-bracket-match-head / .tv-bracket-participant
+   (the knockout MatchCard) rather than reusing those selectors — a pool card
+   has no match outcome or winner to show, and the two stay free to change
+   independently. */
+.tv-teams-group-card {
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+	overflow: hidden;
+}
+
+.tv-teams-group-card-head {
+	padding: var(--space-2) var(--space-3);
+	background: var(--tv-surface-alt);
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.tv-teams-group-card-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	font-size: 0.85rem;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-teams-group-card-row + .tv-teams-group-card-row {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-teams-group-card-seed {
+	flex: 0 0 auto;
+	min-width: 1.5em;
+	color: var(--tv-muted);
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+}
+
 .tv-team-row {
 	display: flex;
 	align-items: center;
@@ -1767,7 +1830,8 @@ body.dark .tv-division-badge {
 	color: var(--tv-muted);
 }
 
-.tv-inline-form-field input {
+.tv-inline-form-field input,
+.tv-inline-form-field textarea {
 	min-width: 0;
 	padding: var(--space-2) var(--space-2);
 	border: 1px solid var(--tv-border);
@@ -1775,6 +1839,16 @@ body.dark .tv-division-badge {
 	background: var(--tv-surface);
 	color: var(--secondary-text-color);
 	font-size: 0.9rem;
+	font-family: inherit;
+}
+
+/* Taller than a browser's one-row default, so a pasted list is visible
+   without scrolling first. Resizable vertically only — the field already
+   fills the row's width, and the actions below sit outside this box, so
+   dragging the handle grows the field in place without disturbing them. */
+.tv-inline-form-textarea {
+	min-height: 140px;
+	resize: vertical;
 }
 
 .tv-inline-form-actions {
@@ -1783,10 +1857,77 @@ body.dark .tv-division-badge {
 	gap: var(--space-1);
 }
 
+/* The default row layout bottom-aligns the field and the actions, which
+   reads fine for a single-line input but visibly drags the actions along
+   whenever the textarea variant is resized. Stacked instead: the field
+   takes the full row and the actions sit on their own line below it,
+   unaffected by the field's own height. */
+.tv-inline-form--stacked {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.tv-inline-form--stacked .tv-inline-form-field {
+	flex: 1 1 auto;
+}
+
 /* Inside a row the form is the whole cell, so its margin would double the
    padding. */
 .tv-team-row--editing .tv-inline-form {
 	margin-bottom: 0;
+}
+
+.tv-switch {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+	cursor: pointer;
+}
+
+.tv-switch input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+}
+
+.tv-switch-track {
+	position: relative;
+	flex: 0 0 auto;
+	width: 34px;
+	height: 20px;
+	border-radius: 999px;
+	background: var(--tv-border);
+	transition: background 0.15s ease;
+}
+
+.tv-switch-track::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--tv-surface);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+	transition: transform 0.15s ease;
+}
+
+.tv-switch input:checked + .tv-switch-track {
+	background: var(--main-color);
+}
+
+.tv-switch input:checked + .tv-switch-track::after {
+	transform: translateX(14px);
+}
+
+.tv-switch input:focus-visible + .tv-switch-track {
+	outline: 2px solid var(--main-color);
+	outline-offset: 2px;
 }
 
 /* Edits accumulate and are saved as one request, so there has to be somewhere
@@ -1833,6 +1974,84 @@ body.dark .tv-division-badge {
 .tv-structure-fields .form-group {
 	flex: 1 1 140px;
 	min-width: 0;
+}
+
+/* Classic divisions: Generated Groups beside the Team List, split by a
+   vertical rule so the two read as separate sections rather than one
+   continuous area. Below 768px there's no room for both, so the icon toggle
+   above switches between them instead of stacking. */
+.tv-teams-view-toggle {
+	display: inline-flex;
+	padding: var(--space-1);
+	margin-bottom: var(--space-3);
+	border-radius: 14px;
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+}
+
+.tv-teams-view-toggle button {
+	background: transparent;
+	color: var(--tv-muted);
+	padding: var(--space-2) var(--space-3);
+	border-radius: 10px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: var(--background-color);
+}
+
+.tv-teams-view-toggle button.active {
+	background: var(--main-color);
+}
+
+.tv-teams-columns-groups,
+.tv-teams-columns-list {
+	display: none;
+}
+
+.tv-teams-columns-groups--active,
+.tv-teams-columns-list--active {
+	display: block;
+}
+
+@media (min-width: 768px) {
+	.tv-teams-view-toggle {
+		display: none;
+	}
+
+	/* Unequal on purpose: two group cards per row need more width than the
+	   team list does. */
+	.tv-teams-columns {
+		display: grid;
+		grid-template-columns: 1.15fr 1fr;
+		gap: var(--space-5);
+	}
+
+	.tv-teams-groups {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.tv-teams-columns-groups,
+	.tv-teams-columns-list {
+		display: block;
+	}
+
+	.tv-teams-columns-groups {
+		padding-right: var(--space-5);
+		border-right: 4px solid var(--tv-border);
+	}
+
+	/* Non-Classic divisions: the flat team list splits into two columns,
+	   filled top-to-bottom then left-to-right, once there's room for it. The
+	   DOM order and the `teams` array are untouched — this is pure CSS
+	   positioning over the same list the drag-and-drop already operates on. */
+	.tv-team-rows--columns {
+		display: grid;
+		grid-auto-flow: column;
+		grid-template-columns: 1fr 1fr;
+		grid-template-rows: repeat(var(--tv-team-rows-count, 1), min-content);
+		column-gap: var(--space-4);
+	}
 }
 
 /* --- skeletons ---------------------------------------------------------- */
@@ -2055,12 +2274,16 @@ body.dark .tv-division-badge {
 		color: var(--tv-muted);
 	}
 
-	/* The toggle drops below the selector rather than competing with it for the
-	   row. Both stay full width so neither is a small target. */
+	/* The round button drops below the selector rather than competing with it
+	   for the row. Both stay full width so neither is a small target. */
 	.tv-standings-toolbar {
 		align-items: stretch;
 		flex-direction: column;
 		gap: var(--space-2);
+	}
+
+	.tv-standings-progress-action {
+		margin-left: 0;
 	}
 
 	.tv-standings-table th,
@@ -2101,15 +2324,25 @@ body.dark .tv-division-badge {
 		padding-inline: 14px;
 	}
 
-	/* The label is the target — it wraps the checkbox and its text — so the
-	   height belongs on the label rather than on the input. */
-	.tv-advanced-toggle {
+	/* The label is the target — it wraps the switch and its text — so the
+	   height belongs on the label rather than on the (visually hidden)
+	   checkbox. The track grows with it so the tap target isn't just the text. */
+	.tv-switch {
 		min-height: 44px;
 	}
 
-	.tv-advanced-toggle input {
+	.tv-switch-track {
+		width: 40px;
+		height: 24px;
+	}
+
+	.tv-switch-track::after {
 		width: 20px;
 		height: 20px;
+	}
+
+	.tv-switch input:checked + .tv-switch-track::after {
+		transform: translateX(16px);
 	}
 
 	/* Narrower columns and a tighter gap, so two rounds are readable at once
@@ -2127,5 +2360,9 @@ body.dark .tv-division-badge {
 	   clear of the card, for the reason on .tv-bracket-slot. */
 	.tv-bracket-slot {
 		min-height: 106px;
+	}
+
+	.tv-toolbar-actions {
+		margin: 0 auto;
 	}
 }

@@ -137,6 +137,20 @@ async function updateSchedule(tournamentId, schedule, client = db) {
     }
 }
 
+// Persists tournaments.scoresheet_template — either a system template key or
+// a `custom:<uuid>` reference into the browser's IndexedDB. Mirrors
+// updateSchedule exactly: one statement, no transaction of its own.
+async function updateScoresheetTemplate(tournamentId, templateKey, client = db) {
+    try {
+        const sql = "UPDATE tournaments SET scoresheet_template = $1 WHERE id = $2::uuid";
+        await client.query(sql, [templateKey, tournamentId]);
+
+        return { message: "Scoresheet template updated" };
+    } catch (error) {
+        throw new Error("Failed to update scoresheet template", { cause: error });
+    }
+}
+
 // Reads tournaments.schedule for a read-modify-write, taking a row lock so a
 // rebuild repairing the schedule cannot lose a placement saved alongside it.
 //
@@ -163,5 +177,6 @@ export const tournamentRepository = {
     endTournament,
     deleteTournament,
     updateSchedule,
-    getScheduleForUpdate
+    getScheduleForUpdate,
+    updateScoresheetTemplate
 };

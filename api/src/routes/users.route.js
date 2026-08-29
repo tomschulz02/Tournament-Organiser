@@ -11,6 +11,7 @@ userRouter.use(express.json());
 userRouter.post('/signup', authLimiter, userController.signup);
 userRouter.post('/login', authLimiter, userController.login);
 userRouter.post('/logout', userController.logout);
+userRouter.put('/password', requireAuth, userController.changePassword);
 userRouter.get('/profile', requireAuth, userController.getUserProfile);
 userRouter.get('/profile/tournaments', requireAuth, userController.getMyTournaments);
 userRouter.get('/profile/saved-tournaments', requireAuth, userController.getMySavedTournaments);

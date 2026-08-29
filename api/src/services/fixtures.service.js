@@ -57,6 +57,8 @@ async function updateResult(fixtureId, userId, sets, finished) {
     const status = deriveStatus(scored, finished === true);
 
     return await db.withTransaction(async (client) => {
+        await assertRoundNotLocked(fixture, client);
+
         await fixturesRepository.updateResult(
             fixtureId,
             [scored.map((set) => set[0]), scored.map((set) => set[1])],
@@ -68,6 +70,21 @@ async function updateResult(fixtureId, userId, sets, finished) {
 
         return { id: fixtureId, status, completedGames };
     });
+}
+
+// A round is locked for editing the moment progression commits its results —
+// the same moment state.currentRound moves past it, so the previous round's
+// fixtures freeze exactly when the next one starts. Re-fetches the state
+// syncCompletedGames also fetches, rather than sharing one read, so this check
+// stays a self-contained guard the transaction can fail on before any write.
+async function assertRoundNotLocked(fixture, client) {
+    const state = normalizeState(await divisionsRepository.getStateForUpdate(fixture.division_id, client));
+    const rounds = Array.isArray(state.rounds) ? state.rounds : [];
+    const round = rounds.find((round) => round.name === roundHolding(fixture.round));
+
+    if (round && Array.isArray(round.results) && round.results.length > 0) {
+        throw new AppError("ROUND_LOCKED");
+    }
 }
 
 // Rewrites the stored completedGames for the round this fixture sits in.
@@ -150,8 +167,12 @@ function validateSets(sets) {
     });
 }
 
+// 999 is generous enough for any real sport's single-set score while still
+// rejecting fat-fingered or malicious values like 999999999.
+const MAX_SET_SCORE = 999;
+
 function isScore(value) {
-    return Number.isInteger(value) && value >= 0;
+    return Number.isInteger(value) && value >= 0 && value <= MAX_SET_SCORE;
 }
 
 // The four statuses, per docs/tournament-rules.md. CANCELLED is the one the

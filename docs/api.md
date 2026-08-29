@@ -371,7 +371,15 @@ one has, the commit returns 409 rather than discarding real scores.
 
 The proposal includes each team's name alongside its id and record, so the client does
 not need a second lookup. Ids are the identity throughout — two teams in a division may
-share a name.
+share a name. A knockout round's "record" is that single match's outcome (`won`/`lost`
+as 1/0, `setsWon`/`setsLost` from that match), rather than a season of them — a bye
+carries zeros, having played nothing.
+
+The proposal also includes `nextRound: { name, groups }` — null on the final round,
+which has none — the same pairing structure `commit` uses to bind fixtures. It lets the
+client preview which teams the next round will pair together from the organiser's
+current (possibly reordered or substituted) qualifier list, before anything is
+confirmed.
 
 On commit, the next round's placeholder fixtures are bound to real teams:
 `nextRound.groups[i]` holds two positions in the confirmed results, and

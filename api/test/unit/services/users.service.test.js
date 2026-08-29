@@ -3,7 +3,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("../../../src/repositories/users.repository.js", () => ({
     userRepository: {
         createUser: vi.fn(),
-        findUserByEmail: vi.fn()
+        findUserByEmailOrUsername: vi.fn(),
+        getUserById: vi.fn(),
+        updatePassword: vi.fn()
     }
 }));
 
@@ -44,7 +46,9 @@ function duplicateKeyFailure(constraint) {
 
 beforeEach(() => {
     vi.mocked(userRepository.createUser).mockReset().mockResolvedValue(STORED_USER);
-    vi.mocked(userRepository.findUserByEmail).mockReset().mockResolvedValue(STORED_USER);
+    vi.mocked(userRepository.findUserByEmailOrUsername).mockReset().mockResolvedValue(STORED_USER);
+    vi.mocked(userRepository.getUserById).mockReset().mockResolvedValue(STORED_USER);
+    vi.mocked(userRepository.updatePassword).mockReset().mockResolvedValue(undefined);
     vi.mocked(bcrypt.hash).mockReset().mockResolvedValue("hashed-password");
     vi.mocked(bcrypt.compare).mockReset().mockResolvedValue(true);
     vi.mocked(jwt.sign).mockReset().mockReturnValue("signed-token");
@@ -161,24 +165,72 @@ describe("userService.loginUser", () => {
         await expect(userService.loginUser("tom@example.com", "")).rejects.toMatchObject({ code: "MISSING_FIELDS" });
     });
 
-    it("gives the same error for an unknown email and a wrong password", async () => {
+    it("gives the same error for an unknown identifier and a wrong password", async () => {
         // Distinguishing the two would let an attacker enumerate accounts.
-        userRepository.findUserByEmail.mockResolvedValueOnce(null);
-        const unknownEmail = await userService.loginUser("nobody@example.com", "secret").catch((err) => err);
+        userRepository.findUserByEmailOrUsername.mockResolvedValueOnce(null);
+        const unknownIdentifier = await userService.loginUser("nobody@example.com", "secret").catch((err) => err);
 
         bcrypt.compare.mockResolvedValueOnce(false);
         const wrongPassword = await userService.loginUser("tom@example.com", "wrong").catch((err) => err);
 
-        expect(unknownEmail.code).toBe("INVALID_CREDENTIALS");
-        expect(unknownEmail.status).toBe(401);
+        expect(unknownIdentifier.code).toBe("INVALID_CREDENTIALS");
+        expect(unknownIdentifier.status).toBe(401);
         expect(wrongPassword.code).toBe("INVALID_CREDENTIALS");
-        expect(wrongPassword.message).toBe(unknownEmail.message);
+        expect(wrongPassword.message).toBe(unknownIdentifier.message);
+    });
+
+    it("accepts a username in place of an email", async () => {
+        expect(await userService.loginUser("tom", "secret")).toEqual({
+            token: "signed-token",
+            username: "tom"
+        });
+
+        expect(userRepository.findUserByEmailOrUsername).toHaveBeenCalledWith("tom");
     });
 
     it("lets a lookup failure propagate, so it becomes a 500 rather than a bad-credentials 401", async () => {
         const failure = new Error("Failed to look up user by email");
-        userRepository.findUserByEmail.mockRejectedValue(failure);
+        userRepository.findUserByEmailOrUsername.mockRejectedValue(failure);
 
         await expect(userService.loginUser("tom@example.com", "secret")).rejects.toBe(failure);
+    });
+});
+
+describe("userService.changePassword", () => {
+    it("verifies the current password, stores the new hash and returns nothing", async () => {
+        const result = await userService.changePassword("user-1", "secret", "NewSecret1!", "NewSecret1!");
+
+        expect(result).toBeUndefined();
+        expect(userRepository.getUserById).toHaveBeenCalledWith("user-1");
+        expect(bcrypt.compare).toHaveBeenCalledWith("secret", "hashed-password");
+        expect(bcrypt.hash).toHaveBeenCalledWith("NewSecret1!", 12);
+        expect(userRepository.updatePassword).toHaveBeenCalledWith("user-1", "hashed-password");
+    });
+
+    it("rejects missing fields", async () => {
+        await expect(userService.changePassword("user-1", "", "NewSecret1!", "NewSecret1!")).rejects.toMatchObject({
+            code: "MISSING_FIELDS"
+        });
+        await expect(userService.changePassword("user-1", "secret", "", "NewSecret1!")).rejects.toMatchObject({
+            code: "MISSING_FIELDS"
+        });
+        await expect(userService.changePassword("user-1", "secret", "NewSecret1!", "")).rejects.toMatchObject({
+            code: "MISSING_FIELDS"
+        });
+    });
+
+    it("rejects mismatched new and confirm passwords", async () => {
+        await expect(
+            userService.changePassword("user-1", "secret", "NewSecret1!", "Different1!")
+        ).rejects.toMatchObject({ code: "PASSWORDS_DO_NOT_MATCH" });
+    });
+
+    it("rejects an incorrect current password", async () => {
+        bcrypt.compare.mockResolvedValueOnce(false);
+
+        await expect(
+            userService.changePassword("user-1", "wrong", "NewSecret1!", "NewSecret1!")
+        ).rejects.toMatchObject({ code: "CURRENT_PASSWORD_INCORRECT" });
+        expect(userRepository.updatePassword).not.toHaveBeenCalled();
     });
 });

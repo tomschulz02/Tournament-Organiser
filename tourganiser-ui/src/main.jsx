@@ -11,8 +11,8 @@ import ViewPage from './pages/View';
 import About from './pages/About';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
-import NotYetImplemented from './pages/NotYetImplemented';
 import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import LegalPage from './pages/Legal';
 import ScrollToTop from './components/ScrollToTop';
 import { AuthProvider } from './AuthProvider';
@@ -41,9 +41,7 @@ function RoutesComponent() {
 					<Route path="/about" element={<About />} />
 					<Route path="/terms" element={<LegalPage />} />
 					<Route path="/profile" element={<Profile />} />
-					{/* Reached from the account menu's Settings item before the page
-					    exists — a real, reachable route rather than a 404. */}
-					<Route path="/settings" element={<NotYetImplemented title="Settings" />} />
+					<Route path="/settings" element={<Settings />} />
 					<Route path="*" element={<NotFound />} />
 				</Route>
 				<Route path="/login" element={<Login />} />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
@@ -16,8 +16,20 @@ import { useHelpTopic } from '../../HelpContext';
 // definitions of what a valid division is.
 import DivisionModal from '../create/DivisionModal';
 import { createEmptyDivision, isConfigurableFormat } from '../create/divisionFormats';
-import { addDivision, deleteDivision, deleteTournament, endTournament, startTournament } from '../../requests';
+import {
+	addDivision,
+	deleteDivision,
+	deleteTournament,
+	endTournament,
+	startTournament,
+	updateTournamentScoresheetTemplate,
+} from '../../requests';
 import { divisionColorStyle } from '../../utils/divisionColors';
+
+// Split out of the main bundle for the same reason ScheduleMakerModal is
+// (see pages/View.jsx): it pulls in pdfjs-dist for the marker-placement
+// preview, which only an organiser opens, and only deliberately.
+const ScoresheetTemplateModal = lazy(() => import('./ScoresheetTemplateModal'));
 
 // The tournament dashboard. Three bands: what this tournament is, what its
 // divisions are, and what has just happened or is about to.
@@ -91,6 +103,7 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 						tournamentId={tournament.id}
 						status={tournament.status}
 						name={tournament.name}
+						scoresheetTemplate={tournament.scoresheet_template}
 						onChanged={onChanged}
 						onDeleted={onDeleted}
 					/>
@@ -106,10 +119,11 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 // Only the transition the tournament is actually in is offered: a finished
 // tournament has neither. The server refuses the others with a 409 regardless —
 // this is presentation, not enforcement.
-function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) {
+function LifecycleActions({ tournamentId, status, name, scoresheetTemplate, onChanged, onDeleted }) {
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const [busy, setBusy] = useState(false);
+	const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
 	const current = status || 'Not Started';
 
@@ -118,7 +132,7 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 		try {
 			await action();
 			showMessage(successMessage, 'success');
-			after();
+			after?.();
 		} catch (apiError) {
 			// Display-ready by contract, including the 409s.
 			showMessage(apiError.message, 'error');
@@ -160,6 +174,18 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 		await run(() => deleteTournament(tournamentId), 'Tournament deleted.', () => onDeleted?.());
 	};
 
+	// The picker hands back the key it wants selected, or null to clear it.
+	// The endpoint is the only source of truth for the selection, so the modal
+	// closes and the page refetches rather than the button holding its own copy.
+	const handleSaveTemplate = async (templateKey) => {
+		setTemplateModalOpen(false);
+		await run(
+			() => updateTournamentScoresheetTemplate(tournamentId, templateKey),
+			'Scoresheet template updated.',
+			() => onChanged?.(),
+		);
+	};
+
 	return (
 		<div className="tv-info-actions">
 			{current === 'Not Started' && (
@@ -174,6 +200,10 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 				</button>
 			)}
 
+			<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => setTemplateModalOpen(true)}>
+				Scoresheet Template
+			</button>
+
 			<button
 				type="button"
 				className="tv-subtle-action tv-subtle-action--danger"
@@ -181,6 +211,16 @@ function LifecycleActions({ tournamentId, status, name, onChanged, onDeleted }) 
 				onClick={handleDelete}>
 				<Icon name='delete' fill='var(--error-color)'></Icon>
 			</button>
+
+			{templateModalOpen && (
+				<Suspense fallback={<LoadingScreen />}>
+					<ScoresheetTemplateModal
+						initialTemplateKey={scoresheetTemplate}
+						onCancel={() => setTemplateModalOpen(false)}
+						onSave={handleSaveTemplate}
+					/>
+				</Suspense>
+			)}
 		</div>
 	);
 }

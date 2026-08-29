@@ -97,7 +97,7 @@ describe("PUT /api/fixtures/:fixtureId/result", () => {
         const response = await request(app).put(PATH).set("Cookie", authCookie()).send({ sets: [[21, -1]] });
 
         expect(response.status).toBe(400);
-        expect(response.body.message).toBe("Scores must be whole numbers of zero or more");
+        expect(response.body.message).toBe("Scores must be whole numbers between 0 and 999");
     });
 
     it("hides an unexpected failure behind a generic 500", async () => {

@@ -19,6 +19,7 @@ import {
     getGroupLabel,
     isDivisionComplete,
     isResultFixture,
+    lockedRoundNamesOf,
     normalizeDivisionState,
     normalizeFixture,
     normalizeFixtureResult,
@@ -420,6 +421,51 @@ describe("normalizeFixture", () => {
             COMPLETED: "Completed",
             CANCELLED: "Cancelled"
         });
+    });
+
+    it("is unlocked by default, with no locked round names supplied", () => {
+        expect(normalizeFixture(makeFixture({ round: "Pool Play" }), teamLookup).locked).toBe(false);
+    });
+
+    it("locks a fixture whose round name is in the locked set", () => {
+        const fixture = makeFixture({ round: "Pool Play" });
+
+        expect(normalizeFixture(fixture, teamLookup, new Set(["Pool Play"])).locked).toBe(true);
+    });
+
+    it("leaves a fixture in a different round unlocked", () => {
+        const fixture = makeFixture({ round: "Semifinals" });
+
+        expect(normalizeFixture(fixture, teamLookup, new Set(["Pool Play"])).locked).toBe(false);
+    });
+
+    it("locks a 3rd Place Playoff fixture off the Finals round's own name", () => {
+        const fixture = makeFixture({ round: "3rd Place Playoff" });
+
+        expect(normalizeFixture(fixture, teamLookup, new Set(["Finals"])).locked).toBe(true);
+    });
+});
+
+describe("lockedRoundNamesOf", () => {
+    it("names every round whose results have been committed", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({ name: "Pool Play", results: ["t1", "t2"] }),
+                makeRound({ name: "Semifinals", type: "knockout", results: [] })
+            ]
+        });
+
+        expect(lockedRoundNamesOf(state)).toEqual(new Set(["Pool Play"]));
+    });
+
+    it("names nothing when no round has been progressed", () => {
+        const state = makeState({ rounds: [makeRound({ name: "Pool Play", results: [] })] });
+
+        expect(lockedRoundNamesOf(state)).toEqual(new Set());
+    });
+
+    it("treats a non-array rounds key as no rounds at all", () => {
+        expect(lockedRoundNamesOf({ rounds: "nope" })).toEqual(new Set());
     });
 });
 
@@ -1004,6 +1050,126 @@ describe("buildDivisionBracket", () => {
 
         expect(finals.matches[0].sources[1]).toBeNull();
     });
+
+    // --- pool-derived labels for the first knockout round -------------------
+
+    it("labels a clean-tier first-round slot with both its pool position and its rank", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2", "t3", "t4"],
+                        ["t5", "t6", "t7", "t8"]
+                    ]
+                }),
+                // 8 qualifiers from 2 pools of 4 -> every tier is clean.
+                makeRound({ name: "Quarterfinals", type: "knockout", groups: [[0, 7], [1, 6], [2, 5], [3, 4]] })
+            ]
+        });
+
+        const quarters = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(quarters.matches.map((match) => match.participants.map((p) => p.name))).toEqual([
+            ["A1 (Rank 1)", "B4 (Rank 8)"],
+            ["B1 (Rank 2)", "A4 (Rank 7)"],
+            ["A2 (Rank 3)", "B3 (Rank 6)"],
+            ["B2 (Rank 4)", "A3 (Rank 5)"]
+        ]);
+    });
+
+    it("keeps Rank N for a slot in a tier that is not clean, and labels the rest", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2", "t3", "t4"],
+                        ["t5", "t6", "t7", "t8"]
+                    ]
+                }),
+                // Max index 4 -> 5 qualifiers from 2 pools of 4: cleanTiers = 2,
+                // so index 4 (the 3rd tier) is not pool-derived.
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[4, 0]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["Rank 5", "A1 (Rank 1)"]);
+    });
+
+    it("labels clean-tier slots correctly for uneven pool sizes", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2", "t3"],
+                        ["t4", "t5"],
+                        ["t6", "t7"]
+                    ]
+                }),
+                // Max index 8 -> 9 qualifiers from pools of 3/2/2: cleanTiers = 3.
+                // Index 6 is pool A's third-place team; index 8 falls outside the
+                // range seedAcrossGroups can produce this way and is not clean.
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[6, 8]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["A3 (Rank 7)", "Rank 9"]);
+    });
+
+    it("falls back to Rank N when the preceding pool round has no groups key", () => {
+        const state = makeState({
+            rounds: [
+                { name: "Pool Play", type: "roundRobin" },
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 1]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["Rank 1", "Rank 2"]);
+    });
+
+    it("tolerates a malformed pool group when computing pool sizes", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({ name: "Pool Play", groups: [["t1", "t2"], "not-a-group"] }),
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 1]] })
+            ]
+        });
+
+        const semis = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(semis.matches[0].participants.map((p) => p.name)).toEqual(["A1 (Rank 1)", "Rank 2"]);
+    });
+
+    it("labels both slots of a two-team knockout stage, bronze included", () => {
+        // docs/tournament-rules.md: a two-team knockout still consumes four ranks.
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Pool Play",
+                    groups: [
+                        ["t1", "t2"],
+                        ["t3", "t4"]
+                    ]
+                }),
+                makeRound({ name: "Finals", type: "knockout", groups: [[2, 3], [0, 1]] })
+            ]
+        });
+
+        const finals = buildDivisionBracket(state, [], teamLookup).rounds[0];
+
+        expect(finals.matches.map((match) => match.participants.map((p) => p.name))).toEqual([
+            ["A2 (Rank 3)", "B2 (Rank 4)"],
+            ["A1 (Rank 1)", "B1 (Rank 2)"]
+        ]);
+    });
 });
 
 describe("buildFinalStandings", () => {
@@ -1255,8 +1421,19 @@ describe("buildFinalStandings", () => {
 
     it("places the quarter-final losers 5-8, ordered by the match they lost", () => {
         // No pool round in state at all: a knockout-only division has nothing
-        // below its bracket.
-        const state = makeState({ rounds: [] });
+        // below its bracket. Quarterfinals is committed (all four winners advance,
+        // per the auto-generated ranking); Semifinals is not — that's what stops
+        // the walk before ranks 1-4.
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Quarterfinals", type: "knockout",
+                    results: ["t1", "t2", "t3", "t4"],
+                    computedResults: ["t1", "t2", "t3", "t4", "t8", "t7", "t6", "t5"]
+                }),
+                makeRound({ name: "Semifinals", type: "knockout" })
+            ]
+        });
         const fixtures = [
             played("qf1", 1, "t1", "t8", [[21, 5], [21, 5]]),
             played("qf2", 2, "t2", "t7", [[21, 19], [21, 19]]),
@@ -1268,6 +1445,7 @@ describe("buildFinalStandings", () => {
             rounds: [
                 {
                     name: "Quarterfinals",
+                    roundIndex: 0,
                     matches: [
                         decided("qf1", "t1", "t8", "t1"),
                         decided("qf2", "t2", "t7", "t2"),
@@ -1277,6 +1455,7 @@ describe("buildFinalStandings", () => {
                 },
                 {
                     name: "Semifinals",
+                    roundIndex: 1,
                     matches: [
                         { id: "sf1", round: "Semifinals", participants: [{ id: "t1" }, { id: "t4" }], winner: null },
                         { id: "sf2", round: "Semifinals", participants: [{ id: "t2" }, { id: "t3" }], winner: null }
@@ -1313,15 +1492,89 @@ describe("buildFinalStandings", () => {
         // t6 took a set, so it separates first; the other three are level on sets
         // and separate on points won in the match they lost.
         expect(ranked).toEqual([
-            { rank: 5, team_id: "t6", name: "t6", note: "Quarterfinals" },
-            { rank: 6, team_id: "t7", name: "t7", note: "Quarterfinals" },
-            { rank: 7, team_id: "t5", name: "t5", note: "Quarterfinals" },
-            { rank: 8, team_id: "t8", name: "t8", note: "Quarterfinals" }
+            { rank: 5, team_id: "t6", name: "Team 6", note: "Quarterfinals" },
+            { rank: 6, team_id: "t7", name: "Team 7", note: "Quarterfinals" },
+            { rank: 7, team_id: "t5", name: "Team 5", note: "Quarterfinals" },
+            { rank: 8, team_id: "t8", name: "Team 8", note: "Quarterfinals" }
+        ]);
+    });
+
+    // Was a real bug: elimination used to be re-derived from each match's score,
+    // so overriding progression to advance the team that actually lost (a
+    // walkover, a late withdrawal — the reason doesn't matter) left the team that
+    // actually won unranked entirely, while the overridden-out team was still
+    // treated as having advanced. Reading who advanced from the round's own
+    // committed `results` instead fixes both.
+    it("eliminates the team the organiser overrode out, not the one who actually lost the match", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Quarterfinals", type: "knockout",
+                    // t2 beat t7 on the scoreboard, but the organiser chose to
+                    // advance t7 in its place.
+                    results: ["t1", "t7", "t3", "t4"],
+                    computedResults: ["t1", "t2", "t3", "t4", "t8", "t7", "t6", "t5"]
+                }),
+                makeRound({ name: "Semifinals", type: "knockout" })
+            ]
+        });
+        const fixtures = [
+            played("qf1", 1, "t1", "t8", [[21, 5], [21, 5]]),
+            played("qf2", 2, "t2", "t7", [[21, 19], [21, 19]]),
+            played("qf3", 3, "t3", "t6", [[21, 19], [19, 21], [21, 19]]),
+            played("qf4", 4, "t4", "t5", [[21, 15], [21, 15]]),
+            stillToPlay
+        ];
+        const bracket = {
+            rounds: [
+                {
+                    name: "Quarterfinals",
+                    roundIndex: 0,
+                    matches: [
+                        decided("qf1", "t1", "t8", "t1"),
+                        decided("qf2", "t2", "t7", "t2"),
+                        decided("qf3", "t3", "t6", "t3"),
+                        decided("qf4", "t4", "t5", "t4")
+                    ]
+                },
+                {
+                    name: "Semifinals",
+                    roundIndex: 1,
+                    matches: [
+                        { id: "sf1", round: "Semifinals", participants: [{ id: "t1" }, { id: "t4" }], winner: null },
+                        { id: "sf2", round: "Semifinals", participants: [{ id: "t7" }, { id: "t3" }], winner: null }
+                    ]
+                }
+            ]
+        };
+
+        const ranked = buildFinalStandings({
+            division, state, fixtures, standings: [], bracket, teams: eightTeams()
+        });
+
+        // t2 is eliminated despite winning its match, and — having won it —
+        // ranks above the three teams that lost theirs outright. t7, the team
+        // actually advanced, is not ranked at all: it is still in the tournament.
+        expect(ranked).toEqual([
+            { rank: 5, team_id: "t2", name: "Team 2", note: "Quarterfinals" },
+            { rank: 6, team_id: "t6", name: "Team 6", note: "Quarterfinals" },
+            { rank: 7, team_id: "t5", name: "Team 5", note: "Quarterfinals" },
+            { rank: 8, team_id: "t8", name: "Team 8", note: "Quarterfinals" }
         ]);
     });
 
     it("leaves the semifinal losers to the playoff that separates them", () => {
-        const state = makeState({ rounds: [] });
+        // All four semifinal participants are committed forward into the Finals
+        // round — the two winners as finalists, the two losers into the bronze
+        // match — so nobody is "eliminated" at the semifinal block itself; that's
+        // what leaves them for the (here, still unplayed) playoff to separate.
+        const state = makeState({
+            rounds: [makeRound({
+                name: "Semifinals", type: "knockout",
+                results: ["t1", "t2", "t4", "t3"],
+                computedResults: ["t1", "t2", "t4", "t3"]
+            })]
+        });
         const fixtures = [
             played("sf1", 5, "t1", "t4", [[21, 15]]),
             played("sf2", 6, "t2", "t3", [[21, 15]]),
@@ -1329,7 +1582,11 @@ describe("buildFinalStandings", () => {
         ];
         const bracket = {
             rounds: [
-                { name: "Semifinals", matches: [decided("sf1", "t1", "t4", "t1"), decided("sf2", "t2", "t3", "t2")] },
+                {
+                    name: "Semifinals",
+                    roundIndex: 0,
+                    matches: [decided("sf1", "t1", "t4", "t1"), decided("sf2", "t2", "t3", "t2")]
+                },
                 {
                     name: "Finals",
                     matches: [{
@@ -1351,10 +1608,19 @@ describe("buildFinalStandings", () => {
 
     it("separates teams eliminated together by the round before, then by seeding", () => {
         // Both lost their semifinal by the same score, so the round before decides:
-        // t4 won its quarter-final more convincingly than t3 won its own.
+        // t4 won its quarter-final more convincingly than t3 won its own. No
+        // bronze match in this bracket, so only the two winners are committed
+        // forward — the losers are genuinely eliminated here, not deferred.
         const state = makeState({
-            // Committed, but carrying no computed ranking — an older division.
-            rounds: [makeRound({ name: "Pool Play", results: ["t1", "t2", "t3", "t4"] })]
+            rounds: [
+                // Committed, but carrying no computed ranking — an older division.
+                makeRound({ name: "Pool Play", results: ["t1", "t2", "t3", "t4"] }),
+                makeRound({
+                    name: "Semifinals", type: "knockout",
+                    results: ["t1", "t2"],
+                    computedResults: ["t1", "t2", "t3", "t4"]
+                })
+            ]
         });
         const fixtures = [
             played("qf1", 1, "t3", "t5", [[21, 19]]),
@@ -1365,7 +1631,11 @@ describe("buildFinalStandings", () => {
         ];
         const bracket = {
             rounds: [
-                { name: "Semifinals", matches: [decided("sf1", "t1", "t3", "t1"), decided("sf2", "t2", "t4", "t2")] },
+                {
+                    name: "Semifinals",
+                    roundIndex: 1,
+                    matches: [decided("sf1", "t1", "t3", "t1"), decided("sf2", "t2", "t4", "t2")]
+                },
                 { name: "Finals", matches: [{ id: "gold", round: "Finals", participants: [{ id: "t1" }, { id: "t2" }], winner: null }] }
             ]
         };
@@ -1378,7 +1648,13 @@ describe("buildFinalStandings", () => {
     });
 
     it("falls through to seeding when two teams never separate", () => {
-        const state = makeState({ rounds: [] });
+        const state = makeState({
+            rounds: [makeRound({
+                name: "Semifinals", type: "knockout",
+                results: ["t1", "t2"],
+                computedResults: ["t1", "t2", "t3", "t4"]
+            })]
+        });
         const fixtures = [
             played("sf1", null, "t1", "t3", [[21, 15]]),
             played("sf2", null, "t2", "t4", [[21, 15]]),
@@ -1388,7 +1664,11 @@ describe("buildFinalStandings", () => {
         ];
         const bracket = {
             rounds: [
-                { name: "Semifinals", matches: [decided("sf1", "t1", "t3", "t1"), decided("sf2", "t2", "t4", "t2")] },
+                {
+                    name: "Semifinals",
+                    roundIndex: 0,
+                    matches: [decided("sf1", "t1", "t3", "t1"), decided("sf2", "t2", "t4", "t2")]
+                },
                 { name: "Finals", matches: [{ id: "gold", round: "Finals", participants: [{ id: "t1" }, { id: "t2" }], winner: null }] }
             ]
         };
@@ -1403,15 +1683,26 @@ describe("buildFinalStandings", () => {
 
     it("ignores a cancelled match and never ranks a bye team as eliminated", () => {
         // A round of one match and one bye: only the loser of the match is
-        // eliminated, and the cancelled match eliminated nobody at all.
+        // eliminated, and the cancelled match — never having produced a computed
+        // result for t9/t10 — eliminated nobody at all. Quarterfinals is still to
+        // be played, so it is not yet committed and stops the walk there.
         const state = makeState({
-            rounds: [makeRound({ name: null, results: ["t1", "t2", "t3"], computedResults: ["t1", "t2", "t3"] })]
+            rounds: [
+                makeRound({ name: null, results: ["t1", "t2", "t3"], computedResults: ["t1", "t2", "t3"] }),
+                makeRound({
+                    name: "Round of 3", type: "knockout",
+                    results: ["t1", "t2"],
+                    computedResults: ["t1", "t2", "t3"]
+                }),
+                makeRound({ name: "Quarterfinals", type: "knockout" })
+            ]
         });
         const fixtures = [played("r3", 1, "t2", "t3", [[21, 15]]), stillToPlay];
         const bracket = {
             rounds: [
                 {
                     name: "Round of 3",
+                    roundIndex: 1,
                     matches: [
                         decided("r3", "t2", "t3", "t2"),
                         { id: "void", round: "Round of 3", status: "CANCELLED", participants: [{ id: "t9" }, { id: "t10" }], winner: null }
@@ -1419,6 +1710,7 @@ describe("buildFinalStandings", () => {
                 },
                 {
                     name: "Quarterfinals",
+                    roundIndex: 2,
                     matches: [{ id: "qf", round: "Quarterfinals", participants: [{ id: "t1" }, { id: "t2" }], winner: null }]
                 },
                 { name: "Finals", matches: [{ id: "gold", round: "Finals", participants: [{ id: "t1" }, { id: "t2" }], winner: null }] }
@@ -1432,7 +1724,42 @@ describe("buildFinalStandings", () => {
         // The quarter-final is still being played, so it eliminates nobody and
         // nothing above it is placed either. t1 sat the round out and is still in the tournament; only t3 is placed,
         // and the pool round left nobody unqualified, so it takes last place.
-        expect(ranked).toEqual([{ rank: 8, team_id: "t3", name: "t3", note: "Round of 3" }]);
+        expect(ranked).toEqual([{ rank: 8, team_id: "t3", name: "Team 3", note: "Round of 3" }]);
+    });
+
+    // Defensive branches: a bracket round with no matching state.rounds entry
+    // (roundIndex points nowhere) reads the same as one that has not been
+    // progressed at all, and a committed round whose computedResults were never
+    // written — a division created before this field existed — eliminates
+    // nobody rather than crashing.
+    it("treats a bracket round with no matching state round as undecided", () => {
+        const state = makeState({ rounds: [] });
+        const bracket = {
+            rounds: [
+                { name: "Quarterfinals", roundIndex: 4, matches: [] },
+                { name: "Finals", matches: [{ id: "gold", round: "Finals", participants: [{ id: "t1" }, { id: "t2" }], winner: null }] }
+            ]
+        };
+
+        expect(buildFinalStandings({
+            division, state, fixtures: [stillToPlay], standings: [], bracket, teams: eightTeams()
+        })).toEqual([]);
+    });
+
+    it("eliminates nobody from a committed round with no computed ranking on record", () => {
+        const state = makeState({
+            rounds: [makeRound({ name: "Quarterfinals", type: "knockout", results: ["t1", "t2", "t3", "t4"] })]
+        });
+        const bracket = {
+            rounds: [
+                { name: "Quarterfinals", roundIndex: 0, matches: [] },
+                { name: "Finals", matches: [{ id: "gold", round: "Finals", participants: [{ id: "t1" }, { id: "t2" }], winner: null }] }
+            ]
+        };
+
+        expect(buildFinalStandings({
+            division, state, fixtures: [stillToPlay], standings: [], bracket, teams: eightTeams()
+        })).toEqual([]);
     });
 });
 
@@ -1641,7 +1968,8 @@ describe("formatTournamentDetails", () => {
             status: "Not Started",
             type: null,
             division_count: 0,
-            schedule: null
+            schedule: null,
+            scoresheet_template: null
         });
     });
 
@@ -1650,6 +1978,11 @@ describe("formatTournamentDetails", () => {
         const schedule = { version: 1, days: [] };
 
         expect(formatTournamentDetails(makeTournament({ schedule }), []).schedule).toEqual(schedule);
+    });
+
+    it("carries the tournament's scoresheet template selection", () => {
+        expect(formatTournamentDetails(makeTournament({ scoresheet_template: "fivb-indoor-2013" }), []).scoresheet_template)
+            .toBe("fivb-indoor-2013");
     });
 
     it("reports no type when the divisions disagree", () => {

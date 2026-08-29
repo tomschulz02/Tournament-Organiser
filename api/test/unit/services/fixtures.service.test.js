@@ -585,6 +585,69 @@ describe("fixtureService.updateResult", () => {
         await expect(fixtureService.updateResult("f1", "user-1", [[21, 15]], true)).rejects.toBe(failure);
 
         expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
-        expect(divisionsRepository.getStateForUpdate).not.toHaveBeenCalled();
+        expect(divisionsRepository.updateStateRounds).not.toHaveBeenCalled();
+    });
+});
+
+describe("fixtureService.updateResult, round locking", () => {
+    function owned(overrides = {}) {
+        return makeFixture({
+            id: "f1",
+            division_id: "div-1",
+            round: "Pool Play",
+            team_1: "t1",
+            team_2: "t2",
+            created_by: "user-1",
+            tournament_id: "tour-1",
+            ...overrides
+        });
+    }
+
+    beforeEach(() => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(owned());
+    });
+
+    it("refuses a result once progression has committed the round's results", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({ rounds: [makeRound({ name: "Pool Play", results: ["t1"] })] })
+        );
+
+        await expect(fixtureService.updateResult("f1", "user-1", [[21, 15]], true))
+            .rejects.toMatchObject({ code: "ROUND_LOCKED", status: 409 });
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+    });
+
+    it("still accepts a result while the round's results are empty, i.e. not yet progressed", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({ rounds: [makeRound({ name: "Pool Play", results: [] })] })
+        );
+
+        await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
+
+        expect(fixturesRepository.updateResult).toHaveBeenCalled();
+    });
+
+    it("locks a 3rd Place Playoff fixture once the Finals round it lives under has progressed", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(owned({ round: "3rd Place Playoff" }));
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({ rounds: [makeRound({ name: "Finals", type: "knockout", results: ["t1"] })] })
+        );
+
+        await expect(fixtureService.updateResult("f1", "user-1", [[21, 15]], true))
+            .rejects.toMatchObject({ code: "ROUND_LOCKED", status: 409 });
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
+    });
+
+    it("does not lock a fixture whose round cannot be found in state", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({ rounds: [makeRound({ name: "Some Other Round", results: ["t1"] })] })
+        );
+
+        await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
+
+        expect(fixturesRepository.updateResult).toHaveBeenCalled();
     });
 });

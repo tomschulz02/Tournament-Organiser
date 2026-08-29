@@ -88,6 +88,9 @@ export const registerUser = (username, email, password, confirmPassword) =>
 
 export const checkLoginStatus = () => request('users/check-login');
 
+export const changePassword = (currentPassword, newPassword, confirmNewPassword) =>
+	request('users/password', { method: 'PUT', body: { currentPassword, newPassword, confirmNewPassword } });
+
 // Self-scoped only — the caller cannot address another user's profile. See
 // docs/decisions.md.
 export const getMyProfile = () => request('users/profile');
@@ -287,6 +290,12 @@ export const addDivision = (tournamentId, division) =>
 // rejection names the rule that was broken. See docs/schedule.md.
 export const updateTournamentSchedule = (tournamentId, schedule) =>
 	request(`tournaments/${tournamentId}/schedule`, { method: 'PUT', body: { schedule } });
+
+// Sets or clears the tournament's scoresheet template selection. scoresheetTemplate
+// is either a system template key, a `custom:<uuid>` reference into this browser's
+// IndexedDB, or null to clear it. See utils/scoresheetTemplates.js.
+export const updateTournamentScoresheetTemplate = (tournamentId, scoresheetTemplate) =>
+	request(`tournaments/${tournamentId}/scoresheet-template`, { method: 'PUT', body: { scoresheetTemplate } });
 
 // Fixtures
 

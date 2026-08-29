@@ -1,0 +1,343 @@
+/* Scoresheet template picker and marker-placement screens.
+ *
+ * Rendered inside CreateModal, so the ct- tokens and ct-button/ct-input
+ * classes from create-tournament.css already apply. Everything new here is
+ * prefixed sst- so it cannot collide with either existing sheet.
+ */
+
+.sst-screen {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.sst-lede {
+	margin: 0;
+	max-width: 60ch;
+	font-size: 0.9rem;
+	line-height: 1.5;
+	color: var(--ct-muted);
+}
+
+/* The placement screen's lede: unlike the picker/upload screens' prose, this
+   is short instructional text next to a wide canvas, and a 60ch cap left it
+   narrower than the PDF viewer below it while eating several extra lines of
+   height the screen cannot spare. */
+.sst-lede-wide {
+	max-width: none;
+}
+
+/* --- picker ---------------------------------------------------------- */
+
+.sst-option-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.sst-option {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3);
+	border: 1px solid var(--ct-border);
+	border-radius: 10px;
+	background: var(--ct-surface-alt);
+	cursor: pointer;
+	text-align: left;
+}
+
+.sst-option-selected {
+	border-color: var(--main-color);
+	box-shadow: 0 0 0 1px var(--main-color);
+}
+
+.sst-option-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.sst-option-name {
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.sst-option-meta {
+	font-size: 0.8rem;
+	color: var(--ct-muted);
+}
+
+.sst-option-warning {
+	font-size: 0.8rem;
+	color: var(--error-color);
+}
+
+/* --- marker placement ---------------------------------------------------- */
+
+/* Fills whatever height CreateModal's body actually has, rather than the
+   canvas assuming a fixed viewport fraction of its own — see the height
+   override on .ct-modal below for why that height is reliably present. */
+.sst-placing-screen {
+	height: 100%;
+	min-height: 0;
+}
+
+.sst-placer-area {
+	position: relative; /* anchors .sst-fields-overlay to this area alone */
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.sst-fields-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	flex: 0 0 auto;
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
+	background: var(--ct-surface-alt);
+	color: var(--secondary-text-color);
+	font-size: 0.85rem;
+	text-align: left;
+	cursor: pointer;
+}
+
+.sst-fields-toggle-label strong {
+	color: var(--secondary-text-color);
+}
+
+.sst-fields-toggle-count {
+	flex: 0 0 auto;
+	font-size: 0.75rem;
+	color: var(--ct-muted);
+	white-space: nowrap;
+}
+
+/* Fills the remaining height of .sst-placer-area, so the canvas absorbs
+   whatever space the toggle and the page nav do not use — the reason
+   neither the modal body nor this pane needs to scroll to reach the page
+   nav below it, only the canvas content inside it does. */
+.sst-canvas-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	border: 1px solid var(--ct-border);
+	border-radius: 10px;
+	background: var(--ct-surface-alt);
+}
+
+/* Sized to exactly its canvas child (inline-block, not the scroll container's
+   full width) so a box's left/top/width/height percentages — computed as a
+   fraction of the canvas's own pixel size — land on the same fraction of
+   this wrapper, whatever width the scroll container happens to be. */
+.sst-canvas-wrap {
+	position: relative;
+	display: inline-block;
+	cursor: crosshair;
+}
+
+.sst-canvas-wrap canvas {
+	display: block;
+}
+
+.sst-marker-box {
+	position: absolute;
+	min-width: 4px;
+	min-height: 4px;
+	border: 2px solid var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.15);
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.sst-marker-box-active {
+	border-color: var(--error-color);
+	background: rgb(from var(--error-color) r g b / 0.15);
+}
+
+.sst-marker-box-label {
+	display: block;
+	padding: 1px 3px;
+	font-size: 0.65rem;
+	line-height: 1.2;
+	color: var(--secondary-text-color);
+	background: var(--ct-surface);
+	white-space: nowrap;
+}
+
+/* The box itself ignores pointer events so a drag can start anywhere,
+   including on top of an existing box — this is the one part of it that
+   needs to be clickable regardless. */
+.sst-marker-box-remove {
+	position: absolute;
+	top: -1px;
+	right: -1px;
+	width: 16px;
+	height: 16px;
+	line-height: 14px;
+	padding: 0;
+	border: 1px solid white;
+	border-radius: 50%;
+	background: var(--error-color);
+	color: white;
+	font-size: 0.7rem;
+	cursor: pointer;
+	pointer-events: auto;
+}
+
+/* The rectangle being dragged out, before mouseup commits it as a field's box. */
+.sst-marker-preview {
+	position: absolute;
+	border: 2px dashed var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.1);
+	pointer-events: none;
+}
+
+.sst-page-nav {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-3);
+}
+
+/* --- fields panel: a slide-in overlay, not a permanent sidebar ------------ */
+/*
+ * Confined to .sst-placer-area (its positioned ancestor) rather than the
+ * whole modal, so it sits over the canvas it covers and nothing else —
+ * mirrors the site's help menu (App.css .help-menu-container/.help-menu),
+ * scaled to this smaller area instead of the full viewport.
+ */
+
+.sst-fields-overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.4);
+	display: flex;
+	justify-content: flex-end;
+	border-radius: 10px;
+	overflow: hidden;
+	z-index: 1;
+}
+
+.sst-fields-panel {
+	display: flex;
+	flex-direction: column;
+	width: min(280px, 85%);
+	height: 100%;
+	background: var(--ct-surface);
+	border-left: 1px solid var(--ct-border);
+	box-shadow: -4px 0 12px rgba(0, 0, 0, 0.25);
+	animation: sstFieldsPanelSlideIn 0.18s ease-out;
+}
+
+@keyframes sstFieldsPanelSlideIn {
+	from {
+		transform: translateX(100%);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+.sst-fields-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	flex: 0 0 auto;
+	padding: var(--space-3);
+	border-bottom: 1px solid var(--ct-border);
+}
+
+.sst-fields-panel-header h3 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.sst-fields-panel-close {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--ct-muted);
+	cursor: pointer;
+}
+
+.sst-fields-panel-close:hover {
+	background: var(--ct-surface-alt);
+	color: var(--secondary-text-color);
+}
+
+.sst-fields-panel-close svg {
+	fill: currentColor;
+}
+
+/* Scrolls within the panel — limited to the canvas viewer's own height
+   (the panel is exactly as tall as .sst-placer-area, which the canvas
+   pane fills) rather than growing past it. */
+.sst-field-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-3);
+}
+
+.sst-field-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
+	background: var(--ct-surface-alt);
+	cursor: pointer;
+	font-size: 0.85rem;
+}
+
+.sst-field-row-active {
+	border-color: var(--main-color);
+	box-shadow: 0 0 0 1px var(--main-color);
+}
+
+.sst-field-row-placed {
+	color: var(--ct-muted);
+}
+
+.sst-field-status {
+	font-size: 0.75rem;
+}
+
+/* CreateModal's .ct-modal caps itself with max-height rather than height, so
+   a modal whose content happens to be shorter than that cap simply shrinks —
+   which leaves .sst-placing-screen's height:100% resolving against nothing
+   definite, and the whole flex-fill layout above collapses to content size
+   instead of using the space it is meant to. Forcing the actual height only
+   while this screen is showing gives every percentage in the chain something
+   real to resolve against, which is what lets the canvas grow to fill the
+   modal instead of the modal shrinking to fit a short canvas.
+   Desktop only: create-tournament.css's own mobile rule already sets
+   height: 100% (full screen) below 769px, which already satisfies the same
+   requirement — this must not fight that at narrow widths. */
+@media (min-width: 769px) {
+	.ct-modal:has(.sst-placing-screen) {
+		height: min(88vh, 900px);
+	}
+}

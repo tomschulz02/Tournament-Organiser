@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import DivisionSelector from './DivisionSelector';
+import Icon from '../Icons';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
 import { isNotStarted } from './tournamentStatus';
@@ -7,7 +8,7 @@ import { useConfirm } from '../ConfirmDialog';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 import { updateDivisionTeams } from '../../requests';
-import { TEAM_NAME_MAX } from '../create/divisionFormats';
+import { TEAM_NAME_MAX, parseBulkTeamNames } from '../create/divisionFormats';
 
 // The teams in one division, in seed order.
 //
@@ -50,8 +51,15 @@ export default function TeamsTab({
 	const [editName, setEditName] = useState('');
 	const [addFor, setAddFor] = useState(null);
 	const [addName, setAddName] = useState('');
+	const [bulkAdding, setBulkAdding] = useState(false);
+	const [bulkText, setBulkText] = useState('');
 	const [confirming, setConfirming] = useState(null);
 	const [busy, setBusy] = useState(false);
+
+	// Below 768px, Groups and Team List take turns rather than stacking — see
+	// the icon toggle in the render. Above that width both are always visible
+	// side by side and this state is simply unused.
+	const [mobileTeamsView, setMobileTeamsView] = useState('groups');
 
 	// The row being carried and the row it is over. Indices rather than keys,
 	// because a move is expressed as a pair of positions.
@@ -104,6 +112,8 @@ export default function TeamsTab({
 		setEditingKey(null);
 		setAddFor(null);
 		setAddName('');
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	const handleAdd = () => {
@@ -117,6 +127,22 @@ export default function TeamsTab({
 		setTeams([...teams, { key: `new-${nextKey.current}`, id: null, name }]);
 		setAddFor(null);
 		setAddName('');
+	};
+
+	const handleAddBulk = () => {
+		const names = parseBulkTeamNames(
+			bulkText,
+			teams.map((row) => row.name)
+		);
+		if (names.length === 0) return;
+
+		const rows = names.map((name) => {
+			nextKey.current += 1;
+			return { key: `new-${nextKey.current}`, id: null, name };
+		});
+		setTeams([...teams, ...rows]);
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	const handleEdit = (row) => {
@@ -256,13 +282,189 @@ export default function TeamsTab({
 		setAddFor(division.id);
 		setAddName('');
 		setEditingKey(null);
+		setBulkAdding(false);
+		setBulkText('');
+	};
+
+	// Switches the open add form between a single name field and a textarea,
+	// rather than being a second way to open the form — there is only ever one
+	// "Add Team" affordance on offer.
+	const toggleBulkMode = () => {
+		setBulkAdding((current) => !current);
+		setAddName('');
+		setBulkText('');
+	};
+
+	const cancelAdding = () => {
+		setAddFor(null);
+		setAddName('');
+		setBulkAdding(false);
+		setBulkText('');
 	};
 
 	const startEditing = (row) => {
 		setEditingKey(row.key);
 		setEditName(row.name);
 		setAddFor(null);
+		setBulkAdding(false);
+		setBulkText('');
 	};
+
+	const teamList = (
+		<>
+			{adding && (
+				<div className="tv-inline-form tv-inline-form--stacked">
+					<label className="tv-switch">
+						<input type="checkbox" checked={bulkAdding} disabled={busy} onChange={toggleBulkMode} />
+						<span className="tv-switch-track" aria-hidden="true" />
+						<span>Add multiple teams</span>
+					</label>
+
+					{bulkAdding ? (
+						<label className="tv-inline-form-field">
+							<span>Add multiple teams to {division.name}</span>
+							<textarea
+								className="tv-inline-form-textarea"
+								value={bulkText}
+								autoFocus
+								disabled={busy}
+								placeholder={'One team per line, e.g.\nAces\nEagles\nFalcons'}
+								onChange={(event) => setBulkText(event.target.value)}
+							/>
+						</label>
+					) : (
+						<label className="tv-inline-form-field">
+							<span>Add a team to {division.name}</span>
+							<input
+								type="text"
+								value={addName}
+								autoFocus
+								disabled={busy}
+								maxLength={TEAM_NAME_MAX}
+								placeholder="Team name"
+								onChange={(event) => setAddName(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key === 'Enter') handleAdd();
+									if (event.key === 'Escape') cancelAdding();
+								}}
+							/>
+						</label>
+					)}
+
+					<div className="tv-inline-form-actions">
+						<button
+							type="button"
+							className="tv-primary-action"
+							disabled={busy}
+							onClick={bulkAdding ? handleAddBulk : handleAdd}>
+							{bulkAdding ? 'Add teams' : 'Add'}
+						</button>
+						<button type="button" className="tv-subtle-action" disabled={busy} onClick={cancelAdding}>
+							Cancel
+						</button>
+					</div>
+				</div>
+			)}
+
+			{teams.length === 0 ? (
+				<SectionState
+					variant="empty"
+					title="No teams have been added to this division yet"
+					message="Teams appear here in the order they were seeded.">
+					{canEditTeams && !adding && (
+						<button type="button" className="tv-primary-action" onClick={startAdding}>
+							Add Team
+						</button>
+					)}
+				</SectionState>
+			) : (
+				<>
+					<p className="tv-fixtures-count">
+						{teams.length} team{teams.length === 1 ? '' : 's'}
+					</p>
+
+					{/* Said rather than left to be discovered. Only the one branch
+					    now: once the tournament has started the handles are not on
+					    screen either, and there is nothing left to explain. */}
+					{canEditTeams && teams.length > 1 && (
+						<p className="tv-teams-seed-note">
+							This order is the seeding. Drag a team by its handle to move it, then Save.
+						</p>
+					)}
+
+					<ul
+						className={`tv-team-rows${division.type !== 'Classic' ? ' tv-team-rows--columns' : ''}`}
+						style={
+							division.type !== 'Classic' ? { '--tv-team-rows-count': Math.ceil(teams.length / 2) } : undefined
+						}>
+						{teams.map((row, index) =>
+							row.key === editing ? (
+								<li key={row.key} className="tv-team-row tv-team-row--editing">
+									<TeamNameForm
+										label={`Rename ${row.name}`}
+										value={editName}
+										busy={busy}
+										submitLabel="Apply"
+										onChange={setEditName}
+										onSubmit={() => handleEdit(row)}
+										onCancel={() => setEditingKey(null)}
+									/>
+								</li>
+							) : (
+								<li
+									key={row.key}
+									className={`tv-team-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
+										overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
+									}`}
+									onDragOver={(event) => canEditTeams && handleDragOver(event, index)}
+									onDrop={(event) => canEditTeams && handleDrop(event, index)}>
+									{canEditTeams && (
+										<button
+											type="button"
+											className="tv-team-grip"
+											draggable
+											disabled={busy}
+											onDragStart={(event) => handleDragStart(event, index)}
+											onDragEnd={endDrag}
+											onKeyDown={(event) => handleGripKeyDown(event, index)}
+											aria-label={`Move ${row.name} from seed ${
+												index + 1
+											}. Drag, or use the up and down arrow keys.`}>
+											<Icon name="grip" size={16} fill="currentColor" />
+										</button>
+									)}
+
+									{/* The list is in seed order, so a row's position is its
+									    seed. No player counts and no logos — the teams table
+									    is (id, name, division_id) and nothing else. */}
+									<TeamIdentity name={row.name} note={`Seed ${index + 1}`} />
+
+									{canEditTeams && (
+										<span className="tv-team-actions">
+											<button
+												type="button"
+												className="tv-subtle-action"
+												disabled={busy}
+												onClick={() => startEditing(row)}>
+												Edit
+											</button>
+											<button
+												type="button"
+												className="tv-subtle-action tv-subtle-action--danger"
+												disabled={busy}
+												onClick={() => handleRemove(row)}>
+												Remove
+											</button>
+										</span>
+									)}
+								</li>
+							),
+						)}
+					</ul>
+				</>
+			)}
+		</>
+	);
 
 	return (
 		<div className="tv-teams">
@@ -302,110 +504,50 @@ export default function TeamsTab({
 				</div>
 			)}
 
-			{adding && (
-				<TeamNameForm
-					label={`Add a team to ${division.name}`}
-					value={addName}
-					busy={busy}
-					submitLabel="Add"
-					onChange={setAddName}
-					onSubmit={handleAdd}
-					onCancel={() => setAddFor(null)}
-				/>
-			)}
-
-			{teams.length === 0 ? (
-				<SectionState
-					variant="empty"
-					title="No teams have been added to this division yet"
-					message="Teams appear here in the order they were seeded.">
-					{canEditTeams && !adding && (
-						<button type="button" className="tv-primary-action" onClick={startAdding}>
-							Add Team
-						</button>
-					)}
-				</SectionState>
-			) : (
+			{division.type === 'Classic' ? (
 				<>
-					<p className="tv-fixtures-count">
-						{teams.length} team{teams.length === 1 ? '' : 's'}
-					</p>
+					{/* Hidden at 768px and up by the stylesheet, where Groups and
+					    List sit side by side and there is nothing to switch
+					    between. Icons only, mirroring the schedule maker's
+					    grid/list view toggle. */}
+					<div className="tv-teams-view-toggle" role="tablist" aria-label="Teams view">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={mobileTeamsView === 'groups'}
+							aria-label="Groups"
+							className={mobileTeamsView === 'groups' ? 'active' : ''}
+							onClick={() => setMobileTeamsView('groups')}>
+							<Icon name="grid" fill={mobileTeamsView === 'groups' ? '#fff' : 'var(--secondary-text-color)'} />
+						</button>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={mobileTeamsView === 'list'}
+							aria-label="Team List"
+							className={mobileTeamsView === 'list' ? 'active' : ''}
+							onClick={() => setMobileTeamsView('list')}>
+							<Icon name="list" fill={mobileTeamsView === 'list' ? '#fff' : 'var(--secondary-text-color)'} />
+						</button>
+					</div>
 
-					{/* Said rather than left to be discovered. Only the one branch
-					    now: once the tournament has started the handles are not on
-					    screen either, and there is nothing left to explain. */}
-					{canEditTeams && teams.length > 1 && (
-						<p className="tv-teams-seed-note">
-							This order is the seeding. Drag a team by its handle to move it, then Save.
-						</p>
-					)}
-
-					<ul className="tv-team-rows">
-						{teams.map((row, index) =>
-							row.key === editing ? (
-								<li key={row.key} className="tv-team-row tv-team-row--editing">
-									<TeamNameForm
-										label={`Rename ${row.name}`}
-										value={editName}
-										busy={busy}
-										submitLabel="Apply"
-										onChange={setEditName}
-										onSubmit={() => handleEdit(row)}
-										onCancel={() => setEditingKey(null)}
-									/>
-								</li>
-							) : (
-								<li
-									key={row.key}
-									className={`tv-team-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
-										overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
-									}`}
-									onDragOver={(event) => canEditTeams && handleDragOver(event, index)}
-									onDrop={(event) => canEditTeams && handleDrop(event, index)}>
-									{canEditTeams && (
-										<button
-											type="button"
-											className="tv-team-grip"
-											draggable
-											disabled={busy}
-											onDragStart={(event) => handleDragStart(event, index)}
-											onDragEnd={endDrag}
-											onKeyDown={(event) => handleGripKeyDown(event, index)}
-											aria-label={`Move ${row.name} from seed ${
-												index + 1
-											}. Drag, or use the up and down arrow keys.`}>
-											<GripDots />
-										</button>
-									)}
-
-									{/* The list is in seed order, so a row's position is its
-									    seed. No player counts and no logos — the teams table
-									    is (id, name, division_id) and nothing else. */}
-									<TeamIdentity name={row.name} note={`Seed ${index + 1}`} />
-
-									{canEditTeams && (
-										<span className="tv-team-actions">
-											<button
-												type="button"
-												className="tv-subtle-action"
-												disabled={busy}
-												onClick={() => startEditing(row)}>
-												Edit
-											</button>
-											<button
-												type="button"
-												className="tv-subtle-action tv-subtle-action--danger"
-												disabled={busy}
-												onClick={() => handleRemove(row)}>
-												Remove
-											</button>
-										</span>
-									)}
-								</li>
-							),
-						)}
-					</ul>
+					<div className="tv-teams-columns">
+						<div
+							className={`tv-teams-columns-groups${
+								mobileTeamsView === 'groups' ? ' tv-teams-columns-groups--active' : ''
+							}`}>
+							<GeneratedGroups division={division} />
+						</div>
+						<div
+							className={`tv-teams-columns-list${
+								mobileTeamsView === 'list' ? ' tv-teams-columns-list--active' : ''
+							}`}>
+							{teamList}
+						</div>
+					</div>
 				</>
+			) : (
+				teamList
 			)}
 
 			{confirming && (
@@ -424,19 +566,40 @@ export default function TeamsTab({
 	);
 }
 
-// Drawn here rather than added to Icons.jsx: it is the only place in the
-// application that needs a grip, and a glyph such as ⠿ renders as tofu wherever
-// the font has no braille block.
-function GripDots() {
+// Mirrors getGroupLabel in tournamentViewFormatter.js. There is no shared
+// frontend/backend module to import it from, so it's duplicated here — the
+// same reason divisionPreview.js ports server logic instead of importing it.
+function groupLabel(index) {
+	return `Group ${String.fromCharCode(65 + index)}`;
+}
+
+// Read-only: shows what's already saved, not the tab's draft state. A
+// division with no pools yet (no teams) gets the same empty state pattern
+// used elsewhere on this tab.
+function GeneratedGroups({ division }) {
+	const groups = division.state?.rounds?.[0]?.groups ?? [];
+
+	if (groups.length === 0) {
+		return <SectionState variant="empty" title="No pools yet" message="Pools appear once teams have been added." />;
+	}
+
+	const teamNames = new Map((division.teams ?? []).map((team) => [team.id, team.name]));
+
 	return (
-		<svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true" focusable="false">
-			{[3, 8, 13].map((y) => (
-				<g key={y}>
-					<circle cx="3" cy={y} r="1.3" />
-					<circle cx="7" cy={y} r="1.3" />
-				</g>
+		<div className="tv-teams-groups">
+			{groups.map((group, index) => (
+				<article key={index} className="tv-teams-group-card">
+					<div className="tv-teams-group-card-head">{groupLabel(index)}</div>
+
+					{group.map((teamId, seedIndex) => (
+						<div key={teamId} className="tv-teams-group-card-row">
+							<span className="tv-teams-group-card-seed">{seedIndex + 1}</span>
+							<span>{teamNames.get(teamId) ?? 'Unknown team'}</span>
+						</div>
+					))}
+				</article>
 			))}
-		</svg>
+		</div>
 	);
 }
 
@@ -549,8 +712,8 @@ function StructureConfirmation({ divisionName, teamCount, knockout, structure, b
 	);
 }
 
-// Used for both adding and renaming. Enter submits, Escape cancels — a one-field
-// form where the only alternative is reaching for the mouse.
+// Used for renaming a team in place. Enter submits, Escape cancels — a
+// one-field form where the only alternative is reaching for the mouse.
 function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onCancel, maxLength = TEAM_NAME_MAX }) {
 	return (
 		<div className="tv-inline-form">

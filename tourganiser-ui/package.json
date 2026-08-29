@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.2.108",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2"

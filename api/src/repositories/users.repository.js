@@ -26,17 +26,41 @@ async function createUser(username, email, password) {
 	}
 }
 
-// Looks up a user by email. Returns null when there is no match — the caller
-// decides how to respond, so that a missing user and a bad password can be
-// handled identically.
-async function findUserByEmail(email) {
+// Looks up a user by email or username. Returns null when there is no match —
+// the caller decides how to respond, so that a missing user and a bad
+// password can be handled identically.
+async function findUserByEmailOrUsername(identifier) {
 	try {
-		const sql = "SELECT * FROM users WHERE email = $1";
-		const rows = await db.query(sql, [email]);
+		const sql = "SELECT * FROM users WHERE email = $1 OR username = $1";
+		const rows = await db.query(sql, [identifier]);
 
 		return rows.length > 0 ? rows[0] : null;
 	} catch (err) {
 		throw new Error("Failed to look up user by email", { cause: err });
+	}
+}
+
+// Looks up a user by id. Returns null when there is no match, same shape as
+// findUserByEmailOrUsername.
+async function getUserById(id) {
+	try {
+		const sql = "SELECT * FROM users WHERE id = $1";
+		const rows = await db.query(sql, [id]);
+
+		return rows.length > 0 ? rows[0] : null;
+	} catch (err) {
+		throw new Error("Failed to look up user by id", { cause: err });
+	}
+}
+
+// Overwrites the stored password hash. No RETURNING — nothing downstream
+// needs the row back.
+async function updatePassword(id, passwordHash) {
+	try {
+		const sql = "UPDATE users SET password = $1 WHERE id = $2";
+		return await db.query(sql, [passwordHash, id]);
+	} catch (err) {
+		throw new Error("Failed to update password", { cause: err });
 	}
 }
 
@@ -98,7 +122,9 @@ async function unfollowTournament(userId, tournamentId) {
 
 export const userRepository = {
 	createUser,
-	findUserByEmail,
+	findUserByEmailOrUsername,
+	getUserById,
+	updatePassword,
 	addFriend,
 	getFriends,
 	joinTournament,

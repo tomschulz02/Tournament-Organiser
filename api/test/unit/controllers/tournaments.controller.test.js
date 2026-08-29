@@ -10,7 +10,8 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         deleteTournament: vi.fn(),
         updateSchedule: vi.fn(),
         saveTournament: vi.fn(),
-        unsaveTournament: vi.fn()
+        unsaveTournament: vi.fn(),
+        updateScoresheetTemplate: vi.fn()
     }
 }));
 
@@ -31,6 +32,7 @@ beforeEach(() => {
     vi.mocked(tournamentService.updateSchedule).mockReset();
     vi.mocked(tournamentService.saveTournament).mockReset();
     vi.mocked(tournamentService.unsaveTournament).mockReset();
+    vi.mocked(tournamentService.updateScoresheetTemplate).mockReset();
 });
 
 // The controllers no longer catch. A rejected service call propagates to the
@@ -328,6 +330,67 @@ describe("tournamentController.updateSchedule", () => {
         ).rejects.toBe(failure);
 
         expect(res.json).not.toHaveBeenCalled();
+    });
+});
+
+describe("tournamentController.updateScoresheetTemplate", () => {
+    it("hands the id, the session user and the template key to the service", async () => {
+        tournamentService.updateScoresheetTemplate.mockResolvedValue({
+            id: VALID_UUID,
+            scoresheet_template: "fivb-indoor-2013"
+        });
+        const res = makeRes();
+
+        await tournamentController.updateScoresheetTemplate(
+            makeReq({
+                params: { tournamentId: VALID_UUID },
+                body: { scoresheetTemplate: "fivb-indoor-2013" },
+                user: { id: "user-1" }
+            }),
+            res
+        );
+
+        expect(tournamentService.updateScoresheetTemplate).toHaveBeenCalledWith(VALID_UUID, "user-1", "fivb-indoor-2013");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Scoresheet template updated",
+            data: { id: VALID_UUID, scoresheet_template: "fivb-indoor-2013" }
+        });
+    });
+
+    it("passes null through to clear the selection when the body carries none", async () => {
+        tournamentService.updateScoresheetTemplate.mockResolvedValue({ id: VALID_UUID, scoresheet_template: null });
+
+        await tournamentController.updateScoresheetTemplate(
+            makeReq({ params: { tournamentId: VALID_UUID }, body: {}, user: { id: "user-1" } }),
+            makeRes()
+        );
+
+        expect(tournamentService.updateScoresheetTemplate).toHaveBeenCalledWith(VALID_UUID, "user-1", null);
+    });
+
+    it("rejects an id that is not a UUID without calling the service", async () => {
+        await expect(
+            tournamentController.updateScoresheetTemplate(
+                makeReq({ params: { tournamentId: "12345" }, body: {}, user: { id: "user-1" } }),
+                makeRes()
+            )
+        ).rejects.toMatchObject({ code: "TOURNAMENT_NOT_FOUND", status: 404 });
+
+        expect(tournamentService.updateScoresheetTemplate).not.toHaveBeenCalled();
+    });
+
+    it("lets the service's refusal propagate", async () => {
+        const failure = Object.assign(new Error("You do not own this tournament"), { code: "NOT_TOURNAMENT_OWNER" });
+        tournamentService.updateScoresheetTemplate.mockRejectedValue(failure);
+
+        await expect(
+            tournamentController.updateScoresheetTemplate(
+                makeReq({ params: { tournamentId: VALID_UUID }, body: {}, user: { id: "user-1" } }),
+                makeRes()
+            )
+        ).rejects.toBe(failure);
     });
 });
 

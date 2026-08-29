@@ -19,8 +19,8 @@ async function signup(req, res) {
 }
 
 async function login(req, res) {
-    const { email, password } = req.body;
-    const session = await userService.loginUser(email, password);
+    const { email: identifier, password } = req.body;
+    const session = await userService.loginUser(identifier, password);
 
     res.cookie('token', session.token, { ...sessionCookieOptions(), maxAge: SESSION_TTL_MS });
     res.status(200).json({
@@ -28,6 +28,13 @@ async function login(req, res) {
         message: 'Login successful',
         data: { username: session.username }
     });
+}
+
+async function changePassword(req, res) {
+    const { currentPassword, newPassword, confirmNewPassword } = req.body;
+    await userService.changePassword(req.user.id, currentPassword, newPassword, confirmNewPassword);
+
+    res.status(200).json({ success: true, message: 'Password updated', data: null });
 }
 
 async function logout(req, res) {
@@ -72,6 +79,7 @@ export const userController = {
     signup,
     login,
     logout,
+    changePassword,
     getUserProfile,
     getMyTournaments,
     getMySavedTournaments,

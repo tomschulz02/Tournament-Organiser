@@ -325,6 +325,16 @@ here. What is left:
   refresh — the spacing pass left the floor where it found it. Fixing it means giving the
   chrome controls their own `min-height`, which is a piece of work in its own right.
 
+## Scoresheet Templates
+
+- **A custom scoresheet template is device-bound.** Per `docs/handover-scoresheets.md`,
+  custom templates are stored in the browser's IndexedDB rather than on the server, so
+  they are only usable on the device that uploaded them. Another viewer of the same
+  tournament — including the organiser on a second device — sees that a custom template
+  is selected but cannot render or download it; the UI shows this state explicitly rather
+  than a broken download. The two built-in FIVB templates are unaffected, since they ship
+  as static assets in the frontend bundle.
+
 ## Project
 
 - `api/` has Vitest, with unit and integration suites gated at 100% coverage, plus the

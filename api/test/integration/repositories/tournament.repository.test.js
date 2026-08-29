@@ -181,6 +181,40 @@ describe("updateSchedule", () => {
     });
 });
 
+describe("updateScoresheetTemplate", () => {
+    it("writes the template key to the tournament's own column", async () => {
+        expect(await tournamentRepository.updateScoresheetTemplate("tour-1", "fivb-indoor-2013"))
+            .toEqual({ message: "Scoresheet template updated" });
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe("UPDATE tournaments SET scoresheet_template = $1 WHERE id = $2::uuid");
+        expect(params).toEqual(["fivb-indoor-2013", "tour-1"]);
+    });
+
+    it("accepts null, clearing the selection", async () => {
+        await tournamentRepository.updateScoresheetTemplate("tour-1", null);
+
+        expect(db.query.mock.calls[0][1]).toEqual([null, "tour-1"]);
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await tournamentRepository.updateScoresheetTemplate("tour-1", "fivb-indoor-2013", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.updateScoresheetTemplate("tour-1", "fivb-indoor-2013").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to update scoresheet template");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
 // The read half of the schedule repair. Takes the client rather than defaulting
 // to the pool, for the same reason as divisions' getStateForUpdate: a lock taken
 // outside the transaction that does the write achieves nothing.

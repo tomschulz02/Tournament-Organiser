@@ -265,6 +265,26 @@ async function updateSchedule(tournamentId, userId, schedule) {
     });
 }
 
+// --- scoresheet template -----------------------------------------------------
+//
+// PUT /api/tournaments/:tournamentId/scoresheet-template.
+//
+// templateKey is either null (clearing the selection), a system template key,
+// or `custom:<uuid>` referencing a browser-side IndexedDB record — resolving
+// which is entirely the frontend's job (see docs/handover-scoresheets.md), so
+// this validates only that the shape is one of those, not which kind it is.
+async function updateScoresheetTemplate(tournamentId, userId, templateKey) {
+    await loadOwnedTournament(tournamentId, userId);
+
+    if (templateKey !== null && templateKey !== undefined) {
+        assertText(templateKey, "scoresheetTemplate", { max: 200 });
+    }
+
+    await tournamentRepository.updateScoresheetTemplate(tournamentId, templateKey ?? null);
+
+    return { id: tournamentId, scoresheet_template: templateKey ?? null };
+}
+
 // requireAuth proves the caller is logged in. This proves the tournament is
 // theirs, and is the tournament-level counterpart of progression's loadDivision.
 async function loadOwnedTournament(tournamentId, userId) {
@@ -298,7 +318,8 @@ export const tournamentService = {
     endTournament,
     deleteTournament,
     addDivision,
-    updateSchedule
+    updateSchedule,
+    updateScoresheetTemplate
 }
 
 

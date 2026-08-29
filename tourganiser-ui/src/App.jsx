@@ -371,7 +371,7 @@ function Footer() {
 
 function HelpMenu({ onClose }) {
 	const { activeTopic } = useHelp();
-	const { title, paragraphs } = HELP_TOPICS[activeTopic] ?? HELP_TOPICS.fallback;
+	const { title, icon = 'info', paragraphs } = HELP_TOPICS[activeTopic] ?? HELP_TOPICS.fallback;
 
 	const handleClickOutside = (e) => {
 		if (e.target.classList.contains('help-menu-container')) {
@@ -379,13 +379,29 @@ function HelpMenu({ onClose }) {
 		}
 	};
 
+	useEffect(() => {
+		const handleKeyDown = (e) => {
+			if (e.key === 'Escape') onClose();
+		};
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, [onClose]);
+
 	return (
 		<div className="help-menu-container" onClick={handleClickOutside}>
 			<div className="help-menu">
-				<h1>{title}</h1>
-				{paragraphs.map((paragraph, index) => (
-					<p key={index}>{paragraph}</p>
-				))}
+				<div className="help-menu-header">
+					<Icon name={icon} size={28} fill="var(--secondary-text-color)" />
+					<h1>{title}</h1>
+					<button type="button" className="help-menu-close" onClick={onClose} aria-label="Close">
+						&times;
+					</button>
+				</div>
+				<div className="help-menu-body">
+					{paragraphs.map((paragraph, index) => (
+						<p key={index}>{paragraph}</p>
+					))}
+				</div>
 			</div>
 		</div>
 	);

@@ -1187,7 +1187,14 @@ export default function ScheduleMakerModal({
 											aria-pressed={pendingFixtureId === fixture.id}
 											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
 											style={getFixtureDivisionStyle(fixture)}
-											onDragStart={(event) => event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`)}
+											onDragStart={(event) => {
+												// effectAllowed has to be set explicitly here, or Chrome can
+												// drop the payload set below somewhere between dragstart and
+												// drop without raising an error — the cursor still shows a
+												// valid drop target, but readDragPayload sees nothing.
+												event.dataTransfer.effectAllowed = 'move';
+												event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`);
+											}}
 											onClick={() => handleSelectFixtureForPlacement(fixture.id)}>
 											<strong>{fixture.team1}</strong>
 											<span>vs</span>
@@ -1509,6 +1516,10 @@ function ScheduleGridView({
 							title={snapped ? `${entry.startTime} - ${entry.endTime}, shown across the slots it covers` : undefined}
 							draggable={canEdit}
 							onDragStart={(event) => {
+								// See the matching comment on the fixture pill's onDragStart:
+								// effectAllowed has to be set explicitly or the payload below can
+								// silently fail to survive to drop in Chrome.
+								event.dataTransfer.effectAllowed = 'move';
 								event.dataTransfer.setData('text/plain', `${ENTRY_DRAG}${entry.id}`);
 								onDragEntry(entry.id);
 							}}

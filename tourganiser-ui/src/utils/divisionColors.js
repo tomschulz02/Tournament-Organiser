@@ -3,11 +3,11 @@
 // row's accent, a division card's accent — calls getDivisionAccent(id) rather than
 // hashing its own copy, so the same division is always the same colour everywhere.
 //
-// The eight tokens are declared once, in App.css (--accent-1 .. --accent-8), tuned
+// The tokens are declared once, in App.css (--accent-1 .. --accent-12), tuned
 // per light/dark theme the same way the app's other shared tokens are. This module
 // only picks which one a given id gets.
 
-const ACCENT_COUNT = 8;
+const ACCENT_COUNT = 12;
 
 // Keyed on the division's id rather than its position, so a division keeps its
 // colour when another is added or removed elsewhere in the tournament. Position

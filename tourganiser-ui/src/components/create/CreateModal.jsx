@@ -22,8 +22,14 @@ export default function CreateModal({ titleId, title, subtitle, onClose, size = 
 	const modalRef = useRef(null);
 
 	useEffect(() => {
+		const scrollY = window.scrollY;
+		document.body.style.top = `-${scrollY}px`;
 		document.body.classList.add('noscroll');
-		return () => document.body.classList.remove('noscroll');
+		return () => {
+			document.body.classList.remove('noscroll');
+			document.body.style.top = '';
+			window.scrollTo(0, scrollY);
+		};
 	}, []);
 
 	// Focus moves into the modal on open and back to whatever opened it on

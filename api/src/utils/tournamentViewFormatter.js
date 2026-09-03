@@ -188,58 +188,114 @@ function buildDivisionOverview({ division, teams, fixtures, results, state }) {
     };
 }
 
+// One standings entry per round-robin round, UNLESS every round-robin round in
+// the division shares the same groups shape (one group holding the same team
+// set) — the repeated-League-cycle case, per docs/decisions.md — in which case
+// their fixtures are combined into a single table instead of one per leg. A
+// division with exactly one round-robin round (Classic's Pool Play, a
+// single-leg League) trivially satisfies "every round shares the same shape"
+// against itself, so this produces the same single-table output as before this
+// change — the combination is additive, not a special case that could regress
+// Classic.
 function buildDivisionStandings(state, fixtures, teamLookup) {
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
-    const standings = [];
     const seedIndex = buildSeedIndex(state.teams);
     const headToHead = buildHeadToHeadMap(fixtures);
 
-    rounds.forEach((round, roundIndex) => {
-        if (round.type !== "roundRobin" || !Array.isArray(round.groups)) {
-            return;
+    const roundRobinRounds = rounds
+        .map((round, roundIndex) => ({ round, roundIndex }))
+        .filter((entry) => entry.round.type === "roundRobin" && Array.isArray(entry.round.groups));
+
+    if (roundRobinRounds.length === 0) {
+        return [];
+    }
+
+    const firstGroups = roundRobinRounds[0].round.groups;
+    const isRepeatedCycle = roundRobinRounds.every((entry) => sameGroupsShape(entry.round.groups, firstGroups));
+
+    if (!isRepeatedCycle) {
+        return roundRobinRounds.map((entry) =>
+            buildRoundRobinStandingsEntry(entry.round, entry.roundIndex, [entry.round], fixtures, teamLookup, seedIndex, headToHead)
+        );
+    }
+
+    const primary = roundRobinRounds[0];
+    return [
+        buildRoundRobinStandingsEntry(
+            primary.round,
+            primary.roundIndex,
+            roundRobinRounds.map((entry) => entry.round),
+            fixtures,
+            teamLookup,
+            seedIndex,
+            headToHead
+        )
+    ];
+}
+
+// Same group count, same team set per group, order-independent — a reordered
+// pool is still the same pool. Used only to decide whether two round-robin
+// rounds are the same repeated cycle; it says nothing about fixtures.
+function sameGroupsShape(groupsA, groupsB) {
+    if (groupsA.length !== groupsB.length) {
+        return false;
+    }
+
+    return groupsA.every((group, index) => {
+        const other = groupsB[index];
+        if (!Array.isArray(group) || !Array.isArray(other) || group.length !== other.length) {
+            return false;
         }
 
-        const roundStandings = {
-            round: round.name || `Round ${roundIndex + 1}`,
-            roundIndex,
-            groups: []
-        };
+        const sortedA = [...group].sort();
+        const sortedB = [...other].sort();
+        return sortedA.every((value, position) => value === sortedB[position]);
+    });
+}
 
-        round.groups.forEach((group, groupIndex) => {
-            const participantIds = Array.isArray(group) ? group.filter((value) => typeof value === "string") : [];
-            const rows = participantIds.map((teamId) => createStandingsRow(teamLookup.get(teamId), teamId));
+// `sourceRounds` is every round-robin round whose fixtures belong in this one
+// entry — more than one only for a combined multi-leg table, where every round
+// shares `primaryRound.groups`, so grouping by `primaryRound`'s groups is valid
+// for all of them.
+function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, fixtures, teamLookup, seedIndex, headToHead) {
+    const roundStandings = {
+        round: primaryRound.name || `Round ${roundIndex + 1}`,
+        roundIndex,
+        groups: []
+    };
 
-            fixtures.forEach((fixture) => {
-                if (!isCountableFixture(fixture)) {
-                    return;
-                }
+    primaryRound.groups.forEach((group, groupIndex) => {
+        const participantIds = Array.isArray(group) ? group.filter((value) => typeof value === "string") : [];
+        const rows = participantIds.map((teamId) => createStandingsRow(teamLookup.get(teamId), teamId));
 
-                if (!fixtureBelongsToRoundRobinGroup(fixture, round, participantIds)) {
-                    return;
-                }
+        fixtures.forEach((fixture) => {
+            if (!isCountableFixture(fixture)) {
+                return;
+            }
 
-                const teamOne = rows.find((team) => team.id === fixture.team_1_id);
-                const teamTwo = rows.find((team) => team.id === fixture.team_2_id);
-                if (!teamOne || !teamTwo) {
-                    return;
-                }
+            if (!sourceRounds.some((round) => fixtureBelongsToRoundRobinGroup(fixture, round, participantIds))) {
+                return;
+            }
 
-                applyFixtureToStandings(teamOne, teamTwo, fixture.result);
-            });
+            const teamOne = rows.find((team) => team.id === fixture.team_1_id);
+            const teamTwo = rows.find((team) => team.id === fixture.team_2_id);
+            if (!teamOne || !teamTwo) {
+                return;
+            }
 
-            rows.forEach(computeRatios);
-
-            roundStandings.groups.push({
-                name: getGroupLabel(groupIndex),
-                groupIndex,
-                standings: rankGroup(rows, { headToHead, seedIndex })
-            });
+            applyFixtureToStandings(teamOne, teamTwo, fixture.result);
         });
 
-        standings.push(roundStandings);
+        rows.forEach(computeRatios);
+
+        roundStandings.groups.push({
+            name: getGroupLabel(groupIndex),
+            groupIndex,
+            standings: rankGroup(rows, { headToHead, seedIndex })
+        });
     });
 
-    return standings;
+    return roundStandings;
 }
 
 function buildDivisionBracket(state, fixtures, teamLookup) {

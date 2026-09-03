@@ -50,7 +50,9 @@ const {
     readTeamEntries,
     formatOf,
     toCount,
-    validateStructure
+    validateStructure,
+    leagueConfigFromPayload,
+    leagueConfigFromState
 } = await import("../../../src/services/divisions.service.js");
 const { generateFixtures } = await import("../../../src/services/fixtures.service.js");
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
@@ -135,7 +137,141 @@ describe("createLeagueState", () => {
         expect(rounds[0].fixtures).toHaveLength(6);
         expect(rounds[0].totalGames).toBe(6);
     });
+
+    // Multiple legs: each cycle is its own round object, identically shaped and
+    // distinctly named, per docs/decisions.md.
+    describe("legs mode", () => {
+        it("builds one round object per leg, each a full cycle over the same pool", () => {
+            const state = createLeagueState(["a", "b", "c", "d"], 4, { mode: "legs", legs: 3 });
+
+            expect(state.rounds).toHaveLength(3);
+            expect(state.rounds.map((round) => round.name)).toEqual([
+                "Round Robin (Leg 1 of 3)",
+                "Round Robin (Leg 2 of 3)",
+                "Round Robin (Leg 3 of 3)"
+            ]);
+            state.rounds.forEach((round) => {
+                expect(round).toMatchObject({
+                    type: "roundRobin",
+                    groups: [["a", "b", "c", "d"]],
+                    results: [],
+                    totalGames: 0,
+                    completedGames: 0,
+                    fixtures: []
+                });
+            });
+        });
+
+        it("names two legs without the 'of N' suffix", () => {
+            const state = createLeagueState(["a", "b", "c", "d"], 4, { mode: "legs", legs: 2 });
+
+            expect(state.rounds.map((round) => round.name)).toEqual(["Round Robin (Leg 1)", "Round Robin (Leg 2)"]);
+        });
+
+        it("generates the full n(n-1)/2 fixtures for every leg, match numbers continuing across legs", () => {
+            const state = createLeagueState(["a", "b", "c", "d"], 4, { mode: "legs", legs: 2 });
+            const { rounds, fixtures } = generateFixtures(state.rounds);
+
+            expect(fixtures).toHaveLength(12);
+            expect(rounds[0].fixtures).toHaveLength(6);
+            expect(rounds[1].fixtures).toHaveLength(6);
+            expect(fixtures.map((fixture) => fixture.matchNo)).toEqual(Array.from({ length: 12 }, (_, i) => i + 1));
+        });
+
+        it("a leg count of 1 is byte-for-byte the original single-round shape", () => {
+            expect(createLeagueState(["a", "b"], 2, { mode: "legs", legs: 1 })).toEqual(
+                createLeagueState(["a", "b"], 2)
+            );
+        });
+    });
+
+    // Limited games per team: one round object whose fixtures are a g-regular
+    // graph, not a leg — per docs/decisions.md.
+    describe("limited mode", () => {
+        it("builds a single round object generated from generatePartialRoundRobinPairs", () => {
+            const teams = ["a", "b", "c", "d", "e", "f", "g", "h"];
+            const state = createLeagueState(teams, 8, { mode: "limited", gamesPerTeam: 3 });
+
+            expect(state.rounds).toHaveLength(1);
+            expect(state.rounds[0]).toMatchObject({ name: "Round Robin", type: "roundRobin", groups: [teams] });
+            expect(state.rounds[0].pairs).toHaveLength(12);
+        });
+
+        it("generates exactly gamesPerTeam fixtures for every team, no repeats", () => {
+            const teams = ["a", "b", "c", "d", "e", "f", "g", "h"];
+            const state = createLeagueState(teams, 8, { mode: "limited", gamesPerTeam: 3 });
+            const { rounds, fixtures } = generateFixtures(state.rounds);
+
+            expect(fixtures).toHaveLength(12);
+            expect(rounds[0].totalGames).toBe(12);
+            expect(rounds[0].pairs).toBeUndefined();
+
+            const playedAgainst = new Map(teams.map((id) => [id, new Set()]));
+            fixtures.forEach((fixture) => {
+                playedAgainst.get(fixture.team1).add(fixture.team2);
+                playedAgainst.get(fixture.team2).add(fixture.team1);
+            });
+            teams.forEach((id) => expect(playedAgainst.get(id).size).toBe(3));
+        });
+
+        it("propagates the realisability error for an invalid (n, g) pair", () => {
+            // 7 teams can only take an even games-per-team — see docs/division-state.md.
+            expect(() => createLeagueState(["a", "b", "c", "d", "e", "f", "g"], 7, { mode: "limited", gamesPerTeam: 3 }))
+                .toThrow(expect.objectContaining({ code: "GAMES_PER_TEAM_PARITY" }));
+        });
+    });
 });
+
+describe("leagueConfigFromPayload", () => {
+    it("reads a legs-mode payload", () => {
+        expect(leagueConfigFromPayload({ round_robin_mode: "legs", round_robin_legs: 3 }))
+            .toEqual({ mode: "legs", legs: 3 });
+    });
+
+    it("reads a limited-mode payload", () => {
+        expect(leagueConfigFromPayload({ round_robin_mode: "limited", games_per_team: 4 }))
+            .toEqual({ mode: "limited", gamesPerTeam: 4 });
+    });
+
+    it("defaults legs to 1 when absent from a legs-mode payload", () => {
+        expect(leagueConfigFromPayload({ round_robin_mode: "legs" })).toEqual({ mode: "legs", legs: 1 });
+    });
+
+    it("returns undefined for a payload naming neither mode, so createLeagueState defaults to one cycle", () => {
+        expect(leagueConfigFromPayload({})).toBeUndefined();
+        expect(leagueConfigFromPayload({ type: "classic" })).toBeUndefined();
+    });
+});
+
+describe("leagueConfigFromState", () => {
+    it("reads legs mode back from more than one round-robin round", () => {
+        const state = { rounds: [makeLeagueRound("Round Robin (Leg 1)"), makeLeagueRound("Round Robin (Leg 2)")] };
+
+        expect(leagueConfigFromState(state, 4)).toEqual({ mode: "legs", legs: 2 });
+    });
+
+    it("reads limited mode back from a single round whose totalGames is short of a full cycle", () => {
+        // 8 teams, g=3 -> 12 games; a full cycle would be 28.
+        const state = { rounds: [{ ...makeLeagueRound("Round Robin"), totalGames: 12 }] };
+
+        expect(leagueConfigFromState(state, 8)).toEqual({ mode: "limited", gamesPerTeam: 3 });
+    });
+
+    it("reads legs mode (1 leg) from a single full-cycle round", () => {
+        const state = { rounds: [{ ...makeLeagueRound("Round robin"), totalGames: 6 }] };
+
+        expect(leagueConfigFromState(state, 4)).toEqual({ mode: "legs", legs: 1 });
+    });
+
+    it("defaults to a single leg when there are no round-robin rounds at all", () => {
+        expect(leagueConfigFromState({ rounds: [] }, 4)).toEqual({ mode: "legs", legs: 1 });
+        expect(leagueConfigFromState(null, 4)).toEqual({ mode: "legs", legs: 1 });
+    });
+});
+
+function makeLeagueRound(name) {
+    return { name, type: "roundRobin", groups: [["a", "b"]], results: [], totalGames: 0, completedGames: 0, fixtures: [] };
+}
 
 describe("createClassicState", () => {
     const eight = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -199,6 +335,15 @@ describe("generateDivisionDetails", () => {
 
         expect(division.type).toBe("League");
         expect(division.state.rounds[0].name).toBe("Round robin");
+    });
+
+    it("threads a League config through to createLeagueState", () => {
+        const division = generateDivisionDetails("league", ["a", "b", "c", "d"], 4, 1, 0, { mode: "legs", legs: 2 });
+
+        expect(division.state.rounds.map((round) => round.name)).toEqual([
+            "Round Robin (Leg 1)",
+            "Round Robin (Leg 2)"
+        ]);
     });
 
     it("defaults to one group and no qualifiers", () => {
@@ -310,6 +455,35 @@ describe("divisionService.createDivision", () => {
         await divisionService.createDivision(details(), "tour-1", "user-1", dbMock.client);
 
         expect(overlapped).toBe(false);
+    });
+
+    it("reads a League division's round-robin mode from the payload", async () => {
+        await divisionService.createDivision(
+            { ...details(), type: "league", round_robin_mode: "legs", round_robin_legs: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        );
+
+        const [, , division] = divisionsRepository.createDivision.mock.calls[0];
+        expect(division.state.rounds.map((round) => round.name)).toEqual([
+            "Round Robin (Leg 1)",
+            "Round Robin (Leg 2)"
+        ]);
+    });
+
+    it("reads a League division's limited-games-per-team mode from the payload", async () => {
+        await divisionService.createDivision(
+            { ...details(), type: "league", round_robin_mode: "limited", games_per_team: 2 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        );
+
+        const [, , division] = divisionsRepository.createDivision.mock.calls[0];
+        // 4 teams, g=2 -> 4 games total.
+        expect(division.state.rounds).toHaveLength(1);
+        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
     });
 
     it("rejects an entry carrying no name", async () => {
@@ -849,6 +1023,59 @@ describe("divisionService.updateDivision", () => {
 
             expect(divisionsRepository.updateTeam)
                 .toHaveBeenCalledWith("t1", "Angels", dbMock.client);
+        });
+
+        // The League round-robin mode is set once at creation, not resupplied on
+        // a team edit — see docs/decisions.md. A rebuild has to read it back from
+        // the division's existing state, or adding a team would silently
+        // collapse a multi-leg division to a single leg.
+        it("preserves a League division's leg count across a rebuild", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({
+                type: "League",
+                state: {
+                    teams: STORED,
+                    rounds: [
+                        makeLeagueRound("Round Robin (Leg 1)"),
+                        makeLeagueRound("Round Robin (Leg 2)")
+                    ],
+                    currentRound: 0
+                }
+            }));
+
+            const teams = [...unchanged(), { name: "Eagles" }];
+            await divisionService.updateDivision("div-1", "user-1", body(teams, { num_groups: 1, knockout_teams: 2 }));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.rounds.map((round) => round.name)).toEqual([
+                "Round Robin (Leg 1)",
+                "Round Robin (Leg 2)"
+            ]);
+        });
+
+        // Same for the limited-games-per-team mode: the surviving totalGames
+        // records what g was, and a rebuild has to re-derive and reapply it.
+        it("preserves a League division's games-per-team target across a rebuild", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({
+                type: "League",
+                state: {
+                    teams: STORED,
+                    // 4 teams at g=2 -> totalGames 4, short of the full cycle (6).
+                    rounds: [{ ...makeLeagueRound("Round Robin"), totalGames: 4 }],
+                    currentRound: 0
+                }
+            }));
+
+            // A genuine set change (adding a team), so this routes to the
+            // rebuild path rather than the rename path unchanged() would take.
+            const teams = [...unchanged(), { name: "Eagles" }];
+            await divisionService.updateDivision("div-1", "user-1", body(teams, { num_groups: 1, knockout_teams: 2 }));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.rounds).toHaveLength(1);
+            // 5 teams at g=2: every team plays 2 games -> 5 fixtures, not the 10
+            // a full cycle would give — confirms the carried-over g (not reset
+            // to a full cycle) was reapplied against the new team count.
+            expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(5);
         });
 
         it("does the whole thing in one transaction", async () => {

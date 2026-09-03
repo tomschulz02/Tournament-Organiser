@@ -358,7 +358,7 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 			    this the page is idle and unchanged until the toast arrives. The
 			    same full-screen loader the rest of the app uses, which also blocks
 			    a second click while the first is in flight. */}
-			{busy && <LoadingScreen />}
+			{busy && <LoadingScreen context="divisionSave" />}
 
 			{/* No key: unlike the creation page, which reuses one modal across
 			    several divisions, this only ever opens a fresh empty one. */}

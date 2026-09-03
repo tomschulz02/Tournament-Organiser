@@ -1,3 +1,6 @@
+import { flattenFixtures } from '../components/tournament/fixtureUtils';
+import { divisionColorStyle } from './divisionColors';
+
 export const SCHEDULE_VERSION = 1;
 export const DEFAULT_SCHEDULE_START = '09:00';
 export const DEFAULT_SCHEDULE_END = '18:00';
@@ -60,6 +63,7 @@ export function normaliseTournamentDays(startDate, endDate, existingDays = []) {
 					id: day.id || createScheduleId('day'),
 					date: day.date,
 					label: day.label || `Day ${index + 1}`,
+					enabled: day.enabled !== false,
 			  }))
 			: [];
 	}
@@ -76,6 +80,7 @@ export function normaliseTournamentDays(startDate, endDate, existingDays = []) {
 			id: existing?.id || createScheduleId('day'),
 			date,
 			label: existing?.label || `Day ${index + 1}`,
+			enabled: existing?.enabled !== false,
 		});
 
 		cursor.setDate(cursor.getDate() + 1);
@@ -333,6 +338,9 @@ export function findEntryConflict(entries, candidate, ignoreEntryId = null) {
 
 export function validateScheduleEntry(schedule, candidate, ignoreEntryId = null) {
 	if (!candidate.day) return 'Choose a schedule day.';
+	if (schedule.days.find((day) => day.date === candidate.day)?.enabled === false) {
+		return 'This day is excluded from scheduling.';
+	}
 	if (!candidate.startTime || !candidate.endTime) return 'Start time and end time are required.';
 	if (!isTimeRangeValid(candidate.startTime, candidate.endTime)) return 'End time must be after the start time.';
 	if (candidate.type === 'fixture' && !candidate.fixtureId) return 'Select a fixture to schedule.';
@@ -473,6 +481,7 @@ export function serialiseScheduleForSave(schedule) {
 			id: day.id,
 			date: day.date,
 			label: day.label,
+			enabled: day.enabled !== false,
 		})),
 		courts: schedule.courts.map((court) => ({
 			id: court.id,
@@ -497,4 +506,81 @@ export function serialiseScheduleForSave(schedule) {
 			slotMinutes: schedule.settings.slotMinutes,
 		},
 	};
+}
+
+// A schedule spans the tournament, not a division. Divisions share the same
+// physical courts, so scheduling them independently could double-book one; one
+// combined entry list makes that impossible to express, because every conflict
+// check runs against all of it.
+//
+// divisionName is set only when there is more than one division — with one, the
+// label is on every row and says nothing. Shared by ScheduleMakerModal (the
+// editable board) and ScheduleTab/the export document (read-only), so both
+// build the same fixture shape from the same divisions data.
+export function buildTournamentSchedule(tournament, divisions = []) {
+	const schedule = getScheduleForTournament(tournament || {});
+	const fixtures = normaliseFixtures(flattenFixtures(divisions));
+
+	if (divisions.length < 2) {
+		return { schedule, fixtures };
+	}
+
+	return {
+		schedule,
+		fixtures: fixtures.map((fixture) => ({
+			...fixture,
+			divisionName: fixture.division_name,
+			searchText: `${fixture.searchText} ${String(fixture.division_name || '').toLowerCase()}`,
+		})),
+	};
+}
+
+// The four presentational helpers below are shared by the schedule maker's own
+// live grid/list view and by ScheduleExportView.jsx's printed/exported pages —
+// both read the same entry shape, so one definition rather than two that could
+// drift.
+
+export function getEntryLabel(entry, fixturesById) {
+	if (entry.type === 'break') return entry.title;
+
+	const fixture = fixturesById[entry.fixtureId];
+	if (!fixture) return 'Fixture unavailable';
+
+	return `${fixture.team1} vs ${fixture.team2}`;
+}
+
+export function getEntrySecondary(entry, fixturesById) {
+	if (entry.type === 'break') {
+		return entry.courtId ? 'Court-specific break' : 'Venue-wide break';
+	}
+
+	const fixture = fixturesById[entry.fixtureId];
+	if (!fixture) return 'Fixture not found';
+
+	const context = `${fixture.round} - Match ${fixture.matchNo}`;
+	return fixture.divisionName ? `${fixture.divisionName} - ${context}` : context;
+}
+
+export function getEntryOfficials(entry) {
+	if (entry.type === 'break') return '';
+
+	return entry.officials ? 'Officials: ' + entry.officials : '';
+}
+
+// Same colour a fixture's division carries everywhere else in the app (the
+// Overview cards, the division selector, Fixtures & Schedule's own rows) —
+// getDivisionAccent's hash is keyed on division_id, so it is already the same
+// colour without this module knowing anything about the others.
+//
+// Gated on divisionName the same way the text label already is: with a single
+// division there is nothing to tell apart, so buildTournamentSchedule leaves
+// divisionName unset and this withholds the colour too rather than tinting
+// every entry identically.
+export function getEntryDivisionStyle(entry, fixturesById) {
+	if (entry.type === 'break') return undefined;
+
+	const fixture = fixturesById[entry.fixtureId];
+	if (!fixture || fixture.divisionName == null) return undefined;
+
+	return divisionColorStyle(fixture.division_id);
 }

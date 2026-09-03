@@ -41,6 +41,11 @@ import {
 	getEntryRowPlacement,
 	getEntrySlotSpan,
 	serialiseScheduleForSave,
+	buildTournamentSchedule,
+	getEntryLabel,
+	getEntrySecondary,
+	getEntryOfficials,
+	getEntryDivisionStyle,
 } from '../src/utils/scheduleUtils';
 
 function entry(overrides = {}) {
@@ -184,8 +189,28 @@ describe('normaliseTournamentDays', () => {
 		const existing = [{ id: 'day-keep', date: '2026-08-02', label: 'Finals Day' }];
 		const days = normaliseTournamentDays('2026-08-01', '2026-08-02', existing);
 
-		expect(days[1]).toEqual({ id: 'day-keep', date: '2026-08-02', label: 'Finals Day' });
+		expect(days[1]).toEqual({ id: 'day-keep', date: '2026-08-02', label: 'Finals Day', enabled: true });
 		expect(days[0].label).toBe('Day 1');
+	});
+
+	it('defaults enabled to true for a brand-new day', () => {
+		const days = normaliseTournamentDays('2026-08-01', '2026-08-02');
+
+		expect(days.every((day) => day.enabled === true)).toBe(true);
+	});
+
+	it('defaults enabled to true for an existing day with no enabled key, per the old-schedule contract', () => {
+		const existing = [{ id: 'day-keep', date: '2026-08-02', label: 'Finals Day' }];
+		const days = normaliseTournamentDays('2026-08-01', '2026-08-02', existing);
+
+		expect(days[1].enabled).toBe(true);
+	});
+
+	it('preserves an existing day explicitly disabled', () => {
+		const existing = [{ id: 'day-keep', date: '2026-08-02', label: 'Finals Day', enabled: false }];
+		const days = normaliseTournamentDays('2026-08-01', '2026-08-02', existing);
+
+		expect(days[1].enabled).toBe(false);
 	});
 
 	it('drops an existing day that falls outside the new range', () => {
@@ -204,7 +229,7 @@ describe('normaliseTournamentDays', () => {
 
 		expect(days).toHaveLength(2);
 		expect(days[0].label).toBe('Day 1');
-		expect(days[1]).toEqual({ id: 'kept', date: '2026-08-02', label: 'Named' });
+		expect(days[1]).toEqual({ id: 'kept', date: '2026-08-02', label: 'Named', enabled: true });
 		expect(days[0].id).toMatch(/^day_/);
 	});
 
@@ -772,6 +797,18 @@ describe('validateScheduleEntry', () => {
 		expect(validateScheduleEntry(base, entry(overrides))).toBe(message);
 	});
 
+	it('rejects a candidate on a day disabled for scheduling', () => {
+		const disabled = schedule({ days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: false }] });
+
+		expect(validateScheduleEntry(disabled, entry())).toBe('This day is excluded from scheduling.');
+	});
+
+	it('accepts a candidate on a day with no enabled key (old-schedule default)', () => {
+		const noKey = schedule({ days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }] });
+
+		expect(validateScheduleEntry(noKey, entry())).toBe('');
+	});
+
 	it('rejects a break with no title, including a blank one', () => {
 		const asBreak = (title) => entry({ type: 'break', fixtureId: null, title });
 
@@ -1121,13 +1158,25 @@ describe('serialiseScheduleForSave', () => {
 
 	it('keeps days and courts to their persisted fields', () => {
 		const base = schedule({
-			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', extra: true }],
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: true, extra: true }],
 			courts: [{ id: 'court-1', name: 'Court 1', divisions: ['div-1'], extra: true }],
 		});
 		const saved = serialiseScheduleForSave(base);
 
-		expect(saved.days[0]).toEqual({ id: 'day-1', date: '2026-08-01', label: 'Day 1' });
+		expect(saved.days[0]).toEqual({ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: true });
 		expect(saved.courts[0]).toEqual({ id: 'court-1', name: 'Court 1', divisions: ['div-1'] });
+	});
+
+	it('defaults a day with no enabled key to enabled: true', () => {
+		const base = schedule({ days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }] });
+
+		expect(serialiseScheduleForSave(base).days[0].enabled).toBe(true);
+	});
+
+	it('preserves a day explicitly disabled', () => {
+		const base = schedule({ days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: false }] });
+
+		expect(serialiseScheduleForSave(base).days[0].enabled).toBe(false);
 	});
 
 	it('defaults a court with no divisions key to an empty restriction', () => {
@@ -1158,5 +1207,122 @@ describe('serialiseScheduleForSave', () => {
 		);
 
 		expect(twice).toEqual(once);
+	});
+});
+
+describe('buildTournamentSchedule', () => {
+	function division(overrides = {}) {
+		return {
+			id: 'div-1',
+			name: 'Open',
+			fixtures: [{ id: 'f1', team1: 'Aces', team2: 'Bears', round: 'Pool Play', match_no: 1 }],
+			...overrides,
+		};
+	}
+
+	it('builds the schedule from the tournament dates', () => {
+		const { schedule } = buildTournamentSchedule({ start_date: '2026-08-01', end_date: '2026-08-01' }, [division()]);
+
+		expect(schedule.days).toHaveLength(1);
+	});
+
+	it('leaves divisionName unset with a single division', () => {
+		const { fixtures } = buildTournamentSchedule({ start_date: '2026-08-01', end_date: '2026-08-01' }, [division()]);
+
+		expect(fixtures[0].divisionName).toBeUndefined();
+	});
+
+	// Regression guard: the divisionName mapping used to be copied by hand at
+	// each call site and dropped the searchText extension when it moved here.
+	it('adds divisionName and extends searchText once there is more than one division', () => {
+		const { fixtures } = buildTournamentSchedule(
+			{ start_date: '2026-08-01', end_date: '2026-08-01' },
+			[
+				division({ id: 'div-1', name: 'Open' }),
+				division({
+					id: 'div-2',
+					name: 'Under 19',
+					fixtures: [{ id: 'f2', team1: 'Cubs', team2: 'Ducks', round: 'Pool Play', match_no: 1 }],
+				}),
+			],
+		);
+
+		const openFixture = fixtures.find((fixture) => fixture.id === 'f1');
+		expect(openFixture.divisionName).toBe('Open');
+		expect(openFixture.searchText).toContain('open');
+	});
+
+	it('defaults to an empty schedule when the tournament has no dates', () => {
+		const { schedule } = buildTournamentSchedule({}, []);
+
+		expect(schedule.days).toEqual([]);
+	});
+});
+
+describe('entry presentation helpers', () => {
+	const fixturesById = {
+		f1: { team1: 'Aces', team2: 'Bears', round: 'Pool Play', matchNo: 3, divisionName: 'Open', division_id: 'div-1' },
+	};
+
+	describe('getEntryLabel', () => {
+		it('names the fixture', () => {
+			expect(getEntryLabel(entry({ type: 'fixture', fixtureId: 'f1' }), fixturesById)).toBe('Aces vs Bears');
+		});
+
+		it('uses the break title', () => {
+			expect(getEntryLabel(entry({ type: 'break', title: 'Lunch' }), fixturesById)).toBe('Lunch');
+		});
+
+		it('names a fixture no longer in the lookup', () => {
+			expect(getEntryLabel(entry({ type: 'fixture', fixtureId: 'missing' }), fixturesById)).toBe('Fixture unavailable');
+		});
+	});
+
+	describe('getEntrySecondary', () => {
+		it('includes the division name when set', () => {
+			expect(getEntrySecondary(entry({ type: 'fixture', fixtureId: 'f1' }), fixturesById))
+				.toBe('Open - Pool Play - Match 3');
+		});
+
+		it('omits the division name when unset', () => {
+			const noDivision = { f1: { ...fixturesById.f1, divisionName: undefined } };
+			expect(getEntrySecondary(entry({ type: 'fixture', fixtureId: 'f1' }), noDivision)).toBe('Pool Play - Match 3');
+		});
+
+		it('describes a break by its scope', () => {
+			expect(getEntrySecondary(entry({ type: 'break', courtId: 'court-1' }), fixturesById)).toBe('Court-specific break');
+			expect(getEntrySecondary(entry({ type: 'break', courtId: null }), fixturesById)).toBe('Venue-wide break');
+		});
+
+		it('names a fixture no longer in the lookup', () => {
+			expect(getEntrySecondary(entry({ type: 'fixture', fixtureId: 'missing' }), fixturesById)).toBe('Fixture not found');
+		});
+	});
+
+	describe('getEntryOfficials', () => {
+		it('formats the officials text', () => {
+			expect(getEntryOfficials(entry({ type: 'fixture', officials: 'Team C' }))).toBe('Officials: Team C');
+		});
+
+		it('is blank with no officials, or for a break', () => {
+			expect(getEntryOfficials(entry({ type: 'fixture', officials: '' }))).toBe('');
+			expect(getEntryOfficials(entry({ type: 'break', officials: 'Team C' }))).toBe('');
+		});
+	});
+
+	describe('getEntryDivisionStyle', () => {
+		it('returns undefined for a break', () => {
+			expect(getEntryDivisionStyle(entry({ type: 'break' }), fixturesById)).toBeUndefined();
+		});
+
+		it('returns undefined when the fixture carries no division name', () => {
+			const noDivision = { f1: { ...fixturesById.f1, divisionName: undefined } };
+			expect(getEntryDivisionStyle(entry({ type: 'fixture', fixtureId: 'f1' }), noDivision)).toBeUndefined();
+		});
+
+		it('returns a division accent style once a division name is set', () => {
+			const style = getEntryDivisionStyle(entry({ type: 'fixture', fixtureId: 'f1' }), fixturesById);
+			expect(style).toHaveProperty('--tv-division-color');
+		});
 	});
 });

@@ -771,6 +771,8 @@ describe("buildDivisionStandings", () => {
         expect(groups[1].standings.map((row) => [row.id, row.won])).toEqual([
             ["t5", 1], ["t4", 0]
         ]);
+    });
+
     // A repeated League cycle — every round-robin round shares the same groups
     // shape (docs/decisions.md) — combines into one table instead of one per
     // round object.

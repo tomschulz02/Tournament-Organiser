@@ -128,6 +128,45 @@ describe("generateRoundRobinFixtures", () => {
 
         expect(generateRoundRobinFixtures(1, round)).toEqual({ fixtures: [], matchNo: 1 });
     });
+
+    // Was bug 11. maxRounds is the max round count across every group in the
+    // round, and that single number used to drive every group's loop,
+    // including smaller ones — so a group whose own round count was less than
+    // the round's max would wrap its rotation cycle and re-emit earlier
+    // rounds' pairings. Fixed by skipping a group once currentRound exceeds
+    // its own round count.
+    it("produces each pairing exactly once per group, whatever the other groups' sizes", () => {
+        const round = makeRound({
+            name: "Pool Play",
+            groups: [
+                ["a1", "a2", "a3", "a4"],
+                ["b1", "b2", "b3", "b4"],
+                ["c1", "c2", "c3", "c4", "c5"]
+            ]
+        });
+
+        const { fixtures } = generateRoundRobinFixtures(1, round);
+
+        const byGroup = {
+            a: fixtures.filter((f) => f.team1.startsWith("a") || f.team2.startsWith("a")),
+            b: fixtures.filter((f) => f.team1.startsWith("b") || f.team2.startsWith("b")),
+            c: fixtures.filter((f) => f.team1.startsWith("c") || f.team2.startsWith("c"))
+        };
+
+        // Round robin of n teams is n*(n-1)/2 pairings: 6 for a group of 4,
+        // 10 for a group of 5.
+        expect(byGroup.a).toHaveLength(6);
+        expect(byGroup.b).toHaveLength(6);
+        expect(byGroup.c).toHaveLength(10);
+        expect(fixtures).toHaveLength(22);
+
+        // No pairing should repeat within a group, in either order.
+        const pairKey = (f) => [f.team1, f.team2].sort().join("-");
+        for (const group of [byGroup.a, byGroup.b, byGroup.c]) {
+            const keys = group.map(pairKey);
+            expect(new Set(keys).size).toBe(keys.length);
+        }
+    });
 });
 
 describe("generateKnockoutFixtures", () => {
@@ -455,6 +494,14 @@ describe("deriveStatus", () => {
         expect(deriveStatus([[0, 0], [21, 15]], true)).toBe("COMPLETED");
         expect(deriveStatus([[0, 0]], false)).toBe("LIVE");
     });
+
+    // CANCELLED is specifically a *single* 0-0 set — sets.length === 1 is part
+    // of the check. Two 0-0 sets take the same path as "0-0 that is not the
+    // only set": COMPLETED, even though every set recorded is 0-0. Not
+    // explicitly asserted before with more than one all-0-0 set.
+    it("is COMPLETED, not CANCELLED, for multiple all-0-0 sets", () => {
+        expect(deriveStatus([[0, 0], [0, 0]], true)).toBe("COMPLETED");
+    });
 });
 
 describe("the third-place playoff exception", () => {
@@ -599,6 +646,27 @@ describe("fixtureService.updateResult", () => {
         expect(rounds.map((round) => round.completedGames)).toEqual([4, 7]);
     });
 
+    // The reverse direction of the test below: this fixture's own round IS
+    // "Finals", not "3rd Place Playoff". The two names are symmetric in
+    // fixtureRoundsOf, but only the 3rd-place direction had a test.
+    it("counts a direct Finals result against both Finals round names", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(owned({ round: "Finals" }));
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({
+                rounds: [makeRound({ name: "Pool Play" }), makeRound({ name: "Finals", type: "knockout" })]
+            })
+        );
+        fixturesRepository.countCompletedInRounds.mockResolvedValue(1);
+
+        await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
+
+        expect(fixturesRepository.countCompletedInRounds)
+            .toHaveBeenCalledWith("div-1", ["Finals", "3rd Place Playoff"], dbMock.client);
+
+        const [, rounds] = divisionsRepository.updateStateRounds.mock.calls[0];
+        expect(rounds[1].completedGames).toBe(1);
+    });
+
     it("counts a third-place result against the Finals round, under both names", async () => {
         fixturesRepository.getFixtureWithOwner.mockResolvedValue(owned({ round: "3rd Place Playoff" }));
         divisionsRepository.getStateForUpdate.mockResolvedValue(
@@ -692,6 +760,19 @@ describe("fixtureService.updateResult", () => {
 
         expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
         expect(divisionsRepository.updateStateRounds).not.toHaveBeenCalled();
+    });
+
+    // The third and final write of the transaction — the earlier two rollback
+    // tests cover countCompletedInRounds and fixturesRepository.updateResult
+    // failing, but not this one.
+    it("rolls back when the final state write fails", async () => {
+        const failure = new Error("Failed to update division state");
+        divisionsRepository.updateStateRounds.mockRejectedValueOnce(failure);
+
+        await expect(fixtureService.updateResult("f1", "user-1", [[21, 15]], true)).rejects.toBe(failure);
+
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+        expect(dbMock.client.release).toHaveBeenCalledOnce();
     });
 });
 

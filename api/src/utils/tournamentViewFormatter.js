@@ -12,6 +12,7 @@ import {
 } from "./standings.js";
 import { qualifierCount } from "../services/progression.service.js";
 import { roundHolding } from "../services/fixtures.service.js";
+import { AppError } from "../errors.js";
 
 const FIXTURE_STATUS_LABELS = {
     UPCOMING: "Upcoming",
@@ -321,7 +322,14 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
             return;
         }
 
-        const roundFixtures = getFixturesForKnockoutRound(fixtures, round.name);
+        // Sorted here rather than trusted from the caller: formatDivisionPayload
+        // happens to pre-sort the whole fixture list by match_no today, but a
+        // group's match is matched to a fixture by walking this array in
+        // order, and that pairing has to hold regardless of what order the
+        // caller handed fixtures in.
+        const roundFixtures = getFixturesForKnockoutRound(fixtures, round.name)
+            .slice()
+            .sort((a, b) => (a.match_no ?? 0) - (b.match_no ?? 0));
         let fixtureIndex = 0;
         const matches = [];
         const groups = round.groups || [];
@@ -336,6 +344,15 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
         groups.forEach((group, groupIndex) => {
             if (!Array.isArray(group) || group.length < 2) {
                 return;
+            }
+
+            // A match is two entries; a bye is one, handled above. Three or more
+            // is not a shape this bracket can draw — it used to silently read
+            // only group[0]/group[1] and drop every entry past the second.
+            if (group.length > 2) {
+                throw new AppError("INVALID_KNOCKOUT_GROUP", {
+                    details: { round: round.name, groupIndex, size: group.length }
+                });
             }
 
             const fixture = roundFixtures[fixtureIndex++] || null;
@@ -381,7 +398,15 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
         });
 
         // The results this round's groups index into, so a bye can be named.
-        previousRound = { groups, matches, previousResults: rounds[roundIndex - 1]?.results };
+        // earlierRound keeps the chain one level further back, so a team that
+        // received a bye two consecutive knockout rounds in a row can still be
+        // resolved by walking back again — see resolveByeTeam.
+        previousRound = {
+            groups,
+            matches,
+            previousResults: rounds[roundIndex - 1]?.results,
+            earlierRound: previousRound
+        };
     });
 
     return {
@@ -433,6 +458,15 @@ function resolveMatchSource(index, previousRound) {
 //
 // It ranks below the fixture in precedence: once progression binds the fixture,
 // the bound team is the answer for the same reason it always was.
+//
+// A team can receive a bye in two (or more) consecutive knockout rounds. When
+// that happens, previousResults has nothing at this index yet — the round that
+// would confirm it has not been committed — but the slot is still knowable:
+// walk back to the round before that one (earlierRound) and ask whether *it*
+// was a bye too. The chain terminates as soon as a round is not itself a bye
+// (returns null and the caller's own fallback to a "Rank N" placeholder takes
+// over) or there is nothing earlier to walk to (a pool round, or the first
+// knockout round in the division).
 function resolveByeTeam(index, previousRound, teamLookup) {
     if (!previousRound || !Number.isInteger(index) || index >= previousRound.groups.length) {
         return null;
@@ -444,10 +478,22 @@ function resolveByeTeam(index, previousRound, teamLookup) {
     }
 
     const entry = group[0];
-    const teamId = typeof entry === "string" ? entry : previousRound.previousResults?.[entry];
-    const team = teamId ? teamLookup.get(teamId) : null;
+    if (typeof entry === "string") {
+        const team = teamLookup.get(entry);
+        return team ? { id: team.id, name: team.name, placeholder: null } : null;
+    }
 
-    return team ? { id: team.id, name: team.name, placeholder: null } : null;
+    if (!Number.isInteger(entry)) {
+        return null;
+    }
+
+    const teamId = previousRound.previousResults?.[entry];
+    if (teamId) {
+        const team = teamLookup.get(teamId);
+        return team ? { id: team.id, name: team.name, placeholder: null } : null;
+    }
+
+    return resolveByeTeam(entry, previousRound.earlierRound, teamLookup);
 }
 
 function describeMatchSource(match, outcome) {

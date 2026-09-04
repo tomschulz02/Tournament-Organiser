@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import CreateModal from './CreateModal';
 import Icon from '../Icons';
 import { useConfirm } from '../ConfirmDialog';
+import { useHelpTopic } from '../../HelpContext';
 import {
 	DIVISION_NAME_MAX,
 	FORMATS,
@@ -49,6 +50,8 @@ const TEAM_DRAG = 'team:';
 // or a fresh empty one — this component never needs to know which, beyond the
 // wording of its title and its confirming button.
 export default function DivisionModal({ division, isEditing, onCancel, onSave }) {
+	useHelpTopic('division-modal');
+
 	// A stable id per row, handed out when the row enters the draft.
 	//
 	// The list used to be keyed by array index, which is only safe while nothing

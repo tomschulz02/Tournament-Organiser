@@ -796,8 +796,31 @@ img {
 	line-height: 1.5;
 }
 
-.help-menu-body p:last-child {
+.help-menu-section {
+	margin-bottom: var(--space-5);
+}
+
+.help-menu-section:last-child {
 	margin-bottom: 0;
+}
+
+.help-menu-section:last-child p:last-child {
+	margin-bottom: 0;
+}
+
+.help-menu-section-heading {
+	margin: 0 0 var(--space-2);
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.help-menu-image {
+	display: block;
+	width: 100%;
+	margin-top: var(--space-2);
+	border-radius: 8px;
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
 }
 
 .menu-bar {

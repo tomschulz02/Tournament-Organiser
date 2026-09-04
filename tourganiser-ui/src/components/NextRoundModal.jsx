@@ -4,6 +4,7 @@ import { fetchRoundProgression, confirmRoundProgression } from '../requests';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
+import { useHelpTopic } from '../HelpContext';
 import '../App.css';
 
 // Prefixed for the same reason TeamsTab.jsx's TEAM_DRAG is: a bare index could
@@ -56,6 +57,8 @@ const portal = (content) => createPortal(content, document.body);
 // Teams are identified by id throughout. Names are for display only — two teams in
 // a division may share a name.
 function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
+	useHelpTopic('next-round-modal');
+
 	const [proposal, setProposal] = useState(null);
 	const [selectedIds, setSelectedIds] = useState([]);
 	const [loading, setLoading] = useState(true);

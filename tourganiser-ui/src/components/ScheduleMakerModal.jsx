@@ -4,6 +4,7 @@ import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
+import { useHelpTopic } from '../HelpContext';
 import '../styles/schedule-maker.css';
 import { generateAutomaticSchedule } from '../utils/scheduleGenerator';
 import {
@@ -150,6 +151,8 @@ export default function ScheduleMakerModal({
 	onClose,
 	onSave,
 }) {
+	useHelpTopic('schedule-maker-modal');
+
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const { schedule: initialSchedule, fixtures } = useMemo(

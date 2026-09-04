@@ -5,6 +5,7 @@ import CreateModal from '../create/CreateModal';
 import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
 import { useMessage } from '../../MessageContext';
+import { useHelpTopic } from '../../HelpContext';
 import { FIELD_LABELS, SCORESHEET_FIELDS, SYSTEM_TEMPLATES } from '../../utils/scoresheetTemplates';
 import { listTemplates, saveTemplate } from '../../utils/scoresheetStorage';
 import '../../styles/scoresheet-template.css';
@@ -26,6 +27,8 @@ function withoutKey(marker) {
 // DivisionModal's convention: one component, its own local draft state, and
 // onCancel/onSave as the only way out. See docs/handover-scoresheets.md.
 export default function ScoresheetTemplateModal({ initialTemplateKey = null, onCancel, onSave }) {
+	useHelpTopic('scoresheet-template-modal');
+
 	const { showMessage } = useMessage();
 	const [screen, setScreen] = useState('picker');
 	const [selectedKey, setSelectedKey] = useState(initialTemplateKey);

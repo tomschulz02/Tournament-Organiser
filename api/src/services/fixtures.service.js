@@ -244,14 +244,22 @@ export function generateFixtures(rounds){
 
 function generateRoundRobinFixtures(matchNo, round){
     const fixtures = [];
-    const maxRounds = Math.max(...round.groups.map(group => 
+    const roundsForGroup = (group) =>
         group.length % 2 === 0
             ? group.length - 1
-            : group.length
-    ));
+            : group.length;
+    const maxRounds = Math.max(...round.groups.map(roundsForGroup));
 
     for (let currentRound = 1; currentRound <= maxRounds; currentRound++){
         for (const group of round.groups){
+            // A group finishes its own round-robin once currentRound exceeds
+            // its own round count. Without this, every group is driven for
+            // maxRounds (the largest group's count), and a smaller group's
+            // rotation cycle wraps and repeats earlier rounds' pairings.
+            if (currentRound > roundsForGroup(group)){
+                continue;
+            }
+
             const currentFixtures = getFixturesForRound(group, currentRound);
 
             for (const [team1, team2] of currentFixtures){

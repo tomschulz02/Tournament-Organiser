@@ -94,7 +94,20 @@ html2canvas and DOMPurify with the PDF export — around half the application's 
 for a screen only an organiser opens. Printing through the browser replaced that on
 2026-08-10 and all three dependencies are gone, taking the chunk from roughly 427kB to
 30kB. It stays lazy because it is still the largest single screen: a grid, a list, an
-inspector, a generator and two print layouts.
+inspector and a generator.
+
+The two print layouts (grid and list) moved out to `components/ScheduleExportView.jsx`
+and `utils/scheduleExportDocument.js` on 2026-09-03, so both the organiser's own print
+action and the "View/Print Schedule" button every viewer sees on the read-only Schedule
+tab (`components/tournament/ScheduleTab.jsx`) build the same document from the same code.
+`openScheduleExportDocument` renders the export components to a static HTML string with
+`react-dom/server`, wraps it in a standalone document with its own inlined stylesheet
+(`styles/schedule-export.css`), and opens it as a `Blob` URL in a new tab — no portal into
+the live app, no hidden always-mounted "export root" waiting on a print media query. Both
+call sites import it with a dynamic `import()` rather than a top-level one: `react-dom/
+server` is a meaningful chunk of code that only this action needs, and `ScheduleTab.jsx`
+is part of the main bundle, unlike this modal, which was already lazy — a top-level import
+there would have put `react-dom/server` in every visitor's initial load.
 
 It was the first component rendered through a portal, and the creation page's modals now
 follow the same pattern through `components/create/CreateModal.jsx`. `createPortal` puts

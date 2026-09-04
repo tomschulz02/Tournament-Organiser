@@ -3,7 +3,7 @@ import DatabaseConnection from "../config/db.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { tournamentRepository } from "../repositories/tournament.repository.js";
-import { generateFixtures, fixtureService } from "./fixtures.service.js";
+import { generateFixtures, fixtureService, generatePartialRoundRobinPairs } from "./fixtures.service.js";
 import { v4 as uuidv4 } from "uuid";
 
 const db = DatabaseConnection();
@@ -41,7 +41,8 @@ async function createDivision(details, tournamentId, userId, client){
         teamIds,
         details.num_teams,
         details.num_groups,
-        details.knockout_teams
+        details.knockout_teams,
+        leagueConfigFromPayload(details)
     );
     division.name = details.name;
     division.num_teams = details.num_teams;
@@ -188,7 +189,8 @@ async function reorderTeams(division, entries, payload) {
         entries.map((entry) => entry.id),
         entries.length,
         numGroups,
-        knockoutTeams
+        knockoutTeams,
+        leagueConfigFromState(division.state, entries.length)
     );
 
     return await db.withTransaction(async (client) => {
@@ -257,7 +259,8 @@ async function rebuildDivision(division, entries, payload) {
         teams.map((team) => team.id),
         teams.length,
         numGroups,
-        knockoutTeams
+        knockoutTeams,
+        leagueConfigFromState(division.state, teams.length)
     );
 
     const kept = new Set(teams.map((team) => team.id));
@@ -447,8 +450,8 @@ function readTeamEntries(teams, existingIds) {
 // The generation sequence, shared so a rebuilt division is indistinguishable
 // from a freshly created one. generateFixtures mutates the rounds it is given
 // and hands them back, which is why the state's rounds are reassigned from it.
-function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams) {
-    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams);
+function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig) {
+    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig);
 
     const generated = generateFixtures(division.state.rounds);
     division.state.rounds = generated.rounds;
@@ -513,14 +516,14 @@ function validateStructure(numGroups, knockoutTeams, teamCount) {
     }
 }
 
-function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0){
+function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0, leagueConfig){
     let division = {};
     if (format === 'classic'){
         division.type = "Classic";
         division.state = createClassicState(teams, num_teams, num_groups, qualifyingTeams);
     } else if (format === 'league'){
         division.type = "League";
-        division.state = createLeagueState(teams, num_teams);
+        division.state = createLeagueState(teams, num_teams, leagueConfig);
     } else if (format === 'single_elim'){
         // The ignore spans the throw as well as the two note lines below it:
         // newer v8 reports the never-taken fall-through after a throw as an
@@ -541,28 +544,113 @@ function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualify
     return division;
 }
 
-function createLeagueState(teams, num_teams){
+// leagueConfig picks one of two mutually exclusive modes — see
+// docs/division-state.md:
+//   { mode: 'legs', legs: n }     — n full round-robin cycles, one round object
+//                                    each, every team playing every other team
+//                                    n times over.
+//   { mode: 'limited', gamesPerTeam: g } — one round object whose fixtures are
+//                                    a g-regular graph (generatePartialRoundRobinPairs),
+//                                    every team playing exactly g games.
+// Absent/undefined defaults to a single full cycle — today's only behaviour,
+// unchanged.
+function createLeagueState(teams, num_teams, leagueConfig){
+    const mode = leagueConfig?.mode === 'limited' ? 'limited' : 'legs';
+
+    if (mode === 'limited') {
+        const pairs = generatePartialRoundRobinPairs(teams, leagueConfig.gamesPerTeam);
+
+        return {
+            teams: teams,
+            rounds: [
+                {
+                    name: "Round Robin",
+                    type: "roundRobin",
+                    groups: [teams],
+                    // Generation input only — read once by generateFixtures's
+                    // roundRobin branch and stripped immediately after. Never
+                    // part of the persisted round shape.
+                    pairs,
+                    results: [],
+                    totalGames: 0,
+                    completedGames: 0,
+                    fixtures: []
+                }
+            ],
+            currentRound: 0
+        };
+    }
+
+    const legs = Math.max(1, Math.trunc(Number(leagueConfig?.legs)) || 1);
+
     return {
         teams: teams,
-        rounds: [
-            {
-                name: "Round robin",
-                type: "roundRobin",
-                // One pool holding the team ids. Wrapping `teams` again made the
-                // pool's single member an array, which fixture generation pairs
-                // with a BYE and every other consumer filters away.
-                groups: [teams],
-                results: [],
-                // The generated fixture count, which generateFixtures adds to —
-                // seeding it with n(n-1)/2 double-counted every game. See
-                // docs/division-state.md.
-                totalGames: 0,
-                completedGames: 0,
-                fixtures: []
-            }
-        ],
+        rounds: Array.from({ length: legs }, (_, index) => ({
+            name: legName(index, legs),
+            type: "roundRobin",
+            // One pool holding the team ids, identical across every leg — see
+            // docs/division-state.md. Wrapping `teams` again made the pool's
+            // single member an array, which fixture generation pairs with a
+            // BYE and every other consumer filters away.
+            groups: [teams],
+            results: [],
+            // The generated fixture count, which generateFixtures adds to —
+            // seeding it with n(n-1)/2 double-counted every game. See
+            // docs/division-state.md.
+            totalGames: 0,
+            completedGames: 0,
+            fixtures: []
+        })),
         currentRound: 0
     }
+}
+
+// "Round robin" for a single leg — unchanged from before this feature, so a
+// leg count of 1 is byte-for-byte what today's generation already produces.
+// Distinctly named per leg from two upward, since fixtures carry this as their
+// `round` value and standings need to tell legs apart to combine them.
+function legName(index, legs) {
+    if (legs <= 1) return "Round robin";
+    if (legs <= 2) return `Round Robin (Leg ${index + 1})`;
+    return `Round Robin (Leg ${index + 1} of ${legs})`;
+}
+
+// Reads the two-mode config divisionFormats.js sends on create/rebuild. Absent
+// entirely (an older client, or Classic's payload) is undefined, which
+// createLeagueState reads as a single full cycle — no behaviour change for a
+// caller that doesn't know about this feature.
+function leagueConfigFromPayload(payload) {
+    if (payload.round_robin_mode === 'limited') {
+        return { mode: 'limited', gamesPerTeam: toCount(payload.games_per_team) };
+    }
+
+    if (payload.round_robin_mode === 'legs') {
+        return { mode: 'legs', legs: toCount(payload.round_robin_legs) || 1 };
+    }
+
+    return undefined;
+}
+
+// A rebuild or reorder regenerates a division from scratch but the League mode
+// itself is set once at creation (see docs/decisions.md) — this reads it back
+// from the division's own state rather than asking the request to resupply it,
+// so a team edit cannot silently collapse a multi-leg division back to one leg.
+function leagueConfigFromState(state, teamCount) {
+    const roundRobinRounds = (Array.isArray(state?.rounds) ? state.rounds : []).filter(
+        (round) => round.type === "roundRobin"
+    );
+
+    if (roundRobinRounds.length > 1) {
+        return { mode: 'legs', legs: roundRobinRounds.length };
+    }
+
+    const round = roundRobinRounds[0];
+    const fullCycleGames = (teamCount * (teamCount - 1)) / 2;
+    if (round && round.totalGames > 0 && round.totalGames < fullCycleGames) {
+        return { mode: 'limited', gamesPerTeam: Math.round((round.totalGames * 2) / teamCount) };
+    }
+
+    return { mode: 'legs', legs: 1 };
 }
 
 function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
@@ -685,7 +773,9 @@ export {
     readTeamEntries,
     formatOf,
     toCount,
-    validateStructure
+    validateStructure,
+    leagueConfigFromPayload,
+    leagueConfigFromState
 };
 
 // const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8","team9"], 9, 2, 6);

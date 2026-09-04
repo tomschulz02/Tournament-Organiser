@@ -1,0 +1,224 @@
+/* The standalone schedule export/print document — a real, separate HTML
+ * document (utils/scheduleExportDocument.js), not a portal into the live app.
+ * Inlined as a <style> tag via a raw import, so this file carries everything
+ * ScheduleExportView.jsx's markup needs and nothing it doesn't: the app's own
+ * design tokens are not loaded here, only the ones these rules use.
+ *
+ * Retired 2026-09-03: the old mechanism kept two hidden "export root" copies
+ * of this markup mounted at all times inside ScheduleMakerModal, made visible
+ * only by a print media query keyed on a data-print-schedule body attribute.
+ * That meant printing was reachable only from inside the modal, which is
+ * organiser-only. This file is what those rules become once the markup is
+ * rendered into its own document on demand instead — see docs/decisions.md.
+ */
+
+:root {
+	--main-color: rgb(41, 98, 255);
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 24px;
+	--space-6: 32px;
+	--z-below: -1;
+
+	/* The same identity palette App.css declares for the live app (light
+	   theme only — a printed page has no dark mode). tournamentAccentStyle
+	   and divisionColorStyle both reference these by name. */
+	--accent-1: rgb(79, 70, 229);
+	--accent-2: rgb(13, 148, 136);
+	--accent-3: rgb(217, 119, 6);
+	--accent-4: rgb(147, 51, 234);
+	--accent-5: rgb(225, 29, 72);
+	--accent-6: rgb(2, 132, 199);
+	--accent-7: rgb(22, 163, 74);
+	--accent-8: rgb(219, 39, 119);
+	--accent-9: rgb(202, 138, 4);
+	--accent-10: rgb(71, 85, 105);
+	--accent-11: rgb(190, 24, 93);
+	--accent-12: rgb(21, 128, 61);
+}
+
+body {
+	margin: 0;
+	font-family: 'Segoe UI', 'Roboto', sans-serif;
+	background: #e5e7eb;
+}
+
+.schedule-export-page {
+	background: #fff;
+	color: #1f2937;
+	padding: var(--space-6);
+	display: grid;
+	gap: var(--space-5);
+	align-content: start;
+	max-width: 1200px;
+	margin: 0 auto var(--space-5);
+}
+
+.schedule-export-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	padding: var(--space-4);
+	border-bottom: 2px solid rgba(31, 41, 55, 0.12);
+	position: relative;
+	overflow: hidden;
+	isolation: isolate;
+}
+
+.schedule-export-header-identity {
+	position: absolute;
+	inset: 0;
+	z-index: var(--z-below);
+	background: linear-gradient(160deg, rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.1), transparent 75%);
+	pointer-events: none;
+}
+
+.schedule-export-header-identity .tournament-pattern {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	color: var(--tournament-accent, var(--main-color));
+}
+
+.schedule-export-header p {
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #1d76ff;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	margin: 0;
+}
+
+.schedule-export-header h2 {
+	margin: var(--space-1) 0 var(--space-1);
+}
+
+.schedule-export-header h3 {
+	margin: 0;
+	font-weight: 400;
+}
+
+.schedule-export-date {
+	font-weight: 700;
+}
+
+.schedule-export-court-range {
+	font-size: 0.85rem;
+	color: #4b5563;
+	margin: var(--space-1) 0 0;
+}
+
+.schedule-export-grid-table {
+	display: grid;
+	border: 1px solid rgba(31, 41, 55, 0.12);
+}
+
+.schedule-export-grid-head,
+.schedule-export-grid-time,
+.schedule-export-grid-cell {
+	padding: var(--space-3);
+	border-right: 1px solid rgba(31, 41, 55, 0.12);
+	border-bottom: 1px solid rgba(31, 41, 55, 0.12);
+	min-height: 56px;
+}
+
+.schedule-export-grid-head {
+	font-weight: 700;
+	background: #f3f8ff;
+}
+
+.schedule-export-grid-cell {
+	display: grid;
+	gap: var(--space-1);
+	/* Division colour, set inline from divisionColorStyle — the same accent
+	   the live grid, the badge and every other division-coloured surface use.
+	   A real border rather than a shadow: this is the printed page, and
+	   border colour survives printing without needing print-color-adjust the
+	   way a background fill would not. */
+	border-left: 3px solid var(--tv-division-color, transparent);
+}
+
+.schedule-export-grid-cell span {
+	font-size: 0.85rem;
+	color: #4b5563;
+}
+
+.schedule-export-list {
+	display: grid;
+	gap: var(--space-2);
+}
+
+.schedule-export-list-row {
+	display: grid;
+	grid-template-columns: 140px 140px minmax(0, 1fr) 180px;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-3);
+	border: 1px solid rgba(31, 41, 55, 0.12);
+	border-radius: 12px;
+	border-left: 3px solid var(--tv-division-color, transparent);
+}
+
+.schedule-export-print-bar {
+	position: sticky;
+	top: 0;
+	display: flex;
+	justify-content: flex-end;
+	padding: var(--space-3) var(--space-5);
+	background: rgba(229, 231, 235, 0.92);
+	backdrop-filter: blur(4px);
+}
+
+.schedule-export-print-button {
+	font: inherit;
+	font-weight: 600;
+	padding: var(--space-2) var(--space-4);
+	border: none;
+	border-radius: 8px;
+	background: var(--main-color);
+	color: #fff;
+	cursor: pointer;
+}
+
+/* Page-break rules. Confined to print, same as before this document existed —
+ * outside of print these elements have no forced pagination and simply flow
+ * as ordinary block content, which is what lets the same markup both scroll
+ * continuously on screen and paginate on paper with no separate "screen"
+ * layout to maintain.
+ */
+@media print {
+	.schedule-export-print-bar {
+		display: none;
+	}
+
+	.schedule-export-page {
+		min-height: 0;
+		max-width: none;
+		margin: 0;
+		break-after: page;
+		page-break-after: always;
+	}
+
+	.schedule-export-page:last-child {
+		break-after: auto;
+		page-break-after: auto;
+	}
+
+	/* A row split across a page boundary is unreadable. */
+	.schedule-export-list-row,
+	.schedule-export-header {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+
+	/* Same reasoning for the grid layout: each fixture is one un-spanned grid
+	   cell, so keeping the cell whole is enough to keep a break at a cell
+	   boundary rather than inside a fixture's own content. */
+	.schedule-export-grid-cell,
+	.schedule-export-grid-time {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+}

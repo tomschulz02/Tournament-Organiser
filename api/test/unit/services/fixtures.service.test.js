@@ -31,6 +31,7 @@ const {
     generateFixtures,
     generateRoundRobinFixtures,
     generateKnockoutFixtures,
+    generatePartialRoundRobinPairs,
     rotateGroupTeams,
     getFixturesForRound,
     validateSets,
@@ -260,6 +261,111 @@ describe("generateFixtures", () => {
         // Currently a bare TypeError from reading .matchNo of undefined.
         // test/known-bugs asserts the named error this should raise instead.
         expect(() => generateFixtures([makeRound({ type: "swiss" })])).toThrow();
+    });
+
+    // A limited-games-per-team League round carries precomputed team-id pairs
+    // on `round.pairs` (divisions.service.js's createLeagueState) instead of
+    // being derived from `groups` by the circle method. See docs/division-state.md.
+    describe("a round carrying precomputed pairs", () => {
+        it("builds one fixture per pair instead of running the circle method", () => {
+            const round = makeRound({
+                name: "Round Robin",
+                groups: [["a", "b", "c", "d"]],
+                pairs: [["a", "c"], ["b", "d"]]
+            });
+
+            const result = generateFixtures([round]);
+
+            expect(result.fixtures.map((fixture) => [fixture.team1, fixture.team2])).toEqual([
+                ["a", "c"],
+                ["b", "d"]
+            ]);
+            expect(result.fixtures.every((fixture) => fixture.round === "Round Robin")).toBe(true);
+            expect(result.fixtures.every((fixture) => fixture.placeholder1 === false && fixture.placeholder2 === false)).toBe(true);
+        });
+
+        it("numbers matches continuing the shared counter, same as any other round", () => {
+            const rounds = [
+                makeRound({ name: "Prelude", groups: [["x", "y"]] }),
+                makeRound({ name: "Round Robin", groups: [["a", "b", "c", "d"]], pairs: [["a", "c"], ["b", "d"]] })
+            ];
+
+            const result = generateFixtures(rounds);
+
+            expect(result.fixtures.map((fixture) => fixture.matchNo)).toEqual([1, 2, 3]);
+        });
+
+        it("strips `pairs` from the round once fixtures are generated, so it is never persisted", () => {
+            const round = makeRound({ groups: [["a", "b"]], pairs: [["a", "b"]] });
+
+            generateFixtures([round]);
+
+            expect(round.pairs).toBeUndefined();
+        });
+    });
+});
+
+describe("generatePartialRoundRobinPairs", () => {
+    const TEAM_IDS = (n) => Array.from({ length: n }, (_, i) => `team-${i}`);
+
+    function degreesOf(teamIds, pairs) {
+        const degree = new Map(teamIds.map((id) => [id, 0]));
+        pairs.forEach(([a, b]) => {
+            degree.set(a, degree.get(a) + 1);
+            degree.set(b, degree.get(b) + 1);
+        });
+        return degree;
+    }
+
+    it("gives every team exactly g opponents for an odd g on an even team count", () => {
+        const teams = TEAM_IDS(8);
+        const pairs = generatePartialRoundRobinPairs(teams, 3);
+
+        expect(pairs).toHaveLength(12);
+        expect([...degreesOf(teams, pairs).values()]).toEqual(teams.map(() => 3));
+    });
+
+    it("gives every team exactly g opponents for an even g on an odd team count", () => {
+        const teams = TEAM_IDS(7);
+        const pairs = generatePartialRoundRobinPairs(teams, 4);
+
+        expect(pairs).toHaveLength(14);
+        expect([...degreesOf(teams, pairs).values()]).toEqual(teams.map(() => 4));
+    });
+
+    it("never pairs a team with itself or with the same opponent twice", () => {
+        const teams = TEAM_IDS(8);
+        const pairs = generatePartialRoundRobinPairs(teams, 5);
+
+        expect(pairs.every(([a, b]) => a !== b)).toBe(true);
+
+        const seen = new Set();
+        for (const [a, b] of pairs) {
+            const key = [a, b].sort().join("|");
+            expect(seen.has(key)).toBe(false);
+            seen.add(key);
+        }
+    });
+
+    it("rejects an odd games-per-team against an odd team count", () => {
+        expect(() => generatePartialRoundRobinPairs(TEAM_IDS(7), 3))
+            .toThrow(expect.objectContaining({ code: "GAMES_PER_TEAM_PARITY", status: 400 }));
+    });
+
+    it("rejects games-per-team at or above a full cycle", () => {
+        expect(() => generatePartialRoundRobinPairs(TEAM_IDS(8), 7))
+            .toThrow(expect.objectContaining({ code: "INVALID_GAMES_PER_TEAM", status: 400 }));
+        expect(() => generatePartialRoundRobinPairs(TEAM_IDS(8), 8))
+            .toThrow(expect.objectContaining({ code: "INVALID_GAMES_PER_TEAM", status: 400 }));
+    });
+
+    it("rejects a non-positive or non-integer games-per-team", () => {
+        expect(() => generatePartialRoundRobinPairs(TEAM_IDS(8), 0))
+            .toThrow(expect.objectContaining({ code: "INVALID_GAMES_PER_TEAM" }));
+        expect(() => generatePartialRoundRobinPairs(TEAM_IDS(8), -2))
+            .toThrow(expect.objectContaining({ code: "INVALID_GAMES_PER_TEAM" }));
+        expect(() => generatePartialRoundRobinPairs(TEAM_IDS(8), 2.5))
+            .toThrow(expect.objectContaining({ code: "INVALID_GAMES_PER_TEAM" }));
     });
 });
 

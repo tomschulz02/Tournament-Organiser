@@ -219,7 +219,17 @@ export function generateFixtures(rounds){
     rounds.forEach(round => {
         let result;
         if (round.type === 'roundRobin'){
-            result = generateRoundRobinFixtures(matchNo, round);
+            // A limited-games-per-team League round carries its precomputed
+            // pairs on `pairs` (set by divisions.service.js's createLeagueState)
+            // instead of being derived from `groups` by the circle method — see
+            // docs/division-state.md. The pairs are generation input only, never
+            // stored: stripped once the fixtures they describe exist.
+            if (Array.isArray(round.pairs)) {
+                result = generatePartialRoundRobinFixtures(matchNo, round);
+                delete round.pairs;
+            } else {
+                result = generateRoundRobinFixtures(matchNo, round);
+            }
         } else if (round.type === 'knockout'){
             result = generateKnockoutFixtures(matchNo, round);
         } else {
@@ -281,6 +291,71 @@ function generateRoundRobinFixtures(matchNo, round){
     }
 
     return {fixtures, matchNo};
+}
+
+// One fixture per pair in round.pairs, in order — the limited-games-per-team
+// counterpart to generateRoundRobinFixtures's circle method. round.pairs is
+// team-id pairs from generatePartialRoundRobinPairs, not a group to derive
+// pairs from, so there is no rotation or bye-handling here at all.
+function generatePartialRoundRobinFixtures(matchNo, round){
+    const fixtures = round.pairs.map(([team1, team2]) => ({
+        id: uuidv4(),
+        matchNo: matchNo++,
+        team1,
+        team2,
+        round: round.name,
+        placeholder1: false,
+        placeholder2: false
+    }));
+
+    return {fixtures, matchNo};
+}
+
+// A g-regular graph over teamIds via the circulant construction: teams sit in
+// their seed order around a circle, and each "distance" d from 1..k connects
+// every team to the ones d positions away in either direction, giving every
+// team degree 2k. An odd g on an even team count adds the single diametrically
+// opposite distance (n/2), which pairs each team with exactly one other team
+// rather than two, contributing the odd "+1". See docs/division-state.md — this
+// is a different mathematical object from a full round-robin cycle (a g-regular
+// graph, not K_n), not a truncation of generateRoundRobinFixtures's circle
+// method, which produces an uneven schedule if truncated whenever n is odd.
+export function generatePartialRoundRobinPairs(teamIds, gamesPerTeam){
+    const n = teamIds.length;
+    const g = Number(gamesPerTeam);
+
+    if (!Number.isInteger(g) || g <= 0 || g >= n - 1) {
+        throw new AppError("INVALID_GAMES_PER_TEAM", { details: { teamCount: n, gamesPerTeam } });
+    }
+
+    if ((n * g) % 2 !== 0) {
+        throw new AppError("GAMES_PER_TEAM_PARITY", { details: { teamCount: n, gamesPerTeam: g } });
+    }
+
+    const pairs = [];
+    const fullDistances = Math.floor(g / 2);
+
+    // A fixed distance d < n/2 walked over every i gives one n-edge cycle
+    // (0,d), (d,2d)... wrapping around — every team appears in exactly two of
+    // its edges (as i and as i's predecessor), so this is degree 2 per
+    // distance with no duplicate edges to filter.
+    for (let d = 1; d <= fullDistances; d++) {
+        for (let i = 0; i < n; i++) {
+            pairs.push([teamIds[i], teamIds[(i + d) % n]]);
+        }
+    }
+
+    if (g % 2 === 1) {
+        // Only reachable when n is even (the parity check above guarantees it
+        // for odd g), so n/2 is a whole number and each team has exactly one
+        // diametrically opposite partner.
+        const half = n / 2;
+        for (let i = 0; i < half; i++) {
+            pairs.push([teamIds[i], teamIds[i + half]]);
+        }
+    }
+
+    return pairs;
 }
 
 function generateKnockoutFixtures(matchNo, round){

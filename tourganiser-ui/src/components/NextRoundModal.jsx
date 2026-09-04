@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchRoundProgression, confirmRoundProgression } from '../requests';
 import Icon from './Icons';
+import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
 import '../App.css';
 
@@ -97,6 +98,14 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 			cancelled = true;
 		};
 	}, [divisionId]);
+
+	// Another round-robin leg of the same division carries every team forward —
+	// nobody is eliminated, so the "qualifiers" framing (heading, aria labels,
+	// the matchup preview) is wrong here even though the underlying
+	// reorder/confirm mechanism is identical. True for League's leg-to-leg case
+	// and, in principle, for a hypothetical second Pool Play round. See
+	// docs/decisions.md.
+	const isRoundRobinNext = proposal?.nextRound?.type === 'roundRobin';
 
 	const eligible = proposal?.eligibleTeams || [];
 	const nameFor = (teamId) => eligible.find((team) => team.id === teamId)?.name || 'Unknown';
@@ -202,7 +211,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 							&times;
 						</button>
 					</div>
-					<p>Loading results...</p>
+					<LoadingScreen context="roundProgress" />
 				</div>
 			</div>
 		);
@@ -244,7 +253,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 
 				<div className="modal-content">
 					<div className="qualified-teams">
-						<h3>Qualifying Teams</h3>
+						<h3>{isRoundRobinNext ? 'Next Leg Order' : 'Qualifying Teams'}</h3>
 						{selectedIds.length > 1 && (
 							<p className="tv-teams-seed-note">Drag a team by its handle to reorder it.</p>
 						)}
@@ -275,7 +284,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 												onDragStart={(event) => handleDragStart(event, index)}
 												onDragEnd={endDrag}
 												onKeyDown={(event) => handleGripKeyDown(event, index)}
-												aria-label={`Move ${nameFor(teamId)} from qualifying position ${
+												aria-label={`Move ${nameFor(teamId)} from ${isRoundRobinNext ? 'position' : 'qualifying position'} ${
 													index + 1
 												}. Drag, or use the up and down arrow keys.`}>
 												<Icon name="grip" size={16} fill="currentColor" />
@@ -339,7 +348,15 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 					</div>
 
 					<div className="fixture-preview">
-						{proposal.nextRound ? (
+						{isRoundRobinNext ? (
+							<div className="next-round-final-note">
+								<h3>{proposal.nextRoundName}</h3>
+								<p>
+									Every team carries forward to this leg — nobody is eliminated, so there is no bracket to preview.
+									The order above sets the seeding for the leg.
+								</p>
+							</div>
+						) : proposal.nextRound ? (
 							<>
 								<h3>{proposal.nextRoundName} Matchups</h3>
 								<div className="fixtures-list">
@@ -389,7 +406,8 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 						className="confirm-btn"
 						onClick={handleConfirm}
 						disabled={saving || hasDuplicates || !complete || proposal.isFinalRound}>
-						{saving ? 'Starting...' : 'Start Next Round'}
+						{saving && <LoadingScreen variant="inline" />}
+						<span>{saving ? 'Starting...' : 'Start Next Round'}</span>
 					</button>
 				</div>
 			</div>

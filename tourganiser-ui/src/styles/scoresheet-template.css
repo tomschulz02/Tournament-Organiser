@@ -27,6 +27,12 @@
 	max-width: none;
 }
 
+.sst-loading-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
 /* --- picker ---------------------------------------------------------- */
 
 .sst-option-list {
@@ -73,6 +79,26 @@
 .sst-option-warning {
 	font-size: 0.8rem;
 	color: var(--error-color);
+}
+
+.sst-option-edit {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: rgb(from var(--secondary-text-color) r g b / 0.1);
+	fill: var(--secondary-text-color);
+	cursor: pointer;
+}
+
+.sst-option-edit:hover,
+.sst-option-edit:focus-visible {
+	background: rgb(from var(--secondary-text-color) r g b / 0.2);
 }
 
 /* --- marker placement ---------------------------------------------------- */

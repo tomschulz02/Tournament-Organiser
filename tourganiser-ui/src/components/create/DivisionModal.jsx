@@ -5,8 +5,10 @@ import { useConfirm } from '../ConfirmDialog';
 import {
 	DIVISION_NAME_MAX,
 	FORMATS,
+	MAX_ROUND_ROBIN_LEGS,
 	TEAM_NAME_MAX,
 	createTeamKey,
+	gamesPerTeamError,
 	getFormat,
 	isConfigurableFormat,
 	parseBulkTeamNames,
@@ -28,6 +30,8 @@ const SCREEN_FOR_ERROR = {
 	type: 'basics',
 	num_groups: 'configuration',
 	knockout_teams: 'configuration',
+	roundRobinLegs: 'configuration',
+	gamesPerTeam: 'configuration',
 	teams: 'teams',
 };
 
@@ -329,6 +333,14 @@ function BasicsScreen({ draft, errors, configurationTouched, onNameChange, onFor
 }
 
 function ConfigurationScreen({ draft, errors, onChange }) {
+	if (draft.type === 'league') {
+		return <LeagueConfigurationScreen draft={draft} errors={errors} onChange={onChange} />;
+	}
+
+	return <ClassicConfigurationScreen draft={draft} errors={errors} onChange={onChange} />;
+}
+
+function ClassicConfigurationScreen({ draft, errors, onChange }) {
 	// Teams are entered on the next screen, so at this point the team count is
 	// usually zero. That is the deliberate order: the mismatch between a pool
 	// count and a team count is caught on Add Division, once both are known.
@@ -394,6 +406,111 @@ function ConfigurationScreen({ draft, errors, onChange }) {
 					)}
 				</div>
 			</div>
+		</div>
+	);
+}
+
+// Two mutually exclusive modes, per docs/decisions.md — a leg count (every leg
+// a full cycle) or an exact games-per-team target (a g-regular graph, not a
+// rounded-up cycle count). A division picks one or the other, never both.
+//
+// Teams are entered on the next screen for a brand-new division, so teamCount
+// is usually 0 here and the parity/range constraint can only be shown as a
+// hint, not enforced live — it's still checked in full at Add Division
+// (validateDivision) and again server-side. Editing an existing division does
+// know its team count already, and gets the live check.
+function LeagueConfigurationScreen({ draft, errors, onChange }) {
+	const teamCount = draft.teams.length;
+	const liveError = teamCount >= 2 && draft.gamesPerTeam !== '' ? gamesPerTeamError(draft.gamesPerTeam, teamCount) : null;
+
+	return (
+		<div className="ct-screen">
+			<p className="ct-screen-lede">Choose how many games each team plays. Every game counts toward one shared table.</p>
+
+			<fieldset className="ct-fieldset">
+				<legend className="ct-field-label">
+					<span>Format</span>
+				</legend>
+				<div className="ct-format-options">
+					<button
+						type="button"
+						className={`ct-format-option ${draft.roundRobinMode !== 'limited' ? 'ct-format-option-selected' : ''}`.trim()}
+						aria-pressed={draft.roundRobinMode !== 'limited'}
+						onClick={() => onChange('roundRobinMode', 'legs')}>
+						<span className="ct-format-name">Play every team the same number of times</span>
+						<span className="ct-format-summary">
+							One or more full round robins — every team plays every other team once per leg.
+						</span>
+					</button>
+					<button
+						type="button"
+						className={`ct-format-option ${draft.roundRobinMode === 'limited' ? 'ct-format-option-selected' : ''}`.trim()}
+						aria-pressed={draft.roundRobinMode === 'limited'}
+						onClick={() => onChange('roundRobinMode', 'limited')}>
+						<span className="ct-format-name">Limit games per team</span>
+						<span className="ct-format-summary">
+							Each team plays an exact number of games against different opponents, fewer than a full round robin.
+						</span>
+					</button>
+				</div>
+			</fieldset>
+
+			{draft.roundRobinMode === 'limited' ? (
+				<div className="ct-field">
+					<label className="ct-field-label" htmlFor="ct-division-games-per-team">
+						<span>Games per team</span>
+						<span className="ct-field-required">Required</span>
+					</label>
+					<input
+						id="ct-division-games-per-team"
+						className={`ct-input ct-input-number ${errors.gamesPerTeam || liveError ? 'ct-input-invalid' : ''}`.trim()}
+						type="number"
+						inputMode="numeric"
+						min="1"
+						value={draft.gamesPerTeam}
+						onChange={(event) => onChange('gamesPerTeam', event.target.value === '' ? '' : Number(event.target.value))}
+						aria-invalid={errors.gamesPerTeam || liveError ? true : undefined}
+					/>
+					<div className="ct-field-foot">
+						{errors.gamesPerTeam || liveError ? (
+							<p className="ct-field-error">{errors.gamesPerTeam || liveError}</p>
+						) : (
+							<p className="ct-field-hint">
+								Has to be less than a full round robin, and — with an odd number of teams — an even number.
+								{teamCount > 0 && ` This division has ${teamCount} teams.`}
+							</p>
+						)}
+					</div>
+				</div>
+			) : (
+				<div className="ct-field">
+					<label className="ct-field-label" htmlFor="ct-division-legs">
+						<span>Legs</span>
+						<span className="ct-field-required">Required</span>
+					</label>
+					<input
+						id="ct-division-legs"
+						className={`ct-input ct-input-number ${errors.roundRobinLegs ? 'ct-input-invalid' : ''}`.trim()}
+						type="number"
+						inputMode="numeric"
+						min="1"
+						max={MAX_ROUND_ROBIN_LEGS}
+						value={draft.roundRobinLegs}
+						onChange={(event) => onChange('roundRobinLegs', Number(event.target.value))}
+						aria-invalid={errors.roundRobinLegs ? true : undefined}
+					/>
+					<div className="ct-field-foot">
+						{errors.roundRobinLegs ? (
+							<p className="ct-field-error">{errors.roundRobinLegs}</p>
+						) : (
+							<p className="ct-field-hint">
+								1 leg is a single round robin. Each additional leg repeats it, so every team meets every other team
+								again.
+							</p>
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

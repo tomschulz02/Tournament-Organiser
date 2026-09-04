@@ -771,6 +771,118 @@ describe("buildDivisionStandings", () => {
         expect(groups[1].standings.map((row) => [row.id, row.won])).toEqual([
             ["t5", 1], ["t4", 0]
         ]);
+    // A repeated League cycle — every round-robin round shares the same groups
+    // shape (docs/decisions.md) — combines into one table instead of one per
+    // round object.
+    describe("a multi-leg League division", () => {
+        function legState() {
+            return makeState({
+                teams: ["t1", "t2"],
+                rounds: [
+                    makeRound({ name: "Round Robin (Leg 1)", groups: [["t1", "t2"]] }),
+                    makeRound({ name: "Round Robin (Leg 2)", groups: [["t1", "t2"]] })
+                ]
+            });
+        }
+
+        it("produces a single standings entry, not one per leg", () => {
+            const standings = buildDivisionStandings(legState(), [], teamLookup);
+
+            expect(standings).toHaveLength(1);
+        });
+
+        it("sums played counts across every leg's completed fixtures", () => {
+            const fixtures = [
+                completedPoolFixture({ round: "Round Robin (Leg 1)" }),
+                completedPoolFixture({ round: "Round Robin (Leg 2)", result: [[15, 21], [18, 21]] })
+            ];
+
+            const rows = buildDivisionStandings(legState(), fixtures, teamLookup)[0].groups[0].standings;
+
+            expect(rows.find((row) => row.id === "t1").played).toBe(2);
+            expect(rows.find((row) => row.id === "t2").played).toBe(2);
+        });
+
+        // Two teams split 1-1 across two legs: head-to-head has to be checked
+        // against fixtures from either leg, not just one.
+        it("checks head-to-head against fixtures from every leg combined", () => {
+            const threeTeamState = makeState({
+                teams: ["t1", "t2", "t3"],
+                rounds: [
+                    makeRound({ name: "Round Robin (Leg 1)", groups: [["t1", "t2", "t3"]] }),
+                    makeRound({ name: "Round Robin (Leg 2)", groups: [["t1", "t2", "t3"]] })
+                ]
+            });
+            const threeTeams = lookupOf([
+                makeTeam({ id: "t1", name: "Aces" }),
+                makeTeam({ id: "t2", name: "Bears" }),
+                makeTeam({ id: "t3", name: "Cubs" })
+            ]);
+
+            // t1 and t2 finish level on wins/sets/points against t3, split 1-1
+            // against each other across the two legs — t2 won the second
+            // meeting, so on head-to-head alone the tie should go to whoever
+            // that decisive rule resolves it to; here, deciding via total sets
+            // (t2 also wins the aggregate) confirms both legs were counted.
+            const fixtures = [
+                completedPoolFixture({ round: "Round Robin (Leg 1)", team_1_id: "t1", team_2_id: "t2", result: [[21, 15]] }),
+                completedPoolFixture({ round: "Round Robin (Leg 2)", team_1_id: "t2", team_2_id: "t1", result: [[21, 10], [21, 10]] }),
+                completedPoolFixture({ round: "Round Robin (Leg 1)", team_1_id: "t1", team_2_id: "t3", result: [[21, 5]] }),
+                completedPoolFixture({ round: "Round Robin (Leg 2)", team_1_id: "t2", team_2_id: "t3", result: [[21, 5]] })
+            ];
+
+            const rows = buildDivisionStandings(threeTeamState, fixtures, threeTeams)[0].groups[0].standings;
+
+            expect(rows[0].id).toBe("t2");
+        });
+
+        it("is a strict no-op for a single-leg League division — same output as before this change", () => {
+            const singleLegState = makeState({
+                teams: ["t1", "t2"],
+                rounds: [makeRound({ groups: [["t1", "t2"]] })]
+            });
+
+            const standings = buildDivisionStandings(singleLegState, [completedPoolFixture()], teamLookup);
+
+            expect(standings).toHaveLength(1);
+            expect(standings[0].groups[0].standings.map((row) => [row.name, row.won]))
+                .toEqual([["Aces", 1], ["Bears", 0]]);
+        });
+    });
+
+    // Guarded fallback for a shape today's generation never produces — see
+    // docs/decisions.md, "Classic's Pool Play ... must continue to produce
+    // exactly what it produces today." Round-robin rounds with genuinely
+    // different groups keep one standings entry each, same as before this
+    // change existed.
+    it("keeps one entry per round when round-robin rounds hold a different number of groups", () => {
+        const state = makeState({
+            teams: ["t1", "t2", "t3"],
+            rounds: [
+                makeRound({ name: "One Pool", groups: [["t1", "t2", "t3"]] }),
+                makeRound({ name: "Two Pools", groups: [["t1", "t2"], ["t3"]] })
+            ]
+        });
+
+        const standings = buildDivisionStandings(state, [], teamLookup);
+
+        expect(standings).toHaveLength(2);
+        expect(standings.map((entry) => entry.round)).toEqual(["One Pool", "Two Pools"]);
+    });
+
+    it("keeps one entry per round when round-robin rounds do not share the same groups", () => {
+        const state = makeState({
+            teams: ["t1", "t2", "t3"],
+            rounds: [
+                makeRound({ name: "Pool A", groups: [["t1", "t2"]] }),
+                makeRound({ name: "Pool B", groups: [["t2", "t3"]] })
+            ]
+        });
+
+        const standings = buildDivisionStandings(state, [], teamLookup);
+
+        expect(standings).toHaveLength(2);
+        expect(standings.map((entry) => entry.round)).toEqual(["Pool A", "Pool B"]);
     });
 });
 

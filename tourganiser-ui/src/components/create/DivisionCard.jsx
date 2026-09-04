@@ -1,5 +1,5 @@
 import Icon from '../Icons';
-import { getFormatLabel, isConfigurableFormat } from './divisionFormats';
+import { getFormatLabel } from './divisionFormats';
 
 // A division at a glance, on the creation page.
 //
@@ -10,7 +10,12 @@ import { getFormatLabel, isConfigurableFormat } from './divisionFormats';
 // label.
 export default function DivisionCard({ division, onEdit, onRemove }) {
 	const teamCount = division.teams.length;
-	const showPools = isConfigurableFormat(division.type);
+	const showPools = division.type === 'classic';
+	const roundRobinFact =
+		division.type === 'league' &&
+		(division.roundRobinMode === 'limited'
+			? division.gamesPerTeam && `${division.gamesPerTeam} games each`
+			: Number(division.roundRobinLegs) > 1 && `${division.roundRobinLegs} legs`);
 
 	return (
 		<div className="ct-division-card">
@@ -26,6 +31,7 @@ export default function DivisionCard({ division, onEdit, onRemove }) {
 							{division.num_groups} {Number(division.num_groups) === 1 ? 'pool' : 'pools'}
 						</span>
 					)}
+					{roundRobinFact && <span className="ct-division-fact">{roundRobinFact}</span>}
 				</div>
 			</div>
 

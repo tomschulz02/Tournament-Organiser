@@ -69,6 +69,10 @@ export const ERRORS = {
 	// is not a shape the bracket can draw a match for, and truncating it to
 	// the first two would silently drop a team from the bracket.
 	INVALID_KNOCKOUT_GROUP: [400, "A knockout group can only hold one or two teams"],
+	// The limited-games-per-team League option. A g-regular graph on n teams
+	// only exists for 0 < g < n - 1 and, when n is odd, only for an even g.
+	INVALID_GAMES_PER_TEAM: [400, "Games per team must be less than the number of teams minus one"],
+	GAMES_PER_TEAM_PARITY: [400, "With an odd number of teams, games per team must be an even number"],
 
 	// Accounts and sessions.
 	MISSING_FIELDS: [400, "Missing required fields"],

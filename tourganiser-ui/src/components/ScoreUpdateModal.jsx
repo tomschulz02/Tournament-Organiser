@@ -4,6 +4,7 @@ import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
 import { useConfirm } from './ConfirmDialog';
+import { useHelpTopic } from '../HelpContext';
 import '../App.css';
 
 // A set counts for whichever team scored more in it; a tie (including an
@@ -28,6 +29,8 @@ function tallySets(sets) {
 }
 
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch, onSaveChanges }) => {
+	useHelpTopic('score-update-modal');
+
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
 	const confirm = useConfirm();
 

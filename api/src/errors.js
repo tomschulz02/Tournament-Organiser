@@ -65,6 +65,10 @@ export const ERRORS = {
 	// UNSUPPORTED_FORMAT, which is about the division's format: this is one round
 	// inside an otherwise valid structure.
 	UNSUPPORTED_ROUND_TYPE: [400, "This round type is not supported"],
+	// A knockout group is a match (two entries) or a bye (one). Three or more
+	// is not a shape the bracket can draw a match for, and truncating it to
+	// the first two would silently drop a team from the bracket.
+	INVALID_KNOCKOUT_GROUP: [400, "A knockout group can only hold one or two teams"],
 
 	// Accounts and sessions.
 	MISSING_FIELDS: [400, "Missing required fields"],
@@ -76,6 +80,8 @@ export const ERRORS = {
 	EMAIL_ALREADY_REGISTERED: [409, "That email is already registered"],
 	USERNAME_TAKEN: [409, "That username is already taken"],
 	CURRENT_PASSWORD_INCORRECT: [401, "Current password is incorrect"],
+	NEW_PASSWORD_SAME_AS_CURRENT: [400, "New password must be different from the current password"],
+	USER_NOT_FOUND: [404, "User not found"],
 
 	// Tournaments.
 	TOURNAMENT_NOT_FOUND: [404, "Tournament not found"],

@@ -233,4 +233,27 @@ describe("userService.changePassword", () => {
         ).rejects.toMatchObject({ code: "CURRENT_PASSWORD_INCORRECT" });
         expect(userRepository.updatePassword).not.toHaveBeenCalled();
     });
+
+    // Q10: getUserById returning null/undefined used to reach bcrypt.compare
+    // with user.password on a null user — an unhandled TypeError rather than a
+    // named failure.
+    it("names the not-found condition rather than crashing on a missing user", async () => {
+        userRepository.getUserById.mockResolvedValueOnce(null);
+
+        await expect(
+            userService.changePassword("user-1", "secret", "NewSecret1!", "NewSecret1!")
+        ).rejects.toMatchObject({ code: "USER_NOT_FOUND", status: 404 });
+        expect(bcrypt.compare).not.toHaveBeenCalled();
+        expect(userRepository.updatePassword).not.toHaveBeenCalled();
+    });
+
+    // Q11: resubmitting the current password as the new one is rejected, not
+    // silently accepted as a no-op change.
+    it("rejects a new password identical to the current one", async () => {
+        await expect(
+            userService.changePassword("user-1", "secret", "secret", "secret")
+        ).rejects.toMatchObject({ code: "NEW_PASSWORD_SAME_AS_CURRENT", status: 400 });
+        expect(userRepository.getUserById).not.toHaveBeenCalled();
+        expect(userRepository.updatePassword).not.toHaveBeenCalled();
+    });
 });

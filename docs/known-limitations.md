@@ -123,6 +123,13 @@ branches, and missing environment variables failing at request time instead of b
   thing keeping the contract — not because anything on screen changed.
 - Nothing enforces the shape of `divisions.state`. A malformed write only surfaces on
   read.
+- **`seedAcrossGroups` has no defined order for the tier that `qualifyingTeams` does
+  not divide evenly across uneven-sized pools.** It sorts that tier by `compareTeams`,
+  which is a deliberate, working tiebreak — the gap is that no rule in
+  `docs/tournament-rules.md` says which pool's teams should fill the remaining
+  qualifying spots when the pools are not the same size. Left undecided rather than
+  pinned to whatever the current sort happens to produce; a test asserting a specific
+  order here would be testing an implementation detail, not a rule.
 
 Ranking now matches `docs/tournament-rules.md` and is computed only in the backend.
 `NextRoundModal.jsx` no longer calculates qualifiers, so the two cannot disagree.

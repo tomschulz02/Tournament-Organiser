@@ -415,6 +415,32 @@ describe("computeRoundResults", () => {
         expect(results.map((row) => row.id)).toEqual(["t1", "t2"]);
         expect(results.every((row) => row.played === 0)).toBe(true);
     });
+
+    // Every case above uses groups that are all the same size. Ranking is a
+    // per-group map/reduce (groups.map(...) then seedAcrossGroups), so a group
+    // of 3 sitting alongside a group of 2 in the same round is the case that
+    // would surface an index confused between "position in this group" and
+    // "position in the round".
+    it("ranks a 3-team pool and a 2-team pool in the same round independently", () => {
+        const fiveTeamState = makeState({ teams: ["t1", "t2", "t3", "t4", "t5"] });
+        const round = makeRound({ name: "Pool Play", groups: [["t1", "t2", "t3"], ["t4", "t5"]] });
+
+        const fixtures = normalised([
+            // Pool A (3 teams): t1 beats t2 and t3; t2 beats t3.
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t1", team_2: "t2", team_1_result: [21], team_2_result: [15] }),
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t1", team_2: "t3", team_1_result: [21], team_2_result: [15] }),
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t2", team_2: "t3", team_1_result: [21], team_2_result: [15] }),
+            // Pool B (2 teams): t5 beats t4.
+            makeFixture({ round: "Pool Play", status: "COMPLETED", team_1: "t4", team_2: "t5", team_1_result: [15], team_2_result: [21] })
+        ]);
+
+        const results = computeRoundResults(round, fiveTeamState, fixtures);
+
+        expect(results.map((row) => row.id)).toEqual(["t1", "t5", "t2", "t4", "t3"]);
+        expect(results.find((row) => row.id === "t1")).toMatchObject({ played: 2, won: 2 });
+        expect(results.find((row) => row.id === "t5")).toMatchObject({ played: 1, won: 1 });
+        expect(results.find((row) => row.id === "t3")).toMatchObject({ played: 2, won: 0 });
+    });
 });
 
 describe("bindFixturesToResults", () => {
@@ -728,6 +754,71 @@ describe("progressionService.commit", () => {
             computedResults: ["t1", "t4", "t2", "t3"],
             resultsAmended: true
         });
+    });
+
+    // amended compares confirmed against computed.slice(0, confirmed.length) —
+    // the computed *prefix*, not the full computed list. Every existing case
+    // either confirms the full list or an amended one; this pins the
+    // true-subset case where confirmed is shorter than computed but still
+    // matches its prefix exactly.
+    it("is not amended when the qualifiers are a strict, unreordered subset of the computed ranking", async () => {
+        loadable({ rounds: [poolRound(), twoTeamRound()] });
+
+        const result = await progressionService.commit("div-1", "user-1", ["t1", "t4"]);
+
+        expect(result.amended).toBe(false);
+        expect(divisionsRepository.updateRounds.mock.calls[0][2][0]).toMatchObject({
+            results: ["t1", "t4"],
+            computedResults: ["t1", "t4", "t2", "t3"],
+            resultsAmended: false
+        });
+    });
+
+    // Q3: substitution is intentional and unrestricted — any team that played
+    // the round may replace any qualifier, not only one ranked near the
+    // cutoff. t3 (computed rank 4, outside the top two) replaces t4 (rank 2).
+    it("accepts a substitute ranked outside the qualifying cutoff", async () => {
+        loadable({ rounds: [poolRound(), twoTeamRound()] });
+
+        const result = await progressionService.commit("div-1", "user-1", ["t1", "t3"]);
+
+        expect(result.results).toEqual(["t1", "t3"]);
+        expect(result.amended).toBe(true);
+        expect(divisionsRepository.updateRounds.mock.calls[0][2][0]).toMatchObject({
+            results: ["t1", "t3"],
+            resultsAmended: true
+        });
+    });
+
+    // Bye-handling (a knockout round whose groups include a one-team bye) and
+    // substitution (the organiser overriding the computed order) were only
+    // tested separately elsewhere; this combines them in one commit.
+    it("binds a bye alongside an organiser substitution in the same commit", async () => {
+        loadable({
+            rounds: [
+                poolRound({ results: ["t1", "t4", "t2", "t3"] }),
+                makeRound({ name: "Semifinals", type: "knockout", groups: [[0], [1, 2]], fixtures: ["f-sf"] }),
+                twoTeamRound()
+            ],
+            currentRound: 1,
+            fixtures: [
+                ...completedPoolFixtures(),
+                makeFixture({
+                    id: "f-sf", match_no: 3, round: "Semifinals", status: "COMPLETED",
+                    team_1: "t4", team_2: "t2", team_1_result: [21], team_2_result: [15]
+                })
+            ]
+        });
+
+        // Computed semifinal results are ["t1", "t4", "t2"] (t1 the bye, t4 the
+        // winner, t2 the loser). The organiser substitutes t2 in for t4.
+        const result = await progressionService.commit("div-1", "user-1", ["t1", "t2"]);
+
+        expect(result.results).toEqual(["t1", "t2"]);
+        expect(result.amended).toBe(true);
+        expect(fixturesRepository.updateFixtures).toHaveBeenCalledWith("div-1", [
+            { id: "f-final", team_1: "t1", team_2: "t2" }
+        ]);
     });
 
     it("writes a bye team into a knockout round's results", async () => {

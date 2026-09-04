@@ -131,4 +131,12 @@ describe("matchesEtag", () => {
     ])("is false given %s", (_label, header, candidate) => {
         expect(matchesEtag(header, candidate)).toBe(false);
     });
+
+    // The naive split(",") mis-tokenizes a candidate that itself contains a
+    // comma. Low real-world risk — this application's own ETags are base64url
+    // digests and can never contain one — but a third-party or proxy-supplied
+    // If-None-Match value legally could.
+    it("mis-tokenizes a candidate that contains a comma", () => {
+        expect(matchesEtag('"ab,cd"', '"ab,cd"')).toBe(false);
+    });
 });

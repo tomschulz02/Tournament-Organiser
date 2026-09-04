@@ -26,6 +26,16 @@ async function createDivision(details, tournamentId, userId, client){
     // rows cannot be stored until after it. See createTeam.
     const teamIds = teamNames.map(() => uuidv4());
 
+    // Only Classic's populateGroups is sensitive to num_groups/knockout_teams —
+    // League ignores both (see createLeagueState) and the create form never
+    // sends them for it, so validating here would reject every League
+    // division outright. Classic's own generation used to accept a num_groups
+    // greater than the team count and silently hand back empty group arrays;
+    // this is the same check rebuildDivision/reorderTeams already make.
+    if (details.type === "classic") {
+        validateStructure(toCount(details.num_groups), toCount(details.knockout_teams), teamIds.length);
+    }
+
     const { division, fixtures } = buildDivision(
         details.type,
         teamIds,

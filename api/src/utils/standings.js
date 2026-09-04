@@ -109,9 +109,10 @@ function compareRatio(a, b) {
     return b - a;
 }
 
-// Head-to-head between exactly the teams still tied. Returns null when it cannot
-// decide — either they never met, or their results form a loop (A beat B, B beat
-// C, C beat A). The rules say do not attempt a mini-league; fall through instead.
+// Head-to-head between exactly these two teams. Returns null when they never
+// met. This only ever sees a pair, so it cannot see a loop involving a third
+// team on its own — that is rankGroup's job, via headToHeadCycle below, before
+// compareTeams is ever asked to compare anyone in a cyclic tie.
 function compareHeadToHead(a, b, headToHead) {
     const key = `${a.id}|${b.id}`;
     const reverse = `${b.id}|${a.id}`;
@@ -195,8 +196,89 @@ export function buildSeedIndex(teamIds) {
     return new Map((teamIds || []).map((id, index) => [id, index]));
 }
 
-export function rankGroup(rows, context) {
-    return rows.slice().sort((a, b) => compareTeams(a, b, context));
+export function rankGroup(rows, context = {}) {
+    const { headToHead = new Map(), seedIndex = new Map() } = context;
+
+    // Teams tied on every criterion ahead of head-to-head (wins, set ratio,
+    // point ratio) are grouped into a tier before head-to-head is applied. A
+    // tier of two resolves by head-to-head as always. A tier of three or more
+    // only resolves by head-to-head when their results form a consistent order
+    // — a cycle (A beat B, B beat C, C beat A) is not a mini-league to
+    // untangle, so the whole tier falls through to seeding, per
+    // docs/tournament-rules.md. Comparing pairs independently with Array.sort,
+    // the previous approach, produced a non-transitive comparator whose result
+    // depended on sort implementation details instead.
+    const tiers = groupTiedRows(rows);
+
+    return tiers.flatMap((tier) => {
+        if (tier.length > 2 && headToHeadCycle(tier, headToHead)) {
+            return tier.slice().sort((a, b) => seedOf(a, seedIndex) - seedOf(b, seedIndex));
+        }
+
+        return tier.slice().sort((a, b) => compareTeams(a, b, { headToHead, seedIndex }));
+    });
+}
+
+// Ordering ahead of head-to-head: matches won, then set ratio, then point
+// ratio. Rows that compare equal on all three belong in the same tier.
+function compareBeforeHeadToHead(a, b) {
+    if (b.won !== a.won) return b.won - a.won;
+
+    const bySets = compareRatio(a.setsRatio, b.setsRatio);
+    if (bySets !== 0) return bySets;
+
+    return compareRatio(a.pointsRatio, b.pointsRatio);
+}
+
+function groupTiedRows(rows) {
+    const sorted = rows.slice().sort(compareBeforeHeadToHead);
+    const tiers = [];
+
+    for (const row of sorted) {
+        const currentTier = tiers[tiers.length - 1];
+        if (currentTier && compareBeforeHeadToHead(currentTier[0], row) === 0) {
+            currentTier.push(row);
+        } else {
+            tiers.push([row]);
+        }
+    }
+
+    return tiers;
+}
+
+// Whether the head-to-head results among this tied group contain a cycle —
+// i.e. are not a strict order. Built as a directed "beat" graph over just this
+// tier, then checked for a cycle with a standard three-colour DFS.
+function headToHeadCycle(tier, headToHead) {
+    const beats = new Map(tier.map((row) => [row.id, []]));
+
+    for (let i = 0; i < tier.length; i += 1) {
+        for (let j = i + 1; j < tier.length; j += 1) {
+            const a = tier[i];
+            const b = tier[j];
+            const result = compareHeadToHead(a, b, headToHead);
+            if (result === null) continue;
+
+            if (result < 0) beats.get(a.id).push(b.id);
+            else beats.get(b.id).push(a.id);
+        }
+    }
+
+    const UNVISITED = 0, VISITING = 1, DONE = 2;
+    const state = new Map(tier.map((row) => [row.id, UNVISITED]));
+
+    const visit = (id) => {
+        state.set(id, VISITING);
+        for (const nextId of beats.get(id)) {
+            const nextState = state.get(nextId);
+            if (nextState === VISITING) return true;
+            if (nextState === UNVISITED && visit(nextId)) return true;
+        }
+        state.set(id, DONE);
+        return false;
+    };
+
+    return tier.some((row) => state.get(row.id) === UNVISITED && visit(row.id));
 }
 
 // Cross-pool seeding for a round-robin round.

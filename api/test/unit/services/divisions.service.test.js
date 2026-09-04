@@ -385,6 +385,77 @@ describe("divisionService.createDivision", () => {
             divisionService.createDivision({ ...details(), type: "swiss" }, "tour-1", "user-1", dbMock.client)
         ).rejects.toThrow("This format is not supported");
     });
+
+    // Q1/Q2: createDivision used to skip the structure check rebuildDivision
+    // and reorderTeams already make, so an over-large num_groups reached
+    // populateGroups and came back with silent empty group arrays instead of
+    // a rejection.
+    it("rejects a Classic division whose num_groups exceeds its team count", async () => {
+        await expect(divisionService.createDivision(
+            { ...details(), num_groups: 5 },
+            "tour-1", "user-1", dbMock.client
+        )).rejects.toMatchObject({ code: "INVALID_STRUCTURE", status: 400 });
+
+        expect(divisionsRepository.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("rejects a Classic division whose knockout_teams exceeds its team count", async () => {
+        await expect(divisionService.createDivision(
+            { ...details(), knockout_teams: 5 },
+            "tour-1", "user-1", dbMock.client
+        )).rejects.toMatchObject({ code: "INVALID_STRUCTURE", status: 400 });
+
+        expect(divisionsRepository.createDivision).not.toHaveBeenCalled();
+    });
+
+    // League ignores num_groups/knockout_teams entirely (createLeagueState
+    // never reads them) and the create form never sends them for it, so the
+    // new check must not apply to it.
+    // The populateGroups unit tests exercise the pure structure only; this
+    // takes the same unequal 9-into-5/4 split (see the commented-out manual
+    // exploration at the bottom of divisions.service.js) all the way through
+    // createDivision -> buildDivision -> generateFixtures, the path bug 11
+    // actually broke: a Pool Play round with a group of 4 (round count 3) and
+    // a group of 5 (round count 5) sharing one round.
+    it("takes an unequal 5/4 pool split through fixture generation without duplicating a group's fixtures", async () => {
+        const nineTeams = Array.from({ length: 9 }, (_, index) => ({ name: `Team${index + 1}` }));
+
+        await divisionService.createDivision(
+            { name: "Division C", type: "classic", teams: nineTeams, num_teams: 9, num_groups: 2, knockout_teams: 6 },
+            "tour-1", "user-1", dbMock.client
+        );
+
+        const [, , division] = divisionsRepository.createDivision.mock.calls[0];
+        const poolGroups = division.state.rounds[0].groups;
+        expect(poolGroups.map((group) => group.length)).toEqual([5, 4]);
+
+        // 5-team pool: 10 pairings. 4-team pool: 6 pairings. No duplicates in
+        // either — the exact regression bug 11 produced.
+        const poolFixtures = fixturesRepository.createFixture.mock.calls
+            .map(([, , , team1, team2, , , round]) => ({ team1, team2, round }))
+            .filter((fixture) => fixture.round === "Pool Play");
+        const poolAIds = new Set(poolGroups[0]);
+        const poolBIds = new Set(poolGroups[1]);
+        const poolAFixtures = poolFixtures.filter((f) => poolAIds.has(f.team1) || poolAIds.has(f.team2));
+        const poolBFixtures = poolFixtures.filter((f) => poolBIds.has(f.team1) || poolBIds.has(f.team2));
+
+        expect(poolAFixtures).toHaveLength(10);
+        expect(poolBFixtures).toHaveLength(6);
+
+        const pairKey = (f) => [f.team1, f.team2].sort().join("-");
+        expect(new Set(poolAFixtures.map(pairKey)).size).toBe(10);
+        expect(new Set(poolBFixtures.map(pairKey)).size).toBe(6);
+    });
+
+    it("creates a League division that carries no num_groups or knockout_teams at all", async () => {
+        const divisionId = await divisionService.createDivision(
+            { name: "Division B", type: "league", teams: [{ name: "Aces" }, { name: "Bears" }], num_teams: 2 },
+            "tour-1", "user-1", dbMock.client
+        );
+
+        expect(divisionId).toBe("uuid-1");
+        expect(divisionsRepository.createDivision).toHaveBeenCalledOnce();
+    });
 });
 
 // The submission rules, shared by creation and editing so the two cannot drift

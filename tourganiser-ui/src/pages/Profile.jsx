@@ -119,7 +119,7 @@ export default function Profile() {
 	};
 
 	if (isLoading) {
-		return <LoadingScreen />;
+		return <LoadingScreen context="pageLoad" />;
 	}
 
 	if (unauthorized) {

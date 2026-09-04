@@ -662,6 +662,61 @@ describe('the lexicographic objective', () => {
 
 // A3 again, from the organiser's side: being told "capacity" when the real
 // blocker was the rest minimum sends them to add a court that will not help.
+// A disabled day contributes no candidate slots at all — see docs/schedule.md.
+describe('a disabled day', () => {
+	it('places nothing when the tournament has a single, disabled day', () => {
+		const base = {
+			version: 1,
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: false }],
+			courts: [],
+			entries: [],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+
+		const { schedule, unscheduledFixtures, warnings } = generate({ baseSchedule: base, fixtures: [fixture('f1')] });
+
+		expect(schedule.entries).toEqual([]);
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f1']);
+		expect(warnings).toEqual([WARNINGS.court(1)]);
+	});
+
+	it('skips a disabled day and places fixtures on the enabled one', () => {
+		const base = {
+			version: 1,
+			days: [
+				{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: false },
+				{ id: 'day-2', date: '2026-08-02', label: 'Day 2', enabled: true },
+			],
+			courts: [],
+			entries: [],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+
+		const { schedule } = generate({
+			baseSchedule: base,
+			startDate: '2026-08-01',
+			endDate: '2026-08-02',
+			fixtures: [fixture('f1')],
+		});
+
+		expect(schedule.entries.filter((e) => e.type === 'fixture').every((e) => e.day === '2026-08-02')).toBe(true);
+	});
+
+	it('treats an old schedule with no enabled key on any day as fully enabled', () => {
+		const base = {
+			version: 1,
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }],
+			courts: [],
+			entries: [],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+
+		const { schedule } = generate({ baseSchedule: base, fixtures: [fixture('f1')] });
+
+		expect(schedule.entries.some((e) => e.fixtureId === 'f1')).toBe(true);
+	});
+});
+
 describe('warnings name the constraint', () => {
 	it('names the round order when a free court was too early to use', () => {
 		const fixtures = [

@@ -31,6 +31,11 @@ export default defineConfig({
                 // pools and bracket from. Pinned to the server's arithmetic by
                 // shared/division-structure.json — see docs/decisions.md.
                 "src/components/create/divisionPreview.js",
+                // The League round-robin config validation, including the
+                // games-per-team realisability check mirrored from
+                // api/src/services/fixtures.service.js's
+                // generatePartialRoundRobinPairs.
+                "src/components/create/divisionFormats.js",
                 // Not a pure module — it calls fetch — but the tournament cache
                 // added on 2026-08-11 decides whether one reader can be shown
                 // another's payload, so it is worth the stubbed fetch.

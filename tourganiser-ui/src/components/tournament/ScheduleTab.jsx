@@ -13,11 +13,12 @@ import {
 	matchesFixtureFilters,
 } from './fixtureUtils';
 import {
+	buildFixtureIndex,
+	buildTournamentSchedule,
 	calculateScheduledStats,
 	compareTimes,
 	formatDateLabel,
 	getCourtName,
-	getScheduleForTournament,
 } from '../../utils/scheduleUtils';
 import { useHelpTopic } from '../../HelpContext';
 
@@ -41,9 +42,35 @@ export default function ScheduleTab({
 }) {
 	useHelpTopic('tournament-fixtures-scheduled');
 
-	const schedule = useMemo(() => getScheduleForTournament(tournament), [tournament]);
+	const { schedule, fixtures: exportFixtures } = useMemo(
+		() => buildTournamentSchedule(tournament, divisions),
+		[tournament, divisions],
+	);
+	// The export document reads a different fixture shape (team1/team2/round/
+	// divisionName, from normaliseFixtures) than this tab's own rows do
+	// (matchesFixtureFilters, FixtureRow) — see buildTournamentSchedule and
+	// scheduleUtils.js's shared getEntry* helpers.
+	const exportFixturesById = useMemo(() => buildFixtureIndex(exportFixtures), [exportFixtures]);
 	const fixtures = useMemo(() => flattenFixtures(divisions), [divisions]);
 	const fixtureIndex = useMemo(() => indexById(fixtures), [fixtures]);
+
+	// Dynamically imported: react-dom/server (needed to render the standalone
+	// document) is a meaningful chunk of code that only this action needs, and
+	// this tab is part of the main bundle, unlike ScheduleMakerModal, which is
+	// already lazy. Importing it at the top of this file would have pulled
+	// react-dom/server into every visitor's initial load for a button most of
+	// them never click.
+	const handleViewSchedule = async (type) => {
+		const { openScheduleExportDocument } = await import('../../utils/scheduleExportDocument');
+
+		openScheduleExportDocument({
+			schedule,
+			fixturesById: exportFixturesById,
+			tournamentName: tournament.name,
+			tournamentId: tournament.id,
+			type,
+		});
+	};
 
 	const [filters, setFilters] = useState(EMPTY_FILTERS);
 
@@ -124,6 +151,16 @@ export default function ScheduleTab({
 							Print All Scoresheets
 						</button>
 					)}
+
+					{/* Unconditional — everyone viewing a scheduled tournament can view
+					    or print it, not just the organiser. Opens a standalone document
+					    in a new tab; never loads ScheduleMakerModal. */}
+					<button type="button" className="tv-subtle-action" onClick={() => handleViewSchedule('grid')}>
+						View/Print Schedule (Grid)
+					</button>
+					<button type="button" className="tv-subtle-action" onClick={() => handleViewSchedule('list')}>
+						View/Print Schedule (List)
+					</button>
 
 					{/* In place of Create Schedule, not alongside it. */}
 					{creator && onEditSchedule && (

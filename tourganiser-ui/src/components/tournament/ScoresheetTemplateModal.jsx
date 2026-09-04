@@ -3,6 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import CreateModal from '../create/CreateModal';
 import Icon from '../Icons';
+import LoadingScreen from '../LoadingScreen';
 import { useMessage } from '../../MessageContext';
 import { FIELD_LABELS, SCORESHEET_FIELDS, SYSTEM_TEMPLATES } from '../../utils/scoresheetTemplates';
 import { listTemplates, saveTemplate } from '../../utils/scoresheetStorage';
@@ -63,21 +64,30 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 		}
 	};
 
+	// Shared by a fresh upload and re-opening a stored template for editing —
+	// both need a pdfjs document to render from and the per-page sizes used to
+	// convert a drawn box to a ratio.
+	const loadPdfDoc = async (bytes) => {
+		const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+
+		const pageSize = [];
+		for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+			const page = await pdf.getPage(pageNumber);
+			const viewport = page.getViewport({ scale: 1 });
+			pageSize.push({ width: viewport.width, height: viewport.height });
+		}
+
+		return { pdf, pageSize };
+	};
+
 	const startPlacing = async () => {
 		if (!uploadFile) return;
 
 		setPreparing(true);
 		try {
 			const originalBytes = await uploadFile.arrayBuffer();
-			const pdf = await pdfjsLib.getDocument({ data: originalBytes.slice(0) }).promise;
+			const { pdf, pageSize } = await loadPdfDoc(originalBytes);
 			setPdfDoc(pdf);
-
-			const pageSize = [];
-			for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-				const page = await pdf.getPage(pageNumber);
-				const viewport = page.getViewport({ scale: 1 });
-				pageSize.push({ width: viewport.width, height: viewport.height });
-			}
 
 			setPlacingDraft({
 				name: uploadName.trim() || uploadFile.name,
@@ -91,6 +101,34 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 			setScreen('placing');
 		} catch {
 			showMessage('That file could not be read as a PDF.', 'error');
+		} finally {
+			setPreparing(false);
+		}
+	};
+
+	// Re-opens an existing custom template's stored record in the same
+	// placement screen the upload flow uses. The record's fields have no
+	// `key` (stripped by withoutKey on save) — a fresh one is added here, the
+	// same way placeMarker adds one when a marker is first placed.
+	const startEditing = async (template) => {
+		setPreparing(true);
+		try {
+			const { pdf, pageSize } = await loadPdfDoc(template.pdfBytes);
+			setPdfDoc(pdf);
+
+			setPlacingDraft({
+				id: template.id,
+				name: template.name,
+				pdfBytes: template.pdfBytes,
+				pageCount: template.pageCount,
+				pageSize,
+				fields: template.fields.map((marker) => ({ ...marker, key: crypto.randomUUID() })),
+				currentPage: 0,
+				activeField: SCORESHEET_FIELDS[0],
+			});
+			setScreen('placing');
+		} catch {
+			showMessage('That template could not be reopened for editing.', 'error');
 		} finally {
 			setPreparing(false);
 		}
@@ -122,7 +160,8 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 	};
 
 	const handleSaveCustomTemplate = async () => {
-		const id = crypto.randomUUID();
+		const isEditing = Boolean(placingDraft.id);
+		const id = placingDraft.id || crypto.randomUUID();
 		const record = {
 			id,
 			name: placingDraft.name,
@@ -138,7 +177,9 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 			return;
 		}
 
-		setCustomTemplates((previous) => [...previous, record]);
+		setCustomTemplates((previous) =>
+			isEditing ? previous.map((template) => (template.id === id ? record : template)) : [...previous, record]
+		);
 		setSelectedKey(`custom:${id}`);
 		setPlacingDraft(null);
 		setPdfDoc(null);
@@ -295,6 +336,15 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 						</button>
 					))}
 
+					{loadingCustom && (
+						// Genuinely quick (an IndexedDB read, not a network request) — an
+						// inline spinner beside static text, not the rotating fullPage
+						// treatment a real wait gets.
+						<p className="sst-lede sst-loading-row">
+							<LoadingScreen variant="inline" /> Loading your custom templates…
+						</p>
+					)}
+
 					{!loadingCustom &&
 						customTemplates.map((template) => {
 							const key = `custom:${template.id}`;
@@ -320,6 +370,18 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 											</span>
 										)}
 									</div>
+									<button
+										type="button"
+										className="sst-option-edit"
+										title="Edit field placement"
+										aria-label={`Edit field placement for ${template.name}`}
+										onMouseDown={(event) => event.stopPropagation()}
+										onClick={(event) => {
+											event.stopPropagation();
+											startEditing(template);
+										}}>
+										<Icon name="edit" size={16} />
+									</button>
 								</button>
 							);
 						})}

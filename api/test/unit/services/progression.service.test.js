@@ -539,6 +539,17 @@ describe("progressionService.getProposal", () => {
         expect(proposal.eligibleTeams).toEqual(proposal.computedResults);
     });
 
+    // A League leg-to-leg transition: nextRound.type lets the client tell this
+    // apart from a real knockout transition, per docs/decisions.md.
+    it("carries the next round's type, roundRobin for a leg-to-leg transition", async () => {
+        const leg2 = makeRound({ name: "Round Robin (Leg 2)", type: "roundRobin", groups: [TEAM_IDS], fixtures: ["f-leg2"] });
+        loadable({ rounds: [poolRound(), leg2] });
+
+        const proposal = await progressionService.getProposal("div-1", "user-1");
+
+        expect(proposal.nextRound).toMatchObject({ name: "Round Robin (Leg 2)", type: "roundRobin" });
+    });
+
     // Regression guard for the temporal dead zone introduced with part 2:
     // nextRound was read on the computed line and declared below it, so every
     // call threw ReferenceError. This case fails outright before that fix, and

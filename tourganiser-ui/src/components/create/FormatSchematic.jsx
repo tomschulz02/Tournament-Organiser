@@ -1,5 +1,4 @@
 import BracketView from '../tournament/BracketView';
-import { isConfigurableFormat } from './divisionFormats';
 import { poolMembership, previewBracket } from './divisionPreview';
 
 // What this division's configuration will produce.
@@ -23,17 +22,22 @@ function groupLabel(index) {
 }
 
 export default function FormatSchematic({ division }) {
-	const configurable = isConfigurableFormat(division.type);
+	// League is offered its own configuration screen (leg count or a
+	// games-per-team target), but neither mode changes the shape shown here:
+	// every League round is still one pool of everyone with no knockout stage,
+	// same as before League had anything to configure. Only Classic draws pools
+	// and a bracket from num_groups/knockout_teams.
+	const isClassic = division.type === 'classic';
 
 	// A Round Robin division is a single pool that plays itself out, with
 	// nothing after it.
-	const pools = poolMembership(division.teams.length, configurable ? division.num_groups : 1);
-	const rounds = configurable ? previewBracket(division.knockout_teams) : [];
+	const pools = poolMembership(division.teams.length, isClassic ? division.num_groups : 1);
+	const rounds = isClassic ? previewBracket(division.knockout_teams) : [];
 
 	return (
 		<div className="ct-schematic">
 			<div className="ct-schematic-stage">
-				<p className="ct-schematic-stage-name">{configurable ? 'Pools' : 'The table'}</p>
+				<p className="ct-schematic-stage-name">{isClassic ? 'Pools' : 'The table'}</p>
 
 				{/* Its own scrolling axis. A division with eight pools is wider
 				    than a phone, and shrinking it until it cannot be read is
@@ -69,7 +73,7 @@ export default function FormatSchematic({ division }) {
 					<BracketView rounds={rounds} />
 				) : (
 					<p className="ct-schematic-note">
-						{configurable
+						{isClassic
 							? 'No knockout stage — fewer than two teams advance from the pools.'
 							: 'No knockout stage. The table decides the division.'}
 					</p>

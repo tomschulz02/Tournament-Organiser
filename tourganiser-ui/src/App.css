@@ -12,6 +12,7 @@
 	--desktop-breakpoint: 1024px;
 	--success-color: rgb(76, 175, 80);
 	--error-color: rgb(244, 67, 54);
+	--warning-color: rgb(230, 120, 0);
 
 	/* Spacing scale. A 4px base, seven steps, numbered by position rather than
 	   by pixel value — the mobile block below redefines the larger steps, so a
@@ -106,6 +107,10 @@ body.light {
 	--accent-6: rgb(2, 132, 199); /* cyan */
 	--accent-7: rgb(22, 163, 74); /* green */
 	--accent-8: rgb(219, 39, 119); /* pink */
+	--accent-9: rgb(202, 138, 4); /* amber */
+	--accent-10: rgb(71, 85, 105); /* slate */
+	--accent-11: rgb(190, 24, 93); /* magenta */
+	--accent-12: rgb(21, 128, 61); /* forest */
 }
 
 body.dark {
@@ -126,6 +131,10 @@ body.dark {
 	--accent-6: rgb(56, 189, 248);
 	--accent-7: rgb(74, 222, 128);
 	--accent-8: rgb(244, 114, 182);
+	--accent-9: rgb(250, 204, 21); /* amber */
+	--accent-10: rgb(148, 163, 184); /* slate */
+	--accent-11: rgb(240, 76, 154); /* magenta */
+	--accent-12: rgb(52, 211, 153); /* forest */
 }
 
 body.noscroll {
@@ -643,7 +652,7 @@ img {
 	right: calc(50% - 150px);
 	width: 300px;
 	background: var(--background-color);
-	color: var(--text-color);
+	color: var(--secondary-text-color);
 	padding: var(--space-3) var(--space-4);
 	border-radius: 8px;
 	z-index: var(--z-toast);
@@ -658,6 +667,14 @@ img {
 }
 .message-popup.error {
 	background: var(--error-color);
+	color: var(--text-color);
+}
+.message-popup.info {
+	background: var(--main-color);
+	color: var(--text-color);
+}
+.message-popup.warning {
+	background: var(--warning-color);
 	color: var(--text-color);
 }
 
@@ -1593,26 +1610,6 @@ Login form styles
 	z-index: calc(var(--z-modal) + 1);
 }
 
-.loading-spinner {
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	height: 21px;
-	width: 21px;
-	margin: 0 auto;
-	border: 2px solid white;
-	border-top: 2px solid transparent;
-	animation: reverse-spin 1s linear infinite;
-	border-radius: 50%;
-}
-.loading-spinner .spinner {
-	width: 15px;
-	height: 15px;
-	border: 2px solid white;
-	border-top: 2px solid transparent;
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
-}
 @keyframes spin {
 	0% {
 		transform: rotate(0deg);
@@ -1622,14 +1619,6 @@ Login form styles
 	}
 	100% {
 		transform: rotate(720deg);
-	}
-}
-@keyframes reverse-spin {
-	0% {
-		transform: rotate(360deg);
-	}
-	100% {
-		transform: rotate(0deg);
 	}
 }
 
@@ -1682,12 +1671,28 @@ Loading Screen styles
 	width: 100%;
 	height: 100%;
 	display: flex;
+	flex-direction: column;
 	justify-content: center;
 	align-items: center;
+	gap: var(--space-4);
 	background-color: rgb(from var(--background-color) r g b / 0.5);
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	backdrop-filter: blur(8px);
 	z-index: var(--z-loading);
+}
+
+/* The rotating contextual line under the ring — see loadingPhrases.js.
+   fadeInOut is the same animation the toast/message-popup infrastructure
+   already uses, so a phrase change reads as a deliberate swap rather than a
+   jarring text-replace; keyed by its own text in LoadingScreen.jsx so React
+   remounts (and therefore re-triggers the animation) on every change. */
+.loading-message {
+	margin: 0;
+	max-width: 320px;
+	text-align: center;
+	font-weight: 500;
+	color: var(--secondary-text-color);
+	animation: fadeInOut 2.2s ease-in-out;
 }
 
 .lds-ring-container {
@@ -1723,6 +1728,21 @@ Loading Screen styles
 .lds-ring div:nth-child(3) {
 	animation-delay: -0.15s;
 }
+/* The inline variant's base look — currentColor, so it tracks whatever
+   button it's dropped into without that button needing its own scoped rule.
+   The existing per-button rules below (.save-btn .btn-spinner and friends)
+   are more specific and keep winning on size where they already tune it;
+   this is only what a plain, unstyled button falls back to. */
+.btn-spinner {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
 @keyframes lds-ring {
 	0% {
 		transform: rotate(0deg);
@@ -2098,9 +2118,9 @@ Score Update Modal styles
 	opacity: 0.8;
 }
 
-/* Scoped to these buttons rather than reusing the dead .loading-spinner:
-   currentColor tracks each button's own text colour under either theme, so we
-   don't have to assume a light-on-colour foreground the way border: white did. */
+/* Sizing tuned for these specific buttons — the base .btn-spinner rule above
+   already gives currentColor and a sane default size, this just overrides it
+   where these buttons want the same 14px explicitly stated. */
 .cancel-match-btn .btn-spinner,
 .save-btn .btn-spinner,
 .end-match-btn .btn-spinner {
@@ -2388,6 +2408,10 @@ Next Round Modal styles
 }
 
 .confirm-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
 	padding: var(--space-2) var(--space-4);
 	background: var(--main-color);
 	color: white;

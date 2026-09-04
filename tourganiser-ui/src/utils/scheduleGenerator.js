@@ -68,7 +68,7 @@ function buildCandidateSlots(days, courts, startTime, endTime, durationMinutes) 
 	const dayEndMinutes = timeToMinutes(endTime);
 	const firstMinute = timeToMinutes(startTime);
 
-	days.forEach((day) => {
+	days.filter((day) => day.enabled !== false).forEach((day) => {
 		for (let cursor = firstMinute; cursor + durationMinutes <= dayEndMinutes; cursor += durationMinutes) {
 			courts.forEach((court, courtIndex) => {
 				slots.push({

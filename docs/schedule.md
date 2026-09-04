@@ -36,6 +36,7 @@ turns it into an empty schedule on read.
 | `id` | string | `day_<random>`. Stable across saves for a date that survives. |
 | `date` | string | `YYYY-MM-DD`. |
 | `label` | string | Display name. `Day 1`, `Day 2`… unless the organiser renamed it. |
+| `enabled` | boolean | Optional. **Absent or `true` means the day is active for scheduling** — only an explicit `false` excludes it. The generator places nothing on a disabled day and hand-placement onto one is blocked client-side; the day stays in `days` rather than disappearing, so re-enabling it is a toggle. Not enforced server-side — see Generation objectives. |
 
 **`days` is regenerated from the tournament's `start_date` and `end_date` on every read.**
 `normaliseTournamentDays` walks the date range and keeps the stored `id` and `label` for

@@ -375,11 +375,13 @@ share a name. A knockout round's "record" is that single match's outcome (`won`/
 as 1/0, `setsWon`/`setsLost` from that match), rather than a season of them — a bye
 carries zeros, having played nothing.
 
-The proposal also includes `nextRound: { name, groups }` — null on the final round,
-which has none — the same pairing structure `commit` uses to bind fixtures. It lets the
-client preview which teams the next round will pair together from the organiser's
-current (possibly reordered or substituted) qualifier list, before anything is
-confirmed.
+The proposal also includes `nextRound: { name, type, groups }` — null on the final
+round, which has none — the same pairing structure `commit` uses to bind fixtures. It
+lets the client preview which teams the next round will pair together from the
+organiser's current (possibly reordered or substituted) qualifier list, before anything
+is confirmed. `type` lets the client tell a real knockout transition from a round-robin
+leg carrying every team forward (a League division's leg-to-leg progression) — no team
+is eliminated in the latter, and the UI should not say "qualify" for it.
 
 On commit, the next round's placeholder fixtures are bound to real teams:
 `nextRound.groups[i]` holds two positions in the confirmed results, and

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
+import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
 import { useConfirm } from './ConfirmDialog';
 import '../App.css';
@@ -275,22 +276,22 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 										<span>Discard changes</span>
 									</button>
 									<button type="submit" className="save-btn" disabled={busy}>
-										{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 										<span>Save changes</span>
 									</button>
 								</>
 							) : (
 								<>
 									<button type="button" className="cancel-match-btn" onClick={handleCancelMatchClick} disabled={busy}>
-										{submitting === 'cancel' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'cancel' ? <LoadingScreen variant="inline" /> : null}
 										<span>Cancel Match</span>
 									</button>
 									<button type="submit" className="save-btn" disabled={busy}>
-										{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 										<span>Save Score</span>
 									</button>
 									<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy}>
-										{submitting === 'end' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'end' ? <LoadingScreen variant="inline" /> : null}
 										<span>End Match</span>
 									</button>
 								</>

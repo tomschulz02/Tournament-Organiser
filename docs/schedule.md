@@ -25,6 +25,7 @@ which records that nothing reads or writes a schedule out of division state.
 | `courts` | array of court objects | yes | The playing surfaces available. May be empty; an empty court list means nothing can be placed. A court may be restricted to a set of divisions. |
 | `entries` | array of entry objects | yes | The placements. May be empty — a schedule that places nothing is valid. |
 | `settings` | settings object | yes | The grid the client draws. Presentation only. |
+| `print` | print object \| `null` | no | Where the organiser has chosen the page breaks of the printed schedule. Presentation only. Absent or `null` means no saved layout — every consumer computes the smart default instead. |
 
 `null` is a legal value for the whole column and means "no schedule yet". The client
 turns it into an empty schedule on read.
@@ -118,6 +119,49 @@ an axis that moves under its own contents cannot be read.
 
 Changing `slotMinutes` or `dayStartTime` after entries exist therefore leaves entries that
 no longer land on a boundary, and that is now something the organiser can see.
+
+### Print
+
+Added 2026-09-08. Two saved layouts, one per printed view, edited and saved independently
+so that switching between them always shows a finished result.
+
+```json
+"print": {
+  "grid": { "orientation": "landscape", "courtBreaks": ["court-7"], "rowBreaksByDay": { "day_k3f8a1m2": [4, 9] } },
+  "list": { "orientation": "portrait", "rowBreaksByDay": { "day_k3f8a1m2": [12] } }
+}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `grid` | layout object \| `null` | `null` | The court-columns-by-time view. `null` means never saved. |
+| `list` | layout object \| `null` | `null` | The one-row-per-fixture view. `null` means never saved. |
+| `<layout>.orientation` | `'portrait'` \| `'landscape'` | `'landscape'` (grid), `'portrait'` (list) | The paper orientation this layout's breaks were chosen against. A layout's orientation and its breaks are one unit — a reader picks a layout, not an orientation. |
+| `<layout>.rowBreaksByDay` | object keyed by `days[].id` | `{}` | Row indices at which a page break falls. An index is the **first row of the next page**, so `[4, 9]` means rows 0–3, 4–8, 9–end. Row `0` is never a break. |
+| `<layout>.courtBreaks` | array of `courts[].id` | `[]` | Grid only. The court each new column group **starts** with. Ids rather than indices so removing a court invalidates only its own break instead of shifting every one after it. |
+
+Read it the way `settings` is read — presentation, not constraint. **The server stores it as
+given and validates nothing about it**, because there is no arrangement of page breaks that
+is impossible, only ones that are more or less useful to read.
+
+Three absences mean three different things, and the difference matters:
+
+- A layout of `null` — never saved. The smart default is computed.
+- A day absent from `rowBreaksByDay` — the layout predates that day. The smart default is
+  computed for that day alone; the rest of the layout still applies.
+- A day present with `[]` — saved deliberately as one page. Not the same as absent.
+
+**Stale breaks are dropped on read, never on write.** A break naming a day id no longer in
+`days`, or a court id no longer in `courts`, is ignored for that load and the smart default
+fills the gap; the organiser is shown a dismissible notice once, and non-organiser viewers
+are shown nothing. What is stored only changes when the organiser saves. A row index past
+the end of a day is ignored the same way, silently — a day getting shorter is not something
+worth interrupting anyone about.
+
+**The smart default reproduces the fixed page sizes it replaced**, then looks up to two rows
+earlier for a natural place to break: an empty slot row on the grid, the start of a new time
+on the list. It never looks *later*, so a page is never longer than the estimate — a short
+page prints with blank space at the foot, a long one silently overflows.
 
 **The generator is stricter than the payload.** Everything it places lies inside the
 configured day and on a slot boundary, because it only ever builds candidate slots there —
@@ -218,7 +262,7 @@ Structural, and checked:
 Free text, and merely stored:
 
 - `title`, `notes` — never inspected.
-- `days`, `settings` — stored as given, and `days` is regenerated on read anyway.
+- `days`, `settings`, `print` — stored as given, and `days` is regenerated on read anyway.
 - `courts` — stored as given, except that each court's `divisions` is read to enforce the
   court division restriction above.
 - `version` — stored as given.
@@ -282,7 +326,8 @@ Two courts, one day, one break spanning both courts and two fixtures.
     "dayStartTime": "09:00",
     "dayEndTime": "18:00",
     "slotMinutes": 30
-  }
+  },
+  "print": null
 }
 ```
 

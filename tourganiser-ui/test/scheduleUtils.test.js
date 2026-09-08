@@ -1134,7 +1134,7 @@ describe('serialiseScheduleForSave', () => {
 
 		const saved = serialiseScheduleForSave(base);
 
-		expect(Object.keys(saved)).toEqual(['version', 'days', 'courts', 'entries', 'settings']);
+		expect(Object.keys(saved)).toEqual(['version', 'days', 'courts', 'entries', 'settings', 'print']);
 		expect(saved.entries.map((e) => e.id)).toEqual(['early', 'late']);
 		expect(Object.keys(saved.entries[0])).toEqual([
 			'id',

@@ -12,7 +12,7 @@ import scheduleExportCss from '../styles/schedule-export.css?raw';
 // signed in, and the reader triggers printing themselves from there (this
 // codebase's own print control, or Ctrl+P) rather than the app opening a
 // print dialog on their behalf.
-export function openScheduleExportDocument({ schedule, fixturesById, tournamentName, tournamentId, type }) {
+export function openScheduleExportDocument({ schedule, fixturesById, tournamentName, tournamentId, type, layout = null }) {
 	const markup = renderToStaticMarkup(
 		<ScheduleExportPages
 			type={type}
@@ -20,10 +20,16 @@ export function openScheduleExportDocument({ schedule, fixturesById, tournamentN
 			fixturesById={fixturesById}
 			tournamentName={tournamentName}
 			tournamentId={tournamentId}
+			layout={layout}
 		/>,
 	);
 
-	const html = buildDocument({ title: `${tournamentName} - Schedule`, type, markup });
+	const html = buildDocument({
+		title: `${tournamentName} - Schedule`,
+		type,
+		orientation: layout?.orientation,
+		markup,
+	});
 	const blob = new Blob([html], { type: 'text/html' });
 	const url = URL.createObjectURL(blob);
 
@@ -38,14 +44,19 @@ export function openScheduleExportDocument({ schedule, fixturesById, tournamentN
 // size/margin per type: the grid is wide (courts across the page, up to 6 per
 // group per COURTS_PER_GROUP) and reads better landscape; the list is a
 // single column of rows and reads better portrait — the same pairing the
-// retired @page rules used.
-function pageCss(type) {
-	return type === 'grid'
+// retired @page rules used, and what DEFAULT_PRINT_ORIENTATION still encodes.
+//
+// A saved layout's own orientation wins, because its page breaks were chosen
+// against that orientation — the two are one unit, per docs/schedule.md.
+function pageCss(type, orientation) {
+	const resolved = orientation || (type === 'grid' ? 'landscape' : 'portrait');
+
+	return resolved === 'landscape'
 		? '@page { size: A4 landscape; margin: 10mm; }'
 		: '@page { size: A4 portrait; margin: 12mm; }';
 }
 
-function buildDocument({ title, type, markup }) {
+function buildDocument({ title, type, orientation, markup }) {
 	return `<!doctype html>
 <html lang="en">
 <head>
@@ -53,7 +64,7 @@ function buildDocument({ title, type, markup }) {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <style>${scheduleExportCss}
-${pageCss(type)}</style>
+${pageCss(type, orientation)}</style>
 </head>
 <body>
 <div class="schedule-export-print-bar">

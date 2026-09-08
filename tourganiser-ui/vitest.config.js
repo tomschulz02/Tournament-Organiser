@@ -26,6 +26,11 @@ export default defineConfig({
             include: [
                 "src/utils/scheduleUtils.js",
                 "src/utils/scheduleGenerator.js",
+                // Where the printed schedule's pages break. Pure, and the one
+                // place three different readers — the exported pages, the break
+                // editor and the page-count indicator — agree on what a row
+                // index means. See docs/schedule.md.
+                "src/utils/schedulePrintLayout.js",
                 "src/components/tournament/fixtureUtils.js",
                 // The port of server generation the creation review computes its
                 // pools and bracket from. Pinned to the server's arithmetic by

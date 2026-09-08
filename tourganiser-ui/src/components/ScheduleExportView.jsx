@@ -2,18 +2,22 @@ import React from 'react';
 import TournamentPattern from './TournamentPattern';
 import { tournamentAccentStyle } from '../utils/tournamentIdentity';
 import {
-	buildGridRowTimes,
+	chunkAtBreaks,
+	courtBreakIndices,
 	formatDateLabel,
 	getCourtName,
-	getDayBounds,
-	getDayEntries,
 	getEntryDivisionStyle,
 	getEntryLabel,
 	getEntryOfficials,
-	getEntryRowPlacement,
 	getEntrySecondary,
-	getSlotMinutes,
 } from '../utils/scheduleUtils';
+import {
+	getPageStartRows,
+	getPrintableDays,
+	getPrintRowsForDay,
+	resolveCourtBreaks,
+	resolveRowBreaks,
+} from '../utils/schedulePrintLayout';
 
 // The schedule's printed/exported rendering — grid and list layouts, chunked
 // onto pages. Used two ways: by ScheduleMakerModal (the organiser's own
@@ -22,41 +26,6 @@ import {
 // standalone document via renderToStaticMarkup). Neither reads component
 // state or hooks beyond the props passed in — everything here is pure and
 // presentational over data already fully assembled by the caller.
-
-// How many list rows / grid slot-rows one printed A4 page is estimated to
-// hold, derived from the row heights already governing rendering (the list
-// row's own padding, the grid's min-height: 56px cell) against the @page
-// dimensions (utils/scheduleExportDocument.js) minus margins and the header's
-// own height.
-//
-// Deliberately conservative: the safe failure mode is a page that breaks a
-// little early and prints with some blank space at the foot, not one that
-// overflows and silently reintroduces the bug this exists to fix (every
-// `.schedule-export-page` forces `break-after: page` in print, so an
-// undersized estimate costs whitespace, never a split). Tune these against
-// real printed/PDF output if a page comes out badly under- or over-full.
-const PRINT_LIST_ROWS_PER_PAGE = 14;
-const PRINT_GRID_SLOTS_PER_PAGE = 7;
-
-// The ceiling on how many courts share one grid table. Past this a single
-// table of columns stops being readable — 19 courts in one row was the
-// reported case. 6 is inside the 4-6 range asked for, chosen as the ceiling
-// so a 6-court or smaller tournament (the common case) is completely
-// unaffected: one court group, identical output to before this existed.
-const COURTS_PER_GROUP = 6;
-
-// Splits into groups of `size`, preserving order. A day with nothing to show
-// still gets one (empty) chunk, matching the one-page-per-day floor the
-// unchunked version always had.
-function chunkList(list, size) {
-	const chunks = [];
-
-	for (let index = 0; index < list.length; index += size) {
-		chunks.push(list.slice(index, index + size));
-	}
-
-	return chunks.length > 0 ? chunks : [[]];
-}
 
 // "Courts 1-6", or the single court's own name when a group holds just one —
 // naming it by range reads oddly for a group of one.
@@ -91,11 +60,15 @@ export function ScheduleExportHeader({ tournamentId, tournamentName, dayLabel, d
 	);
 }
 
-export function ScheduleExportPages({ type, schedule, fixturesById, tournamentName, tournamentId }) {
-	const days = schedule.days.filter((day) => day.enabled !== false);
+// `layout` is the saved or staged print layout for this type, or null for "use
+// the smart default" — every consumer here treats those the same way, so a
+// caller that has no layouts at all (an old schedule, a viewer of a tournament
+// nobody has arranged) needs no special case.
+export function ScheduleExportPages({ type, schedule, fixturesById, tournamentName, tournamentId, layout = null }) {
+	const days = getPrintableDays(schedule);
 
 	if (type === 'grid') {
-		const courtGroups = chunkList(schedule.courts, COURTS_PER_GROUP);
+		const courtGroups = chunkAtBreaks(schedule.courts, courtBreakIndices(schedule.courts, resolveCourtBreaks(schedule, layout)));
 
 		return (
 			<>
@@ -114,6 +87,7 @@ export function ScheduleExportPages({ type, schedule, fixturesById, tournamentNa
 							fixturesById={fixturesById}
 							tournamentName={tournamentName}
 							tournamentId={tournamentId}
+							layout={layout}
 						/>
 					)),
 				)}
@@ -131,6 +105,7 @@ export function ScheduleExportPages({ type, schedule, fixturesById, tournamentNa
 					fixturesById={fixturesById}
 					tournamentName={tournamentName}
 					tournamentId={tournamentId}
+					layout={layout}
 				/>
 			))}
 		</>
@@ -145,28 +120,28 @@ export function ScheduleExportPages({ type, schedule, fixturesById, tournamentNa
 // Entries are placed once against the whole day's axis, exactly as before
 // chunking existed; only which rows get rendered on a given page changes.
 // getEntryRowPlacement's rowStart is a global row number, and slicing the
-// slot list preserves order, so `rowOffset + localIndex` reconstructs the
+// slot list preserves order, so `pageRowOffset + localIndex` reconstructs the
 // same global row index a chunk's slots always had — placement itself is
 // untouched.
 //
 // `courts` is one court group (courtRangeLabel above), not the whole
 // schedule — an entry on a court outside this group simply matches no cell
 // in this table, which is correct: it belongs to a different group's pages.
-function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: rangeLabel, fixturesById, tournamentName, tournamentId }) {
+function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: rangeLabel, fixturesById, tournamentName, tournamentId, layout }) {
 	// The same fixed axis and the same row arithmetic the screen uses, so the
 	// printed page puts an entry in the row the organiser saw it in. Matching on
 	// startTime alone dropped every entry that did not begin exactly on a slot.
-	const dayBounds = getDayBounds(schedule);
-	const allSlots = buildGridRowTimes(schedule, dayBounds);
-	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: allSlots.length };
-	const entries = getDayEntries(schedule, day.date)
-		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
-		.filter((item) => item.inDay);
+	const { rows: allSlots, entries, rowsPerPage, isNaturalBreak } = getPrintRowsForDay('grid', schedule, day);
 
-	const slotChunks = chunkList(allSlots, PRINT_GRID_SLOTS_PER_PAGE);
+	const slotChunks = chunkAtBreaks(allSlots, resolveRowBreaks({ layout, day, rows: allSlots, rowsPerPage, isNaturalBreak }));
+	// The row a page starts at is no longer pageIndex * a fixed size — with
+	// arbitrary breaks it has to be summed, and getEntryRowPlacement's rowStart
+	// is a global row number, so getting this wrong misplaces every entry on
+	// every page after the first.
+	const pageStarts = getPageStartRows(slotChunks);
 
 	return slotChunks.map((slots, pageIndex) => {
-		const rowOffset = pageIndex * PRINT_GRID_SLOTS_PER_PAGE;
+		const pageRowOffset = pageStarts[pageIndex];
 
 		return (
 			<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
@@ -188,7 +163,7 @@ function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: range
 							</div>
 						))}
 						{slots.map((slot, localIndex) => {
-							const rowIndex = rowOffset + localIndex;
+							const rowIndex = pageRowOffset + localIndex;
 
 							return (
 								<React.Fragment key={slot}>
@@ -237,9 +212,9 @@ function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: range
 // its own repeated header. entries is already the flat array the on-screen
 // list uses, so chunking it is a straight array split. Unaffected by court
 // chunking — it already prints one row per fixture regardless of court count.
-function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, tournamentId }) {
-	const entries = getDayEntries(schedule, day.date);
-	const pages = chunkList(entries, PRINT_LIST_ROWS_PER_PAGE);
+function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, tournamentId, layout }) {
+	const { rows: entries, rowsPerPage, isNaturalBreak } = getPrintRowsForDay('list', schedule, day);
+	const pages = chunkAtBreaks(entries, resolveRowBreaks({ layout, day, rows: entries, rowsPerPage, isNaturalBreak }));
 
 	return pages.map((pageEntries, pageIndex) => (
 		<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">

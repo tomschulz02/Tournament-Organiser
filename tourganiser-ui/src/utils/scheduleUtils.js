@@ -6,6 +6,12 @@ export const DEFAULT_SCHEDULE_START = '09:00';
 export const DEFAULT_SCHEDULE_END = '18:00';
 export const DEFAULT_SLOT_MINUTES = 30;
 
+// The orientation each printed layout defaults to when nothing has been saved.
+// The grid runs courts across the page and reads better landscape; the list is
+// a single column of rows and reads better portrait — the same pairing
+// scheduleExportDocument.js's @page rules have always used.
+export const DEFAULT_PRINT_ORIENTATION = { grid: 'landscape', list: 'portrait' };
+
 export function createScheduleId(prefix = 'schedule') {
 	return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 }
@@ -212,7 +218,223 @@ export function buildEmptySchedule({ startDate, endDate, existingDays = [] }) {
 			dayEndTime: DEFAULT_SCHEDULE_END,
 			slotMinutes: DEFAULT_SLOT_MINUTES,
 		},
+		// null per type means "nothing saved, compute the smart default" — see
+		// normalisePrintLayouts. A brand-new schedule has never been printed.
+		print: { grid: null, list: null },
 	};
+}
+
+// --- printed layouts --------------------------------------------------------
+//
+// Where the organiser has chosen the page breaks of the printed schedule, per
+// layout type. Presentation only, the same posture docs/schedule.md already
+// documents for `settings` and `days`: the server stores this as given and
+// validates nothing about it, because there is nothing here that can be
+// impossible — only arrangements that are more or less useful to read.
+//
+// A layout of null means the organiser has never saved one for that type, and
+// every consumer falls back to the smart default (computeSmartDefaultRowBreaks
+// and computeSmartDefaultCourtBreaks below). That is also what an old schedule
+// stored before this key existed normalises to, so nothing regresses.
+//
+// Row breaks are indices into a day's own row list — a break at 7 means the
+// page ends after row 6 and the next begins at row 7 — keyed by day id, so a
+// day removed from the tournament takes its breaks with it. Court breaks name
+// the court id each new column group *starts* with, rather than an index, for
+// the same reason: a court removed from the schedule invalidates only its own
+// break instead of silently shifting every one after it.
+//
+// An empty array is meaningful and is preserved: a day with `[]` prints on one
+// page because that is what was asked for, which is not the same as a day with
+// no entry at all, which falls back to the smart default.
+export function normalisePrintLayouts(rawPrint) {
+	return {
+		grid: normalisePrintLayout(rawPrint?.grid, 'grid'),
+		list: normalisePrintLayout(rawPrint?.list, 'list'),
+	};
+}
+
+function normalisePrintLayout(raw, type) {
+	if (!raw || typeof raw !== 'object') return null;
+
+	return {
+		orientation:
+			raw.orientation === 'portrait' || raw.orientation === 'landscape'
+				? raw.orientation
+				: DEFAULT_PRINT_ORIENTATION[type],
+		// The list has no court columns to group, so it carries no court breaks
+		// however the stored payload was written.
+		courtBreaks:
+			type === 'grid' && Array.isArray(raw.courtBreaks)
+				? raw.courtBreaks.filter((courtId) => typeof courtId === 'string' && courtId !== '')
+				: [],
+		rowBreaksByDay: normaliseRowBreaksByDay(raw.rowBreaksByDay),
+	};
+}
+
+function normaliseRowBreaksByDay(raw) {
+	if (!raw || typeof raw !== 'object') return {};
+
+	const result = {};
+
+	Object.entries(raw).forEach(([dayId, indices]) => {
+		if (!Array.isArray(indices)) return;
+
+		// Row 0 is the top of the day and can never be a break — a page break
+		// before the first row would produce an empty leading page.
+		result[dayId] = [...new Set(indices.map(Number))]
+			.filter((index) => Number.isInteger(index) && index > 0)
+			.sort((a, b) => a - b);
+	});
+
+	return result;
+}
+
+export function serialisePrintLayouts(print) {
+	const grid = serialisePrintLayout(print?.grid, 'grid');
+	const list = serialisePrintLayout(print?.list, 'list');
+
+	// Nothing saved for either type writes null rather than a pair of nulls, so
+	// a schedule that has never been printed stores no shape at all.
+	if (!grid && !list) return null;
+
+	return { grid, list };
+}
+
+function serialisePrintLayout(layout, type) {
+	if (!layout) return null;
+
+	const serialised = {
+		orientation: layout.orientation || DEFAULT_PRINT_ORIENTATION[type],
+		rowBreaksByDay: normaliseRowBreaksByDay(layout.rowBreaksByDay),
+	};
+
+	if (type === 'grid') {
+		serialised.courtBreaks = Array.isArray(layout.courtBreaks) ? layout.courtBreaks : [];
+	}
+
+	return serialised;
+}
+
+// Splits `list` at explicit break positions rather than at a fixed size. This
+// is what replaced the old fixed-size chunker: the same output for a schedule
+// nobody has arranged (the smart defaults below produce the old boundaries),
+// and an arbitrary arrangement once an organiser has moved one.
+//
+// A break index is the first row of the *next* chunk. Indices at or past the
+// end of the list are ignored rather than producing an empty trailing page —
+// that is how a saved layout survives a day getting shorter without needing to
+// be rewritten. An empty list still yields one empty chunk, preserving the
+// one-page-per-day floor the fixed-size chunker always had.
+export function chunkAtBreaks(list, breakIndices = []) {
+	const bounds = [...new Set(breakIndices)]
+		.filter((index) => Number.isInteger(index) && index > 0 && index < list.length)
+		.sort((a, b) => a - b);
+
+	const chunks = [];
+	let start = 0;
+
+	bounds.forEach((bound) => {
+		chunks.push(list.slice(start, bound));
+		start = bound;
+	});
+
+	chunks.push(list.slice(start));
+
+	return chunks;
+}
+
+// How far back from a full page the default will look for a natural place to
+// break. Small on purpose: the point is to avoid splitting a run of
+// simultaneous fixtures or to end a page on an empty slot, not to leave a page
+// visibly short of content.
+const NATURAL_BREAK_WINDOW = 2;
+
+// The breaks a layout starts from before anybody edits it. `rowsPerPage` is the
+// conservative estimate of what one sheet holds, so the search only ever moves
+// a break *earlier* — a page that comes out slightly short prints with some
+// blank space at the foot, whereas one that comes out long silently overflows.
+//
+// `isNaturalBreak(index)` is optional and answers whether breaking immediately
+// before `index` reads well: for the grid, that the row above is empty; for the
+// list, that the row starts a new time. Without it the boundaries are exactly
+// the fixed-size ones.
+export function computeSmartDefaultRowBreaks(rowCount, rowsPerPage, isNaturalBreak = null) {
+	if (!Number.isInteger(rowsPerPage) || rowsPerPage < 1) return [];
+
+	const breaks = [];
+	let start = 0;
+
+	while (rowCount - start > rowsPerPage) {
+		const target = start + rowsPerPage;
+		let chosen = target;
+
+		if (isNaturalBreak) {
+			for (let candidate = target; candidate >= target - NATURAL_BREAK_WINDOW && candidate > start + 1; candidate -= 1) {
+				if (isNaturalBreak(candidate)) {
+					chosen = candidate;
+					break;
+				}
+			}
+		}
+
+		breaks.push(chosen);
+		start = chosen;
+	}
+
+	return breaks;
+}
+
+// The court id each default column group starts with. Ids rather than indices
+// for the same reason the saved layout uses them — see normalisePrintLayouts.
+export function computeSmartDefaultCourtBreaks(courts, courtsPerGroup) {
+	const breaks = [];
+
+	for (let index = courtsPerGroup; index < courts.length; index += courtsPerGroup) {
+		breaks.push(courts[index].id);
+	}
+
+	return breaks;
+}
+
+// Court-id breaks turned into the indices chunkAtBreaks takes. A break naming a
+// court that is no longer in the schedule simply matches nothing, which is the
+// same graceful outcome pruneStalePrintLayout reaches deliberately — this is
+// the safety net, not the mechanism.
+export function courtBreakIndices(courts, courtBreaks = []) {
+	const starts = new Set(courtBreaks);
+
+	return courts.map((court, index) => (index > 0 && starts.has(court.id) ? index : -1)).filter((index) => index > 0);
+}
+
+// Drops the parts of a saved layout that point at a day or a court the schedule
+// no longer has, so the rest of it still applies and what is missing falls back
+// to the smart default. `dropped` is what the organiser-only staleness notice
+// is shown for; it never rewrites what is stored, only what is used on this
+// load — see docs/schedule.md.
+export function pruneStalePrintLayout(layout, { dayIds = [], courtIds = [] } = {}) {
+	if (!layout) return { layout: null, dropped: false };
+
+	let dropped = false;
+	const rowBreaksByDay = {};
+
+	Object.entries(layout.rowBreaksByDay || {}).forEach(([dayId, indices]) => {
+		if (!dayIds.includes(dayId)) {
+			dropped = true;
+			return;
+		}
+
+		rowBreaksByDay[dayId] = indices;
+	});
+
+	const courtBreaks = (layout.courtBreaks || []).filter((courtId) => {
+		if (courtIds.includes(courtId)) return true;
+
+		dropped = true;
+		return false;
+	});
+
+	return { layout: { ...layout, rowBreaksByDay, courtBreaks }, dropped };
 }
 
 export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
@@ -259,6 +481,7 @@ export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
 			dayEndTime: rawSchedule.settings?.dayEndTime || DEFAULT_SCHEDULE_END,
 			slotMinutes: Number(rawSchedule.settings?.slotMinutes) || DEFAULT_SLOT_MINUTES,
 		},
+		print: normalisePrintLayouts(rawSchedule.print),
 	};
 }
 
@@ -505,6 +728,7 @@ export function serialiseScheduleForSave(schedule) {
 			dayEndTime: schedule.settings.dayEndTime,
 			slotMinutes: schedule.settings.slotMinutes,
 		},
+		print: serialisePrintLayouts(schedule.print),
 	};
 }
 

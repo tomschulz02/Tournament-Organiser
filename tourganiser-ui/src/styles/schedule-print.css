@@ -1,0 +1,485 @@
+/* The /tournaments/view/:id/print route's own chrome, and the page-break
+ * editor it shares with the schedule maker's inspector panel.
+ *
+ * Deliberately separate from schedule-export.css, which is the printed pages
+ * themselves and travels into the standalone Blob document as raw text. Nothing
+ * in this file may ever reach paper: every rule here is either hidden by the
+ * @media print block at the foot or belongs to a control that is.
+ */
+
+/* The route is a preview of paper, so it is light whatever the app's theme is —
+ * the same reasoning schedule-export.css already gives for carrying only light
+ * values. It also has to *say* so rather than inherit: App.css sets
+ * `body { color: var(--text-color) }` and --text-color is white in BOTH themes
+ * (readable body text there comes from --secondary-text-color), so anything
+ * here that draws a light surface and inherits its text colour renders white on
+ * white. Declaring colour on this wrapper fixes the whole class of that at
+ * once; the rules below only restate it where they change the surface under it.
+ */
+.schedule-print-root {
+	min-height: 100vh;
+	background: #e5e7eb;
+	color: #1f2937;
+	color-scheme: light;
+}
+
+.schedule-print-state {
+	padding: var(--space-6, 32px);
+	display: grid;
+	gap: var(--space-3, 12px);
+	justify-items: start;
+	color: #1f2937;
+}
+
+.schedule-print-state a {
+	color: #1d4ed8;
+}
+
+/* The route's own top bar is app chrome, not paper, so it follows the app's
+ * header convention rather than the printed page's: `--main-color` with
+ * `--text-color` on top. --text-color is white in both themes, which is the
+ * point — this bar is always a strong colour, so its text is always white and
+ * never the dark --secondary-text-color that light surfaces here use.
+ *
+ * It is the one part of this stylesheet that reads the app's theme variables
+ * instead of hardcoding, because it is the one part that is not a preview of
+ * something that will be printed. @media print hides it entirely.
+ */
+.schedule-print-bar {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3, 12px);
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--space-3, 12px) var(--space-5, 24px);
+	background-color: var(--main-color, rgb(41, 98, 255));
+	color: var(--text-color, #fff);
+	backdrop-filter: blur(8px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Same reasoning as the editor's own reset: App.css styles bare elements, and
+ * an element rule beats an inherited colour. Kept to no specificity of its own
+ * so the rules below still win on source order. */
+.schedule-print-bar :where(a, span, p, button, div) {
+	color: var(--text-color, #fff);
+}
+
+.schedule-print-back {
+	font-weight: 600;
+	color: var(--text-color, #fff);
+	text-decoration: none;
+}
+
+.schedule-print-back:hover {
+	text-decoration: underline;
+}
+
+.schedule-print-bar-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2, 8px);
+	align-items: center;
+}
+
+/* Controls sitting ON the coloured bar, so the polarity is inverted from a
+ * control on a light surface: unselected is the bar showing through with a
+ * white outline, selected lifts to white with the bar's own colour as its
+ * text. A selected state painted in --main-color would vanish into the bar. */
+.schedule-print-types {
+	display: inline-flex;
+	border: 1px solid rgba(255, 255, 255, 0.6);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.schedule-print-choice {
+	font: inherit;
+	padding: var(--space-2, 8px) var(--space-4, 16px);
+	border: none;
+	background: transparent;
+	color: var(--text-color, #fff);
+	cursor: pointer;
+}
+
+.schedule-print-choice[aria-pressed='true'] {
+	background: #fff;
+	color: var(--main-color, rgb(41, 98, 255));
+}
+
+.schedule-print-action {
+	font: inherit;
+	font-weight: 600;
+	padding: var(--space-2, 8px) var(--space-4, 16px);
+	border: 1px solid rgba(255, 255, 255, 0.7);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text-color, #fff);
+	cursor: pointer;
+}
+
+.schedule-print-action.is-primary {
+	border-color: #fff;
+	background: #fff;
+	color: var(--main-color, rgb(41, 98, 255));
+}
+
+.schedule-print-action:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.schedule-print-error,
+.schedule-print-notice {
+	margin: var(--space-4, 16px) auto;
+	max-width: 1200px;
+	padding: var(--space-3, 12px) var(--space-4, 16px);
+	border-radius: 10px;
+	background: #fef3c7;
+	color: #78350f;
+	display: flex;
+	gap: var(--space-3, 12px);
+	align-items: center;
+	justify-content: space-between;
+}
+
+.schedule-print-error {
+	background: #fee2e2;
+	color: #7f1d1d;
+}
+
+.schedule-print-notice p {
+	margin: 0;
+}
+
+.schedule-print-notice button {
+	font: inherit;
+	padding: var(--space-1, 4px) var(--space-3, 12px);
+	border: 1px solid currentColor;
+	border-radius: 6px;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+
+/* --- the break editor ------------------------------------------------------
+ *
+ * Sized entirely by its container, because it has two of them: the full width
+ * of the print route, and the schedule maker's inspector column. Nothing here
+ * measures a viewport.
+ */
+
+.print-layout-editor {
+	display: grid;
+	gap: var(--space-4, 16px);
+	padding: var(--space-4, 16px);
+	max-width: 1200px;
+	margin: 0 auto;
+}
+
+/* Inheriting a readable colour is not enough on its own: App.css styles bare
+ * elements (`h4 { color: var(--text-color) }` and friends), and an element rule
+ * beats an inherited value however close the ancestor is — which is what put
+ * white headings on these white cards. This restates the colour at element
+ * level to outrank those.
+ *
+ * `:where()` contributes no specificity, so this whole selector weighs the same
+ * as a single class and every deliberately-coloured rule below it — the muted
+ * court label, the near-invisible gutters, the pressed toggles — still wins on
+ * source order. Add new coloured rules *after* this one, not before.
+ */
+.print-layout-editor :where(h1, h2, h3, h4, h5, h6, p, span, div, button, strong, label) {
+	color: #1f2937;
+}
+
+.schedule-print-state :where(p, span, h1, h2, h3) {
+	color: #1f2937;
+}
+
+.print-layout-editor-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3, 12px);
+	align-items: center;
+	justify-content: space-between;
+}
+
+.print-layout-editor-orientation {
+	display: inline-flex;
+	border: 1px solid rgba(31, 41, 55, 0.2);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.print-layout-editor-choice {
+	font: inherit;
+	padding: var(--space-1, 4px) var(--space-3, 12px);
+	border: none;
+	background: #fff;
+	color: #1f2937;
+	cursor: pointer;
+}
+
+.print-layout-editor-choice[aria-pressed='true'] {
+	background: var(--main-color, rgb(41, 98, 255));
+	color: #fff;
+}
+
+.print-layout-editor-count {
+	margin: 0;
+	font-weight: 600;
+}
+
+.print-layout-editor-reset {
+	font: inherit;
+	padding: var(--space-1, 4px) var(--space-3, 12px);
+	border: 1px solid rgba(31, 41, 55, 0.2);
+	border-radius: 8px;
+	background: #fff;
+	cursor: pointer;
+}
+
+.print-layout-editor-empty {
+	margin: 0;
+	color: #6b7280;
+}
+
+.print-layout-courts {
+	display: grid;
+	gap: var(--space-2, 8px);
+}
+
+.print-layout-courts-label {
+	font-weight: 700;
+	font-size: 0.85rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #6b7280;
+}
+
+.print-layout-courts-strip {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: stretch;
+	gap: 0;
+}
+
+.print-layout-courts-item {
+	display: flex;
+	align-items: stretch;
+}
+
+.print-layout-courts-name {
+	padding: var(--space-2, 8px) var(--space-3, 12px);
+	border: 1px solid rgba(31, 41, 55, 0.12);
+	background: #f9fafb;
+	white-space: nowrap;
+}
+
+/* The boundary itself is the control, rather than the court that happens to
+   start one — an organiser clicks between two courts to split them. */
+.print-layout-court-gutter {
+	font: inherit;
+	width: 20px;
+	border: none;
+	background: transparent;
+	color: #9ca3af;
+	cursor: pointer;
+}
+
+.print-layout-court-gutter[aria-pressed='true'] {
+	color: var(--main-color, rgb(41, 98, 255));
+	font-weight: 700;
+	background: rgba(41, 98, 255, 0.1);
+}
+
+.print-layout-day {
+	display: grid;
+	gap: var(--space-2, 8px);
+	border: 1px solid rgba(31, 41, 55, 0.12);
+	border-radius: 12px;
+	padding: var(--space-3, 12px);
+	background: #fff;
+}
+
+.print-layout-day-head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3, 12px);
+	align-items: baseline;
+}
+
+.print-layout-day-head h4 {
+	margin: 0;
+}
+
+.print-layout-day-pages {
+	margin-left: auto;
+	font-weight: 600;
+}
+
+/* Horizontal scroll lives here rather than on the page, so a 19-court grid is
+   readable in a narrow inspector column without the whole route scrolling. */
+.print-layout-scroller {
+	overflow-x: auto;
+}
+
+.print-layout-grid-head,
+.print-layout-grid-row {
+	display: flex;
+	align-items: stretch;
+	min-width: max-content;
+}
+
+.print-layout-grid-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	font-weight: 700;
+	background: #f3f8ff;
+}
+
+.print-layout-grid-time {
+	flex: 0 0 72px;
+	padding: var(--space-1, 4px) var(--space-2, 8px);
+	border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+	/* Frozen while the courts scroll sideways — a row with no time against it
+	   says nothing about where a break would fall. */
+	position: sticky;
+	left: 0;
+	z-index: 1;
+	background: inherit;
+}
+
+.print-layout-grid-head .print-layout-grid-time,
+.print-layout-grid-row {
+	background: #fff;
+}
+
+.print-layout-grid-head .print-layout-grid-time {
+	background: #f3f8ff;
+}
+
+.print-layout-grid-cell {
+	flex: 0 0 130px;
+	padding: var(--space-1, 4px) var(--space-2, 8px);
+	border-left: 3px solid var(--tv-division-color, transparent);
+	border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+	font-size: 0.8rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.print-layout-list-row {
+	display: grid;
+	grid-template-columns: 130px 120px minmax(0, 1fr);
+	gap: var(--space-2, 8px);
+	padding: var(--space-1, 4px) var(--space-2, 8px);
+	border-left: 3px solid var(--tv-division-color, transparent);
+	border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+	font-size: 0.85rem;
+}
+
+/* A gutter is a thin, quiet strip between two rows until it is hovered or is
+   already a break. Made loud all the time it would out-shout the schedule it
+   sits inside, which is the thing actually being judged. */
+.print-layout-gutter {
+	font: inherit;
+	font-size: 0.7rem;
+	display: block;
+	width: 100%;
+	min-width: max-content;
+	padding: 0;
+	height: 10px;
+	line-height: 10px;
+	border: none;
+	background: transparent;
+	color: transparent;
+	cursor: pointer;
+	text-align: center;
+}
+
+.print-layout-gutter:hover,
+.print-layout-gutter:focus-visible {
+	background: rgba(41, 98, 255, 0.12);
+	color: var(--main-color, rgb(41, 98, 255));
+}
+
+.print-layout-gutter.is-break {
+	height: auto;
+	line-height: 1.6;
+	padding: var(--space-1, 4px) 0;
+	margin: var(--space-2, 8px) 0;
+	background: rgba(41, 98, 255, 0.1);
+	border-top: 2px dashed var(--main-color, rgb(41, 98, 255));
+	color: var(--main-color, rgb(41, 98, 255));
+	font-weight: 600;
+}
+
+/* Hidden on screen, shown on paper: the pages behind the editor, so Print in
+   edit mode prints the arrangement rather than the controls. */
+.schedule-print-pages.is-print-only {
+	display: none;
+}
+
+@media print {
+	/* On paper the sheet supplies its own ground — .schedule-export-page paints
+	   white — so the route's screen background must not print as a grey wash. */
+	.schedule-print-root {
+		background: none;
+		min-height: 0;
+	}
+
+	.schedule-print-bar,
+	.schedule-print-notice,
+	.schedule-print-error,
+	.schedule-print-editor {
+		display: none !important;
+	}
+
+	.schedule-print-pages.is-print-only {
+		display: block;
+	}
+}
+
+/* Explicit text colour wherever a light surface is drawn, so none of these
+ * depend on inheriting from .schedule-print-root — the editor is used inside
+ * the schedule maker's inspector too, where the surrounding theme is the app's
+ * and may be dark. See the note on --text-color above.
+ */
+.print-layout-editor,
+.print-layout-day,
+.print-layout-grid-head,
+.print-layout-grid-row,
+.print-layout-courts-name,
+.print-layout-list-row {
+	color: #1f2937;
+}
+
+.print-layout-editor {
+	color-scheme: light;
+}
+
+/* "Unsaved changes" beside the route's Save, and the schedule maker panel's
+ * note that its own breaks commit with the schedule rather than on their own.
+ */
+/* On the coloured bar, so amber rather than the dark amber a light surface
+   would take. Overrides the bar's own :where() reset, which it outranks. */
+.schedule-print-dirty {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #fde68a;
+}
+
+.schedule-print-staged-note {
+	margin: 0;
+	padding: var(--space-2, 8px) var(--space-3, 12px);
+	border-radius: 8px;
+	background: #fef3c7;
+	color: #78350f;
+	font-size: 0.85rem;
+}

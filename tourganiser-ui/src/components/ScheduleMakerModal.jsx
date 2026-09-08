@@ -27,6 +27,7 @@ import {
 	getSlotMinutes,
 	getUnscheduledFixtures,
 	isTimeRangeValid,
+	pruneStalePrintLayout,
 	removeScheduleEntry,
 	serialiseScheduleForSave,
 	sortScheduleEntries,
@@ -35,6 +36,8 @@ import {
 	validateScheduleEntry,
 } from '../utils/scheduleUtils';
 import { divisionColorStyle } from '../utils/divisionColors';
+import SchedulePrintLayoutEditor from './SchedulePrintLayoutEditor';
+import '../styles/schedule-print.css';
 
 function scheduleReducer(state, action) {
 	switch (action.type) {
@@ -59,6 +62,15 @@ function scheduleReducer(state, action) {
 			return {
 				...state,
 				days: action.payload,
+			};
+		// Staged like every other in-progress change here: schedule.print is a
+		// field of the same local schedule the dirty/discard/commit logic
+		// already tracks, so a page-break edit rides along with the organiser's
+		// normal save rather than needing a write of its own.
+		case 'setPrintLayouts':
+			return {
+				...state,
+				print: action.payload,
 			};
 		case 'upsertEntry':
 			return upsertScheduleEntry(state, action.payload);
@@ -876,11 +888,17 @@ export default function ScheduleMakerModal({
 	];
 	const activeMobilePanel = mobilePanels.some((panel) => panel.id === mobilePanel) ? mobilePanel : 'board';
 
-	// Opens the chosen layout as a standalone document in a new tab — the same
-	// mechanism the non-organiser "View/Print Schedule" button on ScheduleTab
-	// uses. Save as PDF from there is what replaced the immediate download.
+	// Opens the chosen layout as a standalone document in a new tab, driven by
+	// whatever page breaks are currently staged.
 	//
-	// Dynamically imported for the same reason ScheduleTab's own call does it:
+	// This modal keeps the Blob mechanism even though the live print route
+	// (/tournaments/view/:id/print) no longer needs it: the modal is a
+	// full-screen overlay over the rest of the app, so it is not a clean print
+	// surface, and the schedule being printed here may not be saved yet, so
+	// there is nothing at that route to print. Popping out is what makes both
+	// true at once.
+	//
+	// Dynamically imported for the same reason ScheduleTab's own call did:
 	// react-dom/server is only needed once this is actually clicked, not the
 	// moment this already-lazy modal chunk loads.
 	const handlePrint = async (type) => {
@@ -893,10 +911,37 @@ export default function ScheduleMakerModal({
 				tournamentName,
 				tournamentId: tournament?.id,
 				type,
+				layout: schedule.print?.[type] ?? null,
 			});
 		} catch {
 			showMessage('Could not open the print view.', 'error');
 		}
+	};
+
+	// Says once, on opening the panel, that staged breaks point at a day or court
+	// this draft no longer has. It does not rewrite them: a stale break is
+	// already inert everywhere it is read — a dead day's key is never looked up,
+	// and courtBreakIndices matches no court for a dead id — and rewriting here
+	// would mark the draft dirty for something the organiser did not do. The
+	// next real edit drops them, because materialisePrintLayout rebuilds the
+	// layout from the days that actually exist.
+	const openPrintLayoutPanel = () => {
+		const dayIds = schedule.days.map((day) => day.id);
+		const courtIds = schedule.courts.map((court) => court.id);
+		const grid = pruneStalePrintLayout(schedule.print?.grid ?? null, { dayIds, courtIds });
+		const list = pruneStalePrintLayout(schedule.print?.list ?? null, { dayIds, courtIds });
+
+		if (grid.dropped || list.dropped) {
+			showMessage('This print layout may not reflect recent schedule changes.', 'info', 7000);
+		}
+
+		setPanelMode('print-layout');
+		setMobilePanel('inspector');
+	};
+
+	const handlePrintLayoutChange = (type, nextLayout) => {
+		dispatch({ type: 'setPrintLayouts', payload: { ...schedule.print, [type]: nextLayout } });
+		markDirty();
 	};
 
 	const placedCount = schedule.entries.length;
@@ -912,8 +957,9 @@ export default function ScheduleMakerModal({
 	// work happens in runSecondaryAction at event time.
 	const secondaryActions = [
 		...(canEdit ? [{ id: 'break', label: 'Add Break' }] : []),
-		{ id: 'print-grid', label: 'Print Grid' },
-		{ id: 'print-list', label: 'Print List' },
+		// One action where there were two. Grid and list are now a choice made
+		// inside the panel, alongside the page breaks that differ between them.
+		{ id: 'print-layout', label: 'Edit Print Layout' },
 		...(canEdit
 			? [
 					{ id: 'discard', label: 'Discard Changes', disabled: !dirty },
@@ -936,11 +982,8 @@ export default function ScheduleMakerModal({
 				setPanelMode('break');
 				setMobilePanel('inspector');
 				break;
-			case 'print-grid':
-				handlePrint('grid');
-				break;
-			case 'print-list':
-				handlePrint('list');
+			case 'print-layout':
+				openPrintLayoutPanel();
 				break;
 			case 'discard':
 				handleDiscard();
@@ -1286,6 +1329,14 @@ export default function ScheduleMakerModal({
 								court={courtConfig}
 								divisions={divisionList}
 								onSave={(nextDivisions) => handleSetCourtDivisions(courtConfig.id, nextDivisions)}
+								onBack={handleBackToOverview}
+							/>
+						) : panelMode === 'print-layout' ? (
+							<PrintLayoutPanel
+								schedule={schedule}
+								fixturesById={fixturesById}
+								onChange={handlePrintLayoutChange}
+								onPrint={handlePrint}
 								onBack={handleBackToOverview}
 							/>
 						) : panelMode === 'settings' && settingsDraft ? (
@@ -1786,6 +1837,60 @@ function SettingsPanel({ draft, onChange, onSave, onBack }) {
 			</div>
 			<button type="button" className="primary full-width" onClick={onSave}>
 				Save Settings
+			</button>
+		</div>
+	);
+}
+
+// Where the printed pages break, edited while the schedule is still a draft.
+// The editor itself is the same component the live print route uses — see
+// SchedulePrintLayoutEditor — so what an organiser arranges here is already the
+// tournament's saved layout once the schedule is committed, with no second
+// step and no second definition of what a break means.
+//
+// No save button: this stages into the modal's own schedule.print, and the
+// modal's existing save flow commits it along with everything else. Print
+// still pops out to a standalone document, because the modal is an overlay
+// over the app rather than a clean sheet of paper.
+function PrintLayoutPanel({ schedule, fixturesById, onChange, onPrint, onBack }) {
+	const [type, setType] = useState('grid');
+
+	return (
+		<div className="schedule-panel">
+			<PanelBackButton onBack={onBack} />
+			<h3>Edit Print Layout</h3>
+
+			{/* This panel has no Save of its own, and an organiser who has just
+			    moved a page break has no way to know that without being told —
+			    an editor with no save button reads as one that has lost the
+			    change, not one that is staging it. */}
+			<p className="schedule-print-staged-note">
+				Page breaks are staged with the rest of your changes. Use <strong>Save Schedule</strong> to keep them.
+			</p>
+
+			<div className="schedule-print-types" role="group" aria-label="Schedule layout">
+				{['grid', 'list'].map((option) => (
+					<button
+						key={option}
+						type="button"
+						className="schedule-print-choice"
+						aria-pressed={type === option}
+						onClick={() => setType(option)}>
+						{option === 'grid' ? 'Grid' : 'List'}
+					</button>
+				))}
+			</div>
+
+			<SchedulePrintLayoutEditor
+				type={type}
+				schedule={schedule}
+				fixturesById={fixturesById}
+				layout={schedule.print?.[type] ?? null}
+				onChange={(nextLayout) => onChange(type, nextLayout)}
+			/>
+
+			<button type="button" className="schedule-print-action is-primary" onClick={() => onPrint(type)}>
+				Print this layout
 			</button>
 		</div>
 	);

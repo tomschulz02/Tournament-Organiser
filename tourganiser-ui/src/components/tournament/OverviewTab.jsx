@@ -66,7 +66,7 @@ export default function OverviewTab({
 				creator={creator}
 				onChanged={onChanged}
 			/>
-			<ActivityBand dashboard={dashboard} />
+			<ActivityBand dashboard={dashboard} divisions={divisions} />
 		</div>
 	);
 }
@@ -343,6 +343,7 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 						<DivisionCard
 							key={division.id}
 							division={division}
+							divisions={divisions}
 							onOpenDivision={onOpenDivision}
 							canRemove={canCompose}
 							busy={busy}
@@ -374,14 +375,14 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 	);
 }
 
-function DivisionCard({ division, onOpenDivision, canRemove = false, busy = false, onRemove }) {
+function DivisionCard({ division, divisions = [], onOpenDivision, canRemove = false, busy = false, onRemove }) {
 	const total = division.fixtureCount ?? 0;
 	const completed = division.completedFixtureCount ?? 0;
 	// Guarded: a division with no fixtures yet would otherwise divide by zero.
 	const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
 	return (
-		<article className="tv-division-card" style={divisionColorStyle(division.id)}>
+		<article className="tv-division-card" style={divisionColorStyle(division.id, divisions)}>
 			{/* A div, not a <header>. App.css styles the bare `header` element for
 			    the site's fixed top bar — position: fixed, width: 100vw, height:
 			    80px — so any <header> anywhere in the app is torn out of its
@@ -439,7 +440,7 @@ function DivisionCard({ division, onOpenDivision, canRemove = false, busy = fals
 // Both lists are already sorted and already capped at eight by the backend.
 // Rendering them as given is the point: re-sorting or re-slicing here would put
 // a second, competing definition of "recent" in the client.
-function ActivityBand({ dashboard }) {
+function ActivityBand({ dashboard, divisions = [] }) {
 	const upcoming = dashboard.upcomingFixtures ?? [];
 	const recent = dashboard.recentResults ?? [];
 
@@ -452,14 +453,20 @@ function ActivityBand({ dashboard }) {
 					title="Up next"
 					fixtures={upcoming}
 					emptyMessage="Nothing is scheduled to play next."
+					divisions={divisions}
 				/>
-				<FixturePreviewList title="Recent results" fixtures={recent} emptyMessage="No matches have finished yet." />
+				<FixturePreviewList
+					title="Recent results"
+					fixtures={recent}
+					emptyMessage="No matches have finished yet."
+					divisions={divisions}
+				/>
 			</div>
 		</section>
 	);
 }
 
-function FixturePreviewList({ title, fixtures, emptyMessage }) {
+function FixturePreviewList({ title, fixtures, emptyMessage, divisions = [] }) {
 	return (
 		<div className="tv-activity-column">
 			<h3 className="tv-activity-heading">{title}</h3>
@@ -469,7 +476,7 @@ function FixturePreviewList({ title, fixtures, emptyMessage }) {
 			) : (
 				<ul className="tv-fixture-previews">
 					{fixtures.map((fixture) => (
-						<FixturePreview key={fixture.id} fixture={fixture} />
+						<FixturePreview key={fixture.id} fixture={fixture} divisions={divisions} />
 					))}
 				</ul>
 			)}
@@ -477,14 +484,14 @@ function FixturePreviewList({ title, fixtures, emptyMessage }) {
 	);
 }
 
-function FixturePreview({ fixture }) {
+function FixturePreview({ fixture, divisions = [] }) {
 	const score = formatResult(fixture.result);
 
 	return (
 		<li className="tv-fixture-preview">
 			<div className="tv-fixture-preview-meta">
 				{fixture.match_no != null && <span className="tv-match-no">#{fixture.match_no}</span>}
-				<DivisionBadge id={fixture.division_id} name={fixture.division_name} />
+				<DivisionBadge id={fixture.division_id} name={fixture.division_name} divisions={divisions} />
 			</div>
 
 			<div className="tv-fixture-preview-teams">

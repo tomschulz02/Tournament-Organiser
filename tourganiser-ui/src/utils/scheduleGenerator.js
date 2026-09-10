@@ -41,8 +41,18 @@ import {
 	here — docs/schedule.md decided to surface the failure rather than solve it.
 */
 
-// docs/schedule.md: at least one slot between a team's two matches on one day.
-const REST_SLOTS = 1;
+// docs/schedule.md: a team gets a rest gap between two matches on the same day.
+//
+// The gap is a number of minutes in its own right. It used to be a multiple of
+// the match length, which read as "one slot of rest" and was only a sensible
+// unit because rest and duration were the same number by construction — the
+// generator gave every fixture one duration and then drew the grid to match. Now
+// that the grid is the organiser's and a fixture's length is its own, rest has
+// to be its own value too, or it means nothing.
+//
+// When the caller asks for no particular rest it falls back to the fixture
+// duration, which is numerically what the old rule always produced.
+const DEFAULT_REST_MULTIPLE = 1;
 
 // A fixture's round name is not always a round name in state.rounds: the
 // third-place playoff carries its own while belonging to the Finals round.
@@ -226,7 +236,11 @@ function recordRoundEnd(roundEndByDivision, divisionId, roundIndex, end) {
 function createPlacementState() {
 	return {
 		usedSlots: new Set(), // `${day}_${courtId}_${startMinutes}`
-		teamSlots: new Map(), // teamKey -> day -> Set of startMinutes
+		// teamKey -> day -> array of { start, end } in minutes. The end is stored
+		// rather than recomputed from a duration because the rest rule measures
+		// the gap between two matches, and a duration is no longer a property of
+		// the run that every placement shares.
+		teamSlots: new Map(),
 		courtHandover: new Map(), // `${day}_${courtId}_${endMinutes}` -> divisionId
 		courtAffinity: new Map(), // `${divisionId}:${poolKey}` -> courtId
 		roundEndByDivision: new Map(),
@@ -237,8 +251,14 @@ function slotKey(slot) {
 	return `${slot.day}_${slot.courtId}_${slot.startMinutes}`;
 }
 
+// Every match this team has already been given on this day, earliest first only
+// by accident — nothing here depends on the order.
+function playedIntervals(state, teamKey, day) {
+	return state.teamSlots.get(teamKey)?.get(day) || [];
+}
+
 function playsAt(state, teamKey, day, startMinutes) {
-	return Boolean(state.teamSlots.get(teamKey)?.get(day)?.has(startMinutes));
+	return playedIntervals(state, teamKey, day).some((played) => played.start === startMinutes);
 }
 
 function recordPlacement(state, slot, fixture, durationMinutes) {
@@ -253,10 +273,10 @@ function recordPlacement(state, slot, fixture, durationMinutes) {
 
 	getTeamKeys(fixture).forEach((team) => {
 		const byDay = state.teamSlots.get(team) || new Map();
-		const starts = byDay.get(slot.day) || new Set();
+		const played = byDay.get(slot.day) || [];
 
-		starts.add(slot.startMinutes);
-		byDay.set(slot.day, starts);
+		played.push({ start: slot.startMinutes, end: slot.startMinutes + durationMinutes });
+		byDay.set(slot.day, played);
 		state.teamSlots.set(team, byDay);
 	});
 
@@ -276,7 +296,7 @@ function recordPlacement(state, slot, fixture, durationMinutes) {
 // cannot be used. That is what makes the warnings in describeFailure honest —
 // they can say "the only free slots would leave a team playing back to back"
 // rather than blaming capacity for everything.
-function findSlotFailure(slot, fixture, state, { durationMinutes, barrier, teams }) {
+function findSlotFailure(slot, fixture, state, { durationMinutes, restMinutes, barrier, teams }) {
 	// A court reserved for a set of divisions is closed to every other, whether or
 	// not anything is on it — so this comes before the usedSlots check. Reporting
 	// "every court is booked" for a court that was never open to this division
@@ -291,18 +311,26 @@ function findSlotFailure(slot, fixture, state, { durationMinutes, barrier, teams
 
 	if (barrier !== null && slot.instant < barrier) return 'round';
 
-	// One slot of rest, checked on BOTH sides. The handover phrased it as the
+	// Rest, checked on BOTH sides. The original handover phrased it as the
 	// immediately preceding slot, but fixtures are not placed in time order —
 	// within a round each takes the earliest slot left, so a fixture placed later
 	// can land before one placed earlier. Checking only backwards would let that
 	// pair end up back to back, which is the thing the rule exists to forbid.
-	const restMinutes = durationMinutes * REST_SLOTS;
-	const adjacent = teams.some(
-		(team) =>
-			playsAt(state, team, slot.day, slot.startMinutes - restMinutes) ||
-			playsAt(state, team, slot.day, slot.startMinutes + restMinutes)
+	//
+	// Expressed as a gap rather than as "the slot restMinutes away". Probing two
+	// exact instants only worked while every match was the same length and every
+	// start sat on the same lattice; with rest independent of duration, the
+	// instant probed is one nothing is ever placed at, so the rule would silently
+	// stop applying. The gap between the two matches is what the rule is about,
+	// so that is what is measured. With restMinutes equal to durationMinutes on a
+	// uniform grid this refuses and allows exactly the same slots as before.
+	const slotEnd = slot.startMinutes + durationMinutes;
+	const tooClose = teams.some((team) =>
+		playedIntervals(state, team, slot.day).some(
+			(played) => slot.startMinutes < played.end + restMinutes && played.start < slotEnd + restMinutes
+		)
 	);
-	if (adjacent) return 'rest';
+	if (tooClose) return 'rest';
 
 	return null;
 }
@@ -577,9 +605,20 @@ export function generateAutomaticSchedule({
 	dailyStartTime,
 	dailyEndTime,
 	fixtureDurationMinutes,
+	restMinutes: requestedRestMinutes,
 	assignOfficials = false,
 }) {
 	const durationMinutes = Number(fixtureDurationMinutes);
+	// Absent, blank or nonsensical means "whatever one match lasts", which is the
+	// number the old rest rule always came out at. A caller that has never heard
+	// of rest therefore generates exactly what it used to. Zero is a real answer —
+	// back-to-back matches allowed — so it is only rejected when it is not a
+	// number at all.
+	const parsedRestMinutes = Number(requestedRestMinutes);
+	const restMinutes =
+		Number.isFinite(parsedRestMinutes) && parsedRestMinutes >= 0 && requestedRestMinutes !== '' && requestedRestMinutes !== null
+			? parsedRestMinutes
+			: durationMinutes * DEFAULT_REST_MULTIPLE;
 
 	if (!courtCount || !durationMinutes || !isTimeRangeValid(dailyStartTime, dailyEndTime)) {
 		return {
@@ -612,7 +651,13 @@ export function generateAutomaticSchedule({
 			...normalised.settings,
 			dayStartTime: dailyStartTime,
 			dayEndTime: dailyEndTime,
-			slotMinutes: durationMinutes,
+			// slotMinutes is deliberately NOT written here. It is the height of a
+			// grid row — how the board is drawn — and it used to be overwritten
+			// with whatever duration the last run happened to use, so the grid an
+			// organiser had chosen could not survive a regeneration. A fixture's
+			// length is its own startTime/endTime and nothing else; the grid is a
+			// reading aid over the top of it. normaliseSchedule has already seeded
+			// a default for a schedule that never had one.
 		},
 	};
 
@@ -643,6 +688,7 @@ export function generateAutomaticSchedule({
 	for (const { fixture, roundIndex } of fixturesToSchedule) {
 		const context = {
 			durationMinutes,
+			restMinutes,
 			barrier: findRoundBarrier(state.roundEndByDivision, fixture.division_id, roundIndex),
 			teams: getTeamKeys(fixture),
 		};

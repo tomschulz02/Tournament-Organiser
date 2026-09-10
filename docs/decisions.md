@@ -649,3 +649,43 @@ Per `docs/tournament-rules.md`'s instruction not to reimplement any part of the 
 chain outside `standings.js`, this lives beside `seedAcrossGroups` rather than inline in
 `tournamentViewFormatter.js`, even though it is presentation-adjacent rather than a
 ranking decision itself.
+
+## The Grid Is The Organiser's, And A Fixture's Length Is Its Own
+
+Decided 2026-09-10.
+
+`schedule.settings.slotMinutes` is how the board is ruled and nothing else. The generator
+used to write the fixture duration of the run into it, so an organiser who set a 60-minute
+grid and then generated 25-minute matches got a 25-minute grid — the two numbers were the
+same by construction, which is why "the slots ARE the fixture length" was a fair
+description of the app. The generator no longer writes the field; a grid chosen in the
+settings panel survives every regeneration.
+
+A fixture's length is its `startTime` and `endTime`, as it always was in the data. What
+changed is that the board now draws it that way: an entry is positioned from its own start
+in minutes and drawn at its own length, so a 25-minute match on a 60-minute grid is a
+quarter-row block rather than a full row marked approximate. Two consequences follow that
+were not previously reachable — an organiser can drag a range out on an empty column to
+create an entry of exactly that length, and drag a placed entry's edge to change it.
+
+The generator still uses one duration per run. Varying length per fixture within one run —
+"forty minutes for the final, twenty-five for pool play" — was considered and left out: it
+needs a division- or round-aware generator, and an organiser reaches the same schedule by
+resizing afterwards or generating in more than one pass.
+
+The rest minimum became its own number of minutes in the same change. It had been
+`durationMinutes * REST_SLOTS`, which only read as a unit while rest and duration were the
+same number; expressed that way it would have gone on measuring against a lattice nothing
+was placed on. It is now a gap between two of a team's matches, measured in minutes,
+defaulting to the fixture duration so that an existing tournament regenerates identically.
+
+Reason:
+The alternative was a per-division or per-schedule "match length" setting, which is the
+same coupling one level up: it still says that some group of fixtures must share a length,
+and the data model has never said that. Making the grid purely presentational costs one
+line in the generator and gives the organiser a granularity they can read the day at,
+independent of what is on it.
+
+Given up: an organiser who liked the grid snapping to whatever was last generated now sets
+it themselves. The printed grid is deliberately not given continuous positioning — see
+`docs/schedule.md` — so a fine-grained schedule reads differently on screen and on paper.

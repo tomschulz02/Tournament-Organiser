@@ -6,6 +6,7 @@ import {
 	courtBreakIndices,
 	normalisePrintLayouts,
 	normaliseSchedule,
+	getDayEntries,
 	pruneStalePrintLayout,
 	serialisePrintLayouts,
 	serialiseScheduleForSave,
@@ -273,6 +274,46 @@ describe('getPrintRowsForDay', () => {
 		expect(isNaturalBreak(2)).toBe(true);
 	});
 
+	// A printed grid cell stacks every entry that starts in its row, so a row with
+	// two matches on one court is about twice as tall. Seven of those overflow the
+	// sheet, and an overflowing page loses what falls off it — the one failure
+	// schedulePrintLayout.js's own comment says the estimate must never cause.
+	it('gives a page its usual row budget when nothing shares a cell', () => {
+		const schedule = scheduleWith({
+			entries: [
+				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:30', fixtureId: 'f1' },
+				{ id: 'e2', type: 'fixture', day: '2026-09-12', courtId: 'court-2', startTime: '09:30', endTime: '10:00', fixtureId: 'f2' },
+			],
+		});
+
+		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(7);
+	});
+
+	it('halves the row budget when a cell holds two entries', () => {
+		const schedule = scheduleWith({
+			entries: [
+				// Both start inside the 09:00 row of a 30-minute grid, on one court.
+				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:15', fixtureId: 'f1' },
+				{ id: 'e2', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:15', endTime: '09:30', fixtureId: 'f2' },
+			],
+		});
+
+		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(3);
+	});
+
+	// A break spans every court and prints once across the row, so it is not what
+	// makes a cell tall and must not shrink the page on its own.
+	it('does not count a venue-wide break against the budget', () => {
+		const schedule = scheduleWith({
+			entries: [
+				{ id: 'b1', type: 'break', day: '2026-09-12', courtId: null, startTime: '12:00', endTime: '12:15', title: 'Lunch' },
+				{ id: 'b2', type: 'break', day: '2026-09-12', courtId: null, startTime: '12:15', endTime: '12:30', title: 'Presentation' },
+			],
+		});
+
+		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(7);
+	});
+
 	it('treats a list row as natural to break before when it starts a new time', () => {
 		const schedule = scheduleWith({
 			entries: [
@@ -348,5 +389,37 @@ describe('pruneStalePrintLayout', () => {
 		);
 
 		expect(result.dropped).toBe(false);
+	});
+});
+
+// The printed list view reads its rows through getDayEntries, which used to
+// sort by time alone — so two matches at the same time came out in whatever
+// order they were stored in, and the printed list could disagree with the grid
+// printed beside it.
+describe('getDayEntries court ordering', () => {
+	it('orders same-time entries by court position, with a schedule-wide break first', () => {
+		const courts = Array.from({ length: 11 }, (_, index) => ({ id: `court-${index + 1}`, name: `Court ${index + 1}` }));
+		const schedule = scheduleWith({
+			courts,
+			entries: [
+				{ id: 'c10', type: 'fixture', day: '2026-09-12', courtId: 'court-10', startTime: '09:00', endTime: '09:30', fixtureId: 'f1' },
+				{ id: 'c2', type: 'fixture', day: '2026-09-12', courtId: 'court-2', startTime: '09:00', endTime: '09:30', fixtureId: 'f2' },
+				{ id: 'lunch', type: 'break', day: '2026-09-12', courtId: null, startTime: '09:00', endTime: '09:30', title: 'Lunch' },
+				{ id: 'c1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:30', fixtureId: 'f3' },
+			],
+		});
+
+		expect(getDayEntries(schedule, '2026-09-12').map((e) => e.id)).toEqual(['lunch', 'c1', 'c2', 'c10']);
+	});
+
+	it('still orders by time before court', () => {
+		const schedule = scheduleWith({
+			entries: [
+				{ id: 'later', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '10:00', endTime: '10:30', fixtureId: 'f1' },
+				{ id: 'earlier', type: 'fixture', day: '2026-09-12', courtId: 'court-2', startTime: '09:00', endTime: '09:30', fixtureId: 'f2' },
+			],
+		});
+
+		expect(getDayEntries(schedule, '2026-09-12').map((e) => e.id)).toEqual(['earlier', 'later']);
 	});
 });

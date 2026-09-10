@@ -12,7 +12,15 @@ import scheduleExportCss from '../styles/schedule-export.css?raw';
 // signed in, and the reader triggers printing themselves from there (this
 // codebase's own print control, or Ctrl+P) rather than the app opening a
 // print dialog on their behalf.
-export function openScheduleExportDocument({ schedule, fixturesById, tournamentName, tournamentId, type, layout = null }) {
+export function openScheduleExportDocument({
+	schedule,
+	fixturesById,
+	tournamentName,
+	tournamentId,
+	divisions = [],
+	type,
+	layout = null,
+}) {
 	const markup = renderToStaticMarkup(
 		<ScheduleExportPages
 			type={type}
@@ -20,6 +28,7 @@ export function openScheduleExportDocument({ schedule, fixturesById, tournamentN
 			fixturesById={fixturesById}
 			tournamentName={tournamentName}
 			tournamentId={tournamentId}
+			divisions={divisions}
 			layout={layout}
 		/>,
 	);

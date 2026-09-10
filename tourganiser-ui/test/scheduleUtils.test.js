@@ -12,6 +12,7 @@ import {
 	timeToMinutes,
 	minutesToTime,
 	addMinutesToTime,
+	compareByCourtOrder,
 	compareTimes,
 	isTimeRangeValid,
 	rangesOverlap,
@@ -36,8 +37,11 @@ import {
 	calculateScheduledStats,
 	getDayBounds,
 	getSlotMinutes,
+	snapToIncrement,
+	SNAP_MINUTES,
 	buildTimeSlots,
 	buildGridRowTimes,
+	getEntryDayPlacement,
 	getEntryRowPlacement,
 	getEntrySlotSpan,
 	serialiseScheduleForSave,
@@ -1111,6 +1115,80 @@ describe('getEntryRowPlacement', () => {
 	});
 });
 
+// The board draws from this rather than from the row placement above: a block at
+// its own start for its own length, not one snapped out to the rows that contain
+// it. Print still wants the row form, which is why both exist.
+describe('getEntryDayPlacement', () => {
+	const axis = { start: '09:00', slotMinutes: 30, rowCount: 4 }; // 09:00 to 11:00
+
+	it('measures an entry in minutes from the start of the day', () => {
+		expect(getEntryDayPlacement(entry({ startTime: '10:00', endTime: '10:30' }), axis)).toEqual({
+			startOffset: 60,
+			endOffset: 90,
+			axisMinutes: 120,
+			inDay: true,
+		});
+	});
+
+	it('keeps an unaligned entry unaligned', () => {
+		expect(getEntryDayPlacement(entry({ startTime: '09:20', endTime: '09:45' }), axis)).toMatchObject({
+			startOffset: 20,
+			endOffset: 45,
+			inDay: true,
+		});
+	});
+
+	// The two functions have to agree about what is on the grid, or an entry could
+	// be drawn by the board and listed as undrawable by print, or the reverse.
+	it.each([
+		['before the day', '08:30', '09:30'],
+		['after the day', '10:30', '11:30'],
+		['of no length', '10:00', '10:00'],
+		['inverted', '10:30', '10:00'],
+		['aligned and inside', '10:00', '10:30'],
+		['unaligned and inside', '09:20', '09:45'],
+		['ending exactly at the close', '10:30', '11:00'],
+	])('agrees with getEntryRowPlacement about an entry %s', (_label, startTime, endTime) => {
+		const item = entry({ startTime, endTime });
+
+		expect(getEntryDayPlacement(item, axis).inDay).toBe(getEntryRowPlacement(item, axis).inDay);
+	});
+
+	// buildGridRowTimes rounds the row count up, so a day of unwhole slots is
+	// drawn slightly longer than it is configured. An entry in that last part is
+	// on the grid, and axisMinutes is what says so.
+	it('measures the axis in drawn rows, not in configured hours', () => {
+		expect(getEntryDayPlacement(entry({ startTime: '09:00', endTime: '09:30' }), { start: '09:00', slotMinutes: 45, rowCount: 3 })).toMatchObject({
+			axisMinutes: 135,
+		});
+	});
+});
+
+// Flat, and deliberately not a function of slotMinutes: an increment derived from
+// the grid is the coupling this whole change removed, and on an hourly grid it
+// put 25 minutes out of reach.
+describe('SNAP_MINUTES', () => {
+	it('is five minutes, on every grid', () => {
+		expect(SNAP_MINUTES).toBe(5);
+	});
+
+	it('divides every length a drag can produce', () => {
+		[25, 30, 40, 45, 55, 90].forEach((length) => expect(length % SNAP_MINUTES).toBe(0));
+	});
+});
+
+describe('snapToIncrement', () => {
+	it('rounds to the nearest increment', () => {
+		expect(snapToIncrement(37, 15)).toBe(30);
+		expect(snapToIncrement(38, 15)).toBe(45);
+		expect(snapToIncrement(-4, 15)).toBe(-0);
+	});
+
+	it('never divides by nothing', () => {
+		expect(snapToIncrement(37, 0)).toBe(37);
+	});
+});
+
 describe('getEntrySlotSpan', () => {
 	it('counts whole slots', () => {
 		expect(getEntrySlotSpan(entry({ startTime: '09:00', endTime: '10:00' }), 30)).toBe(2);
@@ -1324,5 +1402,101 @@ describe('entry presentation helpers', () => {
 			const style = getEntryDivisionStyle(entry({ type: 'fixture', fixtureId: 'f1' }), fixturesById);
 			expect(style).toHaveProperty('--tv-division-color');
 		});
+	});
+});
+
+// Court order is the court's position in schedule.courts, never a string
+// comparison of its id. The case this exists for is ten or more courts:
+// "court-10".localeCompare("court-2") is negative, so the old comparator put
+// Court 10 ahead of Court 2 on every list of entries in the app.
+describe('compareByCourtOrder', () => {
+	const manyCourts = {
+		courts: Array.from({ length: 12 }, (_, index) => ({ id: `court-${index + 1}`, name: `Court ${index + 1}` })),
+	};
+
+	it('orders double-digit courts after single-digit ones', () => {
+		const compare = compareByCourtOrder(manyCourts);
+
+		expect(compare('court-2', 'court-10')).toBeLessThan(0);
+		expect(compare('court-10', 'court-2')).toBeGreaterThan(0);
+	});
+
+	it('sorts a whole set of ids into positional order', () => {
+		const ids = ['court-11', 'court-2', 'court-1', 'court-10', 'court-3'];
+
+		expect([...ids].sort(compareByCourtOrder(manyCourts))).toEqual([
+			'court-1',
+			'court-2',
+			'court-3',
+			'court-10',
+			'court-11',
+		]);
+	});
+
+	it('sorts a court by its position even when its name carries no number', () => {
+		const schedule = {
+			courts: [{ id: 'court-1', name: 'Court 1' }, { id: 'court-2', name: 'Centre Court' }, { id: 'court-3', name: 'Court 3' }],
+		};
+
+		expect([...['court-3', 'court-2', 'court-1']].sort(compareByCourtOrder(schedule))).toEqual([
+			'court-1',
+			'court-2',
+			'court-3',
+		]);
+	});
+
+	it('sorts a schedule-wide break, which has no court, first', () => {
+		const compare = compareByCourtOrder(manyCourts);
+
+		expect(compare(null, 'court-1')).toBeLessThan(0);
+		expect(compare('court-1', null)).toBeGreaterThan(0);
+		expect(compare(null, null)).toBe(0);
+	});
+
+	it('sorts a court the schedule no longer has after every court it does', () => {
+		const compare = compareByCourtOrder(manyCourts);
+
+		expect(compare('court-removed', 'court-12')).toBeGreaterThan(0);
+		expect(compare('court-1', 'court-removed')).toBeLessThan(0);
+	});
+
+	it('is stable between two unknown courts rather than order-dependent', () => {
+		const compare = compareByCourtOrder(manyCourts);
+
+		expect(compare('zebra', 'aardvark')).toBeGreaterThan(0);
+		expect(compare('aardvark', 'zebra')).toBeLessThan(0);
+	});
+
+	it('falls back to comparing ids when given no schedule at all', () => {
+		const compare = compareByCourtOrder(null);
+
+		expect(compare('court-1', 'court-2')).toBeLessThan(0);
+		expect(compare(null, 'court-1')).toBeLessThan(0);
+	});
+});
+
+describe('sortScheduleEntries with a schedule', () => {
+	const schedule = {
+		courts: Array.from({ length: 11 }, (_, index) => ({ id: `court-${index + 1}` })),
+	};
+
+	it('orders same-time entries by court position, not by id string', () => {
+		const entries = [
+			entry({ id: 'e3', day: '2026-08-01', startTime: '09:00', courtId: 'court-10' }),
+			entry({ id: 'e1', day: '2026-08-01', startTime: '09:00', courtId: 'court-1' }),
+			entry({ id: 'e2', day: '2026-08-01', startTime: '09:00', courtId: 'court-2' }),
+		];
+
+		expect(sortScheduleEntries(entries, schedule).map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+	});
+
+	it('still puts day and time ahead of court', () => {
+		const entries = [
+			entry({ id: 'late', day: '2026-08-01', startTime: '10:00', courtId: 'court-1' }),
+			entry({ id: 'early', day: '2026-08-01', startTime: '09:00', courtId: 'court-10' }),
+			entry({ id: 'nextDay', day: '2026-08-02', startTime: '08:00', courtId: 'court-1' }),
+		];
+
+		expect(sortScheduleEntries(entries, schedule).map((e) => e.id)).toEqual(['early', 'late', 'nextDay']);
 	});
 });

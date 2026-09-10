@@ -125,14 +125,60 @@ export function rangesOverlap(startA, endA, startB, endB) {
 	return timeToMinutes(startA) < timeToMinutes(endB) && timeToMinutes(endA) > timeToMinutes(startB);
 }
 
-export function sortScheduleEntries(entries = []) {
+// Orders two courtIds the way the organiser laid the courts out, which is their
+// position in schedule.courts — the array buildCourtList builds by index and
+// that the print grid's columns and the courts panel already treat as
+// authoritative.
+//
+// String-comparing the ids is what this replaces, and it was wrong the moment a
+// tournament had ten courts: "court-10".localeCompare("court-2") is negative,
+// because '1' sorts before '2' at the first differing character, so Court 10
+// came before Court 2 everywhere entries were listed. Parsing a number out of
+// the id would fix that case and break the next one — a court renamed "Centre
+// Court" has no number to parse. Position has neither problem.
+//
+// A courtId of null is a break spanning every court that day, so it sorts
+// first within its time group: it reads as the heading for what follows rather
+// than as an entry filed under some arbitrary column.
+export function compareByCourtOrder(schedule) {
+	const order = new Map((schedule?.courts || []).map((court, index) => [court.id, index]));
+
+	return (leftCourtId, rightCourtId) => {
+		const left = courtRank(leftCourtId, order);
+		const right = courtRank(rightCourtId, order);
+
+		if (left !== right) return left - right;
+
+		// Same rank means both are null, or both name courts this schedule no
+		// longer has. Compare the ids themselves so the order is at least
+		// stable rather than dependent on input order.
+		return String(leftCourtId ?? '').localeCompare(String(rightCourtId ?? ''));
+	};
+}
+
+// A court the schedule does not list sorts after every court it does, rather
+// than before them or in the middle — a stale reference should be visible at
+// the end, not silently interleaved with real courts.
+function courtRank(courtId, order) {
+	if (courtId == null || courtId === '') return -1;
+
+	const index = order.get(courtId);
+
+	return index === undefined ? order.size : index;
+}
+
+// `schedule` is optional only so that a caller with entries and no courts to
+// hand still gets day/time ordering. Pass it wherever it exists — without it
+// every court ties and the order falls through to entry id, which is arbitrary.
+export function sortScheduleEntries(entries = [], schedule = null) {
+	const compareCourts = compareByCourtOrder(schedule);
+
 	return [...entries].sort((left, right) => {
 		if (left.day !== right.day) return left.day.localeCompare(right.day);
 		if (left.startTime !== right.startTime) return compareTimes(left.startTime, right.startTime);
 
-		const leftCourt = left.courtId || '';
-		const rightCourt = right.courtId || '';
-		if (leftCourt !== rightCourt) return leftCourt.localeCompare(rightCourt);
+		const byCourt = compareCourts(left.courtId, right.courtId);
+		if (byCourt !== 0) return byCourt;
 
 		return left.id.localeCompare(right.id);
 	});
@@ -448,18 +494,23 @@ export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
 		return base;
 	}
 
+	// Hoisted out of the object literal below because the entry sort needs it:
+	// entries are ordered by their court's position in this array, so it has to
+	// exist before they are sorted rather than alongside them.
+	const courts = Array.isArray(rawSchedule.courts)
+		? rawSchedule.courts.map((court, index) => ({
+				id: court.id || `court-${index + 1}`,
+				name: court.name || `Court ${index + 1}`,
+				// Absent or non-array means unrestricted. An old saved schedule
+				// has no divisions key on any court and loads as [].
+				divisions: Array.isArray(court.divisions) ? court.divisions : [],
+		  }))
+		: [];
+
 	return {
 		version: rawSchedule.version || SCHEDULE_VERSION,
 		days: normaliseTournamentDays(startDate, endDate, rawSchedule.days || base.days),
-		courts: Array.isArray(rawSchedule.courts)
-			? rawSchedule.courts.map((court, index) => ({
-					id: court.id || `court-${index + 1}`,
-					name: court.name || `Court ${index + 1}`,
-					// Absent or non-array means unrestricted. An old saved schedule
-					// has no divisions key on any court and loads as [].
-					divisions: Array.isArray(court.divisions) ? court.divisions : [],
-			  }))
-			: [],
+		courts,
 		entries: sortScheduleEntries(
 			(rawSchedule.entries || [])
 				.filter((entry) => entry?.id && entry?.day && entry?.startTime && entry?.endTime)
@@ -474,7 +525,8 @@ export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
 					title: entry.title || '',
 					officials: entry.officials || '',
 					notes: entry.notes || '',
-				}))
+				})),
+			{ courts },
 		),
 		settings: {
 			dayStartTime: rawSchedule.settings?.dayStartTime || DEFAULT_SCHEDULE_START,
@@ -584,7 +636,7 @@ export function upsertScheduleEntry(schedule, nextEntry) {
 
 	return {
 		...schedule,
-		entries: sortScheduleEntries(entries),
+		entries: sortScheduleEntries(entries, schedule),
 	};
 }
 
@@ -600,8 +652,16 @@ export function getCourtName(schedule, courtId) {
 	return schedule.courts.find((court) => court.id === courtId)?.name || 'Unassigned Court';
 }
 
+// Time first, then court order. The court tiebreak used to be missing
+// altogether, which left entries sharing a start time in whatever order they
+// happened to be stored in — so the printed list could show the same day's
+// 09:00 matches in a different order from the grid beside it.
 export function getDayEntries(schedule, day) {
-	return schedule.entries.filter((entry) => entry.day === day).sort((left, right) => compareTimes(left.startTime, right.startTime));
+	const compareCourts = compareByCourtOrder(schedule);
+
+	return schedule.entries
+		.filter((entry) => entry.day === day)
+		.sort((left, right) => compareTimes(left.startTime, right.startTime) || compareCourts(left.courtId, right.courtId));
 }
 
 export function calculateScheduledStats(schedule, fixtures) {
@@ -667,16 +727,23 @@ export function buildGridRowTimes(schedule, bounds) {
 // Where an entry sits on that axis, in rows. rowStart is a 1-based grid line and
 // the entry occupies rowStart through rowStart + rowSpan - 1.
 //
+// This is the PRINTED grid's arithmetic. The board stopped using it on
+// 2026-09-10 and positions its blocks from getEntryDayPlacement's minutes
+// instead; a sheet of paper has no way to draw a block at an arbitrary offset
+// and keep the row it is in legible, so print keeps whole rows.
+//
 // Arithmetic in minutes rather than a lookup in the row list, so an entry's drawn
 // position and a cell's occupied state are derived from the same expression and
 // cannot disagree. Occupancy used to be walked in rows and was therefore only
 // correct against the row set of the moment.
 //
 // `snapped` is true when the entry does not begin and end on a boundary. It is
-// then drawn over the rows that contain it, and the caller marks it as
-// approximate — its stored times are never changed. `inDay` is false when the
-// entry falls outside the configured hours altogether; widening the day to reach
-// it is what this change removes, so it is listed off the grid instead.
+// then drawn over the rows that contain it — its stored times are never changed.
+// Nothing reads the flag since the board retired its approximate treatment; it is
+// left on the return because print is the caller that would want it if the
+// printed grid ever marks the same thing. `inDay` is false when the entry falls
+// outside the configured hours altogether; widening the day to reach it is what
+// the 2026-08-13 change removed, so it is listed off the grid instead.
 export function getEntryRowPlacement(entry, { start, slotMinutes, rowCount }) {
 	const startMinutes = timeToMinutes(start);
 	const startOffset = timeToMinutes(entry.startTime) - startMinutes;
@@ -691,6 +758,51 @@ export function getEntryRowPlacement(entry, { start, slotMinutes, rowCount }) {
 		snapped: startOffset % slotMinutes !== 0 || endOffset % slotMinutes !== 0,
 		inDay: startOffset >= 0 && endOffset > startOffset && lastRow <= rowCount,
 	};
+}
+
+// Where an entry sits on that axis in minutes rather than in rows, which is what
+// the board draws from. The two offsets are getEntryRowPlacement's own, taken
+// before it rounds them: the row form is what print still wants, the minute form
+// is what a block positioned at its real start and length wants.
+//
+// axisMinutes is the drawn length of the day, not dayEndTime - dayStartTime.
+// buildGridRowTimes rounds the row count up, so a day whose hours are not a whole
+// number of slots is drawn slightly longer than it is configured — and an entry
+// in that last part of the final row is on the grid. inDay agrees with
+// getEntryRowPlacement's exactly: ceil(endOffset / slotMinutes) <= rowCount is
+// endOffset <= rowCount * slotMinutes.
+export function getEntryDayPlacement(entry, { start, slotMinutes, rowCount }) {
+	const dayStart = timeToMinutes(start);
+	const startOffset = timeToMinutes(entry.startTime) - dayStart;
+	const endOffset = timeToMinutes(entry.endTime) - dayStart;
+	const axisMinutes = rowCount * slotMinutes;
+
+	return {
+		startOffset,
+		endOffset,
+		axisMinutes,
+		inDay: startOffset >= 0 && endOffset > startOffset && endOffset <= axisMinutes,
+	};
+}
+
+// What a drag on the board snaps to. Five minutes, on every grid.
+//
+// It was briefly a fraction of a grid row — a quarter, floored to five — which
+// tied the lengths an organiser could draw back to the grid, the exact coupling
+// the rest of this work removed. On a 60-minute grid it made a 25-minute match
+// undrawable: the increment was 15 and the lengths on offer were 15, 30, 45, 60.
+// A flat five is finer than the grid ever was, is the same number everywhere so
+// there is nothing to learn, and at the board's row height is a 7px step on an
+// hourly grid — small, but a step, not a slide.
+//
+// Below five a gesture is asking for precision a mouse does not have, and the
+// entry editor's own time inputs remain the honest way to say "12:37".
+export const SNAP_MINUTES = 5;
+
+export function snapToIncrement(minutes, increment) {
+	const step = Math.max(1, Math.round(increment));
+
+	return Math.round(minutes / step) * step;
 }
 
 export function getEntrySlotSpan(entry, slotMinutes) {
@@ -711,7 +823,7 @@ export function serialiseScheduleForSave(schedule) {
 			name: court.name,
 			divisions: Array.isArray(court.divisions) ? court.divisions : [],
 		})),
-		entries: sortScheduleEntries(schedule.entries).map((entry) => ({
+		entries: sortScheduleEntries(schedule.entries, schedule).map((entry) => ({
 			id: entry.id,
 			type: entry.type,
 			day: entry.day,
@@ -792,19 +904,25 @@ export function getEntryOfficials(entry) {
 }
 
 // Same colour a fixture's division carries everywhere else in the app (the
-// Overview cards, the division selector, Fixtures & Schedule's own rows) —
-// getDivisionAccent's hash is keyed on division_id, so it is already the same
-// colour without this module knowing anything about the others.
+// Overview cards, the division selector, Fixtures & Schedule's own rows).
+// `divisions` — the tournament's full division list — has to be passed through
+// from the caller for that to hold: getDivisionAccent assigns colours by each
+// division's position among its siblings, not from the id alone, so two
+// callers that disagree about the sibling list can disagree about the colour
+// even for the same division. (This module previously called
+// divisionColorStyle with the id alone, which is what let the schedule board,
+// list view and printed/exported pages drift to a different colour than the
+// rest of the app the moment a fixture was placed on the schedule.)
 //
 // Gated on divisionName the same way the text label already is: with a single
 // division there is nothing to tell apart, so buildTournamentSchedule leaves
 // divisionName unset and this withholds the colour too rather than tinting
 // every entry identically.
-export function getEntryDivisionStyle(entry, fixturesById) {
+export function getEntryDivisionStyle(entry, fixturesById, divisions = []) {
 	if (entry.type === 'break') return undefined;
 
 	const fixture = fixturesById[entry.fixtureId];
 	if (!fixture || fixture.divisionName == null) return undefined;
 
-	return divisionColorStyle(fixture.division_id);
+	return divisionColorStyle(fixture.division_id, divisions);
 }

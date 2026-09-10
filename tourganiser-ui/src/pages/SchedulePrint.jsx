@@ -259,6 +259,7 @@ export default function SchedulePrintPage() {
 					fixturesById={fixturesById}
 					tournamentName={tournament.name}
 					tournamentId={tournament.id}
+					divisions={result.data?.divisions ?? []}
 					layout={activeLayout}
 				/>
 			</div>

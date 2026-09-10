@@ -71,28 +71,42 @@ export default function SchedulePrintLayoutEditor({ type, schedule, fixturesById
 
 	return (
 		<div className="print-layout-editor">
+			{/* Two groups, not three peers in a row. The page count is a readout of
+			    what the current arrangement costs — it answers a question rather
+			    than doing anything — so it is set apart from the two controls that
+			    change the arrangement. As three equal children of one flex-wrap
+			    row they read as a jumble at inspector width, where they wrap
+			    unpredictably. */}
 			<div className="print-layout-editor-toolbar">
-				<div className="print-layout-editor-orientation" role="group" aria-label="Paper orientation">
-					{['portrait', 'landscape'].map((orientation) => (
-						<button
-							key={orientation}
-							type="button"
-							className="print-layout-editor-choice"
-							aria-pressed={effective.orientation === orientation}
-							onClick={() => setOrientation(orientation)}>
-							{orientation === 'portrait' ? 'Portrait' : 'Landscape'}
-						</button>
-					))}
-				</div>
-
-				<p className="print-layout-editor-count">
-					{totalPages} page{totalPages === 1 ? '' : 's'}
-					{type === 'grid' && courtGroups.length > 1 && ` · ${courtGroups.length} court groups`}
+				<p className="print-layout-editor-count" aria-live="polite">
+					<strong>
+						{totalPages} page{totalPages === 1 ? '' : 's'}
+					</strong>
+					{type === 'grid' && courtGroups.length > 1 && (
+						<span>
+							{courtGroups.length} court group{courtGroups.length === 1 ? '' : 's'}
+						</span>
+					)}
 				</p>
 
-				<button type="button" className="print-layout-editor-reset" onClick={handleReset}>
-					Reset to smart default
-				</button>
+				<div className="print-layout-editor-controls">
+					<div className="print-layout-editor-orientation" role="group" aria-label="Paper orientation">
+						{['portrait', 'landscape'].map((orientation) => (
+							<button
+								key={orientation}
+								type="button"
+								className="print-layout-editor-choice"
+								aria-pressed={effective.orientation === orientation}
+								onClick={() => setOrientation(orientation)}>
+								{orientation === 'portrait' ? 'Portrait' : 'Landscape'}
+							</button>
+						))}
+					</div>
+
+					<button type="button" className="print-layout-editor-reset" onClick={handleReset}>
+						Reset
+					</button>
+				</div>
 			</div>
 
 			{type === 'grid' && schedule.courts.length > 1 && (
@@ -185,6 +199,9 @@ function DayBreakEditor({ type, schedule, day, fixturesById, breaks, onToggle })
 								{court.name}
 							</span>
 						))}
+						{/* The narrow container's stand-in for the court columns —
+						    see GridPreviewRow. Hidden at full width. */}
+						<span className="print-layout-grid-density-head">Courts in use</span>
 					</div>
 				)}
 
@@ -250,26 +267,50 @@ function describeRow(type, row, schedule) {
 // resolved once per day in getPrintRowsForDay), read here only to show what a
 // slot holds — a break's consequence is what the organiser is judging.
 function GridPreviewRow({ schedule, slot, rowIndex, entries, fixturesById }) {
+	const cells = schedule.courts.map((court) => {
+		const placed = entries.find((item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1);
+		const spanning = entries.find(
+			(item) => item.entry.courtId === null && item.rowStart <= rowIndex + 1 && item.rowStart + item.rowSpan > rowIndex + 1,
+		);
+
+		return { court, shown: placed ?? spanning };
+	});
+
+	const inUse = cells.filter((cell) => cell.shown).length;
+
 	return (
 		<div className="print-layout-grid-row">
 			<span className="print-layout-grid-time">{slot}</span>
-			{schedule.courts.map((court) => {
-				const placed = entries.find((item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1);
-				const spanning = entries.find(
-					(item) =>
-						item.entry.courtId === null && item.rowStart <= rowIndex + 1 && item.rowStart + item.rowSpan > rowIndex + 1,
-				);
-				const shown = placed ?? spanning;
 
-				return (
-					<span
+			{cells.map(({ court, shown }) => (
+				<span
+					key={court.id}
+					className="print-layout-grid-cell"
+					style={shown ? getEntryDivisionStyle(shown.entry, fixturesById) : undefined}>
+					{shown ? getEntryLabel(shown.entry, fixturesById) : ''}
+				</span>
+			))}
+
+			{/* What the row looks like when there is no room for one labelled cell
+			    per court — the inspector column is ~215px of usable width, which
+			    fits under two labelled columns however narrow they are made, so
+			    the labelled version is a peephole there rather than a preview.
+			    A break is judged on whether it cuts through a busy stretch, and
+			    that is exactly what this shows: one tick per court, coloured by
+			    division, plus the count. Which courts are which is answered by
+			    the court strip above, so nothing is lost that this view owes. */}
+			<span className="print-layout-grid-density" aria-hidden="true">
+				{cells.map(({ court, shown }) => (
+					<i
 						key={court.id}
-						className="print-layout-grid-cell"
-						style={shown ? getEntryDivisionStyle(shown.entry, fixturesById) : undefined}>
-						{shown ? getEntryLabel(shown.entry, fixturesById) : ''}
-					</span>
-				);
-			})}
+						className={shown ? 'is-used' : undefined}
+						style={shown ? getEntryDivisionStyle(shown.entry, fixturesById) : undefined}
+					/>
+				))}
+			</span>
+			<span className="print-layout-grid-load">
+				{inUse}/{schedule.courts.length}
+			</span>
 		</div>
 	);
 }

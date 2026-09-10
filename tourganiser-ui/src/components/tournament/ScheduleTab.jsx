@@ -16,6 +16,7 @@ import {
 import {
 	buildTournamentSchedule,
 	calculateScheduledStats,
+	compareByCourtOrder,
 	compareTimes,
 	formatDateLabel,
 	getCourtName,
@@ -184,7 +185,8 @@ export default function ScheduleTab({
 											court={getCourtName(schedule, entry.courtId)}
 											officials={entry.officials}
 											action={creator && renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
-										/>
+												divisions={divisions}
+											/>
 									),
 								)}
 							</ul>
@@ -202,6 +204,7 @@ export default function ScheduleTab({
 								fixture={fixture}
 								showDivision={showDivision}
 								action={creator && renderFixtureAction ? renderFixtureAction(fixture) : null}
+								divisions={divisions}
 							/>
 						))}
 					</ul>
@@ -234,6 +237,9 @@ function BreakRow({ entry, schedule }) {
 // Day -> start time -> the courts running at that time.
 function buildSections({ schedule, days, filters, fixtureIndex }) {
 	const hideBreaks = hasFixtureFilter(filters);
+	// Built once for the whole tab rather than per comparison — it indexes every
+	// court, and the sort below runs inside a per-day map.
+	const compareCourts = compareByCourtOrder(schedule);
 
 	return days
 		.filter((day) => !filters.day || day.date === filters.day)
@@ -251,11 +257,10 @@ function buildSections({ schedule, days, filters, fixtureIndex }) {
 					return matchesFixtureFilters(entry.fixture, filters);
 				})
 				// Time first, then court, so a group reads left to right across the
-				// courts in a stable order.
-				.sort(
-					(a, b) =>
-						compareTimes(a.startTime, b.startTime) || String(a.courtId || '').localeCompare(String(b.courtId || '')),
-				);
+				// courts in the order the organiser laid them out — by position in
+				// schedule.courts, not by comparing ids as strings, which put Court
+				// 10 ahead of Court 2. See compareByCourtOrder.
+				.sort((a, b) => compareTimes(a.startTime, b.startTime) || compareCourts(a.courtId, b.courtId));
 
 			return { date: day.date, label: day.label, groups: groupByStartTime(entries) };
 		})

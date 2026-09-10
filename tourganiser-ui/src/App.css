@@ -94,23 +94,32 @@ body.light {
 	--card-border-color: rgba(37, 37, 37, 0.15);
 	--card-shadow-color: rgba(37, 37, 37, 0.2);
 
-	/* Shared 8-colour identity palette. Division colours (divisionColors.js) and
+	/* Shared 12-colour identity palette. Division colours (divisionColors.js) and
 	   tournament identity (tournamentIdentity.js) both pick from this set, keyed
 	   on different ids, rather than each inventing its own colours — one visual
 	   language across the app. Muted rather than saturated, so an accent reads as
-	   identity rather than as a status or a call to action. */
+	   identity rather than as a status or a call to action.
+
+	   Hues are spaced by design, not just picked to look nice individually — the
+	   palette is read as thin 1-2px lines and small dots, where two colours only
+	   ~5-10° apart on the wheel are indistinguishable at that size regardless of
+	   how different their names sound. Every neighbouring pair below is at least
+	   ~24° apart (accent-6/accent-10 is the deliberate exception, at ~15° — slate
+	   is desaturated enough to read as grey rather than compete with cyan's hue).
+	   Re-tuned 2026-09-10: orange/amber, pink/magenta and green/forest previously
+	   sat within 0-8° of their neighbour in this theme. */
 	--accent-1: rgb(79, 70, 229); /* indigo */
 	--accent-2: rgb(13, 148, 136); /* teal */
-	--accent-3: rgb(217, 119, 6); /* orange */
+	--accent-3: rgb(217, 76, 6); /* orange */
 	--accent-4: rgb(147, 51, 234); /* purple */
 	--accent-5: rgb(225, 29, 72); /* rose */
 	--accent-6: rgb(2, 132, 199); /* cyan */
 	--accent-7: rgb(22, 163, 74); /* green */
-	--accent-8: rgb(219, 39, 119); /* pink */
-	--accent-9: rgb(202, 138, 4); /* amber */
+	--accent-8: rgb(226, 30, 160); /* pink */
+	--accent-9: rgb(202, 169, 4); /* amber */
 	--accent-10: rgb(71, 85, 105); /* slate */
-	--accent-11: rgb(190, 24, 93); /* magenta */
-	--accent-12: rgb(21, 128, 61); /* forest */
+	--accent-11: rgb(209, 30, 226); /* magenta */
+	--accent-12: rgb(48, 128, 21); /* olive (was a near-duplicate of green as "forest") */
 }
 
 body.dark {
@@ -120,9 +129,15 @@ body.dark {
 	--card-border-color: rgba(245, 245, 245, 0.15);
 	--card-shadow-color: rgba(245, 245, 245, 0.2);
 
-	/* Same eight identities, lightened so they stay legible against the dark
+	/* Same twelve identities, lightened so they stay legible against the dark
 	   surface — the near-black card would otherwise flatten the light-theme
-	   values the way it already does for --main-color and friends. */
+	   values the way it already does for --main-color and friends.
+
+	   accent-8/accent-11 (pink/magenta) were re-tuned 2026-09-10 alongside the
+	   light theme: at ~329°/~331° they were only ~3° apart on the wheel and read
+	   as the same colour. Pushed to ~320°/~295° so each sits roughly as far from
+	   its neighbour (rose at ~351°, purple at ~270°) as those neighbours already
+	   are from each other. */
 	--accent-1: rgb(129, 120, 255);
 	--accent-2: rgb(45, 212, 191);
 	--accent-3: rgb(251, 146, 60);
@@ -130,10 +145,10 @@ body.dark {
 	--accent-5: rgb(251, 113, 133);
 	--accent-6: rgb(56, 189, 248);
 	--accent-7: rgb(74, 222, 128);
-	--accent-8: rgb(244, 114, 182);
+	--accent-8: rgb(244, 113, 200); /* pink */
 	--accent-9: rgb(250, 204, 21); /* amber */
 	--accent-10: rgb(148, 163, 184); /* slate */
-	--accent-11: rgb(240, 76, 154); /* magenta */
+	--accent-11: rgb(226, 76, 240); /* magenta */
 	--accent-12: rgb(52, 211, 153); /* forest */
 }
 

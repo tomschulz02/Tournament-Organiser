@@ -19,17 +19,20 @@ import {
 	getCourtName,
 	getDayBounds,
 	getDayEntries,
+	getEntryDayPlacement,
 	getEntryDivisionStyle,
 	getEntryLabel,
 	getEntryOfficials,
-	getEntryRowPlacement,
 	getEntrySecondary,
 	getSlotMinutes,
 	getUnscheduledFixtures,
 	isTimeRangeValid,
+	minutesToTime,
 	pruneStalePrintLayout,
 	removeScheduleEntry,
 	serialiseScheduleForSave,
+	SNAP_MINUTES,
+	snapToIncrement,
 	sortScheduleEntries,
 	timeToMinutes,
 	upsertScheduleEntry,
@@ -86,10 +89,10 @@ function getDefaultViewMode() {
 	return window.innerWidth <= 768 ? 'list' : 'grid';
 }
 
-function getFixtureDivisionStyle(fixture) {
+function getFixtureDivisionStyle(fixture, divisions = []) {
 	if (!fixture || fixture.divisionName == null) return undefined;
 
-	return divisionColorStyle(fixture.division_id);
+	return divisionColorStyle(fixture.division_id, divisions);
 }
 
 function getSlotKey(day, courtId, startTime) {
@@ -216,6 +219,10 @@ export default function ScheduleMakerModal({
 		dailyStartTime: initialSchedule.settings.dayStartTime,
 		dailyEndTime: initialSchedule.settings.dayEndTime,
 		fixtureDurationMinutes: initialSchedule.settings.slotMinutes,
+		// The gap a team is guaranteed between two matches on one day, in minutes.
+		// Its own value rather than a multiple of the match length: matching the
+		// duration is only the default, not the definition. See docs/schedule.md.
+		restMinutes: initialSchedule.settings.slotMinutes,
 		// Off by default: generation preserves whatever officials were typed and
 		// assigns nothing. On, it assigns one team per match after placement.
 		assignOfficials: false,
@@ -342,7 +349,7 @@ export default function ScheduleMakerModal({
 			type: 'replace',
 			payload: {
 				...nextSchedule,
-				entries: sortScheduleEntries(nextSchedule.entries),
+				entries: sortScheduleEntries(nextSchedule.entries, nextSchedule),
 			},
 		});
 		markDirty();
@@ -602,6 +609,32 @@ export default function ScheduleMakerModal({
 		showMessage(`Moved to ${candidate.startTime} on ${getCourtName(schedule, candidate.courtId)}.`, 'success');
 	};
 
+	// Dragging an entry's own edge changes one of its times and nothing else. The
+	// validation is the same call every other edit makes — this is a new gesture
+	// over an existing path, not a new rule. A drag that lands back where it
+	// started is not an edit and is dropped before it can mark the schedule dirty.
+	const handleResizeEntry = (entryId, startTime, endTime) => {
+		const entry = schedule.entries.find((item) => item.id === entryId);
+		if (!entry) return;
+		if (entry.startTime === startTime && entry.endTime === endTime) return;
+
+		const candidate = { ...entry, startTime, endTime };
+
+		const validationError = validateScheduleEntry(schedule, candidate, entry.id);
+		if (validationError) {
+			showMessage(validationError, 'error');
+			return;
+		}
+
+		dispatch({ type: 'upsertEntry', payload: candidate });
+		// The inspector may be open on this very entry. Its form is a copy, so
+		// without this the next Save Changes would write the old times back over
+		// the resize.
+		setEntryForm((current) => (current && current.id === entryId ? { ...current, startTime, endTime } : current));
+		markDirty();
+		showMessage(`Now ${startTime} - ${endTime}.`, 'success');
+	};
+
 	const handleDropOnSlot = (event, day, courtId, startTime) => {
 		event.preventDefault();
 		const payload = readDragPayload(event);
@@ -636,8 +669,13 @@ export default function ScheduleMakerModal({
 		setMobilePanel('board');
 	};
 
-	const handleOpenSlotPicker = (day, courtId, startTime) => {
-		const draft = createSlotDraft(day, courtId, startTime, schedule.settings.slotMinutes);
+	// A tapped cell says only where, so the draft is one grid row long — that is
+	// all a tap can mean. A drag on the board says how long as well and passes its
+	// own end. Both arrive at the same picker and the same assignment path.
+	const handleOpenSlotPicker = (day, courtId, startTime, endTime = '') => {
+		const draft = endTime
+			? { day, courtId, startTime, endTime }
+			: createSlotDraft(day, courtId, startTime, schedule.settings.slotMinutes);
 
 		// A fixture is waiting for somewhere to go, so this tap is the answer to
 		// that rather than a request to open the picker. Same function the
@@ -695,10 +733,12 @@ export default function ScheduleMakerModal({
 		markDirty();
 	};
 
-	// Day settings can be edited on their own, not only as a side effect of
-	// automatic generation. The panel writes to schedule.settings, which is the
-	// grid's axis, so changing the slot length or hours after entries exist can
-	// leave some off a boundary — that is visible on the grid and is allowed.
+	// Day settings can be edited on their own, and are no longer a side effect of
+	// automatic generation — the generator stopped writing slotMinutes on
+	// 2026-09-10, so a grid chosen here survives a regeneration. The panel writes
+	// to schedule.settings, which is the grid's axis alone; changing the slot
+	// length re-rules the board and moves nothing, because an entry is drawn from
+	// its own times rather than from the rows.
 	const handleOpenSettings = () => {
 		setSettingsDraft({
 			dayStartTime: schedule.settings.dayStartTime,
@@ -859,6 +899,11 @@ export default function ScheduleMakerModal({
 			dailyStartTime: generatorDraft.dailyStartTime,
 			dailyEndTime: generatorDraft.dailyEndTime,
 			fixtureDurationMinutes: Number(generatorDraft.fixtureDurationMinutes),
+			// Passed raw, not through Number(): an emptied field is Number('') === 0,
+			// and a silent "no rest at all" is not what clearing a box means. The
+			// generator falls back to the fixture duration for anything it cannot
+			// read, which is the rest this generator has always given.
+			restMinutes: generatorDraft.restMinutes,
 			assignOfficials: generatorDraft.assignOfficials,
 		});
 
@@ -910,6 +955,7 @@ export default function ScheduleMakerModal({
 				fixturesById,
 				tournamentName,
 				tournamentId: tournament?.id,
+				divisions: divisionList,
 				type,
 				layout: schedule.print?.[type] ?? null,
 			});
@@ -1189,7 +1235,7 @@ export default function ScheduleMakerModal({
 											draggable
 											aria-pressed={pendingFixtureId === fixture.id}
 											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
-											style={getFixtureDivisionStyle(fixture)}
+											style={getFixtureDivisionStyle(fixture, divisionList)}
 											onDragStart={(event) => {
 												// effectAllowed has to be set explicitly here, or Chrome can
 												// drop the payload set below somewhere between dragstart and
@@ -1283,6 +1329,7 @@ export default function ScheduleMakerModal({
 								onOpenCourtConfig={handleOpenCourtConfig}
 								onDropOnSlot={handleDropOnSlot}
 								onDragEntry={setDraggingEntryId}
+								onResizeEntry={handleResizeEntry}
 								divisions={divisionList}
 								highlightEntryIds={highlightEntryIds}
 							/>
@@ -1291,6 +1338,7 @@ export default function ScheduleMakerModal({
 								schedule={schedule}
 								activeDay={activeDay}
 								fixturesById={fixturesById}
+								divisions={divisionList}
 								onSelectEntry={openEntryEditor}
 							/>
 						)}
@@ -1321,6 +1369,7 @@ export default function ScheduleMakerModal({
 								draft={slotDraft}
 								schedule={schedule}
 								fixtures={filteredUnscheduledFixtures}
+								divisions={divisionList}
 								onAssign={(fixture) => handleAssignFixtureToSlot(fixture, slotDraft)}
 								onBack={handleBackToOverview}
 							/>
@@ -1363,9 +1412,10 @@ export default function ScheduleMakerModal({
 
 // Where one entry sits on the grid, and whether it can be drawn there at all.
 //
-// The row arithmetic is getEntryRowPlacement's, in minutes against the fixed
-// axis. It used to look the entry's times up in the row list, which only worked
-// because the row list had been built from those same times.
+// The arithmetic is getEntryDayPlacement's: minutes from the start of the day
+// against the fixed axis, not rows. The block is drawn at the entry's own start
+// and its own length, so a 25-minute match on a 60-minute grid is a quarter-row
+// block rather than a full row marked approximate.
 //
 // Two things stop an entry being drawn, and each is a reason the organiser needs
 // to see rather than have quietly resolved:
@@ -1376,7 +1426,7 @@ export default function ScheduleMakerModal({
 //             reach it is what made the axis move under its own contents.
 // Either way it is listed beneath the grid.
 function locateEntry(entry, axis, courts) {
-	const placement = getEntryRowPlacement(entry, axis);
+	const placement = getEntryDayPlacement(entry, axis);
 	const courtIndex = entry.courtId === null ? null : courts.findIndex((court) => court.id === entry.courtId);
 	const reason = !placement.inDay ? 'hours' : courtIndex === -1 ? 'court' : null;
 
@@ -1387,6 +1437,107 @@ function locateEntry(entry, axis, courts) {
 		placeable: reason === null,
 		reason,
 	};
+}
+
+// The board's axis in pixels. One grid row is GRID_ROW_HEIGHT tall and the rows
+// sit flush against one another, so a minute is a fixed number of pixels and an
+// entry can be drawn at its own start for its own length. The row track is set
+// from this constant below, so it is the one place the number lives; the 1px is
+// the padding schedule-maker.css gives .schedule-grid-cells, which the pointer
+// arithmetic has to step over because it measures from the element's own edge.
+//
+// Row lines used to be a 1px gap between the tracks. They are a border on the
+// cells now: a gap makes the pixel position of a minute depend on how many row
+// boundaries precede it, so every entry drifts further from the time column the
+// later in the day it starts.
+const GRID_ROW_HEIGHT = 84;
+const GRID_EDGE_PADDING = 1;
+
+// A block shorter than this cannot hold its own subtitle and officials line, so
+// they are dropped rather than clipped mid-word. Two lines of text plus padding.
+const COMPACT_ENTRY_HEIGHT = 62;
+
+// How far the pointer must travel before a press becomes a drag rather than the
+// tap that opens the slot picker or the click that opens the inspector.
+const DRAG_THRESHOLD_PX = 4;
+
+// Auto-scrolling the board while a drag is in progress.
+//
+// Without it the board has a hard ceiling: a 09:00-17:00 day on a 30-minute grid
+// is sixteen rows at GRID_ROW_HEIGHT, taller than the panel it is read in, so
+// anything past the bottom of the window cannot be dragged to at all — not to
+// create, not to resize, and not to move an entry to.
+//
+// EDGE_PX is how deep the band at each edge is, and MAX_PX_PER_FRAME the speed
+// at the very edge of it; between the two the speed ramps, so a pointer resting
+// just inside the band creeps and one held against the edge travels. IDLE_MS
+// stops the loop when the events feeding it dry up, which is the only reliable
+// end for an HTML5 drag: a drop outside the board fires nothing here.
+const AUTO_SCROLL_EDGE_PX = 56;
+const AUTO_SCROLL_MAX_PX_PER_FRAME = 20;
+const AUTO_SCROLL_IDLE_MS = 250;
+
+// Pixels to scroll this frame on one axis, given where the pointer is against
+// that axis's two edges. Negative is towards the start. Pure, and the same
+// function for both axes and both kinds of drag.
+function edgeScrollVelocity(position, min, max) {
+	const fromStart = position - min;
+	const fromEnd = max - position;
+
+	if (fromStart < AUTO_SCROLL_EDGE_PX) {
+		const depth = Math.min(1, (AUTO_SCROLL_EDGE_PX - fromStart) / AUTO_SCROLL_EDGE_PX);
+		return -Math.ceil(depth * AUTO_SCROLL_MAX_PX_PER_FRAME);
+	}
+
+	if (fromEnd < AUTO_SCROLL_EDGE_PX) {
+		const depth = Math.min(1, (AUTO_SCROLL_EDGE_PX - fromEnd) / AUTO_SCROLL_EDGE_PX);
+		return Math.ceil(depth * AUTO_SCROLL_MAX_PX_PER_FRAME);
+	}
+
+	return 0;
+}
+
+// Where a running gesture puts its two ends given the minute the pointer is now
+// over. Pure, so the rule is readable on its own and the listener above stays
+// about pointers.
+//
+// A create is anchored at the row it began on and grows in whichever direction
+// the pointer went; a resize holds the edge that was not grabbed. Both keep at
+// least one snap increment, because a zero-length entry is not a thing the
+// organiser can have meant and the validator would refuse it anyway.
+function advanceGesture(gesture, pointerMinutes, { axisMinutes, snapMinutes }) {
+	if (gesture.kind === 'resize') {
+		if (gesture.edge === 'start') {
+			const startOffset = Math.max(0, Math.min(gesture.endOffset - snapMinutes, pointerMinutes));
+			return { ...gesture, startOffset };
+		}
+
+		const endOffset = Math.min(axisMinutes, Math.max(gesture.startOffset + snapMinutes, pointerMinutes));
+		return { ...gesture, endOffset };
+	}
+
+	let startOffset = Math.min(gesture.anchor, pointerMinutes);
+	let endOffset = Math.max(gesture.anchor, pointerMinutes);
+
+	if (endOffset - startOffset < snapMinutes) {
+		if (pointerMinutes < gesture.anchor) {
+			startOffset = endOffset - snapMinutes;
+		} else {
+			endOffset = startOffset + snapMinutes;
+		}
+	}
+
+	if (startOffset < 0) {
+		startOffset = 0;
+		endOffset = Math.max(endOffset, snapMinutes);
+	}
+
+	if (endOffset > axisMinutes) {
+		endOffset = axisMinutes;
+		startOffset = Math.min(startOffset, axisMinutes - snapMinutes);
+	}
+
+	return { ...gesture, startOffset, endOffset };
 }
 
 const UNPLACEABLE_REASONS = {
@@ -1405,14 +1556,19 @@ function ScheduleGridView({
 	onOpenCourtConfig,
 	onDropOnSlot,
 	onDragEntry,
+	onResizeEntry,
 	divisions,
 	highlightEntryIds = [],
 }) {
 	// The axis is a function of the settings alone. Nothing an entry does can
 	// change how many rows there are, where they start, or how long each one is.
+	// What has changed is that an entry is no longer drawn ON the rows: they rule
+	// the board so that a time can be read off it, and the entry is drawn at its
+	// own time over the top of them.
 	const dayBounds = getDayBounds(schedule);
 	const timeSlots = buildGridRowTimes(schedule, dayBounds);
 	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: timeSlots.length };
+	const axisMinutes = axis.rowCount * axis.slotMinutes;
 	const dayEntries = getDayEntries(schedule, activeDay);
 	// A disabled day has no meaningful slots to drop a fixture on — same
 	// treatment as the generator's own skip, see docs/schedule.md.
@@ -1426,24 +1582,318 @@ function ScheduleGridView({
 	// ever be moved somewhere it does not already overlap.
 	const dropBlockedSlots = new Set();
 
-	// Walked from the same rowStart and rowSpan the entry is drawn with, so a cell
-	// that looks occupied is occupied. A snapped entry covers the whole of every
-	// row it overlaps, which is what its block covers too.
-	placedEntries.forEach(({ entry, rowStart, rowSpan }) => {
+	// A cell is occupied when an entry overlaps the minutes that cell covers,
+	// which is a different question from where the entry is drawn now that the
+	// two have come apart. A 25-minute match starting at 09:10 fills no whole row
+	// on an hourly grid and still leaves nowhere to drop anything in the 09:00
+	// one.
+	//
+	// The cells stay the drop target for a moved entry and the tap target for the
+	// slot picker, and they stay whole rows, because a whole row is what a tap can
+	// mean. Saying "09:10 to 09:35 exactly" is what the drag below is for.
+	placedEntries.forEach(({ entry, startOffset, endOffset }) => {
 		if (entry.courtId === null) {
 			return;
 		}
 
-		for (let offset = 0; offset < rowSpan; offset += 1) {
-			const slot = timeSlots[rowStart - 1 + offset];
-			if (slot) {
-				occupiedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
-				if (entry.id !== draggingEntryId) {
-					dropBlockedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
-				}
+		timeSlots.forEach((slot, rowIndex) => {
+			const rowStart = rowIndex * axis.slotMinutes;
+			if (startOffset >= rowStart + axis.slotMinutes || endOffset <= rowStart) return;
+
+			occupiedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
+			if (entry.id !== draggingEntryId) {
+				dropBlockedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
 			}
-		}
+		});
 	});
+
+	// --- the drag gestures ---------------------------------------------------
+	//
+	// Dragging out a range on an empty column creates an entry of exactly that
+	// length; dragging a placed entry's edge changes that one time. Neither is
+	// new data or a new rule: a create ends in the same slot picker a tap opens,
+	// and a resize ends in the same validate-then-upsert as every other edit.
+	//
+	// Mouse and pen only. A touch drag on this board is a scroll — the grid is
+	// taller than the screen it is read on — and taking it would cost a phone the
+	// only way it has of moving around the day. Tap-to-place and the entry
+	// editor's own time fields already reach everything the drags reach.
+	const dayStartMinutes = timeToMinutes(axis.start);
+	const cellsRef = useRef(null);
+	const gestureRef = useRef(null);
+	const suppressClickRef = useRef(false);
+	const commitRef = useRef(null);
+	const axisRef = useRef(null);
+	const scrollerRef = useRef(null);
+	const autoScrollRef = useRef(null);
+	const applyPointerRef = useRef(null);
+	// Set once by the auto-scroll effect below and called from four places: the
+	// pointer listener, the board's dragover, and the two ends of a drag. Refs
+	// rather than functions off the render, because the pointer listener is
+	// subscribed once per gesture and the frame loop outlives every render.
+	const trackAutoScrollRef = useRef(null);
+	const stopAutoScrollRef = useRef(null);
+	const [gesture, setGesture] = useState(null);
+	const gestureActive = gesture !== null;
+
+	// Read by the window listeners, which subscribe once per gesture and so
+	// cannot close over anything that changes between renders. Written on every
+	// render rather than against a dependency list — getting that list wrong here
+	// is a gesture that silently measures against the previous render's axis.
+	useEffect(() => {
+		axisRef.current = { slotMinutes: axis.slotMinutes, axisMinutes, snapMinutes: SNAP_MINUTES };
+	});
+
+	// Where the pointer is, in minutes on the axis, snapped and clamped. Reads the
+	// refs rather than taking the axis as an argument, because both callers — the
+	// window listener and the auto-scroll frame — outlive the render they were
+	// created in.
+	const readPointerMinutes = (clientY) => {
+		const node = cellsRef.current;
+		const current = axisRef.current;
+		if (!node || !current) return 0;
+
+		const rect = node.getBoundingClientRect();
+		const rows = (clientY - rect.top - GRID_EDGE_PADDING) / GRID_ROW_HEIGHT;
+		const minutes = snapToIncrement(rows * current.slotMinutes, current.snapMinutes);
+
+		return Math.min(Math.max(minutes, 0), current.axisMinutes);
+	};
+
+	// Advance the running gesture to wherever the pointer now is. Called on every
+	// pointermove, and again on every auto-scroll frame — the pointer has not
+	// moved then, but the board has moved under it, so the same clientY is a
+	// different minute and re-reading it is the whole point.
+	useEffect(() => {
+		applyPointerRef.current = (clientY, moved) => {
+			const running = gestureRef.current;
+			const current = axisRef.current;
+			if (!running || !current) return;
+
+			const next = advanceGesture(running, readPointerMinutes(clientY), current);
+			next.moved = running.moved || moved;
+
+			gestureRef.current = next;
+			setGesture(next);
+		};
+	});
+
+	// One frame of auto-scroll, rescheduling itself until the drag feeding it
+	// stops. Everything it needs is on a ref, so the loop survives the renders
+	// each frame causes.
+	useEffect(() => {
+		const stop = () => {
+			const running = autoScrollRef.current;
+			if (!running) return;
+
+			cancelAnimationFrame(running.frame);
+			autoScrollRef.current = null;
+		};
+
+		const step = () => {
+			const running = autoScrollRef.current;
+			const node = scrollerRef.current;
+
+			if (!running || !node || performance.now() > running.until) {
+				stop();
+				return;
+			}
+
+			const rect = node.getBoundingClientRect();
+			const down = edgeScrollVelocity(running.clientY, rect.top, rect.bottom);
+			// Sideways only for a drag that can change court — a create or a resize
+			// stays in the column it began in, and scrolling it out of view would
+			// leave the organiser dragging something they cannot see.
+			const across = running.horizontal ? edgeScrollVelocity(running.clientX, rect.left, rect.right) : 0;
+
+			if (down) node.scrollTop += down;
+			if (across) node.scrollLeft += across;
+			if (down && running.trackGesture) applyPointerRef.current?.(running.clientY, true);
+
+			running.frame = requestAnimationFrame(step);
+		};
+
+		autoScrollRef.current = null;
+		trackAutoScrollRef.current = ({ clientX, clientY, horizontal, trackGesture }) => {
+			const running = autoScrollRef.current;
+			// A pointer held still at the edge fires no further pointermove, so a
+			// gesture drag would stop scrolling the moment the organiser stopped
+			// moving — the opposite of what holding at the edge means. It ends on
+			// pointerup instead, which always comes. An HTML5 drag has no such end
+			// to rely on (a drop outside the board tells this component nothing) but
+			// does fire dragover continuously even while stationary, so the idle
+			// timeout is both safe and necessary there.
+			const until = trackGesture ? Infinity : performance.now() + AUTO_SCROLL_IDLE_MS;
+
+			if (running) {
+				Object.assign(running, { clientX, clientY, horizontal, trackGesture, until });
+				return;
+			}
+
+			autoScrollRef.current = { clientX, clientY, horizontal, trackGesture, until, frame: 0 };
+			autoScrollRef.current.frame = requestAnimationFrame(step);
+		};
+		stopAutoScrollRef.current = stop;
+
+		return stop;
+	}, []);
+
+	useEffect(() => {
+		commitRef.current = (finished) => {
+			if (!finished.moved) return;
+
+			const startTime = minutesToTime(dayStartMinutes + finished.startOffset);
+			const endTime = minutesToTime(dayStartMinutes + finished.endOffset);
+
+			if (finished.kind === 'create') {
+				onOpenSlot(activeDay, finished.courtId, startTime, endTime);
+				return;
+			}
+
+			onResizeEntry(finished.entryId, startTime, endTime);
+		};
+	});
+
+	useEffect(() => {
+		if (!gestureActive) return undefined;
+
+		const onPointerMove = (event) => {
+			const running = gestureRef.current;
+			if (!running) return;
+
+			applyPointerRef.current?.(event.clientY, Math.abs(event.clientY - running.originY) > DRAG_THRESHOLD_PX);
+			trackAutoScrollRef.current?.({
+				clientX: event.clientX,
+				clientY: event.clientY,
+				horizontal: false,
+				trackGesture: true,
+			});
+		};
+
+		const onPointerEnd = () => {
+			stopAutoScrollRef.current?.();
+
+			const finished = gestureRef.current;
+			gestureRef.current = null;
+			setGesture(null);
+			if (!finished) return;
+
+			commitRef.current?.(finished);
+
+			// The click that follows this pointerup would otherwise open the slot
+			// picker or the inspector on top of whatever the drag just did. Cleared
+			// on the next task, which is after that click has been dispatched.
+			if (finished.moved) {
+				suppressClickRef.current = true;
+				window.setTimeout(() => {
+					suppressClickRef.current = false;
+				}, 0);
+			}
+		};
+
+		// Abandon without committing. Escape is the organiser saying so;
+		// pointercancel is the browser saying so, which on touch means it has
+		// decided the contact belongs to a scroll or a system gesture — writing an
+		// edit off the back of that would be writing one nobody asked for.
+		const abandon = () => {
+			stopAutoScrollRef.current?.();
+			gestureRef.current = null;
+			setGesture(null);
+		};
+
+		const onKeyDown = (event) => {
+			if (event.key !== 'Escape') return;
+			abandon();
+		};
+
+		window.addEventListener('pointermove', onPointerMove);
+		window.addEventListener('pointerup', onPointerEnd);
+		window.addEventListener('pointercancel', abandon);
+		window.addEventListener('keydown', onKeyDown, true);
+
+		return () => {
+			window.removeEventListener('pointermove', onPointerMove);
+			window.removeEventListener('pointerup', onPointerEnd);
+			window.removeEventListener('pointercancel', abandon);
+			window.removeEventListener('keydown', onKeyDown, true);
+		};
+	}, [gestureActive]);
+
+	const beginGesture = (event, next) => {
+		if (!canEdit || !isActiveDayEnabled) return;
+		if (event.button !== 0) return;
+
+		// A touch drag on an empty cell is a scroll, and taking it would cost a
+		// phone the only way it has of moving around the day — so drag-create stays
+		// mouse and pen. A resize handle is a 10px strip that scrolls nothing worth
+		// keeping, and the stylesheet gives it touch-action: none so the browser
+		// hands the gesture over instead of panning; without that pair the finger
+		// would scroll the board and the handle would never see the move.
+		if (event.pointerType === 'touch' && next.kind !== 'resize') return;
+
+		// Stops the press becoming a text selection. Deliberately not
+		// stopPropagation as well: React dispatches from the root, so stopping here
+		// would also hide the press from the document-level listener that closes
+		// the toolbar's overflow menu. The entry's own HTML5 drag-to-move is kept
+		// out of the way by the guard in its onDragStart instead.
+		event.preventDefault();
+
+		const started = { ...next, moved: false, originY: event.clientY };
+		gestureRef.current = started;
+		setGesture(started);
+	};
+
+	// Anchored to the top of the row pressed rather than to the pointer, so a
+	// press near the bottom of a row still drags a range out from the time that
+	// row is labelled with.
+	const beginCreate = (event, courtId, rowIndex) => {
+		const anchor = rowIndex * axis.slotMinutes;
+
+		beginGesture(event, {
+			kind: 'create',
+			courtId,
+			anchor,
+			startOffset: anchor,
+			endOffset: Math.min(anchor + SNAP_MINUTES, axisMinutes),
+		});
+	};
+
+	const beginResize = (event, item, edge) => {
+		beginGesture(event, {
+			kind: 'resize',
+			entryId: item.entry.id,
+			edge,
+			startOffset: item.startOffset,
+			endOffset: item.endOffset,
+		});
+	};
+
+	// An entry moved with HTML5 drag-and-drop, or a fixture dragged in from the
+	// sidebar, produces dragover and nothing else — no pointer events reach here
+	// at all — so the auto-scroll it needs has to be fed from its own stream.
+	//
+	// Deliberately no preventDefault: that is what marks a drop target, and the
+	// board as a whole is not one. The cells decide that for themselves.
+	//
+	// Sideways as well as down, because this is the one drag that can change
+	// court, and a tournament with more courts than fit scrolls horizontally.
+	const handleBoardDragOver = (event) => {
+		if (!canEdit || !isActiveDayEnabled) return;
+
+		trackAutoScrollRef.current?.({
+			clientX: event.clientX,
+			clientY: event.clientY,
+			horizontal: true,
+			trackGesture: false,
+		});
+	};
+
+	// True when a click is the organiser's own and not the tail of a drag.
+	const takeClick = () => !suppressClickRef.current;
+
+	const topFor = (startOffset) => (startOffset / axis.slotMinutes) * GRID_ROW_HEIGHT;
+	const heightFor = (startOffset, endOffset) => ((endOffset - startOffset) / axis.slotMinutes) * GRID_ROW_HEIGHT;
+	const resizingEntryId = gesture?.kind === 'resize' ? gesture.entryId : null;
 
 	if (schedule.courts.length === 0) {
 		return (
@@ -1460,11 +1910,17 @@ function ScheduleGridView({
 	const gridColumns = `72px repeat(${schedule.courts.length}, minmax(160px, 1fr))`;
 
 	return (
-		<div className="schedule-grid-shell">
+		<div className={`schedule-grid-shell${gestureActive ? ' is-dragging' : ''}`}>
 			{/* The header lives inside the scrolling body deliberately. Sticky
 			    positions against the nearest scrollport, so a header outside it
 			    could not stay aligned with the columns underneath it. */}
-			<div className="schedule-grid-body">
+			<div
+				className="schedule-grid-body"
+				ref={scrollerRef}
+				onDragOver={handleBoardDragOver}
+				onDrop={() => stopAutoScrollRef.current?.()}
+				onDragEnd={() => stopAutoScrollRef.current?.()}
+				onDragLeave={() => stopAutoScrollRef.current?.()}>
 				<div className="schedule-grid-header" style={{ gridTemplateColumns: gridColumns }}>
 					<div className="schedule-grid-header-time">Time</div>
 					{schedule.courts.map((court) => {
@@ -1493,14 +1949,17 @@ function ScheduleGridView({
 				</div>
 
 				<div
+					ref={cellsRef}
 					className="schedule-grid-cells"
 					style={{
 						gridTemplateColumns: gridColumns,
-						// Every row is the same span, so every row is the same height.
-						// minmax(84px, auto) let a row grow to its content, which drew
-						// rows of unequal length at unequal heights and made the time
-						// column impossible to count down.
-						gridTemplateRows: `repeat(${timeSlots.length}, minmax(84px, auto))`,
+						// A fixed height, not minmax(84px, auto). Every row is the same
+						// span, so every row is the same height; a row that grew to its
+						// content drew rows of unequal length at unequal heights and made
+						// the time column impossible to count down. It is also the pixel
+						// the entry positions below are measured in, so it cannot be a
+						// number only the browser knows.
+						gridTemplateRows: `repeat(${timeSlots.length}, ${GRID_ROW_HEIGHT}px)`,
 					}}>
 					{timeSlots.map((time, rowIndex) => (
 						<React.Fragment key={time}>
@@ -1514,7 +1973,10 @@ function ScheduleGridView({
 									<div
 										key={slotKey}
 										className={`schedule-grid-cell ${isOccupied ? 'occupied' : 'open'}`}
-										onClick={() => !isOccupied && canEdit && isActiveDayEnabled && onOpenSlot(activeDay, court.id, time)}
+										onClick={() =>
+											takeClick() && !isOccupied && canEdit && isActiveDayEnabled && onOpenSlot(activeDay, court.id, time)
+										}
+										onPointerDown={(event) => !isOccupied && beginCreate(event, court.id, rowIndex)}
 										onDragOver={(event) => acceptsDrop && event.preventDefault()}
 										onDrop={(event) => acceptsDrop && onDropOnSlot(event, activeDay, court.id, time)}
 										style={{ gridColumn: columnIndex + 2, gridRow: rowIndex + 1 }}
@@ -1524,44 +1986,116 @@ function ScheduleGridView({
 						</React.Fragment>
 					))}
 
-					{placedEntries.map(({ entry, rowStart, rowSpan, courtIndex, snapped }) => (
-						// Draggable and clickable at once: dragging moves the entry, clicking
-						// opens the inspector. The payload is the entry id rather than the
-						// fixture id, which is how the cell tells a move from a placement.
-						<button
-							key={entry.id}
-							type="button"
-							data-entry-id={entry.id}
-							className={`schedule-grid-entry ${entry.type}${snapped ? ' snapped' : ''}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}`}
-							// An entry that does not sit on a slot boundary covers the rows
-							// that contain it. Its own times are on the block and unchanged;
-							// this says the block is wider than the entry rather than
-							// leaving the organiser to notice.
-							title={snapped ? `${entry.startTime} - ${entry.endTime}, shown across the slots it covers` : undefined}
-							draggable={canEdit}
-							onDragStart={(event) => {
-								// See the matching comment on the fixture pill's onDragStart:
-								// effectAllowed has to be set explicitly or the payload below can
-								// silently fail to survive to drop in Chrome.
-								event.dataTransfer.effectAllowed = 'move';
-								event.dataTransfer.setData('text/plain', `${ENTRY_DRAG}${entry.id}`);
-								onDragEntry(entry.id);
-							}}
-							onDragEnd={() => onDragEntry(null)}
+					{placedEntries.map((item) => {
+						const { entry, courtIndex } = item;
+						// Mid-resize the block follows the pointer while the stored entry is
+						// still the old one — the write happens once, on pointerup, through
+						// the validator. Until then this is a preview and nothing more.
+						const preview = resizingEntryId === entry.id ? gesture : item;
+						const height = heightFor(preview.startOffset, preview.endOffset);
+
+						return (
+							// Draggable and clickable at once: dragging moves the entry, clicking
+							// opens the inspector. The payload is the entry id rather than the
+							// fixture id, which is how the cell tells a move from a placement.
+							<button
+								key={entry.id}
+								type="button"
+								data-entry-id={entry.id}
+								className={`schedule-grid-entry ${entry.type}${height < COMPACT_ENTRY_HEIGHT ? ' compact' : ''}${
+									resizingEntryId === entry.id ? ' resizing' : ''
+								}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}`}
+								draggable={canEdit}
+								onDragStart={(event) => {
+									// A resize begins with a press on the entry's own edge, and the
+									// entry is draggable, so the browser will offer to drag it away
+									// as soon as the pointer moves. Refusing here is what keeps the
+									// two gestures apart.
+									if (gestureRef.current) {
+										event.preventDefault();
+										return;
+									}
+
+									// See the matching comment on the fixture pill's onDragStart:
+									// effectAllowed has to be set explicitly or the payload below can
+									// silently fail to survive to drop in Chrome.
+									event.dataTransfer.effectAllowed = 'move';
+									event.dataTransfer.setData('text/plain', `${ENTRY_DRAG}${entry.id}`);
+									onDragEntry(entry.id);
+								}}
+								onDragEnd={() => onDragEntry(null)}
+								style={{
+									// BOTH column lines, always. An absolutely positioned grid child
+									// is not a grid item, and `auto` as its end line means the grid
+									// container's padding edge rather than "span one track" — so a
+									// bare `${courtIndex + 2}` placed the block on the right court
+									// and then let it run to the right-hand edge of the board, across
+									// every court after it. Rows never showed the fault because they
+									// have always named both lines.
+									gridColumn:
+										entry.courtId === null
+											? `2 / span ${schedule.courts.length}`
+											: `${courtIndex + 2} / span 1`,
+									// Every row at once, so the block's containing box is the whole
+									// column and top/height below can be its real time rather than a
+									// count of rows.
+									gridRow: '1 / -1',
+									top: `${topFor(preview.startOffset)}px`,
+									height: `${height}px`,
+									...getEntryDivisionStyle(entry, fixturesById, divisions),
+								}}
+								onClick={() => takeClick() && onSelectEntry(entry)}>
+								{/* Read off the offsets rather than the stored times, so that the
+								    times shown mid-resize are the ones the drag is about to
+								    write. Off a gesture the two are the same value. */}
+								<div className="schedule-grid-entry-time">
+									{minutesToTime(dayStartMinutes + preview.startOffset)} -{' '}
+									{minutesToTime(dayStartMinutes + preview.endOffset)}
+								</div>
+								<div className="schedule-grid-entry-title">{getEntryLabel(entry, fixturesById)}</div>
+								<div className="schedule-grid-entry-subtitle">{getEntrySecondary(entry, fixturesById)}</div>
+								{getEntryOfficials(entry) && <div className='schedule-grid-entry-officials'>{getEntryOfficials(entry)}</div>}
+								{canEdit && isActiveDayEnabled && (
+									<>
+										{/* Not focusable and not labelled: dragging an edge is a
+										    mouse affordance, and the keyboard route to the same
+										    change is the entry editor's own time fields, which
+										    every entry already opens into. */}
+										<span
+											aria-hidden="true"
+											className="schedule-grid-entry-handle top"
+											onPointerDown={(event) => beginResize(event, item, 'start')}
+										/>
+										<span
+											aria-hidden="true"
+											className="schedule-grid-entry-handle bottom"
+											onPointerDown={(event) => beginResize(event, item, 'end')}
+										/>
+									</>
+								)}
+							</button>
+						);
+					})}
+
+					{/* The range being dragged out on an empty column, before it is
+					    anything. It is drawn with the same arithmetic as a real block, so
+					    what is released is what was shown. */}
+					{gesture?.kind === 'create' && gesture.moved && (
+						<div
+							className="schedule-grid-draft"
 							style={{
-								gridColumn: entry.courtId === null ? `2 / span ${schedule.courts.length}` : `${courtIndex + 2}`,
-								gridRow: `${rowStart} / span ${rowSpan}`,
-								...getEntryDivisionStyle(entry, fixturesById),
-							}}
-							onClick={() => onSelectEntry(entry)}>
-							<div className="schedule-grid-entry-time">
-								{entry.startTime} - {entry.endTime}
-							</div>
-							<div className="schedule-grid-entry-title">{getEntryLabel(entry, fixturesById)}</div>
-							<div className="schedule-grid-entry-subtitle">{getEntrySecondary(entry, fixturesById)}</div>
-							{getEntryOfficials(entry) && <div className='schedule-grid-entry-officials'>{getEntryOfficials(entry)}</div>}
-						</button>
-					))}
+								// Both lines, for the reason on the entry block above.
+								gridColumn: `${schedule.courts.findIndex((court) => court.id === gesture.courtId) + 2} / span 1`,
+								gridRow: '1 / -1',
+								top: `${topFor(gesture.startOffset)}px`,
+								height: `${heightFor(gesture.startOffset, gesture.endOffset)}px`,
+							}}>
+							<span>
+								{minutesToTime(dayStartMinutes + gesture.startOffset)} -{' '}
+								{minutesToTime(dayStartMinutes + gesture.endOffset)}
+							</span>
+						</div>
+					)}
 				</div>
 			</div>
 
@@ -1579,7 +2113,7 @@ function ScheduleGridView({
 								key={entry.id}
 								type="button"
 								className="schedule-fixture-pill"
-								style={getEntryDivisionStyle(entry, fixturesById)}
+								style={getEntryDivisionStyle(entry, fixturesById, divisions)}
 								onClick={() => onSelectEntry(entry)}>
 								<strong>{getEntryLabel(entry, fixturesById)}</strong>
 								<small>
@@ -1595,7 +2129,7 @@ function ScheduleGridView({
 	);
 }
 
-function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) {
+function ScheduleListView({ schedule, activeDay, fixturesById, divisions = [], onSelectEntry }) {
 	const dayEntries = getDayEntries(schedule, activeDay);
 
 	if (dayEntries.length === 0) {
@@ -1614,7 +2148,7 @@ function ScheduleListView({ schedule, activeDay, fixturesById, onSelectEntry }) 
 					key={entry.id}
 					type="button"
 					className={`schedule-list-entry ${entry.type}`}
-					style={getEntryDivisionStyle(entry, fixturesById)}
+					style={getEntryDivisionStyle(entry, fixturesById, divisions)}
 					onClick={() => onSelectEntry(entry)}>
 					<div className="schedule-list-time">
 						{entry.startTime} - {entry.endTime}
@@ -1728,7 +2262,7 @@ function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange
 	);
 }
 
-function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign, onBack }) {
+function SlotAssignmentPanel({ draft, schedule, fixtures, divisions = [], onAssign, onBack }) {
 	return (
 		<div className="schedule-panel">
 			<PanelBackButton onBack={onBack} />
@@ -1744,7 +2278,7 @@ function SlotAssignmentPanel({ draft, schedule, fixtures, onAssign, onBack }) {
 							key={fixture.id}
 							type="button"
 							className="schedule-fixture-pill"
-							style={getFixtureDivisionStyle(fixture)}
+							style={getFixtureDivisionStyle(fixture, divisions)}
 							onClick={() => onAssign(fixture)}>
 							<strong>{fixture.team1}</strong>
 							<span>vs</span>
@@ -1814,7 +2348,11 @@ function SettingsPanel({ draft, onChange, onSave, onBack }) {
 		<div className="schedule-panel">
 			<PanelBackButton onBack={onBack} />
 			<h3>Day Settings</h3>
-			<p>These set the grid every day is drawn on. Existing entries are not moved; any that no longer sit on a slot are shown across the slots they cover.</p>
+			<p>
+				These rule the grid every day is drawn on. They do not change any entry: a match is drawn at its own start
+				time for its own length, whether or not that lands on a line. Generating a schedule no longer changes them
+				either.
+			</p>
 			<div className="schedule-form-grid">
 				<label>
 					<span>Day Start</span>
@@ -1868,7 +2406,10 @@ function PrintLayoutPanel({ schedule, fixturesById, onChange, onPrint, onBack })
 				Page breaks are staged with the rest of your changes. Use <strong>Save Schedule</strong> to keep them.
 			</p>
 
-			<div className="schedule-print-types" role="group" aria-label="Schedule layout">
+			{/* is-on-light: this toggle sits on the inspector panel, not on the
+			    print route's --main-color toolbar, so it takes the app's normal
+			    polarity — selected is blue. See schedule-print.css. */}
+			<div className="schedule-print-types is-on-light" role="group" aria-label="Schedule layout">
 				{['grid', 'list'].map((option) => (
 					<button
 						key={option}
@@ -1993,6 +2534,17 @@ function GeneratorPanel({ draft, onChange, onGenerate, onBack }) {
 						value={draft.fixtureDurationMinutes}
 						onChange={(event) => onChange({ ...draft, fixtureDurationMinutes: event.target.value })}
 					/>
+				</label>
+				<label>
+					<span>Team Rest (min)</span>
+					<input
+						type="number"
+						min="0"
+						step="5"
+						value={draft.restMinutes}
+						onChange={(event) => onChange({ ...draft, restMinutes: event.target.value })}
+					/>
+					<small>The gap every team gets between two of its own matches on a day.</small>
 				</label>
 			</div>
 			<label className="schedule-generator-toggle">

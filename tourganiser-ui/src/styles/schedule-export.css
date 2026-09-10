@@ -132,13 +132,28 @@ body {
 
 .schedule-export-grid-cell {
 	display: grid;
+	gap: var(--space-2);
+	align-content: start;
+}
+
+/* One entry inside a cell. A cell can hold more than one now that a match is
+   not the same length as a row, so the division accent belongs to the entry
+   rather than to the cell around it.
+
+   Division colour, set inline from divisionColorStyle — the same accent the
+   live grid, the badge and every other division-coloured surface use. A real
+   border rather than a shadow: this is the printed page, and border colour
+   survives printing without needing print-color-adjust the way a background
+   fill would not. */
+.schedule-export-grid-entry {
+	display: grid;
 	gap: var(--space-1);
-	/* Division colour, set inline from divisionColorStyle — the same accent
-	   the live grid, the badge and every other division-coloured surface use.
-	   A real border rather than a shadow: this is the printed page, and
-	   border colour survives printing without needing print-color-adjust the
-	   way a background fill would not. */
 	border-left: 3px solid var(--tv-division-color, transparent);
+	padding-left: var(--space-2);
+}
+
+.schedule-export-grid-entry-time {
+	font-weight: 700;
 }
 
 .schedule-export-grid-cell span {

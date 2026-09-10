@@ -770,11 +770,21 @@ button.schedule-grid-header-court:hover {
 .schedule-grid-cells {
 	padding: 1px;
 	position: relative;
+	/* Columns are still separated by the container's background showing through a
+	   1px gap. Rows are not: an entry is positioned from its own start time in
+	   minutes, and a gap between every row makes the pixel position of a minute
+	   depend on how many row boundaries precede it — so a block drawn at 16:00
+	   would sit visibly below the 16:00 label at the end of a long day. The row
+	   lines are a border on the cells instead, which takes no height. */
+	column-gap: 1px;
+	row-gap: 0;
 }
 
 .schedule-grid-time,
 .schedule-grid-cell {
 	background: var(--schedule-surface);
+	border-top: 1px solid var(--schedule-border);
+	box-sizing: border-box;
 }
 
 .schedule-grid-time {
@@ -797,8 +807,17 @@ button.schedule-grid-header-court:hover {
 	cursor: default;
 }
 
+/* Positioned rather than laid out. The button is an absolutely positioned child
+   of .schedule-grid-cells with a definite grid column and grid-row: 1 / -1, so
+   its containing block is that column for the whole day and the inline top and
+   height are its own start time and its own length. Its margin used to be what
+   inset it inside a row; with top set explicitly a margin would push it off the
+   time it is meant to sit at, so the inset is left/right and nothing else. */
 .schedule-grid-entry {
-	margin: var(--space-1);
+	position: absolute;
+	left: var(--space-1);
+	right: var(--space-1);
+	box-sizing: border-box;
 	border: none;
 	/* Set inline per entry from divisionColorStyle, only in a multi-division
 	   tournament — the same colour the badge, the division selector and
@@ -825,13 +844,86 @@ button.schedule-grid-header-court:hover {
 	min-width: 0;
 }
 
-/* An entry whose times do not fall on slot boundaries is drawn across the slots
-   that contain it, so its block is wider than the entry it represents. The
-   dashed inset says so; the times on the block stay the entry's own. Outline
-   rather than a background, because .fixture and .break already own that. */
-.schedule-grid-entry.snapped {
-	outline: 2px dashed rgba(255, 255, 255, 0.55);
-	outline-offset: -5px;
+/* A short match has a short block. Its times are what it is for at that height,
+   so the two lines that will not fit are dropped rather than clipped mid-word,
+   and the padding and the corner radius come down to match. */
+.schedule-grid-entry.compact {
+	padding: var(--space-1) var(--space-2);
+	border-radius: 12px;
+	gap: 0;
+}
+
+.schedule-grid-entry.compact .schedule-grid-entry-subtitle,
+.schedule-grid-entry.compact .schedule-grid-entry-officials {
+	display: none;
+}
+
+.schedule-grid-entry.compact .schedule-grid-entry-time {
+	/* One line. On a narrow column a wrapped time takes the row the title needs,
+	   and the title is the half a reader is scanning for. */
+	white-space: nowrap;
+}
+
+.schedule-grid-entry.compact .schedule-grid-entry-title {
+	line-height: 1.15;
+}
+
+/* Lifted while its edge is being dragged, so the block being changed is the one
+   on top of whatever it is being dragged over. */
+.schedule-grid-entry.resizing {
+	z-index: calc(var(--z-raised) + 4);
+	box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
+}
+
+/* The grab strips on an entry's two edges. Deliberately taller than they look —
+   the visible cue is the cursor, and a 4px target is not one anybody can hit. */
+.schedule-grid-entry-handle {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 10px;
+	cursor: ns-resize;
+	/* The browser hands the gesture to the page instead of panning with it, which
+	   is what lets a finger resize an entry. Scoped to the strips themselves: the
+	   board still scrolls under a finger everywhere else, and that is the only way
+	   a phone has of moving around a day taller than its screen. */
+	touch-action: none;
+}
+
+.schedule-grid-entry-handle.top {
+	top: 0;
+}
+
+.schedule-grid-entry-handle.bottom {
+	bottom: 0;
+}
+
+/* The range being dragged out on an empty column. Drawn with the same
+   arithmetic as a real block so that what is released is what was shown. */
+.schedule-grid-draft {
+	position: absolute;
+	left: var(--space-1);
+	right: var(--space-1);
+	box-sizing: border-box;
+	border: 2px dashed var(--main-color, #4a90d9);
+	border-radius: 14px;
+	background: rgb(from var(--main-color, #4a90d9) r g b / 0.18);
+	display: grid;
+	align-content: start;
+	padding: var(--space-1) var(--space-2);
+	font-size: 0.78rem;
+	font-weight: 700;
+	color: var(--schedule-text);
+	overflow: hidden;
+	pointer-events: none;
+	z-index: calc(var(--z-raised) + 3);
+}
+
+/* A drag across the board would otherwise select the time column's labels on the
+   way past, which leaves the grid full of highlighted text when it ends. */
+.schedule-grid-shell.is-dragging,
+.schedule-grid-shell.is-dragging * {
+	user-select: none;
 }
 
 /* The entry the server named as breaking a rule on the last save. Pulses briefly
@@ -1109,6 +1201,14 @@ button.schedule-grid-header-court:hover {
 .schedule-form-grid label span {
 	font-size: 0.86rem;
 	font-weight: 600;
+	color: var(--schedule-muted);
+}
+
+/* A hint under a field, for the one or two inputs whose meaning is not obvious
+   from a two-word label. The label is a grid, so this is simply its third row. */
+.schedule-form-grid label small {
+	font-size: 0.78rem;
+	line-height: 1.35;
 	color: var(--schedule-muted);
 }
 

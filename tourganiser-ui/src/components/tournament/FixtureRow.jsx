@@ -15,7 +15,14 @@ import { divisionColorStyle } from '../../utils/divisionColors';
 //
 // `action` is the per-fixture organiser slot, supplied by View.jsx and empty for
 // everyone else.
-export default function FixtureRow({ fixture, showDivision = false, court = null, action = null, officials = '' }) {
+export default function FixtureRow({
+	fixture,
+	showDivision = false,
+	court = null,
+	action = null,
+	officials = '',
+	divisions = [],
+}) {
 	const status = (fixture.status || 'upcoming').toLowerCase();
 	const sets = setsWon(fixture.result);
 	const scores = setScores(fixture.result);
@@ -29,7 +36,11 @@ export default function FixtureRow({ fixture, showDivision = false, court = null
 	// badge's colour is what makes "Division 1 vs Division 2" readable at a
 	// glance in a flattened list. A single-division tournament has nothing to
 	// differentiate, and the row keeps its plain border (see the CSS fallback).
-	const style = showDivision ? divisionColorStyle(fixture.division_id) : undefined;
+	//
+	// `divisions` — the tournament's full division list — is threaded through
+	// from the caller so this row's colour never collides with a sibling
+	// division's; see divisionColors.js.
+	const style = showDivision ? divisionColorStyle(fixture.division_id, divisions) : undefined;
 
 	return (
 		<li className={`tv-fixture-row tv-fixture-row--${status}`} style={style}>
@@ -54,7 +65,9 @@ export default function FixtureRow({ fixture, showDivision = false, court = null
 				{hasPlace && (
 					<span className="tv-fixture-row-place">
 						{court && <span className="tv-court-chip">{court}</span>}
-						{showDivision && <DivisionBadge id={fixture.division_id} name={fixture.division_name} />}
+						{showDivision && (
+							<DivisionBadge id={fixture.division_id} name={fixture.division_name} divisions={divisions} />
+						)}
 						{fixture.round && <span className="tv-round-label">{fixture.round}</span>}
 					</span>
 				)}

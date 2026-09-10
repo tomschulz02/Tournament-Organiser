@@ -97,11 +97,44 @@ export function getPrintableDays(schedule) {
 
 // The rows one day contributes to a layout of this type: grid slot times, or
 // the day's entries, along with everything needed to break them into pages.
+// The most entries any one cell of this day's grid holds. One, on a day where
+// every match is at least as long as a grid row — which was every day until the
+// two came apart. Two 25-minute matches on a 45-minute grid share a cell, and
+// the cell prints them stacked, so the row is that many times as tall.
+//
+// Whole-day worst case rather than per-row: the page budget below is one number
+// for the day, and a row-by-row budget means teaching computeSmartDefaultRowBreaks
+// to weigh rows unequally, which the list view shares and does not want.
+function getBusiestCell(entries) {
+	const counts = new Map();
+
+	entries.forEach((item) => {
+		if (item.entry.courtId === null) return;
+
+		const key = `${item.entry.courtId}_${item.rowStart}`;
+		counts.set(key, (counts.get(key) || 0) + 1);
+	});
+
+	return Math.max(1, ...counts.values(), 1);
+}
+
 export function getPrintRowsForDay(type, schedule, day) {
 	if (type === 'grid') {
 		const { slots, entries } = getGridRowsForDay(schedule, day);
 
-		return { rows: slots, entries, rowsPerPage: PRINT_GRID_SLOTS_PER_PAGE, isNaturalBreak: makeGridNaturalBreakTest(entries) };
+		// A page holds PRINT_GRID_SLOTS_PER_PAGE rows of one entry each. Where a
+		// cell stacks two, its row is about twice as tall, and seven of those
+		// overflow the sheet — which is the one failure this file's own comment
+		// says must not happen, because a page that overflows loses what falls off
+		// rather than costing whitespace. So the budget is divided by the fullest
+		// cell of the day.
+		//
+		// A day where nothing shares a cell divides by one and paginates exactly as
+		// it always did. A saved layout still wins verbatim; this is only the
+		// default.
+		const rowsPerPage = Math.max(1, Math.floor(PRINT_GRID_SLOTS_PER_PAGE / getBusiestCell(entries)));
+
+		return { rows: slots, entries, rowsPerPage, isNaturalBreak: makeGridNaturalBreakTest(entries) };
 	}
 
 	const entries = getDayEntries(schedule, day.date);

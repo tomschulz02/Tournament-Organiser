@@ -110,6 +110,31 @@
 	color: var(--main-color, rgb(41, 98, 255));
 }
 
+/* The same control on a light surface — the schedule maker's inspector panel —
+ * takes the app's normal polarity instead: the selected option is
+ * --main-color with white on it, matching every other segmented control on the
+ * site. The inversion above is not the house style; it exists only because the
+ * print route's toolbar is itself --main-color, and a blue selected state
+ * there would vanish into the bar.
+ *
+ * Weighted to outrank `.schedule-panel button` (0,1,1), which paints every
+ * button in that panel --main-color and would otherwise make both options look
+ * selected.
+ */
+.schedule-print-types.is-on-light {
+	border-color: rgba(31, 41, 55, 0.2);
+}
+
+.schedule-print-types.is-on-light .schedule-print-choice {
+	background: #fff;
+	color: #1f2937;
+}
+
+.schedule-print-types.is-on-light .schedule-print-choice[aria-pressed='true'] {
+	background: var(--main-color, rgb(41, 98, 255));
+	color: #fff;
+}
+
 .schedule-print-action {
 	font: inherit;
 	font-weight: 600;
@@ -176,8 +201,31 @@
 	display: grid;
 	gap: var(--space-4, 16px);
 	padding: var(--space-4, 16px);
+	/* `width: 100%` is load-bearing, not decoration. `container-type:
+	   inline-size` means this element's own width may not be derived from its
+	   contents — and `margin: 0 auto` on a flex item opts it out of the
+	   stretch it would otherwise get from the schedule maker's inspector
+	   column, which is a flex column. Together, with no definite width, that
+	   collapsed the whole editor to its own padding: 32px wide inside a 320px
+	   panel. A definite inline size removes the question. */
+	width: 100%;
 	max-width: 1200px;
 	margin: 0 auto;
+	/* Its own surface, because it is a preview of paper and paper is light in
+	   both of its containers — including the schedule maker's inspector, which
+	   is a dark panel. Without this the editor's dark text sat directly on that
+	   dark panel. A pale grey rather than white so the day cards inside it
+	   still read as cards. */
+	background: #f3f4f6;
+	border-radius: 12px;
+	/* This editor has two containers of very different widths — the full print
+	   route, and the schedule maker's 320px inspector column — and it must be
+	   legible in both. A container query rather than a media query, because
+	   what matters is how much room this component was given, not how big the
+	   window is: at inspector width the window is usually wide. See the
+	   @container block at the foot of this section. */
+	container-type: inline-size;
+	container-name: print-editor;
 }
 
 /* Inheriting a readable colour is not enough on its own: App.css styles bare
@@ -186,12 +234,19 @@
  * white headings on these white cards. This restates the colour at element
  * level to outrank those.
  *
- * `:where()` contributes no specificity, so this whole selector weighs the same
- * as a single class and every deliberately-coloured rule below it — the muted
- * court label, the near-invisible gutters, the pressed toggles — still wins on
- * source order. Add new coloured rules *after* this one, not before.
+ * The doubled class is deliberate and is what makes this survive its second
+ * container. `schedule-maker.css` styles `.schedule-panel p` and
+ * `.schedule-panel button` — two classes' worth of weight each — and this
+ * editor renders inside that panel, so a single-class selector here loses to
+ * them and the panel's muted grey wins on a pale amber note. Repeating the
+ * class outranks them without reaching into that file. Every other rule in
+ * this section is prefixed with `.print-layout-editor ` for the same reason.
+ *
+ * `:where()` still contributes no specificity, so the deliberately-coloured
+ * rules below — the muted court label, the quiet gutters, the pressed toggles
+ * — continue to win on source order. Add new coloured rules *after* this one.
  */
-.print-layout-editor :where(h1, h2, h3, h4, h5, h6, p, span, div, button, strong, label) {
+.print-layout-editor.print-layout-editor :where(h1, h2, h3, h4, h5, h6, p, span, div, button, strong, label) {
 	color: #1f2937;
 }
 
@@ -199,7 +254,8 @@
 	color: #1f2937;
 }
 
-.print-layout-editor-toolbar {
+/* Readout on the left, the controls that change it on the right. */
+.print-layout-editor .print-layout-editor-toolbar {
 	display: flex;
 	flex-wrap: wrap;
 	gap: var(--space-3, 12px);
@@ -207,14 +263,21 @@
 	justify-content: space-between;
 }
 
-.print-layout-editor-orientation {
+.print-layout-editor .print-layout-editor-controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2, 8px);
+	align-items: center;
+}
+
+.print-layout-editor .print-layout-editor-orientation {
 	display: inline-flex;
 	border: 1px solid rgba(31, 41, 55, 0.2);
 	border-radius: 8px;
 	overflow: hidden;
 }
 
-.print-layout-editor-choice {
+.print-layout-editor .print-layout-editor-choice {
 	font: inherit;
 	padding: var(--space-1, 4px) var(--space-3, 12px);
 	border: none;
@@ -223,36 +286,52 @@
 	cursor: pointer;
 }
 
-.print-layout-editor-choice[aria-pressed='true'] {
+.print-layout-editor .print-layout-editor-choice[aria-pressed='true'] {
 	background: var(--main-color, rgb(41, 98, 255));
 	color: #fff;
 }
 
-.print-layout-editor-count {
+/* A status readout, not a third button. Given its own surface so it reads as
+   an answer rather than as something else to press. */
+.print-layout-editor .print-layout-editor-count {
 	margin: 0;
-	font-weight: 600;
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-2, 8px);
+	padding: var(--space-1, 4px) var(--space-3, 12px);
+	border-radius: 999px;
+	background: rgba(41, 98, 255, 0.08);
 }
 
-.print-layout-editor-reset {
+.print-layout-editor .print-layout-editor-count strong {
+	font-weight: 700;
+}
+
+.print-layout-editor .print-layout-editor-count span {
+	font-size: 0.85rem;
+	color: #4b5563;
+}
+
+.print-layout-editor .print-layout-editor-reset {
 	font: inherit;
-	padding: var(--space-1, 4px) var(--space-3, 12px);
+	padding: var(--space-2, 8px) var(--space-3, 12px);
 	border: 1px solid rgba(31, 41, 55, 0.2);
 	border-radius: 8px;
 	background: #fff;
 	cursor: pointer;
 }
 
-.print-layout-editor-empty {
+.print-layout-editor .print-layout-editor-empty {
 	margin: 0;
 	color: #6b7280;
 }
 
-.print-layout-courts {
+.print-layout-editor .print-layout-courts {
 	display: grid;
 	gap: var(--space-2, 8px);
 }
 
-.print-layout-courts-label {
+.print-layout-editor .print-layout-courts-label {
 	font-weight: 700;
 	font-size: 0.85rem;
 	text-transform: uppercase;
@@ -260,19 +339,19 @@
 	color: #6b7280;
 }
 
-.print-layout-courts-strip {
+.print-layout-editor .print-layout-courts-strip {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: stretch;
 	gap: 0;
 }
 
-.print-layout-courts-item {
+.print-layout-editor .print-layout-courts-item {
 	display: flex;
 	align-items: stretch;
 }
 
-.print-layout-courts-name {
+.print-layout-editor .print-layout-courts-name {
 	padding: var(--space-2, 8px) var(--space-3, 12px);
 	border: 1px solid rgba(31, 41, 55, 0.12);
 	background: #f9fafb;
@@ -280,23 +359,36 @@
 }
 
 /* The boundary itself is the control, rather than the court that happens to
-   start one — an organiser clicks between two courts to split them. */
-.print-layout-court-gutter {
+   start one — an organiser clicks between two courts to split them.
+   Same hit-area reasoning as the row gutters above: 28px wide to land on,
+   pulled back by a negative margin so the court chips stay as close together
+   as they were at 20px. */
+.print-layout-editor .print-layout-court-gutter {
 	font: inherit;
-	width: 20px;
+	flex: 0 0 auto;
+	width: 28px;
+	margin: 0 -4px;
+	position: relative;
+	z-index: 1;
 	border: none;
 	background: transparent;
 	color: #9ca3af;
 	cursor: pointer;
 }
 
-.print-layout-court-gutter[aria-pressed='true'] {
+.print-layout-editor .print-layout-court-gutter:hover, 
+.print-layout-editor .print-layout-court-gutter:focus-visible {
+	color: var(--main-color, rgb(41, 98, 255));
+	background: rgba(41, 98, 255, 0.12);
+}
+
+.print-layout-editor .print-layout-court-gutter[aria-pressed='true'] {
 	color: var(--main-color, rgb(41, 98, 255));
 	font-weight: 700;
 	background: rgba(41, 98, 255, 0.1);
 }
 
-.print-layout-day {
+.print-layout-editor .print-layout-day {
 	display: grid;
 	gap: var(--space-2, 8px);
 	border: 1px solid rgba(31, 41, 55, 0.12);
@@ -305,36 +397,36 @@
 	background: #fff;
 }
 
-.print-layout-day-head {
+.print-layout-editor .print-layout-day-head {
 	display: flex;
 	flex-wrap: wrap;
 	gap: var(--space-3, 12px);
 	align-items: baseline;
 }
 
-.print-layout-day-head h4 {
+.print-layout-editor .print-layout-day-head h4 {
 	margin: 0;
 }
 
-.print-layout-day-pages {
+.print-layout-editor .print-layout-day-pages {
 	margin-left: auto;
 	font-weight: 600;
 }
 
 /* Horizontal scroll lives here rather than on the page, so a 19-court grid is
    readable in a narrow inspector column without the whole route scrolling. */
-.print-layout-scroller {
+.print-layout-editor .print-layout-scroller {
 	overflow-x: auto;
 }
 
-.print-layout-grid-head,
-.print-layout-grid-row {
+.print-layout-editor .print-layout-grid-head, 
+.print-layout-editor .print-layout-grid-row {
 	display: flex;
 	align-items: stretch;
 	min-width: max-content;
 }
 
-.print-layout-grid-head {
+.print-layout-editor .print-layout-grid-head {
 	position: sticky;
 	top: 0;
 	z-index: 1;
@@ -342,7 +434,7 @@
 	background: #f3f8ff;
 }
 
-.print-layout-grid-time {
+.print-layout-editor .print-layout-grid-time {
 	flex: 0 0 72px;
 	padding: var(--space-1, 4px) var(--space-2, 8px);
 	border-bottom: 1px solid rgba(31, 41, 55, 0.08);
@@ -354,16 +446,16 @@
 	background: inherit;
 }
 
-.print-layout-grid-head .print-layout-grid-time,
-.print-layout-grid-row {
+.print-layout-editor .print-layout-grid-head .print-layout-grid-time, 
+.print-layout-editor .print-layout-grid-row {
 	background: #fff;
 }
 
-.print-layout-grid-head .print-layout-grid-time {
+.print-layout-editor .print-layout-grid-head .print-layout-grid-time {
 	background: #f3f8ff;
 }
 
-.print-layout-grid-cell {
+.print-layout-editor .print-layout-grid-cell {
 	flex: 0 0 130px;
 	padding: var(--space-1, 4px) var(--space-2, 8px);
 	border-left: 3px solid var(--tv-division-color, transparent);
@@ -374,7 +466,7 @@
 	white-space: nowrap;
 }
 
-.print-layout-list-row {
+.print-layout-editor .print-layout-list-row {
 	display: grid;
 	grid-template-columns: 130px 120px minmax(0, 1fr);
 	gap: var(--space-2, 8px);
@@ -384,18 +476,32 @@
 	font-size: 0.85rem;
 }
 
-/* A gutter is a thin, quiet strip between two rows until it is hovered or is
-   already a break. Made loud all the time it would out-shout the schedule it
-   sits inside, which is the thing actually being judged. */
-.print-layout-gutter {
+/* A gutter stays quiet until it is hovered or is already a break — made loud
+ * all the time it would out-shout the schedule it sits inside, which is the
+ * thing actually being judged.
+ *
+ * Quiet is not the same as hidden, though, and it must not mean *small*. The
+ * hit area is 22px tall, pulled back by a negative margin so the rows stay as
+ * tight as they were when the whole control was 10px: the target you can hit
+ * is twice the height of the space it occupies. The idle state shows a faint
+ * hairline so there is something to aim at without hunting — visible enough to
+ * find, faint enough not to compete. This is the standard treatment for thin
+ * dividers, and the reason the visible line and the clickable box are sized
+ * separately here.
+ */
+.print-layout-editor .print-layout-gutter {
 	font: inherit;
 	font-size: 0.7rem;
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	width: 100%;
 	min-width: max-content;
 	padding: 0;
-	height: 10px;
-	line-height: 10px;
+	height: 22px;
+	margin: -6px 0;
+	position: relative;
+	z-index: 1;
 	border: none;
 	background: transparent;
 	color: transparent;
@@ -403,21 +509,120 @@
 	text-align: center;
 }
 
-.print-layout-gutter:hover,
-.print-layout-gutter:focus-visible {
+/* The idle hairline. On the element's own ::before so the hit area above can
+   stay tall while the mark stays 1px. */
+.print-layout-editor .print-layout-gutter::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	border-top: 1px dashed rgba(41, 98, 255, 0.28);
+}
+
+.print-layout-editor .print-layout-gutter:hover, 
+.print-layout-editor .print-layout-gutter:focus-visible {
 	background: rgba(41, 98, 255, 0.12);
 	color: var(--main-color, rgb(41, 98, 255));
 }
 
-.print-layout-gutter.is-break {
+.print-layout-editor .print-layout-gutter:hover::before, 
+.print-layout-editor .print-layout-gutter:focus-visible::before {
+	border-top-color: transparent;
+}
+
+/* An existing break is the one state that should be loud: it is a decision
+   already made, and the organiser needs to see where the page ends. */
+.print-layout-editor .print-layout-gutter.is-break {
 	height: auto;
 	line-height: 1.6;
 	padding: var(--space-1, 4px) 0;
 	margin: var(--space-2, 8px) 0;
+	z-index: auto;
 	background: rgba(41, 98, 255, 0.1);
 	border-top: 2px dashed var(--main-color, rgb(41, 98, 255));
 	color: var(--main-color, rgb(41, 98, 255));
 	font-weight: 600;
+}
+
+/* The break marker replaces the idle hairline rather than sitting behind it. */
+.print-layout-editor .print-layout-gutter.is-break::before {
+	content: none;
+}
+
+/* Both gutters put their label in a child span, and the colour reset near the
+   top of this section reaches that span directly rather than letting it
+   inherit — so the button turning transparent while idle did not take its own
+   label with it, and "Break here" showed on every row. `inherit` re-ties the
+   label to whatever the control itself is currently painted. */
+.print-layout-editor .print-layout-gutter span,
+.print-layout-editor .print-layout-court-gutter span {
+	color: inherit;
+}
+
+/* The narrow container: the schedule maker's 320px inspector column, less its
+ * own padding. At the full-width sizes above, that column shows the time
+ * column and about one and a half courts, so the preview stops being something
+ * you can judge a break against — .print-layout-scroller's horizontal scroll is
+ * meant to be the overflow fallback, not the way every court is reached.
+ *
+ * Keyed on the editor's own width (see container-type above), not the
+ * viewport's: at inspector width the window is usually wide.
+ */
+@container print-editor (max-width: 560px) {
+	.print-layout-editor .print-layout-editor {
+		gap: var(--space-3, 12px);
+		padding: var(--space-3, 12px);
+	}
+
+	/* Readout above the controls rather than beside them — side by side they
+	   wrap into an unpredictable order at this width. */
+	.print-layout-editor .print-layout-editor-toolbar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.print-layout-editor .print-layout-editor-count {
+		justify-content: center;
+	}
+
+	.print-layout-editor .print-layout-editor-controls {
+		justify-content: space-between;
+	}
+
+	.print-layout-editor .print-layout-editor-orientation, 
+	.print-layout-editor .print-layout-editor-choice {
+		flex: 1 1 auto;
+	}
+
+	/* Roughly twice as many courts visible before scrolling, which is the
+	   difference between a preview and a peephole. */
+	.print-layout-editor .print-layout-grid-cell {
+		flex-basis: 88px;
+		font-size: 0.7rem;
+		padding: var(--space-1, 4px);
+	}
+
+	.print-layout-editor .print-layout-grid-time {
+		flex: 0 0 52px;
+		font-size: 0.7rem;
+		padding: var(--space-1, 4px);
+	}
+
+	.print-layout-editor .print-layout-list-row {
+		grid-template-columns: 96px minmax(0, 1fr);
+		font-size: 0.78rem;
+	}
+
+	/* The third column (the fixture label) wraps under the first two rather
+	   than being squeezed to nothing. */
+	.print-layout-editor .print-layout-list-row span:last-child {
+		grid-column: 1 / -1;
+	}
+
+	.print-layout-editor .print-layout-day-head {
+		gap: var(--space-2, 8px);
+	}
 }
 
 /* Hidden on screen, shown on paper: the pages behind the editor, so Print in
@@ -452,11 +657,11 @@
  * and may be dark. See the note on --text-color above.
  */
 .print-layout-editor,
-.print-layout-day,
-.print-layout-grid-head,
-.print-layout-grid-row,
-.print-layout-courts-name,
-.print-layout-list-row {
+.print-layout-editor .print-layout-day, 
+.print-layout-editor .print-layout-grid-head, 
+.print-layout-editor .print-layout-grid-row, 
+.print-layout-editor .print-layout-courts-name, 
+.print-layout-editor .print-layout-list-row {
 	color: #1f2937;
 }
 
@@ -475,11 +680,78 @@
 	color: #fde68a;
 }
 
-.schedule-print-staged-note {
+/* Doubled for the same reason as the editor's own colour reset: this note
+   renders inside .schedule-panel, whose `p` rule outweighs a single class and
+   would paint it the panel's muted grey on a pale amber ground. */
+.schedule-print-staged-note.schedule-print-staged-note {
 	margin: 0;
 	padding: var(--space-2, 8px) var(--space-3, 12px);
 	border-radius: 8px;
 	background: #fef3c7;
 	color: #78350f;
 	font-size: 0.85rem;
+}
+
+/* The density strip: the narrow container's replacement for one labelled cell
+ * per court. Hidden entirely at full width, where the labelled cells are
+ * better. See GridPreviewRow for why it exists.
+ */
+.print-layout-editor .print-layout-grid-density, 
+.print-layout-editor .print-layout-grid-density-head, 
+.print-layout-editor .print-layout-grid-load {
+	display: none;
+}
+
+@container print-editor (max-width: 560px) {
+	/* The labelled columns give way to the strip — not merely narrowed, because
+	   no width makes nineteen labelled columns fit ~215px. */
+	.print-layout-editor .print-layout-grid-head .print-layout-grid-cell, 
+	.print-layout-editor .print-layout-grid-row .print-layout-grid-cell {
+		display: none;
+	}
+
+	.print-layout-editor .print-layout-grid-density {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: stretch;
+		gap: 1px;
+		min-width: 0;
+		padding: var(--space-1, 4px) 0;
+	}
+
+	/* One tick per court, sharing the row's width however many there are, so
+	   this scales from two courts to twenty without a breakpoint. */
+	.print-layout-editor .print-layout-grid-density i {
+		flex: 1 1 0;
+		min-width: 2px;
+		border-radius: 1px;
+		background: rgba(31, 41, 55, 0.08);
+	}
+
+	.print-layout-editor .print-layout-grid-density i.is-used {
+		background: var(--tv-division-color, var(--main-color, rgb(41, 98, 255)));
+	}
+
+	.print-layout-editor .print-layout-grid-load {
+		display: block;
+		flex: 0 0 auto;
+		padding-left: var(--space-2, 8px);
+		font-size: 0.7rem;
+		font-variant-numeric: tabular-nums;
+		color: #4b5563;
+	}
+
+	.print-layout-editor .print-layout-grid-density-head {
+		display: block;
+		flex: 1 1 auto;
+		font-size: 0.7rem;
+		padding: var(--space-1, 4px) 0;
+	}
+
+	/* Nothing overflows any more, so the row must not still be sized to a
+	   content width that no longer exists. */
+	.print-layout-editor .print-layout-grid-head, 
+	.print-layout-editor .print-layout-grid-row {
+		min-width: 0;
+	}
 }

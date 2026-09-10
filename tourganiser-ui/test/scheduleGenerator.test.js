@@ -192,14 +192,31 @@ describe('placing fixtures', () => {
 		]);
 	});
 
-	it('records the generation settings on the schedule', () => {
+	it('records the generated day hours on the schedule', () => {
 		const { schedule } = generate({ dailyStartTime: '08:00', dailyEndTime: '20:00', fixtureDurationMinutes: 45 });
 
 		expect(schedule.settings).toMatchObject({
 			dayStartTime: '08:00',
 			dayEndTime: '20:00',
-			slotMinutes: 45,
 		});
+	});
+
+	// slotMinutes is the height of a grid row, not the length of a match. It used
+	// to be overwritten with whatever duration the run happened to use, so an
+	// organiser who had set a 60-minute grid lost it the moment they generated
+	// 25-minute matches. The fixture length lives in the entries alone.
+	it('leaves the grid granularity the organiser chose alone', () => {
+		const base = baseWithRestrictedCourts([{ id: 'court-1', name: 'Court 1', divisions: [] }]);
+		const { schedule } = generate({ baseSchedule: base, fixtures: [fixture('f1')], fixtureDurationMinutes: 25 });
+
+		expect(schedule.settings.slotMinutes).toBe(60);
+		expect(entriesFor(schedule, 'f1')).toMatchObject({ startTime: '09:00', endTime: '09:25' });
+	});
+
+	it('seeds a default grid granularity when the schedule has never had one', () => {
+		const { schedule } = generate({ fixtures: [fixture('f1')], fixtureDurationMinutes: 45 });
+
+		expect(schedule.settings.slotMinutes).toBe(30);
 	});
 
 	it('returns entries in chronological order', () => {
@@ -579,6 +596,51 @@ describe('the rest minimum', () => {
 		expect(schedule.entries).toHaveLength(1);
 		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f2']);
 		expect(warnings).toEqual([WARNINGS.rest(1)]);
+	});
+
+	// Rest is its own number of minutes. It used to be a multiple of the fixture
+	// duration, which meant a generator that placed 25-minute matches could only
+	// ever guarantee 25 minutes of rest, and a probe at an exact instant stopped
+	// finding anything the moment the two numbers differed.
+	it('honours a rest longer than a match', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3, fixtureDurationMinutes: 30, restMinutes: 90 });
+
+		// f1 runs 09:00-09:30; 90 minutes of rest puts the next one at 11:00, not
+		// at the 10:00 the old duration-multiple rule would have allowed.
+		expect(startOf(schedule, 'f1')).toBe('09:00');
+		expect(startOf(schedule, 'f2')).toBe('11:00');
+	});
+
+	it('honours a rest shorter than a match', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3, fixtureDurationMinutes: 60, restMinutes: 0 });
+
+		expect(startOf(schedule, 'f1')).toBe('09:00');
+		expect(startOf(schedule, 'f2')).toBe('10:00');
+	});
+
+	it.each([
+		['nothing at all', undefined],
+		['an emptied field', ''],
+		['a value that is not a number', 'abc'],
+	])('falls back to one match length of rest given %s', (_label, restMinutes) => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3, fixtureDurationMinutes: 60, restMinutes });
+
+		expect(startOf(schedule, 'f2')).toBe('11:00');
 	});
 });
 

@@ -89,7 +89,7 @@ export default function DivisionSelector({ divisions = [], selectedId, onSelect,
 							key={division.id}
 							type="button"
 							className={`tv-division-pill ${division.id === selectedId ? 'active' : ''}`}
-							style={divisionColorStyle(division.id)}
+							style={divisionColorStyle(division.id, divisions)}
 							aria-pressed={division.id === selectedId}
 							onClick={() => onSelect(division.id)}>
 							<span className="tv-division-dot" aria-hidden="true" />

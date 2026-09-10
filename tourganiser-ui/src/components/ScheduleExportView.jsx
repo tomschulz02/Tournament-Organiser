@@ -64,7 +64,15 @@ export function ScheduleExportHeader({ tournamentId, tournamentName, dayLabel, d
 // the smart default" — every consumer here treats those the same way, so a
 // caller that has no layouts at all (an old schedule, a viewer of a tournament
 // nobody has arranged) needs no special case.
-export function ScheduleExportPages({ type, schedule, fixturesById, tournamentName, tournamentId, layout = null }) {
+export function ScheduleExportPages({
+	type,
+	schedule,
+	fixturesById,
+	tournamentName,
+	tournamentId,
+	divisions = [],
+	layout = null,
+}) {
 	const days = getPrintableDays(schedule);
 
 	if (type === 'grid') {
@@ -87,6 +95,7 @@ export function ScheduleExportPages({ type, schedule, fixturesById, tournamentNa
 							fixturesById={fixturesById}
 							tournamentName={tournamentName}
 							tournamentId={tournamentId}
+							divisions={divisions}
 							layout={layout}
 						/>
 					)),
@@ -105,6 +114,7 @@ export function ScheduleExportPages({ type, schedule, fixturesById, tournamentNa
 					fixturesById={fixturesById}
 					tournamentName={tournamentName}
 					tournamentId={tournamentId}
+					divisions={divisions}
 					layout={layout}
 				/>
 			))}
@@ -127,7 +137,17 @@ export function ScheduleExportPages({ type, schedule, fixturesById, tournamentNa
 // `courts` is one court group (courtRangeLabel above), not the whole
 // schedule — an entry on a court outside this group simply matches no cell
 // in this table, which is correct: it belongs to a different group's pages.
-function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: rangeLabel, fixturesById, tournamentName, tournamentId, layout }) {
+function ScheduleExportGridPages({
+	schedule,
+	day,
+	courts,
+	courtRangeLabel: rangeLabel,
+	fixturesById,
+	tournamentName,
+	tournamentId,
+	divisions = [],
+	layout,
+}) {
 	// The same fixed axis and the same row arithmetic the screen uses, so the
 	// printed page puts an entry in the row the organiser saw it in. Matching on
 	// startTime alone dropped every entry that did not begin exactly on a slot.
@@ -169,7 +189,13 @@ function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: range
 								<React.Fragment key={slot}>
 									<div className="schedule-export-grid-time">{slot}</div>
 									{courts.map((court) => {
-										const placed = entries.find(
+										// Every entry that starts in this row, not the first of them.
+										// The printed grid still snaps an entry to the row that
+										// contains it — a sheet of paper has no way to draw a block
+										// at an arbitrary offset and keep the row legible — but two
+										// matches can now start in one row, and finding one of them
+										// left the other off the page altogether.
+										const placed = entries.filter(
 											(item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1,
 										);
 										const spanningBreak = entries.find(
@@ -180,21 +206,32 @@ function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: range
 										);
 
 										return (
-											<div
-												key={`${court.id}-${slot}`}
-												className="schedule-export-grid-cell"
-												style={placed ? getEntryDivisionStyle(placed.entry, fixturesById) : undefined}>
+											<div key={`${court.id}-${slot}`} className="schedule-export-grid-cell">
 												{spanningBreak ? (
 													<strong>{spanningBreak.entry.title}</strong>
-												) : placed ? (
-													<>
-														<span>{getEntrySecondary(placed.entry, fixturesById)}</span>
-														<strong>{getEntryLabel(placed.entry, fixturesById)}</strong>
-														{getEntryOfficials(placed.entry) && (
-															<span style={{ color: 'dodgerblue' }}>{getEntryOfficials(placed.entry)}</span>
-														)}
-													</>
-												) : null}
+												) : (
+													placed.map((item) => (
+														<div
+															key={item.entry.id}
+															className="schedule-export-grid-entry"
+															style={getEntryDivisionStyle(item.entry, fixturesById, divisions)}>
+															{/* The row is labelled with the time it starts, which is
+															    the entry's own time only when the two agree. Where
+															    they do not — a 25-minute match on a 45-minute grid —
+															    the entry has to say when it actually is. */}
+															{item.entry.startTime !== slot && (
+																<span className="schedule-export-grid-entry-time">
+																	{item.entry.startTime} - {item.entry.endTime}
+																</span>
+															)}
+															<span>{getEntrySecondary(item.entry, fixturesById)}</span>
+															<strong>{getEntryLabel(item.entry, fixturesById)}</strong>
+															{getEntryOfficials(item.entry) && (
+																<span style={{ color: 'dodgerblue' }}>{getEntryOfficials(item.entry)}</span>
+															)}
+														</div>
+													))
+												)}
 											</div>
 										);
 									})}
@@ -212,7 +249,7 @@ function ScheduleExportGridPages({ schedule, day, courts, courtRangeLabel: range
 // its own repeated header. entries is already the flat array the on-screen
 // list uses, so chunking it is a straight array split. Unaffected by court
 // chunking — it already prints one row per fixture regardless of court count.
-function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, tournamentId, layout }) {
+function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, tournamentId, divisions = [], layout }) {
 	const { rows: entries, rowsPerPage, isNaturalBreak } = getPrintRowsForDay('list', schedule, day);
 	const pages = chunkAtBreaks(entries, resolveRowBreaks({ layout, day, rows: entries, rowsPerPage, isNaturalBreak }));
 
@@ -221,7 +258,7 @@ function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, 
 			<ScheduleExportHeader tournamentId={tournamentId} tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
 			<div className="schedule-export-list">
 				{pageEntries.map((entry) => (
-					<div key={entry.id} className="schedule-export-list-row" style={getEntryDivisionStyle(entry, fixturesById)}>
+					<div key={entry.id} className="schedule-export-list-row" style={getEntryDivisionStyle(entry, fixturesById, divisions)}>
 						<div>
 							<strong>
 								{entry.startTime} - {entry.endTime}

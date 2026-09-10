@@ -2,6 +2,7 @@ import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../AuthContext';
 import '../App.css';
 import { useLocation, useNavigate } from 'react-router-dom';
+import LoadingScreen from '../components/LoadingScreen';
 import { loginUser, registerUser, checkLoginStatus } from '../requests';
 import { useMessage } from '../MessageContext';
 import { MessagePopup } from '../MessageProvider';
@@ -167,9 +168,7 @@ function LoginForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 				</div>
 				<button type="submit" disabled={isLoading}>
 					{isLoading ? (
-						<div className="loading-spinner">
-							<div className="spinner"></div>
-						</div>
+						<LoadingScreen variant="inline" />
 					) : (
 						'Login'
 					)}
@@ -280,9 +279,7 @@ function RegisterForm({ onFormSwitch, onClose, onSuccess, setLoggedIn }) {
 				</div>
 				<button type="submit" disabled={isLoading}>
 					{isLoading ? (
-						<div className="loading-spinner">
-							<div className="spinner"></div>
-						</div>
+						<LoadingScreen variant="inline" />
 					) : (
 						'Create Account'
 					)}

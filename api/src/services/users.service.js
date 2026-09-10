@@ -93,10 +93,19 @@ async function changePassword(userId, currentPassword, newPassword, confirmNewPa
     if (newPassword !== confirmNewPassword) {
         throw new AppError("PASSWORDS_DO_NOT_MATCH");
     }
+    if (newPassword === currentPassword) {
+        throw new AppError("NEW_PASSWORD_SAME_AS_CURRENT");
+    }
 
-    // Always exists: userId comes from a verified JWT via requireAuth, unlike
-    // loginUser, which has to handle an unknown identifier.
+    // Usually exists: userId comes from a verified JWT via requireAuth, unlike
+    // loginUser, which has to handle an unknown identifier. It can still be
+    // null if the account was deleted after the token was issued but before it
+    // expired, which used to surface as an unhandled TypeError reading
+    // user.password below.
     const user = await userRepository.getUserById(userId);
+    if (!user) {
+        throw new AppError("USER_NOT_FOUND");
+    }
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {

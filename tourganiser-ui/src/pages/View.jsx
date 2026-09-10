@@ -232,6 +232,10 @@ export default function ViewPage() {
 	// docs/handover-scoresheets.md, Step 7's Don't.
 	const scoresheetTemplateKey = result.data?.tournament?.scoresheet_template ?? null;
 	const [resolvedScoresheetTemplate, setResolvedScoresheetTemplate] = useState(null);
+	// Neither the single-fixture download nor "print all" showed any wait
+	// before — the pdf-lib overlay work is fast for one fixture but "print
+	// all" loops it across every fixture in the tournament, which is not.
+	const [generatingScoresheet, setGeneratingScoresheet] = useState(false);
 
 	useEffect(() => {
 		let active = true;
@@ -281,17 +285,20 @@ export default function ViewPage() {
 	const handleDownloadScoresheet = async (fixture) => {
 		if (!resolvedScoresheetTemplate) return;
 
+		setGeneratingScoresheet(true);
 		try {
 			const { buildFieldValues, generateScoresheet } = await loadScoresheetPrefill();
 			const fieldValues = buildFieldValues(
 				fixture,
 				result.data.tournament,
-				null,
+				fixture.division_name || null,
 				scoresheetScheduleIndex.get(fixture.id),
 			);
 			openGeneratedPdf(await generateScoresheet(resolvedScoresheetTemplate, fieldValues));
 		} catch {
 			showMessage('The scoresheet could not be generated.', 'error');
+		} finally {
+			setGeneratingScoresheet(false);
 		}
 	};
 
@@ -318,6 +325,7 @@ export default function ViewPage() {
 	const handlePrintAllScoresheets = async () => {
 		if (!resolvedScoresheetTemplate) return;
 
+		setGeneratingScoresheet(true);
 		try {
 			const { buildFieldValues, generateScoresheet, mergeScoresheets } = await loadScoresheetPrefill();
 			const fixtures = flattenFixtures(result.data?.divisions ?? []);
@@ -327,7 +335,7 @@ export default function ViewPage() {
 				const fieldValues = buildFieldValues(
 					fixture,
 					result.data.tournament,
-					null,
+					fixture.division_name || null,
 					scoresheetScheduleIndex.get(fixture.id),
 				);
 				// Sequential: each fixture's PDF is generated from the same shared
@@ -338,6 +346,8 @@ export default function ViewPage() {
 			openGeneratedPdf(await mergeScoresheets(pdfBytesList));
 		} catch {
 			showMessage('The scoresheets could not be generated.', 'error');
+		} finally {
+			setGeneratingScoresheet(false);
 		}
 	};
 
@@ -399,6 +409,8 @@ export default function ViewPage() {
 	// waits, so LoadingScreen is deliberately not used here.
 	return (
 		<>
+			{generatingScoresheet && <LoadingScreen context="scoresheetGenerate" />}
+
 			{/* Mounted only while open, so the fixture set is not rebuilt on every
 			    render of the page behind it. */}
 			{/* Organiser only, and only while a fixture is chosen. Guarded on

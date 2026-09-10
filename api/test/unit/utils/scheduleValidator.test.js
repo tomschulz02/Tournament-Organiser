@@ -637,6 +637,57 @@ describe("validateSchedule — round order", () => {
         );
     });
 
+    // latestEnd is a running max over every entry placed in a round — every
+    // case above places exactly one entry per round, which cannot exercise
+    // that. Two Pool Play entries finishing at different times: the semifinal
+    // has to respect the later one, not the first one found.
+    it("enforces the later of two same-round entries' finish times, not the first", () => {
+        rejects(
+            [
+                entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "09:00", endTime: "10:00" }),
+                entry({ id: "b", fixtureId: "pool-2", courtId: "court-2", startTime: "10:00", endTime: "11:00" }),
+                entry({ id: "c", fixtureId: "semi-1", courtId: "court-1", startTime: "10:30", endTime: "11:30" })
+            ],
+            "SCHEDULE_ROUND_ORDER"
+        );
+
+        expect(() =>
+            validateSchedule(
+                schedule([
+                    entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "09:00", endTime: "10:00" }),
+                    entry({ id: "b", fixtureId: "pool-2", courtId: "court-2", startTime: "10:00", endTime: "11:00" }),
+                    entry({ id: "c", fixtureId: "semi-1", courtId: "court-1", startTime: "11:00", endTime: "12:00" })
+                ]),
+                CONTEXT
+            )
+        ).not.toThrow();
+    });
+
+    // A real chain of three fully-placed rounds, rather than a chain with the
+    // middle round left unplaced (as "compares against every earlier round"
+    // above tests).
+    it("propagates the running maximum through three fully-placed rounds", () => {
+        expect(() =>
+            validateSchedule(
+                schedule([
+                    entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "09:00", endTime: "10:00" }),
+                    entry({ id: "b", fixtureId: "semi-1", courtId: "court-1", startTime: "10:00", endTime: "11:00" }),
+                    entry({ id: "c", fixtureId: "final-1", courtId: "court-1", startTime: "11:00", endTime: "12:00" })
+                ]),
+                CONTEXT
+            )
+        ).not.toThrow();
+
+        rejects(
+            [
+                entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "09:00", endTime: "10:00" }),
+                entry({ id: "b", fixtureId: "semi-1", courtId: "court-1", startTime: "10:00", endTime: "11:00" }),
+                entry({ id: "c", fixtureId: "final-1", courtId: "court-2", startTime: "10:30", endTime: "12:00" })
+            ],
+            "SCHEDULE_ROUND_ORDER"
+        );
+    });
+
     it("constrains each division separately, so two divisions may overlap", () => {
         expect(() =>
             validateSchedule(

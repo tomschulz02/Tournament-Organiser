@@ -43,6 +43,7 @@ export const SCORESHEET_FIELDS = [
 	'team2Name',
 	'team2Abbr3',
 	'team2Abbr4',
+	'division',
 ];
 
 // Human-readable labels for the marker-placement screen and any future field list UI.
@@ -67,6 +68,7 @@ export const FIELD_LABELS = {
 	team2Name: 'Team B name',
 	team2Abbr3: 'Team B abbreviation (3 letters)',
 	team2Abbr4: 'Team B abbreviation (4 letters)',
+	division: 'Division',
 };
 
 // Each fields array was seeded through the marker-placement screen itself,

@@ -94,7 +94,44 @@ html2canvas and DOMPurify with the PDF export — around half the application's 
 for a screen only an organiser opens. Printing through the browser replaced that on
 2026-08-10 and all three dependencies are gone, taking the chunk from roughly 427kB to
 30kB. It stays lazy because it is still the largest single screen: a grid, a list, an
-inspector, a generator and two print layouts.
+inspector and a generator.
+
+The two print layouts (grid and list) moved out to `components/ScheduleExportView.jsx`
+and `utils/scheduleExportDocument.js` on 2026-09-03, so both the organiser's own print
+action and the "View/Print Schedule" button every viewer sees on the read-only Schedule
+tab (`components/tournament/ScheduleTab.jsx`) build the same document from the same code.
+`openScheduleExportDocument` renders the export components to a static HTML string with
+`react-dom/server`, wraps it in a standalone document with its own inlined stylesheet
+(`styles/schedule-export.css`), and opens it as a `Blob` URL in a new tab — no portal into
+the live app, no hidden always-mounted "export root" waiting on a print media query. Both
+call sites import it with a dynamic `import()` rather than a top-level one: `react-dom/
+server` is a meaningful chunk of code that only this action needs, and `ScheduleTab.jsx`
+is part of the main bundle, unlike this modal, which was already lazy — a top-level import
+there would have put `react-dom/server` in every visitor's initial load.
+
+**Superseded for viewers on 2026-09-08.** The Schedule tab's two buttons became one link
+to `/tournaments/view/:id/print` (`pages/SchedulePrint.jsx`), a route registered as a
+sibling of `/login` in `main.jsx` and therefore outside the `App` shell — no header,
+navigation or footer reaches the paper. It fetches for itself rather than reading router
+state, because a link that only works when clicked from inside the app is not an address:
+a printable schedule has to survive being bookmarked or pasted into a club's group chat.
+Grid/list, the page-break editor and Print all live on that page; `styles/schedule-export.css`
+is injected into `document.head` for the life of the route rather than imported, so the
+route and the standalone document are styled by the very same text and the stylesheet's
+`body` and `:root` rules do not follow the reader back into the app.
+
+`utils/scheduleExportDocument.jsx` is **not** retired by that. `ScheduleMakerModal` still
+uses it, permanently: the modal is a full-screen overlay over the rest of the app rather
+than a clean print surface, and the schedule being printed there may not be saved yet, so
+there is nothing at the route to print. Popping out to a Blob document is what makes both
+true at once.
+
+Where the pages actually break is `utils/schedulePrintLayout.js` — its own module, not
+part of `ScheduleExportView.jsx`, because three components now share it (the printed
+pages, `components/SchedulePrintLayoutEditor.jsx`, and that editor's page-count
+indicator) and `react-refresh/only-export-components` forbids a file exporting both
+components and the plain functions they share. The organiser's chosen breaks live in the
+schedule JSONB's `print` key; see `docs/schedule.md`.
 
 It was the first component rendered through a portal, and the creation page's modals now
 follow the same pattern through `components/create/CreateModal.jsx`. `createPortal` puts

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import DivisionSelector from './DivisionSelector';
 import Icon from '../Icons';
+import LoadingScreen from '../LoadingScreen';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
 import { isNotStarted } from './tournamentStatus';
@@ -494,7 +495,7 @@ export default function TeamsTab({
 
 					<div className="tv-inline-form-actions">
 						<button type="button" className="tv-primary-action" disabled={busy} onClick={handleSave}>
-							{busy && <span className="btn-spinner" aria-hidden="true" />}
+							{busy && <LoadingScreen variant="inline" />}
 							<span>{busy ? 'Saving…' : 'Save Changes'}</span>
 						</button>
 						<button type="button" className="tv-subtle-action" disabled={busy} onClick={handleDiscard}>
@@ -700,7 +701,7 @@ function StructureConfirmation({ divisionName, teamCount, knockout, structure, b
 
 				<div className="confirm-buttons">
 					<button type="button" disabled={busy || Boolean(error)} onClick={onConfirm}>
-						{busy && <span className="btn-spinner" aria-hidden="true" />}
+						{busy && <LoadingScreen variant="inline" />}
 						<span>{busy ? 'Rebuilding…' : 'Rebuild Division'}</span>
 					</button>
 					<button type="button" disabled={busy} onClick={onCancel}>

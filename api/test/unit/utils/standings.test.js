@@ -340,7 +340,11 @@ describe("compareTeams", () => {
         expect(compareTeams(a, b, { headToHead, seedIndex })).toBeGreaterThan(0);
     });
 
-    it("ignores head-to-head that forms a loop and falls to seeding", () => {
+    // Q4: a 3-way head-to-head cycle falls through to seeding for the whole
+    // tied group, rather than resolving each pair independently — which used
+    // to produce a non-transitive comparator whose result depended on
+    // Array.sort's own implementation instead of the rules.
+    it("ignores head-to-head that forms a loop and falls to seeding, for the whole tied group", () => {
         // A beat B, B beat C, C beat A. The rules forbid a mini-league here.
         const rows = [
             makeStandingsRow({ id: "a", won: 1 }),
@@ -352,10 +356,44 @@ describe("compareTeams", () => {
 
         const ranked = rankGroup(rows, { headToHead, seedIndex: loopSeeds });
 
-        // Each pair is separated by head-to-head, not by seeding, so the loop
-        // resolves to whatever order the sort settles on — the point is that it
-        // terminates and every team appears exactly once.
-        expect(ranked.map((row) => row.id).sort()).toEqual(["a", "b", "c"]);
+        // The cycle means head-to-head decides nothing for any pair in this
+        // group, so seeding alone orders all three: c, then b, then a.
+        expect(ranked.map((row) => row.id)).toEqual(["c", "b", "a"]);
+    });
+
+    // A larger group where only a sub-cycle among some of the tied teams
+    // exists still has to fall through entirely, per Q4 — a partial order is
+    // not enough to trust head-to-head for any pair in the tier.
+    it("falls through a four-team tie to seeding when three of them cycle", () => {
+        const rows = [
+            makeStandingsRow({ id: "a", won: 1 }),
+            makeStandingsRow({ id: "b", won: 1 }),
+            makeStandingsRow({ id: "c", won: 1 }),
+            makeStandingsRow({ id: "d", won: 1 })
+        ];
+        // a beat b, b beat c, c beat a (a cycle); d beat everyone else cleanly.
+        const headToHead = new Map([
+            ["a|b", 1], ["b|c", 1], ["c|a", 1],
+            ["d|a", 1], ["d|b", 1], ["d|c", 1]
+        ]);
+        const seedIndex = buildSeedIndex(["d", "c", "b", "a"]);
+
+        const ranked = rankGroup(rows, { headToHead, seedIndex });
+
+        expect(ranked.map((row) => row.id)).toEqual(["d", "c", "b", "a"]);
+    });
+
+    // A tied pair still resolves by head-to-head as before — only a group of
+    // three or more can cycle.
+    it("still resolves a tied pair by head-to-head, untouched by the cycle fix", () => {
+        const rows = [
+            makeStandingsRow({ id: "a", won: 1 }),
+            makeStandingsRow({ id: "b", won: 1 })
+        ];
+        const headToHead = new Map([["b|a", 1]]);
+        const seedIndex = buildSeedIndex(["a", "b"]);
+
+        expect(rankGroup(rows, { headToHead, seedIndex }).map((row) => row.id)).toEqual(["b", "a"]);
     });
 
     it("falls to seeding when nothing else separates two teams", () => {

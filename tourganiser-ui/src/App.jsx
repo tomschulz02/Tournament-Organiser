@@ -371,7 +371,7 @@ function Footer() {
 
 function HelpMenu({ onClose }) {
 	const { activeTopic } = useHelp();
-	const { title, icon = 'info', paragraphs } = HELP_TOPICS[activeTopic] ?? HELP_TOPICS.fallback;
+	const { title, icon = 'info', sections } = HELP_TOPICS[activeTopic] ?? HELP_TOPICS.fallback;
 
 	const handleClickOutside = (e) => {
 		if (e.target.classList.contains('help-menu-container')) {
@@ -398,8 +398,16 @@ function HelpMenu({ onClose }) {
 					</button>
 				</div>
 				<div className="help-menu-body">
-					{paragraphs.map((paragraph, index) => (
-						<p key={index}>{paragraph}</p>
+					{sections.map((section, sectionIndex) => (
+						<div className="help-menu-section" key={sectionIndex}>
+							{section.heading && <h2 className="help-menu-section-heading">{section.heading}</h2>}
+							{section.paragraphs.map((paragraph, paragraphIndex) => (
+								<p key={paragraphIndex}>{paragraph}</p>
+							))}
+							{section.image && (
+								<img className="help-menu-image" src={section.image.src} alt={section.image.alt} />
+							)}
+						</div>
 					))}
 				</div>
 			</div>

@@ -17,8 +17,7 @@ export const FORMATS = [
 		label: 'Round Robin',
 		summary: 'Every team plays every other team once. One table decides it, with no knockout at the end.',
 		best: 'Best for smaller divisions where everyone should get the same number of matches.',
-		// Nothing to configure, so the modal goes straight from Basics to Teams.
-		configurable: false,
+		configurable: true,
 	},
 	{
 		type: 'classic',
@@ -34,6 +33,11 @@ export const MIN_KNOCKOUT_TEAMS = 2;
 
 // Two teams is the smallest thing that can play a match.
 export const MIN_TEAMS = 2;
+
+// A generous ceiling on League's "multiple legs" mode — nothing structural
+// requires this, it just stops an organiser from fat-fingering a fixture list
+// that grows as legs * teamCount * (teamCount - 1) / 2 into something absurd.
+export const MAX_ROUND_ROBIN_LEGS = 10;
 
 export const DIVISION_NAME_MAX = 100;
 
@@ -78,6 +82,12 @@ export function createEmptyDivision() {
 		type: '',
 		num_groups: 2,
 		knockout_teams: 4,
+		// League only. 'legs' plays roundRobinLegs full cycles; 'limited' plays
+		// exactly gamesPerTeam games per team — a different, exact constraint,
+		// not a rounded-up cycle count. See docs/division-state.md.
+		roundRobinMode: 'legs',
+		roundRobinLegs: 1,
+		gamesPerTeam: '',
 		teams: [],
 	};
 }
@@ -127,7 +137,7 @@ export function validateDivision(division) {
 		}
 	}
 
-	if (isConfigurableFormat(division.type) && teamCount >= MIN_TEAMS) {
+	if (division.type === 'classic' && teamCount >= MIN_TEAMS) {
 		const groups = Number(division.num_groups);
 		const qualifiers = Number(division.knockout_teams);
 
@@ -144,7 +154,44 @@ export function validateDivision(division) {
 		}
 	}
 
+	if (division.type === 'league' && teamCount >= MIN_TEAMS) {
+		if (division.roundRobinMode === 'limited') {
+			const error = gamesPerTeamError(division.gamesPerTeam, teamCount);
+			if (error) errors.gamesPerTeam = error;
+		} else {
+			const legs = Number(division.roundRobinLegs);
+			if (!Number.isInteger(legs) || legs < 1) {
+				errors.roundRobinLegs = 'Play at least one leg.';
+			} else if (legs > MAX_ROUND_ROBIN_LEGS) {
+				errors.roundRobinLegs = `${MAX_ROUND_ROBIN_LEGS} legs is the most this can generate at once.`;
+			}
+		}
+	}
+
 	return errors;
+}
+
+// The same realisability check api/src/services/fixtures.service.js's
+// generatePartialRoundRobinPairs enforces server-side — surfaced here so the
+// organiser sees why before submitting, not only after a rejection. A
+// g-regular graph on n teams exists iff 0 < g < n - 1 and, when n is odd, g is
+// even (total degree n * g must be even). See docs/division-state.md.
+export function gamesPerTeamError(gamesPerTeam, teamCount) {
+	const g = Number(gamesPerTeam);
+
+	if (!Number.isInteger(g) || g < 1) {
+		return 'Choose how many games each team plays.';
+	}
+
+	if (g >= teamCount - 1) {
+		return `${g} games per team is a full round robin already — use "Play every team once" (or set legs) instead.`;
+	}
+
+	if ((teamCount * g) % 2 !== 0) {
+		return `With ${teamCount} teams, games per team has to be an even number.`;
+	}
+
+	return null;
 }
 
 // Parses a pasted block of team names: splits on newlines then commas, trims

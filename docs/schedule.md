@@ -23,8 +23,9 @@ which records that nothing reads or writes a schedule out of division state.
 | `version` | integer | yes | Payload version. `1` is the only version that has existed. `SCHEDULE_VERSION` in `scheduleUtils.js`. |
 | `days` | array of day objects | yes | One per calendar day of the tournament, ascending. Derived, not authored — see below. |
 | `courts` | array of court objects | yes | The playing surfaces available. May be empty; an empty court list means nothing can be placed. A court may be restricted to a set of divisions. |
-| `entries` | array of entry objects | yes | The placements. May be empty — a schedule that places nothing is valid. |
+| `entries` | array of entry objects | yes | The placements, in a defined order — see Entry below. May be empty; a schedule that places nothing is valid. |
 | `settings` | settings object | yes | The grid the client draws. Presentation only. |
+| `print` | print object \| `null` | no | Where the organiser has chosen the page breaks of the printed schedule. Presentation only. Absent or `null` means no saved layout — every consumer computes the smart default instead. |
 
 `null` is a legal value for the whole column and means "no schedule yet". The client
 turns it into an empty schedule on read.
@@ -36,6 +37,7 @@ turns it into an empty schedule on read.
 | `id` | string | `day_<random>`. Stable across saves for a date that survives. |
 | `date` | string | `YYYY-MM-DD`. |
 | `label` | string | Display name. `Day 1`, `Day 2`… unless the organiser renamed it. |
+| `enabled` | boolean | Optional. **Absent or `true` means the day is active for scheduling** — only an explicit `false` excludes it. The generator places nothing on a disabled day and hand-placement onto one is blocked client-side; the day stays in `days` rather than disappearing, so re-enabling it is a toggle. Not enforced server-side — see Generation objectives. |
 
 **`days` is regenerated from the tournament's `start_date` and `end_date` on every read.**
 `normaliseTournamentDays` walks the date range and keeps the stored `id` and `label` for
@@ -93,6 +95,21 @@ another division, or duplicate team names within one — **the field needs a tea
 the validator stops working before anyone notices.** A string that resolves to no team
 ("Club referee", a person's name) is left alone and never rejected.
 
+**Entries are ordered by day, then start time, then court, then id** — applied on read,
+on every mutation, and on save, so the stored array is already in that order. Corrected
+2026-09-10: *court* means the court's **index in `courts`**, not a string comparison of
+its id. Comparing ids as strings put `court-10` ahead of `court-2`, so any tournament
+with ten or more courts listed them 1, 10, 11, … 2, 3 — on the Fixtures & Schedule tab
+and in the printed list alike. Parsing a number out of the id would fix that and break a
+court renamed "Centre Court"; position has neither problem, and is already what the
+printed grid's columns and the courts panel treat as authoritative. An entry with
+`courtId: null` — a break spanning every court — sorts first within its time group. An
+entry naming a court the schedule no longer has sorts after every court it does.
+`compareByCourtOrder` in `scheduleUtils.js` is the single definition.
+
+Schedules saved before that date still hold the old order in the column; they are
+re-sorted on read and rewritten in the corrected order the next time they are saved.
+
 **`normaliseSchedule` silently drops any entry missing `id`, `day`, `startTime` or
 `endTime`.** The client therefore never sees a malformed entry and cannot report one.
 A malformed entry that reaches the column is not an error the organiser will ever be
@@ -105,18 +122,86 @@ server validates on write rather than relying on the client to have sent somethi
 |---|---|---|---|
 | `dayStartTime` | string | `'09:00'` | `HH:MM`. First slot of the grid. |
 | `dayEndTime` | string | `'18:00'` | `HH:MM`. The grid stops before this. |
-| `slotMinutes` | integer | `30` | Row height of the grid, in minutes. |
+| `slotMinutes` | integer | `30` | Row height of the grid, in minutes. **How the board is ruled, never how long a match is.** |
 
 Settings describe the grid the organiser is looking at, not a constraint on entries — the
-server stores an entry outside them without complaint. But since 2026-08-13 the grid's
-axis is a function of these three values alone and nothing else, so an entry that does not
-fit them is visibly not drawn on it: one that begins off a slot boundary is drawn across
-the slots it covers and marked as approximate, and one outside `dayStartTime`…`dayEndTime`
-is listed beneath the grid instead. The axis no longer widens to contain an entry, because
-an axis that moves under its own contents cannot be read.
+server stores an entry outside them without complaint. Since 2026-08-13 the grid's axis is
+a function of these three values alone and nothing else, so it never widens to contain an
+entry: one outside `dayStartTime`…`dayEndTime` is listed beneath the grid rather than
+moving the axis under its own contents.
 
-Changing `slotMinutes` or `dayStartTime` after entries exist therefore leaves entries that
-no longer land on a boundary, and that is now something the organiser can see.
+`slotMinutes` is the organiser's, and only theirs. Until 2026-09-10 the generator wrote
+the fixture duration of the run into it, so the grid always equalled the last match length
+generated and a chosen granularity could not survive a regeneration. It does not write it
+any more. A schedule that has never had one is seeded with the default by
+`normaliseSchedule`.
+
+A fixture's length is its own `startTime` and `endTime`, related to `slotMinutes` by
+nothing at all. Two entries on one court may have two different lengths, and neither need
+begin or end on a grid line.
+
+- **The schedule maker's board** draws an entry at its own start for its own length, over
+  grid lines that are a reading aid rather than a placement constraint. An organiser can
+  drag a range out on an empty column to create an entry, and drag a placed entry's edge to
+  change its length; both snap to five minutes, on every grid — the increment is not a
+  fraction of a row, because a length an organiser can draw should not depend on how the
+  board happens to be ruled.
+  Drag-create is mouse and pen only: a touch drag on an empty part of the board is a
+  scroll, and taking it would cost a phone the only way it has of moving around the day.
+  The resize handles do take touch — they are 10px strips that scroll nothing worth
+  keeping. Dragging near the top or bottom of the board scrolls it, so a day taller than
+  the panel can still be reached; the same is true of dragging an entry to another court
+  or time, which scrolls sideways as well.
+- **The printed grid** still snaps an entry to the whole rows that contain it, because a
+  sheet of paper has no way to draw a block at an arbitrary offset and keep the row legible.
+  Where a row holds more than one entry on a court, every one of them is printed, and any
+  entry whose start is not the row's own time carries its real times.
+
+Changing `slotMinutes` or `dayStartTime` after entries exist re-rules the board and moves
+nothing.
+
+### Print
+
+Added 2026-09-08. Two saved layouts, one per printed view, edited and saved independently
+so that switching between them always shows a finished result.
+
+```json
+"print": {
+  "grid": { "orientation": "landscape", "courtBreaks": ["court-7"], "rowBreaksByDay": { "day_k3f8a1m2": [4, 9] } },
+  "list": { "orientation": "portrait", "rowBreaksByDay": { "day_k3f8a1m2": [12] } }
+}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `grid` | layout object \| `null` | `null` | The court-columns-by-time view. `null` means never saved. |
+| `list` | layout object \| `null` | `null` | The one-row-per-fixture view. `null` means never saved. |
+| `<layout>.orientation` | `'portrait'` \| `'landscape'` | `'landscape'` (grid), `'portrait'` (list) | The paper orientation this layout's breaks were chosen against. A layout's orientation and its breaks are one unit — a reader picks a layout, not an orientation. |
+| `<layout>.rowBreaksByDay` | object keyed by `days[].id` | `{}` | Row indices at which a page break falls. An index is the **first row of the next page**, so `[4, 9]` means rows 0–3, 4–8, 9–end. Row `0` is never a break. |
+| `<layout>.courtBreaks` | array of `courts[].id` | `[]` | Grid only. The court each new column group **starts** with. Ids rather than indices so removing a court invalidates only its own break instead of shifting every one after it. |
+
+Read it the way `settings` is read — presentation, not constraint. **The server stores it as
+given and validates nothing about it**, because there is no arrangement of page breaks that
+is impossible, only ones that are more or less useful to read.
+
+Three absences mean three different things, and the difference matters:
+
+- A layout of `null` — never saved. The smart default is computed.
+- A day absent from `rowBreaksByDay` — the layout predates that day. The smart default is
+  computed for that day alone; the rest of the layout still applies.
+- A day present with `[]` — saved deliberately as one page. Not the same as absent.
+
+**Stale breaks are dropped on read, never on write.** A break naming a day id no longer in
+`days`, or a court id no longer in `courts`, is ignored for that load and the smart default
+fills the gap; the organiser is shown a dismissible notice once, and non-organiser viewers
+are shown nothing. What is stored only changes when the organiser saves. A row index past
+the end of a day is ignored the same way, silently — a day getting shorter is not something
+worth interrupting anyone about.
+
+**The smart default reproduces the fixed page sizes it replaced**, then looks up to two rows
+earlier for a natural place to break: an empty slot row on the grid, the start of a new time
+on the list. It never looks *later*, so a page is never longer than the estimate — a short
+page prints with blank space at the foot, a long one silently overflows.
 
 **The generator is stricter than the payload.** Everything it places lies inside the
 configured day and on a slot boundary, because it only ever builds candidate slots there —
@@ -146,8 +231,15 @@ and none of them can be traded away for a better score on anything below.
 4. **Round order.** A fixture of round *n* in a division may not start before every
    fixture of that division's earlier rounds has finished. The server enforces the same
    rule on write; see `docs/tournament-rules.md`.
-5. **Rest.** At least one slot between a team's two matches on the same day. A team never
+5. **Rest.** A gap of at least `restMinutes` between the end of one of a team's matches
+   and the start of the next, on the same day, checked in both directions. A team never
    plays back to back.
+
+   `restMinutes` is a generation input in its own right, alongside the fixture duration,
+   and defaults to the fixture duration when nothing is asked for — which is what the rule
+   always came out at while it was expressed as a multiple of the match length. It stopped
+   being expressed that way on 2026-09-10: with the grid no longer tied to the match
+   length, "one slot of rest" named a unit that no longer existed.
 6. **Day bounds.** Every entry lies within the configured `dayStartTime` and `dayEndTime`.
 
 A team is only a team when the fixture names one. An unbound knockout slot carries a
@@ -217,7 +309,7 @@ Structural, and checked:
 Free text, and merely stored:
 
 - `title`, `notes` — never inspected.
-- `days`, `settings` — stored as given, and `days` is regenerated on read anyway.
+- `days`, `settings`, `print` — stored as given, and `days` is regenerated on read anyway.
 - `courts` — stored as given, except that each court's `divisions` is read to enforce the
   court division restriction above.
 - `version` — stored as given.
@@ -281,7 +373,8 @@ Two courts, one day, one break spanning both courts and two fixtures.
     "dayStartTime": "09:00",
     "dayEndTime": "18:00",
     "slotMinutes": 30
-  }
+  },
+  "print": null
 }
 ```
 

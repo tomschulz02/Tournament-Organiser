@@ -123,6 +123,13 @@ branches, and missing environment variables failing at request time instead of b
   thing keeping the contract — not because anything on screen changed.
 - Nothing enforces the shape of `divisions.state`. A malformed write only surfaces on
   read.
+- **`seedAcrossGroups` has no defined order for the tier that `qualifyingTeams` does
+  not divide evenly across uneven-sized pools.** It sorts that tier by `compareTeams`,
+  which is a deliberate, working tiebreak — the gap is that no rule in
+  `docs/tournament-rules.md` says which pool's teams should fill the remaining
+  qualifying spots when the pools are not the same size. Left undecided rather than
+  pinned to whatever the current sort happens to produce; a test asserting a specific
+  order here would be testing an implementation detail, not a rule.
 
 Ranking now matches `docs/tournament-rules.md` and is computed only in the backend.
 `NextRoundModal.jsx` no longer calculates qualifiers, so the two cannot disagree.
@@ -267,18 +274,20 @@ here. What is left:
   the save over it would strand the organiser, but it does mean the rule has a hole that
   bad data can fall through.
 - **`getEntrySlotSpan` and `buildTimeSlots` in `scheduleUtils.js` are called by nothing.**
-  The fixed-axis work of 2026-08-13 left both behind: the grid derives a span from
+  The fixed-axis work of 2026-08-13 left both behind: the printed grid derives a span from
   `getEntryRowPlacement`, which floors the start and ceils the end so an unaligned entry
   covers the rows it actually overlaps — `getEntrySlotSpan` counts duration alone and
   would draw it a row short. `buildTimeSlots` was the old row builder. Both left in place
   rather than deleted — deleting code is High Risk under `CLAUDE.md` — and both still
-  carry tests.
-- **An entry that does not begin and end on a slot boundary is drawn across the slots it
-  covers, not at its exact time.** Its stored times are untouched and shown on the block,
-  and the block carries a dashed inset and a title saying so, but the grid cannot express
-  a 12:35 start on a 30-minute axis. The alternative was to leave it off the grid
-  entirely, which hides a real entry. An entry outside the day's configured hours *is*
-  left off, and listed beneath the grid with its reason.
+  carry tests. `getEntryRowPlacement`'s `snapped` flag joined them on 2026-09-10, when the
+  board stopped drawing approximate blocks; the field is still returned and still tested,
+  and print is the caller that would want it if the printed grid ever marks the same thing.
+- ~~**An entry that does not begin and end on a slot boundary is drawn across the slots it
+  covers, not at its exact time.**~~ — **done 2026-09-10.** The board positions an entry
+  from its own start time in minutes and draws it at its own length, so a 25-minute match
+  on a 60-minute grid is a quarter-row block and two entries of different lengths sit flush
+  against one another. The grid lines are a reading aid, not a placement constraint. The
+  *printed* grid still snaps to whole rows, deliberately — see `docs/schedule.md`.
 - **The rest minimum cannot reach across the pool-to-knockout boundary.** A semifinal's
   teams are unbound at generation time — the fixture carries `Rank 1` and a null
   `team_1` — so the generator has nobody to give rest to and will place it in the slot

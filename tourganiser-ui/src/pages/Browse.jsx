@@ -208,7 +208,7 @@ function BrowseTournaments() {
 		<>
 			{/* The list's loading state, so it cannot overlay the tournament
 			    view — the fetch above is skipped entirely while one is open. */}
-			{isLoading && !id && <LoadingScreen />}
+			{isLoading && !id && <LoadingScreen context="pageLoad" />}
 			{id ? (
 				<Outlet />
 			) : (

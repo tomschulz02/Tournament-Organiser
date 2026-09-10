@@ -1,20 +1,35 @@
 import CreateModal from './CreateModal';
 import FormatSchematic from './FormatSchematic';
 import Icon from '../Icons';
-import { getFormatLabel, isConfigurableFormat } from './divisionFormats';
+import LoadingScreen from '../LoadingScreen';
+import { getFormatLabel } from './divisionFormats';
 import { totalMatches } from './divisionPreview';
 
-// A Round Robin division has no pools or knockout configuration to read, so it
-// is a single pool of everyone and no knockout stage — the same fallback
-// FormatSchematic already uses.
+// Classic reads its match count from pools and a knockout stage. League has
+// neither — its count is either N full cycles (legs mode) or an exact
+// g-regular pairing (limited mode), mirroring createLeagueState/
+// generatePartialRoundRobinPairs in api/src/services/. Games per team is kept
+// as a target and rounded via the same "even n*g" logic those functions
+// validate, so a mid-typing invalid value still shows a sane number rather
+// than NaN.
 function divisionMatches(division) {
-	const configurable = isConfigurableFormat(division.type);
+	if (division.type === 'classic') {
+		return totalMatches(division.teams.length, division.num_groups, division.knockout_teams);
+	}
 
-	return totalMatches(
-		division.teams.length,
-		configurable ? division.num_groups : 1,
-		configurable ? division.knockout_teams : 0,
-	);
+	if (division.type === 'league') {
+		const teamCount = division.teams.length;
+
+		if (division.roundRobinMode === 'limited') {
+			const g = Number(division.gamesPerTeam) || 0;
+			return Math.floor((teamCount * g) / 2);
+		}
+
+		const legs = Math.max(1, Number(division.roundRobinLegs) || 1);
+		return legs * ((teamCount * (teamCount - 1)) / 2);
+	}
+
+	return totalMatches(division.teams.length, 1, 0);
 }
 
 // yyyy-mm-dd from a date input, read as a plain calendar date. Parsed through
@@ -51,7 +66,8 @@ export default function ReviewModal({ details, divisions, isCreating, onClose, o
 					Close
 				</button>
 				<button type="button" className="ct-button ct-button-primary" onClick={onCreate} disabled={isCreating}>
-					{isCreating ? 'Creating…' : 'Create Tournament'}
+					{isCreating && <LoadingScreen variant="inline" />}
+					<span>{isCreating ? 'Creating…' : 'Create Tournament'}</span>
 				</button>
 			</div>
 		</>
@@ -104,8 +120,6 @@ export default function ReviewModal({ details, divisions, isCreating, onClose, o
 }
 
 function ReviewDivision({ division }) {
-	const configurable = isConfigurableFormat(division.type);
-
 	return (
 		<section className="ct-review-division">
 			<div className="ct-review-division-head">
@@ -118,7 +132,7 @@ function ReviewDivision({ division }) {
 					<dt>Teams</dt>
 					<dd>{division.teams.length}</dd>
 				</div>
-				{configurable && (
+				{division.type === 'classic' && (
 					<>
 						<div className="ct-review-fact">
 							<dt>Pools</dt>
@@ -129,6 +143,12 @@ function ReviewDivision({ division }) {
 							<dd>{division.knockout_teams}</dd>
 						</div>
 					</>
+				)}
+				{division.type === 'league' && (
+					<div className="ct-review-fact">
+						<dt>{division.roundRobinMode === 'limited' ? 'Games per team' : 'Legs'}</dt>
+						<dd>{division.roundRobinMode === 'limited' ? division.gamesPerTeam : division.roundRobinLegs}</dd>
+					</div>
 				)}
 				<div className="ct-review-fact">
 					<dt>Matches</dt>

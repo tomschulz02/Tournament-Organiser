@@ -192,14 +192,31 @@ describe('placing fixtures', () => {
 		]);
 	});
 
-	it('records the generation settings on the schedule', () => {
+	it('records the generated day hours on the schedule', () => {
 		const { schedule } = generate({ dailyStartTime: '08:00', dailyEndTime: '20:00', fixtureDurationMinutes: 45 });
 
 		expect(schedule.settings).toMatchObject({
 			dayStartTime: '08:00',
 			dayEndTime: '20:00',
-			slotMinutes: 45,
 		});
+	});
+
+	// slotMinutes is the height of a grid row, not the length of a match. It used
+	// to be overwritten with whatever duration the run happened to use, so an
+	// organiser who had set a 60-minute grid lost it the moment they generated
+	// 25-minute matches. The fixture length lives in the entries alone.
+	it('leaves the grid granularity the organiser chose alone', () => {
+		const base = baseWithRestrictedCourts([{ id: 'court-1', name: 'Court 1', divisions: [] }]);
+		const { schedule } = generate({ baseSchedule: base, fixtures: [fixture('f1')], fixtureDurationMinutes: 25 });
+
+		expect(schedule.settings.slotMinutes).toBe(60);
+		expect(entriesFor(schedule, 'f1')).toMatchObject({ startTime: '09:00', endTime: '09:25' });
+	});
+
+	it('seeds a default grid granularity when the schedule has never had one', () => {
+		const { schedule } = generate({ fixtures: [fixture('f1')], fixtureDurationMinutes: 45 });
+
+		expect(schedule.settings.slotMinutes).toBe(30);
 	});
 
 	it('returns entries in chronological order', () => {
@@ -580,6 +597,51 @@ describe('the rest minimum', () => {
 		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f2']);
 		expect(warnings).toEqual([WARNINGS.rest(1)]);
 	});
+
+	// Rest is its own number of minutes. It used to be a multiple of the fixture
+	// duration, which meant a generator that placed 25-minute matches could only
+	// ever guarantee 25 minutes of rest, and a probe at an exact instant stopped
+	// finding anything the moment the two numbers differed.
+	it('honours a rest longer than a match', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3, fixtureDurationMinutes: 30, restMinutes: 90 });
+
+		// f1 runs 09:00-09:30; 90 minutes of rest puts the next one at 11:00, not
+		// at the 10:00 the old duration-multiple rule would have allowed.
+		expect(startOf(schedule, 'f1')).toBe('09:00');
+		expect(startOf(schedule, 'f2')).toBe('11:00');
+	});
+
+	it('honours a rest shorter than a match', () => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3, fixtureDurationMinutes: 60, restMinutes: 0 });
+
+		expect(startOf(schedule, 'f1')).toBe('09:00');
+		expect(startOf(schedule, 'f2')).toBe('10:00');
+	});
+
+	it.each([
+		['nothing at all', undefined],
+		['an emptied field', ''],
+		['a value that is not a number', 'abc'],
+	])('falls back to one match length of rest given %s', (_label, restMinutes) => {
+		const fixtures = [
+			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		];
+
+		const { schedule } = generate({ fixtures, courtCount: 3, fixtureDurationMinutes: 60, restMinutes });
+
+		expect(startOf(schedule, 'f2')).toBe('11:00');
+	});
 });
 
 // An unbound knockout slot carries a placeholder, not a team. Team exclusivity
@@ -662,6 +724,61 @@ describe('the lexicographic objective', () => {
 
 // A3 again, from the organiser's side: being told "capacity" when the real
 // blocker was the rest minimum sends them to add a court that will not help.
+// A disabled day contributes no candidate slots at all — see docs/schedule.md.
+describe('a disabled day', () => {
+	it('places nothing when the tournament has a single, disabled day', () => {
+		const base = {
+			version: 1,
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: false }],
+			courts: [],
+			entries: [],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+
+		const { schedule, unscheduledFixtures, warnings } = generate({ baseSchedule: base, fixtures: [fixture('f1')] });
+
+		expect(schedule.entries).toEqual([]);
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f1']);
+		expect(warnings).toEqual([WARNINGS.court(1)]);
+	});
+
+	it('skips a disabled day and places fixtures on the enabled one', () => {
+		const base = {
+			version: 1,
+			days: [
+				{ id: 'day-1', date: '2026-08-01', label: 'Day 1', enabled: false },
+				{ id: 'day-2', date: '2026-08-02', label: 'Day 2', enabled: true },
+			],
+			courts: [],
+			entries: [],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+
+		const { schedule } = generate({
+			baseSchedule: base,
+			startDate: '2026-08-01',
+			endDate: '2026-08-02',
+			fixtures: [fixture('f1')],
+		});
+
+		expect(schedule.entries.filter((e) => e.type === 'fixture').every((e) => e.day === '2026-08-02')).toBe(true);
+	});
+
+	it('treats an old schedule with no enabled key on any day as fully enabled', () => {
+		const base = {
+			version: 1,
+			days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }],
+			courts: [],
+			entries: [],
+			settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+		};
+
+		const { schedule } = generate({ baseSchedule: base, fixtures: [fixture('f1')] });
+
+		expect(schedule.entries.some((e) => e.fixtureId === 'f1')).toBe(true);
+	});
+});
+
 describe('warnings name the constraint', () => {
 	it('names the round order when a free court was too early to use', () => {
 		const fixtures = [

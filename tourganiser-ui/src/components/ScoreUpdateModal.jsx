@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
+import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
 import { useConfirm } from './ConfirmDialog';
+import { useHelpTopic } from '../HelpContext';
 import '../App.css';
 
 // A set counts for whichever team scored more in it; a tie (including an
@@ -27,6 +29,8 @@ function tallySets(sets) {
 }
 
 const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch, onSaveChanges }) => {
+	useHelpTopic('score-update-modal');
+
 	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
 	const confirm = useConfirm();
 
@@ -275,22 +279,22 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 										<span>Discard changes</span>
 									</button>
 									<button type="submit" className="save-btn" disabled={busy}>
-										{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 										<span>Save changes</span>
 									</button>
 								</>
 							) : (
 								<>
 									<button type="button" className="cancel-match-btn" onClick={handleCancelMatchClick} disabled={busy}>
-										{submitting === 'cancel' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'cancel' ? <LoadingScreen variant="inline" /> : null}
 										<span>Cancel Match</span>
 									</button>
 									<button type="submit" className="save-btn" disabled={busy}>
-										{submitting === 'save' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 										<span>Save Score</span>
 									</button>
 									<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy}>
-										{submitting === 'end' ? <span className="btn-spinner" aria-hidden="true" /> : null}
+										{submitting === 'end' ? <LoadingScreen variant="inline" /> : null}
 										<span>End Match</span>
 									</button>
 								</>

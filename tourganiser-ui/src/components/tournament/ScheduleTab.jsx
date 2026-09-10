@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
@@ -13,11 +14,12 @@ import {
 	matchesFixtureFilters,
 } from './fixtureUtils';
 import {
+	buildTournamentSchedule,
 	calculateScheduledStats,
+	compareByCourtOrder,
 	compareTimes,
 	formatDateLabel,
 	getCourtName,
-	getScheduleForTournament,
 } from '../../utils/scheduleUtils';
 import { useHelpTopic } from '../../HelpContext';
 
@@ -41,7 +43,7 @@ export default function ScheduleTab({
 }) {
 	useHelpTopic('tournament-fixtures-scheduled');
 
-	const schedule = useMemo(() => getScheduleForTournament(tournament), [tournament]);
+	const { schedule } = useMemo(() => buildTournamentSchedule(tournament, divisions), [tournament, divisions]);
 	const fixtures = useMemo(() => flattenFixtures(divisions), [divisions]);
 	const fixtureIndex = useMemo(() => indexById(fixtures), [fixtures]);
 
@@ -125,6 +127,15 @@ export default function ScheduleTab({
 						</button>
 					)}
 
+					{/* Unconditional — everyone viewing a scheduled tournament can view
+					    or print it, not just the organiser. One button rather than two:
+					    grid and list are a choice made on the print page itself now that
+					    it is a real, linkable route rather than a generated document.
+					    Never loads ScheduleMakerModal. */}
+					<Link to={`/tournaments/view/${tournament.id}/print`} className="tv-subtle-action" target="_blank" rel="noopener">
+						View/Print Schedule
+					</Link>
+
 					{/* In place of Create Schedule, not alongside it. */}
 					{creator && onEditSchedule && (
 						<button type="button" className="tv-primary-action" onClick={onEditSchedule}>
@@ -174,7 +185,8 @@ export default function ScheduleTab({
 											court={getCourtName(schedule, entry.courtId)}
 											officials={entry.officials}
 											action={creator && renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
-										/>
+												divisions={divisions}
+											/>
 									),
 								)}
 							</ul>
@@ -192,6 +204,7 @@ export default function ScheduleTab({
 								fixture={fixture}
 								showDivision={showDivision}
 								action={creator && renderFixtureAction ? renderFixtureAction(fixture) : null}
+								divisions={divisions}
 							/>
 						))}
 					</ul>
@@ -224,6 +237,9 @@ function BreakRow({ entry, schedule }) {
 // Day -> start time -> the courts running at that time.
 function buildSections({ schedule, days, filters, fixtureIndex }) {
 	const hideBreaks = hasFixtureFilter(filters);
+	// Built once for the whole tab rather than per comparison — it indexes every
+	// court, and the sort below runs inside a per-day map.
+	const compareCourts = compareByCourtOrder(schedule);
 
 	return days
 		.filter((day) => !filters.day || day.date === filters.day)
@@ -241,11 +257,10 @@ function buildSections({ schedule, days, filters, fixtureIndex }) {
 					return matchesFixtureFilters(entry.fixture, filters);
 				})
 				// Time first, then court, so a group reads left to right across the
-				// courts in a stable order.
-				.sort(
-					(a, b) =>
-						compareTimes(a.startTime, b.startTime) || String(a.courtId || '').localeCompare(String(b.courtId || '')),
-				);
+				// courts in the order the organiser laid them out — by position in
+				// schedule.courts, not by comparing ids as strings, which put Court
+				// 10 ahead of Court 2. See compareByCourtOrder.
+				.sort((a, b) => compareTimes(a.startTime, b.startTime) || compareCourts(a.courtId, b.courtId));
 
 			return { date: day.date, label: day.label, groups: groupByStartTime(entries) };
 		})

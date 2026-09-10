@@ -7,8 +7,9 @@ import { useConfirm } from '../components/ConfirmDialog';
 import { createTournament } from '../requests';
 import DivisionCard from '../components/create/DivisionCard';
 import DivisionModal from '../components/create/DivisionModal';
+import LoadingScreen from '../components/LoadingScreen';
 import ReviewModal from '../components/create/ReviewModal';
-import { createEmptyDivision, isConfigurableFormat, isDivisionValid } from '../components/create/divisionFormats';
+import { createEmptyDivision, isDivisionValid } from '../components/create/divisionFormats';
 import { clearDraft, describeDraftAge, hasDraftContent, readDraft, writeDraft } from '../utils/createDraft';
 import '../styles/create-tournament.css';
 // The review embeds BracketView, whose styles live with the tournament view and
@@ -138,9 +139,10 @@ function findMissing(details, detailErrors, divisions) {
 
 // Only the fields the endpoint reads, in the shape it reads them.
 //
-// num_groups and knockout_teams are omitted entirely for a format that has
-// neither, and no team id is sent: teams belong to divisions and are always
-// created fresh, so createDivision generates their ids itself.
+// num_groups/knockout_teams and the round-robin fields are each omitted
+// entirely for a format that has neither, and no team id is sent: teams
+// belong to divisions and are always created fresh, so createDivision
+// generates their ids itself.
 function buildPayload(details, divisions) {
 	return {
 		details: {
@@ -154,9 +156,15 @@ function buildPayload(details, divisions) {
 			name: division.name,
 			type: division.type,
 			num_teams: division.teams.length,
-			...(isConfigurableFormat(division.type) && {
+			...(division.type === 'classic' && {
 				num_groups: Number(division.num_groups),
 				knockout_teams: Number(division.knockout_teams),
+			}),
+			...(division.type === 'league' && {
+				round_robin_mode: division.roundRobinMode,
+				...(division.roundRobinMode === 'limited'
+					? { games_per_team: Number(division.gamesPerTeam) }
+					: { round_robin_legs: Number(division.roundRobinLegs) }),
 			}),
 			teams: division.teams.map((team) => ({ name: team.name })),
 		})),
@@ -523,6 +531,8 @@ function CreateTournamentForm() {
 					onSave={handleSaveDivision}
 				/>
 			)}
+
+			{isCreating && <LoadingScreen context="tournamentCreate" />}
 
 			{showReview && (
 				<ReviewModal

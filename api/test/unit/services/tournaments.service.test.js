@@ -472,6 +472,35 @@ describe("tournamentService.fetchTournamentDetails", () => {
 
         await expect(tournamentService.fetchTournamentDetails("tour-1")).rejects.toBe(failure);
     });
+
+    // Q9: groupByDivisionId, unlike teamsByDivisionId, gives a fixtureless
+    // division no Map entry at all rather than an empty array — confirmed
+    // intentional, not a bug. Pinned here so a future change to that choice is
+    // deliberate rather than accidental.
+    it("gives a fixtureless division no entry in fixturesByDivisionId", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([
+            makeDivision({ id: "div-1", state: makeState({ teams: ["t1"] }) }),
+            makeDivision({ id: "div-2", state: makeState({ teams: ["t2"] }) }),
+            makeDivision({ id: "div-3", state: makeState({ teams: [] }) })
+        ]);
+        divisionsRepository.getTeamsByIds.mockImplementation(async (teamIds) =>
+            teamIds.map((id) => ({ id, name: id.toUpperCase() }))
+        );
+        // Only div-1 and div-2 have fixtures; div-3 has none at all.
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([
+            { id: "f1", division_id: "div-1" },
+            { id: "f2", division_id: "div-2" }
+        ]);
+
+        await tournamentService.fetchTournamentDetails("tour-1", "user-1");
+
+        const [args] = vi.mocked(formatTournamentViewPayload).mock.calls[0];
+        expect(args.fixturesByDivisionId.has("div-3")).toBe(false);
+        expect(args.fixturesByDivisionId.get("div-3")).toBeUndefined();
+        // The unaffected map still carries an entry for every division.
+        expect(args.teamsByDivisionId.has("div-3")).toBe(true);
+    });
 });
 
 // The three lifecycle actions share their ownership check, so it is asserted
@@ -545,6 +574,17 @@ describe("tournamentService.endTournament", () => {
         expect(await tournamentService.endTournament("tour-1", "user-1"))
             .toEqual({ id: "tour-1", status: "Finished" });
         expect(tournamentRepository.endTournament).toHaveBeenCalledWith("tour-1");
+    });
+
+    // Mirrors startTournament's and addDivision's own null-status coverage —
+    // this call site had never exercised statusOf() at all.
+    it("treats a null status as Not Started, and refuses to end it", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: null }));
+
+        await expect(tournamentService.endTournament("tour-1", "user-1"))
+            .rejects.toMatchObject({ code: "TOURNAMENT_NOT_STARTED", status: 409 });
+        expect(tournamentRepository.endTournament).not.toHaveBeenCalled();
     });
 
     it("refuses to end a tournament that has not started", async () => {
@@ -668,6 +708,38 @@ describe("tournamentService.updateSchedule", () => {
 
         expect(await tournamentService.updateSchedule("tour-1", "user-1", { version: 1 }))
             .toEqual({ id: "tour-1", entries: 0 });
+    });
+
+    // Every other case here uses one division. getTeamsByDivision resolves each
+    // division's teams from its own state in a loop, so two divisions of
+    // different sizes in the same call is the shape that would surface a state
+    // leaking between iterations.
+    it("resolves teams per division correctly when the divisions hold different team counts", async () => {
+        tournamentRepository.getTournamentById.mockResolvedValue(
+            makeTournament({ created_by: "user-1", start_date: "2026-08-01", end_date: "2026-08-03" })
+        );
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([
+            makeDivision({ id: "div-1", state: makeState({ teams: ["t1", "t2"] }) }),
+            makeDivision({ id: "div-2", state: makeState({ teams: ["t3", "t4", "t5"] }) })
+        ]);
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([]);
+        divisionsRepository.getTeamsByIds.mockImplementation(async (teamIds) =>
+            teamIds.map((id) => ({ id, name: id.toUpperCase() }))
+        );
+
+        await tournamentService.updateSchedule("tour-1", "user-1", schedule);
+
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(1, ["t1", "t2"]);
+        expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(2, ["t3", "t4", "t5"]);
+        expect(validateSchedule).toHaveBeenCalledWith(
+            schedule,
+            expect.objectContaining({
+                teamsByDivisionId: new Map([
+                    ["div-1", [{ id: "t1", name: "T1" }, { id: "t2", name: "T2" }]],
+                    ["div-2", [{ id: "t3", name: "T3" }, { id: "t4", name: "T4" }, { id: "t5", name: "T5" }]]
+                ])
+            })
+        );
     });
 });
 

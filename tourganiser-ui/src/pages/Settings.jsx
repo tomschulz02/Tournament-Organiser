@@ -43,7 +43,7 @@ export default function Settings() {
 	}, [showMessage]);
 
 	if (isLoading) {
-		return <LoadingScreen />;
+		return <LoadingScreen context="pageLoad" />;
 	}
 
 	if (unauthorized) {
@@ -162,7 +162,7 @@ function PasswordChangeForm() {
 				/>
 			</div>
 			<button type="submit" className="tv-primary-action" disabled={busy}>
-				{busy && <span className="btn-spinner" aria-hidden="true" />}
+				{busy && <LoadingScreen variant="inline" />}
 				<span>{busy ? 'Saving…' : 'Change Password'}</span>
 			</button>
 		</form>

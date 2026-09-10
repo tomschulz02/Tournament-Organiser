@@ -12,6 +12,7 @@ import {
 } from "./standings.js";
 import { qualifierCount } from "../services/progression.service.js";
 import { roundHolding } from "../services/fixtures.service.js";
+import { AppError } from "../errors.js";
 
 const FIXTURE_STATUS_LABELS = {
     UPCOMING: "Upcoming",
@@ -188,58 +189,114 @@ function buildDivisionOverview({ division, teams, fixtures, results, state }) {
     };
 }
 
+// One standings entry per round-robin round, UNLESS every round-robin round in
+// the division shares the same groups shape (one group holding the same team
+// set) — the repeated-League-cycle case, per docs/decisions.md — in which case
+// their fixtures are combined into a single table instead of one per leg. A
+// division with exactly one round-robin round (Classic's Pool Play, a
+// single-leg League) trivially satisfies "every round shares the same shape"
+// against itself, so this produces the same single-table output as before this
+// change — the combination is additive, not a special case that could regress
+// Classic.
 function buildDivisionStandings(state, fixtures, teamLookup) {
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
-    const standings = [];
     const seedIndex = buildSeedIndex(state.teams);
     const headToHead = buildHeadToHeadMap(fixtures);
 
-    rounds.forEach((round, roundIndex) => {
-        if (round.type !== "roundRobin" || !Array.isArray(round.groups)) {
-            return;
+    const roundRobinRounds = rounds
+        .map((round, roundIndex) => ({ round, roundIndex }))
+        .filter((entry) => entry.round.type === "roundRobin" && Array.isArray(entry.round.groups));
+
+    if (roundRobinRounds.length === 0) {
+        return [];
+    }
+
+    const firstGroups = roundRobinRounds[0].round.groups;
+    const isRepeatedCycle = roundRobinRounds.every((entry) => sameGroupsShape(entry.round.groups, firstGroups));
+
+    if (!isRepeatedCycle) {
+        return roundRobinRounds.map((entry) =>
+            buildRoundRobinStandingsEntry(entry.round, entry.roundIndex, [entry.round], fixtures, teamLookup, seedIndex, headToHead)
+        );
+    }
+
+    const primary = roundRobinRounds[0];
+    return [
+        buildRoundRobinStandingsEntry(
+            primary.round,
+            primary.roundIndex,
+            roundRobinRounds.map((entry) => entry.round),
+            fixtures,
+            teamLookup,
+            seedIndex,
+            headToHead
+        )
+    ];
+}
+
+// Same group count, same team set per group, order-independent — a reordered
+// pool is still the same pool. Used only to decide whether two round-robin
+// rounds are the same repeated cycle; it says nothing about fixtures.
+function sameGroupsShape(groupsA, groupsB) {
+    if (groupsA.length !== groupsB.length) {
+        return false;
+    }
+
+    return groupsA.every((group, index) => {
+        const other = groupsB[index];
+        if (!Array.isArray(group) || !Array.isArray(other) || group.length !== other.length) {
+            return false;
         }
 
-        const roundStandings = {
-            round: round.name || `Round ${roundIndex + 1}`,
-            roundIndex,
-            groups: []
-        };
+        const sortedA = [...group].sort();
+        const sortedB = [...other].sort();
+        return sortedA.every((value, position) => value === sortedB[position]);
+    });
+}
 
-        round.groups.forEach((group, groupIndex) => {
-            const participantIds = Array.isArray(group) ? group.filter((value) => typeof value === "string") : [];
-            const rows = participantIds.map((teamId) => createStandingsRow(teamLookup.get(teamId), teamId));
+// `sourceRounds` is every round-robin round whose fixtures belong in this one
+// entry — more than one only for a combined multi-leg table, where every round
+// shares `primaryRound.groups`, so grouping by `primaryRound`'s groups is valid
+// for all of them.
+function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, fixtures, teamLookup, seedIndex, headToHead) {
+    const roundStandings = {
+        round: primaryRound.name || `Round ${roundIndex + 1}`,
+        roundIndex,
+        groups: []
+    };
 
-            fixtures.forEach((fixture) => {
-                if (!isCountableFixture(fixture)) {
-                    return;
-                }
+    primaryRound.groups.forEach((group, groupIndex) => {
+        const participantIds = Array.isArray(group) ? group.filter((value) => typeof value === "string") : [];
+        const rows = participantIds.map((teamId) => createStandingsRow(teamLookup.get(teamId), teamId));
 
-                if (!fixtureBelongsToRoundRobinGroup(fixture, round, participantIds)) {
-                    return;
-                }
+        fixtures.forEach((fixture) => {
+            if (!isCountableFixture(fixture)) {
+                return;
+            }
 
-                const teamOne = rows.find((team) => team.id === fixture.team_1_id);
-                const teamTwo = rows.find((team) => team.id === fixture.team_2_id);
-                if (!teamOne || !teamTwo) {
-                    return;
-                }
+            if (!sourceRounds.some((round) => fixtureBelongsToRoundRobinGroup(fixture, round, participantIds))) {
+                return;
+            }
 
-                applyFixtureToStandings(teamOne, teamTwo, fixture.result);
-            });
+            const teamOne = rows.find((team) => team.id === fixture.team_1_id);
+            const teamTwo = rows.find((team) => team.id === fixture.team_2_id);
+            if (!teamOne || !teamTwo) {
+                return;
+            }
 
-            rows.forEach(computeRatios);
-
-            roundStandings.groups.push({
-                name: getGroupLabel(groupIndex),
-                groupIndex,
-                standings: rankGroup(rows, { headToHead, seedIndex })
-            });
+            applyFixtureToStandings(teamOne, teamTwo, fixture.result);
         });
 
-        standings.push(roundStandings);
+        rows.forEach(computeRatios);
+
+        roundStandings.groups.push({
+            name: getGroupLabel(groupIndex),
+            groupIndex,
+            standings: rankGroup(rows, { headToHead, seedIndex })
+        });
     });
 
-    return standings;
+    return roundStandings;
 }
 
 function buildDivisionBracket(state, fixtures, teamLookup) {
@@ -265,7 +322,14 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
             return;
         }
 
-        const roundFixtures = getFixturesForKnockoutRound(fixtures, round.name);
+        // Sorted here rather than trusted from the caller: formatDivisionPayload
+        // happens to pre-sort the whole fixture list by match_no today, but a
+        // group's match is matched to a fixture by walking this array in
+        // order, and that pairing has to hold regardless of what order the
+        // caller handed fixtures in.
+        const roundFixtures = getFixturesForKnockoutRound(fixtures, round.name)
+            .slice()
+            .sort((a, b) => (a.match_no ?? 0) - (b.match_no ?? 0));
         let fixtureIndex = 0;
         const matches = [];
         const groups = round.groups || [];
@@ -280,6 +344,15 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
         groups.forEach((group, groupIndex) => {
             if (!Array.isArray(group) || group.length < 2) {
                 return;
+            }
+
+            // A match is two entries; a bye is one, handled above. Three or more
+            // is not a shape this bracket can draw — it used to silently read
+            // only group[0]/group[1] and drop every entry past the second.
+            if (group.length > 2) {
+                throw new AppError("INVALID_KNOCKOUT_GROUP", {
+                    details: { round: round.name, groupIndex, size: group.length }
+                });
             }
 
             const fixture = roundFixtures[fixtureIndex++] || null;
@@ -325,7 +398,15 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
         });
 
         // The results this round's groups index into, so a bye can be named.
-        previousRound = { groups, matches, previousResults: rounds[roundIndex - 1]?.results };
+        // earlierRound keeps the chain one level further back, so a team that
+        // received a bye two consecutive knockout rounds in a row can still be
+        // resolved by walking back again — see resolveByeTeam.
+        previousRound = {
+            groups,
+            matches,
+            previousResults: rounds[roundIndex - 1]?.results,
+            earlierRound: previousRound
+        };
     });
 
     return {
@@ -377,6 +458,15 @@ function resolveMatchSource(index, previousRound) {
 //
 // It ranks below the fixture in precedence: once progression binds the fixture,
 // the bound team is the answer for the same reason it always was.
+//
+// A team can receive a bye in two (or more) consecutive knockout rounds. When
+// that happens, previousResults has nothing at this index yet — the round that
+// would confirm it has not been committed — but the slot is still knowable:
+// walk back to the round before that one (earlierRound) and ask whether *it*
+// was a bye too. The chain terminates as soon as a round is not itself a bye
+// (returns null and the caller's own fallback to a "Rank N" placeholder takes
+// over) or there is nothing earlier to walk to (a pool round, or the first
+// knockout round in the division).
 function resolveByeTeam(index, previousRound, teamLookup) {
     if (!previousRound || !Number.isInteger(index) || index >= previousRound.groups.length) {
         return null;
@@ -388,10 +478,22 @@ function resolveByeTeam(index, previousRound, teamLookup) {
     }
 
     const entry = group[0];
-    const teamId = typeof entry === "string" ? entry : previousRound.previousResults?.[entry];
-    const team = teamId ? teamLookup.get(teamId) : null;
+    if (typeof entry === "string") {
+        const team = teamLookup.get(entry);
+        return team ? { id: team.id, name: team.name, placeholder: null } : null;
+    }
 
-    return team ? { id: team.id, name: team.name, placeholder: null } : null;
+    if (!Number.isInteger(entry)) {
+        return null;
+    }
+
+    const teamId = previousRound.previousResults?.[entry];
+    if (teamId) {
+        const team = teamLookup.get(teamId);
+        return team ? { id: team.id, name: team.name, placeholder: null } : null;
+    }
+
+    return resolveByeTeam(entry, previousRound.earlierRound, teamLookup);
 }
 
 function describeMatchSource(match, outcome) {

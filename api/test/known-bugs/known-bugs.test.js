@@ -9,9 +9,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // file and stays there as the regression guard. A comment is left in its place
 // here saying where it went.
 //
-// Only bug 10 is left, and it is deferred rather than outstanding: it now covers
-// two functions nothing calls, for a `friends` table that is not in the schema.
-// It is fixed when the friends feature is built. Everything above it is done.
+// Bug 10 is deferred rather than outstanding: it now covers two functions
+// nothing calls, for a `friends` table that is not in the schema. It is fixed
+// when the friends feature is built. It is the only entry left in this file.
 // joinTournament, getSavedTournaments and unfollowTournament were fixed for the
 // Profile page — their regression guard now lives in
 // test/integration/repositories/users.repository.test.js, asserting each
@@ -71,6 +71,12 @@ beforeEach(() => {
 // regression guard now lives in test/unit/services/fixtures.service.test.js,
 // under generateFixtures, asserting the UNSUPPORTED_ROUND_TYPE code and the
 // round type it reports in `details`.
+
+// bug 11, round-robin groups of unequal size double-generating the smaller
+// group's early fixtures, is fixed. Its regression guard now lives in
+// test/unit/services/fixtures.service.test.js, under
+// describe("generateRoundRobinFixtures"), asserting a 4/4/5 group split
+// produces 6/6/10 fixtures with no duplicate pairing per group.
 
 describe("bug 10: the friends queries always throw", () => {
     // api/src/repositories/users.repository.js:44 and 57 test `result.success`

@@ -64,6 +64,24 @@ This is why knockout fixtures can be generated before the pool stage finishes: t
 matchups are expressed positionally and only resolve to teams once `results` is filled.
 Those pre-generated fixtures use `team_1_placeholder` / `team_2_placeholder` for display.
 
+**A League division can have more than one `roundRobin` round.** Classic's Pool Play is
+always exactly one; League offers a "multiple legs" mode where each leg is its own round
+object — `type: "roundRobin"`, `groups: [teams]` identical across every leg, distinctly
+named (`"Round robin"` for a single leg, `"Round Robin (Leg 1)"`/`"Round Robin (Leg 2)"`
+for two, `"Round Robin (Leg 1 of 3)"` style for three or more). `createLeagueState` in
+`api/src/services/divisions.service.js` builds them; `tournamentViewFormatter.js`'s
+`buildDivisionStandings` combines every round-robin round sharing the same `groups` shape
+into one standings table rather than one per leg.
+
+**A League round's fixture set is not always a full cycle.** League's other mode,
+"limited games per team", produces a single `roundRobin` round whose fixtures are a
+`g`-regular graph over the team set — every team plays exactly `g` opponents, fewer than
+the full `n - 1` a cycle would give — via `generatePartialRoundRobinPairs` in
+`api/src/services/fixtures.service.js` (a circulant construction, not a truncated cycle:
+truncating the circle-method rotation gives an uneven schedule whenever `n` is odd). The
+round object itself is indistinguishable from any other `roundRobin` round once
+generated — `totalGames` is just smaller than `n * (n - 1) / 2`.
+
 ### results
 
 Empty while a round is in progress. When the round completes, teams are ranked by their

@@ -62,7 +62,7 @@ async function getProposal(divisionId, userId) {
         // bindFixturesToResults), exposed read-only so the client can preview the
         // next round's matchups from the organiser's current qualifier order,
         // before anything is confirmed. Null on the final round, which has none.
-        nextRound: nextRound ? { name: nextRound.name, groups: nextRound.groups } : null
+        nextRound: nextRound ? { name: nextRound.name, type: nextRound.type, groups: nextRound.groups } : null
     };
 }
 

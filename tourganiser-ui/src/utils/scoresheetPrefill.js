@@ -187,6 +187,7 @@ export function buildFieldValues(fixture, tournament, division, scheduleEntry) {
 		team2Name,
 		team2Abbr3: abbreviateTeamName(team2Name, 3),
 		team2Abbr4: abbreviateTeamName(team2Name, 4),
+		division: typeof division === 'string' ? division : division?.name || '',
 	};
 }
 

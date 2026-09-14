@@ -111,8 +111,17 @@ body {
 	margin: var(--space-1) 0 0;
 }
 
+/* The court count arrives inline as --schedule-grid-courts; the track sizes are
+   here. The defaults are exactly what the inline grid-template-columns used to
+   be (88px, then equal columns free to shrink), so paper is unchanged — but a
+   consumer on a narrow screen can now raise --schedule-grid-court-col to give
+   the columns a legible minimum and scroll the overflow instead of squashing
+   it. schedule-print.css does that for the /print route. */
 .schedule-export-grid-table {
 	display: grid;
+	grid-template-columns:
+		var(--schedule-grid-time-col, 88px)
+		repeat(var(--schedule-grid-courts, 1), minmax(var(--schedule-grid-court-col, 0px), 1fr));
 	border: 1px solid rgba(31, 41, 55, 0.12);
 }
 

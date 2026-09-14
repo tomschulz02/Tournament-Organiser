@@ -120,6 +120,35 @@ async function updateDivision(divisionId, userId, payload = {}) {
         : await renameTeams(divisionId, entries, existingIds);
 }
 
+// PUT /api/divisions/:divisionId/colour — the organiser's chosen accent.
+//
+// Its own endpoint rather than another branch of updateDivision, because that
+// one is the teams-and-structure editor: its reorder and rebuild paths are gated
+// on Not Started and on no results existing, and a colour has no business being
+// refused by either. A division's colour is presentation, so it is changeable
+// for as long as the organiser owns the tournament — during play, and after it
+// has finished.
+//
+// Ownership is the only check, the same one updateDivision makes. `colour` is
+// either one of the twelve palette tokens or null, which clears the choice and
+// hands the division back to the automatic accent.
+async function updateDivisionColour(divisionId, userId, colour) {
+    const division = await divisionsRepository.getDivisionWithOwner(divisionId);
+    if (!division) {
+        throw new AppError("DIVISION_NOT_FOUND");
+    }
+
+    if (division.created_by !== userId) {
+        throw new AppError("NOT_TOURNAMENT_OWNER");
+    }
+
+    const value = normaliseDivisionColour(colour);
+
+    await divisionsRepository.updateStateColor(divisionId, value);
+
+    return { divisionId, color: value };
+}
+
 // The rename path. No gate: a name has no bearing on results, so there is no
 // reason to forbid fixing a typo once the tournament is under way.
 async function renameTeams(divisionId, entries, existingIds) {
@@ -389,12 +418,42 @@ async function repairSchedule(tournamentId, deletedFixtureIds, client) {
 export const divisionService = {
     createDivision,
     updateDivision,
+    updateDivisionColour,
     deleteDivision
 }
 
 
 
 // Helper Functions
+
+// The division accent palette. Twelve tokens, declared once in the UI's App.css
+// as --accent-1 .. --accent-12 and tuned per light/dark theme there; the server
+// stores only which one was chosen, never a colour value, so a division picked
+// in light mode still reads correctly in dark.
+const DIVISION_COLOUR_COUNT = 12;
+
+// Accepts a palette token, or null/empty for "no choice — use the automatic
+// accent". Anything else is refused rather than coerced: a token the stylesheet
+// has no rule for would resolve to nothing and the division would lose its
+// colour everywhere at once, with no error to explain it.
+function normaliseDivisionColour(colour) {
+    if (colour === null || colour === undefined || colour === "") {
+        return null;
+    }
+
+    if (typeof colour !== "string") {
+        throw new AppError("INVALID_DIVISION_COLOUR");
+    }
+
+    const match = /^accent-(\d+)$/.exec(colour.trim());
+    const index = match ? Number(match[1]) : 0;
+
+    if (index < 1 || index > DIVISION_COLOUR_COUNT) {
+        throw new AppError("INVALID_DIVISION_COLOUR");
+    }
+
+    return `accent-${index}`;
+}
 
 // The one place a submitted team list is checked, so creation and editing cannot
 // drift apart on what a valid list is.

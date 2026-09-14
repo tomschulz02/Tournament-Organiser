@@ -100,6 +100,11 @@ function formatDivisionPayload({ division, teams, fixtures }) {
         name: division.name,
         type: division.type || null,
         num_teams: division.num_teams ?? orderedTeams.length,
+        // Lifted out of state alongside it. Every other division-coloured
+        // surface in the client reads a division object, not its state, and the
+        // dashboard's summaries carry no state at all — one shape for both is
+        // what lets divisionColors.js resolve a colour the same way everywhere.
+        color: state.color ?? null,
         state,
         teams: orderedTeams.map((team) => ({
             id: team.id,
@@ -128,6 +133,7 @@ function buildTournamentDashboard(tournament, divisions) {
             id: division.id,
             name: division.name,
             type: division.type,
+            color: division.color ?? null,
             teamCount: division.overview.teamCount,
             fixtureCount: division.overview.totalFixtures,
             completedFixtureCount: division.overview.completedFixtures,
@@ -772,11 +778,30 @@ function normalizeDivisionState(state) {
         }
     }
 
+    const colour = divisionColourOf(state);
+
     return {
         teams: Array.isArray(state.teams) ? state.teams : [],
         rounds: Array.isArray(state.rounds) ? state.rounds : [],
-        currentRound: Number.isInteger(state.currentRound) ? state.currentRound : Number(state.currentRound) || 0
+        currentRound: Number.isInteger(state.currentRound) ? state.currentRound : Number(state.currentRound) || 0,
+        // Carried through rather than rebuilt. This function names every key it
+        // passes on, so a division's chosen accent has to be named here or it
+        // would be stripped on the way out and the organiser's choice would
+        // appear not to have saved. Spread conditionally: absent means "no
+        // choice", which is what the client's automatic accent falls back to,
+        // and a key holding null would be a second way to say the same thing.
+        ...(colour ? { color: colour } : {})
     };
+}
+
+// The stored accent, or null if there isn't a usable one. Validation proper is
+// the service's — this only guards the read path against a value that predates
+// it or was written by hand, so a bad one falls back to the automatic accent
+// rather than reaching the stylesheet as a token it has no rule for.
+function divisionColourOf(state) {
+    const colour = typeof state?.color === "string" ? state.color.trim() : "";
+
+    return /^accent-([1-9]|1[0-2])$/.test(colour) ? colour : null;
 }
 
 function orderTeamsByState(teams, teamOrder = []) {

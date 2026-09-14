@@ -211,6 +211,29 @@ async function updateStateRounds(divisionId, rounds, client) {
     }
 }
 
+// Sets or clears the organiser's chosen accent for a division.
+//
+// A patch rather than a state rewrite, for the same reason updateStateRounds is
+// one: a colour has nothing to do with teams, rounds or seeding, and rewriting
+// state wholesale to change it would put all three at the mercy of a cosmetic
+// edit. A null colour removes the key outright rather than storing a null, so
+// "no colour chosen" has one representation rather than two and the automatic
+// accent takes over again — see divisionColors.js.
+async function updateStateColor(divisionId, color, client = db) {
+    try {
+        const sql = color === null
+            ? "UPDATE divisions SET state = state - 'color', last_update = now() WHERE id = $1::uuid"
+            : "UPDATE divisions SET state = jsonb_set(state, '{color}', $2::jsonb), last_update = now() WHERE id = $1::uuid";
+        const params = color === null ? [divisionId] : [divisionId, JSON.stringify(color)];
+
+        await client.query(sql, params);
+
+        return { message: "Division colour updated" };
+    } catch (error) {
+        throw new Error("Failed to update division colour", { cause: error });
+    }
+}
+
 // Fetches a division together with the id of the user who owns its tournament,
 // so the service can authorise before mutating anything.
 //
@@ -287,6 +310,7 @@ export const divisionsRepository = {
     updateRounds,
     getStateForUpdate,
     updateStateRounds,
+    updateStateColor,
     getDivisionWithOwner,
     getTeamsByIds,
     getFixturesByDivisionId,

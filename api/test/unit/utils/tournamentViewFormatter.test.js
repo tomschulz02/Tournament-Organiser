@@ -595,6 +595,28 @@ describe("normalizeDivisionState", () => {
     it("falls back to round zero when currentRound is not a number", () => {
         expect(normalizeDivisionState({ currentRound: "later" }).currentRound).toBe(0);
     });
+
+    // The organiser's chosen accent. Named here or it would be stripped on the
+    // way out and the choice would appear not to have saved.
+    it("carries a chosen colour through", () => {
+        expect(normalizeDivisionState({ color: "accent-3" }).color).toBe("accent-3");
+    });
+
+    it("trims a chosen colour", () => {
+        expect(normalizeDivisionState({ color: " accent-12 " }).color).toBe("accent-12");
+    });
+
+    // Absent rather than null, so "no colour chosen" has one representation and
+    // the client's automatic accent takes over.
+    it("omits the key when no colour is stored", () => {
+        expect(normalizeDivisionState({ teams: [] })).not.toHaveProperty("color");
+    });
+
+    // A value outside the palette would resolve to no colour at all in the
+    // stylesheet, so the read path falls back rather than passing it on.
+    it.each(["accent-0", "accent-13", "red", "", 3, null])("omits an unusable colour %p", (value) => {
+        expect(normalizeDivisionState({ color: value })).not.toHaveProperty("color");
+    });
 });
 
 describe("orderTeamsByState", () => {

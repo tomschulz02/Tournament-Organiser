@@ -11,7 +11,7 @@ vi.mock("../../../src/services/progression.service.js", () => ({
 }));
 
 vi.mock("../../../src/services/divisions.service.js", () => ({
-    divisionService: { updateDivision: vi.fn(), deleteDivision: vi.fn() }
+    divisionService: { updateDivision: vi.fn(), updateDivisionColour: vi.fn(), deleteDivision: vi.fn() }
 }));
 
 const app = (await import("../../../src/app.js")).default;
@@ -22,11 +22,13 @@ const { authCookie } = await import("../../helpers/auth.js");
 
 const PROGRESSION_URL = "/api/divisions/div-1/progression";
 const DIVISION_URL = "/api/divisions/div-1";
+const COLOUR_URL = "/api/divisions/div-1/colour";
 
 beforeEach(() => {
     vi.mocked(progressionService.getProposal).mockReset();
     vi.mocked(progressionService.commit).mockReset();
     vi.mocked(divisionService.updateDivision).mockReset();
+    vi.mocked(divisionService.updateDivisionColour).mockReset();
     vi.mocked(divisionService.deleteDivision).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -127,6 +129,44 @@ describe("PUT /api/divisions/:divisionId", () => {
     });
 });
 
+describe("PUT /api/divisions/:divisionId/colour", () => {
+    it("requires a session", async () => {
+        const response = await request(app).put(COLOUR_URL).send({ color: "accent-3" });
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({
+            success: false,
+            message: "You must be logged in to do that",
+            data: null
+        });
+        expect(divisionService.updateDivisionColour).not.toHaveBeenCalled();
+    });
+
+    it("stores the chosen colour and answers in the documented envelope", async () => {
+        const result = { divisionId: "div-1", color: "accent-3" };
+        divisionService.updateDivisionColour.mockResolvedValue(result);
+
+        const response = await request(app)
+            .put(COLOUR_URL)
+            .set("Cookie", authCookie({ id: "user-1", username: "tom" }))
+            .send({ color: "accent-3" });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Division colour updated", data: result });
+        expect(divisionService.updateDivisionColour).toHaveBeenCalledWith("div-1", "user-1", "accent-3");
+    });
+
+    // The route exists precisely so a colour is not caught by the teams
+    // endpoint's path. It must not be shadowed by PUT /:divisionId above it.
+    it("does not reach the teams endpoint", async () => {
+        divisionService.updateDivisionColour.mockResolvedValue({ divisionId: "div-1", color: null });
+
+        await request(app).put(COLOUR_URL).set("Cookie", authCookie()).send({ color: null });
+
+        expect(divisionService.updateDivision).not.toHaveBeenCalled();
+    });
+});
+
 describe("DELETE /api/divisions/:divisionId", () => {
     it("requires a session", async () => {
         const response = await request(app).delete(DIVISION_URL);
@@ -196,6 +236,27 @@ describe.each([
             .put(DIVISION_URL)
             .set("Cookie", authCookie())
             .send({ teams: [] });
+
+        expect(response.status).toBe(status);
+        expect(response.body).toEqual({ success: false, message, data: null });
+    });
+});
+
+// The colour endpoint's own refusals. Deliberately short: ownership, existence
+// and the palette. There is no started-tournament case, because a colour is
+// changeable for as long as the organiser owns the tournament.
+describe.each([
+    ["INVALID_DIVISION_COLOUR", 400, "That is not one of the available division colours"],
+    ["NOT_TOURNAMENT_OWNER", 403, "You do not own this tournament"],
+    ["DIVISION_NOT_FOUND", 404, "Division not found"]
+])("division colour error %s", (code, status, message) => {
+    it(`returns ${status}`, async () => {
+        divisionService.updateDivisionColour.mockRejectedValue(new AppError(code));
+
+        const response = await request(app)
+            .put(COLOUR_URL)
+            .set("Cookie", authCookie())
+            .send({ color: "puce" });
 
         expect(response.status).toBe(status);
         expect(response.body).toEqual({ success: false, message, data: null });

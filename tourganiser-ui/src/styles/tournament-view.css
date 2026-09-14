@@ -608,6 +608,115 @@ body.dark .tv-division-badge {
 	overflow-wrap: anywhere;
 }
 
+/* The organiser's colour control. Pushed to the end of the header row rather
+   than sitting beside the name: the name and format label describe the
+   division, this changes it. Organiser only — a viewer's card has no such
+   element at all. */
+.tv-division-colour {
+	position: relative;
+	margin-left: auto;
+}
+
+.tv-division-colour-toggle {
+	display: grid;
+	place-items: center;
+	padding: 4px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: none;
+	cursor: pointer;
+	line-height: 0;
+}
+
+.tv-division-colour-toggle:hover,
+.tv-division-colour-toggle:focus-visible {
+	border-color: var(--tv-division-color, var(--main-color));
+}
+
+/* The card's own accent, so the control shows what it controls. */
+.tv-division-colour-swatch {
+	width: 16px;
+	height: 16px;
+	border-radius: 999px;
+	background: var(--tv-division-color, var(--main-color));
+}
+
+.tv-division-colour-menu {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	z-index: 5;
+	display: grid;
+	gap: var(--space-2);
+	padding: var(--space-2);
+	min-width: 168px;
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* Four across, so twelve accents are three tidy rows at any card width. */
+.tv-division-colour-swatches {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--space-2);
+}
+
+.tv-division-colour-option {
+	position: relative;
+	border: 2px solid transparent;
+	border-radius: 999px;
+	background: var(--tv-division-color);
+	cursor: pointer;
+	aspect-ratio: 1;
+	padding: 0;
+}
+
+/* Default is a labelled row rather than a thirteenth swatch: it is not another
+   colour, it is the absence of a choice, and its dot shows which colour that
+   absence currently produces. */
+.tv-division-colour-option.is-default {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	aspect-ratio: auto;
+	padding: var(--space-1) var(--space-2);
+	border-radius: 8px;
+	background: none;
+	color: var(--secondary-text-color);
+	font-size: 0.85rem;
+	text-align: left;
+}
+
+.tv-division-colour-option.is-default::before {
+	content: '';
+	width: 14px;
+	height: 14px;
+	border-radius: 999px;
+	background: var(--tv-division-color, var(--main-color));
+	flex: 0 0 auto;
+}
+
+.tv-division-colour-option.is-current {
+	border-color: var(--secondary-text-color);
+}
+
+.tv-division-colour-option:focus-visible {
+	outline: 2px solid var(--main-color);
+	outline-offset: 2px;
+}
+
+/* A colour a sibling division is already showing. Marked, never disabled — two
+   divisions in one colour is the organiser's call to make. */
+.tv-division-colour-option.is-taken::after {
+	content: '';
+	position: absolute;
+	inset: 35%;
+	border-radius: 999px;
+	background: var(--tv-surface);
+}
+
 .tv-progress-bar {
 	height: 6px;
 	border-radius: 999px;

@@ -8,7 +8,7 @@ vi.mock("../../../src/services/progression.service.js", () => ({
 }));
 
 vi.mock("../../../src/services/divisions.service.js", () => ({
-    divisionService: { updateDivision: vi.fn() }
+    divisionService: { updateDivision: vi.fn(), updateDivisionColour: vi.fn() }
 }));
 
 const { divisionController } = await import("../../../src/controllers/divisions.controller.js");
@@ -20,6 +20,7 @@ beforeEach(() => {
     vi.mocked(progressionService.getProposal).mockReset();
     vi.mocked(progressionService.commit).mockReset();
     vi.mocked(divisionService.updateDivision).mockReset();
+    vi.mocked(divisionService.updateDivisionColour).mockReset();
 });
 
 function req(overrides = {}) {
@@ -80,6 +81,34 @@ describe("divisionController.updateDivision", () => {
     });
 });
 
+describe("divisionController.updateDivisionColour", () => {
+    it("passes the chosen colour through and reports the outcome", async () => {
+        divisionService.updateDivisionColour.mockResolvedValue({ divisionId: "div-1", color: "accent-3" });
+        const res = makeRes();
+
+        await divisionController.updateDivisionColour(req({ body: { color: "accent-3" } }), res);
+
+        expect(divisionService.updateDivisionColour).toHaveBeenCalledWith("div-1", "user-1", "accent-3");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Division colour updated",
+            data: { divisionId: "div-1", color: "accent-3" }
+        });
+    });
+
+    // A body with no colour is how the choice is cleared, so it has to reach the
+    // service as null rather than be treated as a missing field.
+    it.each([{ body: {} }, { body: undefined }])("sends null when no colour is given (%p)", async (overrides) => {
+        divisionService.updateDivisionColour.mockResolvedValue({ divisionId: "div-1", color: null });
+        const res = makeRes();
+
+        await divisionController.updateDivisionColour(req(overrides), res);
+
+        expect(divisionService.updateDivisionColour).toHaveBeenCalledWith("div-1", "user-1", null);
+    });
+});
+
 // Status and message mapping is no longer this controller's job. The full table
 // of progression codes is driven end to end in
 // test/integration/routes/divisions.route.test.js; here we only check that a
@@ -111,6 +140,16 @@ describe("failure handling", () => {
         const res = makeRes();
 
         await expect(divisionController.updateDivision(req({ body: { teams: [] } }), res)).rejects.toBe(failure);
+
+        expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it("lets a failure from the colour endpoint propagate", async () => {
+        const failure = new Error("INVALID_DIVISION_COLOUR");
+        divisionService.updateDivisionColour.mockRejectedValue(failure);
+        const res = makeRes();
+
+        await expect(divisionController.updateDivisionColour(req({ body: { color: "red" } }), res)).rejects.toBe(failure);
 
         expect(res.json).not.toHaveBeenCalled();
     });

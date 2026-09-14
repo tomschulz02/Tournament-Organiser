@@ -16,6 +16,12 @@ divisionRouter.post('/:divisionId/progression', requireAuth, divisionController.
 // checks that the caller owns the tournament.
 divisionRouter.put('/:divisionId', requireAuth, divisionController.updateDivision);
 
+// The division's colour, on its own route. Deliberately not part of the PUT
+// above: that one is gated on the tournament not having started, and a colour is
+// presentation the organiser may change at any point. Ownership is still
+// required — the service checks it.
+divisionRouter.put('/:divisionId/colour', requireAuth, divisionController.updateDivisionColour);
+
 // Removing the division. The delete cascades to its teams and its fixtures, and
 // the tournament's saved schedule is repaired in the same transaction — the
 // removed division's entries go, every other division's placements and all

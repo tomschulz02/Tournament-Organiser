@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
@@ -22,9 +22,10 @@ import {
 	deleteTournament,
 	endTournament,
 	startTournament,
+	updateDivisionColour,
 	updateTournamentScoresheetTemplate,
 } from '../../requests';
-import { divisionColorStyle } from '../../utils/divisionColors';
+import { DIVISION_ACCENTS, divisionColorStyle, getAutomaticAccent } from '../../utils/divisionColors';
 
 // Split out of the main bundle for the same reason ScheduleMakerModal is
 // (see pages/View.jsx): it pulls in pdfjs-dist for the marker-placement
@@ -247,11 +248,30 @@ function StatusPill({ status }) {
 // One card per division, summarising it and offering a way into the tab that
 // holds the detail. No fixture lists and no standings — a card says how big a
 // division is and how far through it is, and nothing more.
-function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creator, onChanged }) {
+function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status, creator, onChanged }) {
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const [busy, setBusy] = useState(false);
 	const [adding, setAdding] = useState(false);
+	// Colours chosen in this band and not yet confirmed by a refetch, keyed by
+	// division id. A colour change is one request and then a fresh fetch of the
+	// whole tournament, so without this the swatch the organiser just clicked
+	// would sit unchanged for the round trip and read as a click that did nothing.
+	//
+	// Each override records the stored colour it was applied over. That is what
+	// retires it: once the fetch comes back with anything other than that base,
+	// the server has had its say and the override is ignored — so a value the
+	// server settled on differently is never masked by what was clicked. Applied
+	// to the whole list rather than to one card, because an accent is resolved
+	// against the division's siblings and the list is what that reads.
+	const [pendingColours, setPendingColours] = useState({});
+
+	const divisions = stored.map((division) => {
+		const pending = pendingColours[division.id];
+		const superseded = !pending || (division.color ?? null) !== pending.base;
+
+		return superseded ? division : { ...division, color: pending.colour };
+	});
 
 	// A division can only be added or removed before the tournament starts —
 	// afterwards the schedule and the standings are describing a fixed set of
@@ -325,6 +345,31 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 		await run(() => deleteDivision(division.id), 'Division removed.');
 	};
 
+	// Deliberately not routed through `run`. That helper raises the full-screen
+	// loader, which is right for a request that regenerates fixtures and wrong
+	// for one that changes a colour — and there is no success toast either,
+	// because the card changing colour is the confirmation. Only a failure has
+	// anything to say, and it also drops the override so the card stops showing
+	// a colour that was not saved.
+	const handleColour = async (division, colour) => {
+		const base = stored.find((entry) => entry.id === division.id)?.color ?? null;
+		setPendingColours((current) => ({ ...current, [division.id]: { colour, base } }));
+
+		try {
+			await updateDivisionColour(division.id, colour);
+			onChanged?.();
+		} catch (apiError) {
+			setPendingColours((current) => {
+				const remaining = { ...current };
+				delete remaining[division.id];
+
+				return remaining;
+			});
+			// Display-ready by contract.
+			showMessage(apiError.message, 'error');
+		}
+	};
+
 	return (
 		<section className="tv-band">
 			<div className="tv-band-header">
@@ -358,6 +403,13 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 							canRemove={canCompose}
 							busy={busy}
 							onRemove={handleRemove}
+							// Not canCompose: adding and removing divisions stop
+							// when the tournament starts because the schedule and
+							// the standings then describe a fixed set of them. A
+							// colour describes nothing, so the organiser keeps it
+							// for the tournament's whole life.
+							canRecolour={creator}
+							onRecolour={handleColour}
 						/>
 					))}
 				</div>
@@ -385,7 +437,16 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 	);
 }
 
-function DivisionCard({ division, divisions = [], onOpenDivision, canRemove = false, busy = false, onRemove }) {
+function DivisionCard({
+	division,
+	divisions = [],
+	onOpenDivision,
+	canRemove = false,
+	busy = false,
+	onRemove,
+	canRecolour = false,
+	onRecolour,
+}) {
 	const total = division.fixtureCount ?? 0;
 	const completed = division.completedFixtureCount ?? 0;
 	// Guarded: a division with no fixtures yet would otherwise divide by zero.
@@ -400,6 +461,14 @@ function DivisionCard({ division, divisions = [], onOpenDivision, canRemove = fa
 			<div className="tv-division-card-header">
 				<h3>{division.name}</h3>
 				{division.type && <span className="tv-info-format">{division.type}</span>}
+
+				{canRecolour && (
+					<DivisionColourPicker
+						division={division}
+						divisions={divisions}
+						onChoose={(colour) => onRecolour(division, colour)}
+					/>
+				)}
 			</div>
 
 			<dl className="tv-division-card-stats">
@@ -444,6 +513,116 @@ function DivisionCard({ division, divisions = [], onOpenDivision, canRemove = fa
 				)}
 			</div>
 		</article>
+	);
+}
+
+// The organiser's control over a division's colour: the current swatch, which
+// opens a small palette.
+//
+// On the card rather than in a settings screen because the card is where the
+// colour is already on show — the thing being changed and the control that
+// changes it are the same object. Organiser only, and shown for the tournament's
+// whole life; see the note on canRecolour at the call site.
+//
+// The palette itself comes from divisionColors.js rather than being listed here,
+// so the swatches offered are exactly the tokens a division can resolve to.
+function DivisionColourPicker({ division, divisions, onChoose }) {
+	const [open, setOpen] = useState(false);
+	const containerRef = useRef(null);
+
+	// Same dismissal the schedule maker's overflow menu uses: pointerdown
+	// outside closes, so a click on the card behind does not leave the palette
+	// hanging over it.
+	useEffect(() => {
+		if (!open) return;
+
+		const onPointerDown = (event) => {
+			if (!containerRef.current?.contains(event.target)) setOpen(false);
+		};
+		const onKeyDown = (event) => {
+			if (event.key === 'Escape') setOpen(false);
+		};
+
+		document.addEventListener('pointerdown', onPointerDown);
+		document.addEventListener('keydown', onKeyDown);
+
+		return () => {
+			document.removeEventListener('pointerdown', onPointerDown);
+			document.removeEventListener('keydown', onKeyDown);
+		};
+	}, [open]);
+
+	const chosen = division.color ?? null;
+	// What "Default" would give this division, shown as the colour it actually
+	// resolves to rather than as an empty swatch — the option is a colour like
+	// any other, it just is not a stored choice.
+	const automatic = getAutomaticAccent(division.id, divisions);
+
+	// Which accents this division's siblings are already showing, so a duplicate
+	// can be marked. Not forbidden: two divisions in one colour is the
+	// organiser's call, and refusing it would be the application overruling a
+	// deliberate choice.
+	const taken = new Set(
+		divisions
+			.filter((entry) => entry.id !== division.id)
+			.map((entry) => entry.color ?? getAutomaticAccent(entry.id, divisions)?.replace('--', '')),
+	);
+
+	const choose = (colour) => {
+		setOpen(false);
+		if (colour !== chosen) onChoose(colour);
+	};
+
+	return (
+		<div className="tv-division-colour" ref={containerRef}>
+			<button
+				type="button"
+				className="tv-division-colour-toggle"
+				aria-haspopup="menu"
+				aria-expanded={open}
+				aria-label={`Change the colour of ${division.name}`}
+				title="Change colour"
+				onClick={() => setOpen((value) => !value)}>
+				<span className="tv-division-colour-swatch" aria-hidden="true" />
+			</button>
+
+			{open && (
+				<div className="tv-division-colour-menu" role="menu" aria-label={`${division.name} colour`}>
+					<button
+						type="button"
+						role="menuitemradio"
+						aria-checked={chosen === null}
+						className={`tv-division-colour-option is-default ${chosen === null ? 'is-current' : ''}`}
+						style={automatic ? { '--tv-division-color': `var(${automatic})` } : undefined}
+						onClick={() => choose(null)}>
+						Default
+					</button>
+
+					<div className="tv-division-colour-swatches">
+						{DIVISION_ACCENTS.map((accent) => (
+							<button
+								key={accent}
+								type="button"
+								role="menuitemradio"
+								aria-checked={chosen === accent}
+								className={`tv-division-colour-option ${chosen === accent ? 'is-current' : ''} ${
+									taken.has(accent) ? 'is-taken' : ''
+								}`}
+								style={{ '--tv-division-color': `var(--${accent})` }}
+								// The name is the only thing a screen reader has to
+								// go on here — a swatch has no text — and "in use by
+								// another division" is the whole of what the marker
+								// on it means.
+								aria-label={`${accent.replace('accent-', 'Colour ')}${
+									taken.has(accent) ? ', in use by another division' : ''
+								}`}
+								onClick={() => choose(accent)}
+							/>
+						))}
+					</div>
+				</div>
+			)}
+		</div>
 	);
 }
 

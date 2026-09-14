@@ -303,6 +303,37 @@ Success returns `rebuilt` and `reordered`, the resulting team list in seed order
 fixture count and how many schedule entries were dropped — for a rebuild always, and for a
 reorder now that it regenerates fixtures too.
 
+### Setting a division's colour
+
+`PUT /api/divisions/:divisionId/colour`. Body: `{ "color": "accent-3" }`, or
+`{ "color": null }` to clear the choice.
+
+Its own endpoint rather than another field on the PUT above, because that one is the
+teams-and-structure editor and its reorder and rebuild paths are gated on the tournament
+not having started. A colour is presentation: it touches neither teams nor results, so the
+organiser may change it at any point in the tournament's life, during play and after it
+has finished.
+
+The value is one of the twelve palette tokens `accent-1` … `accent-12`, which the UI
+declares in `App.css` and tunes per light and dark theme. The server stores which token was
+chosen, never a colour value — a division picked in light mode therefore still reads
+correctly in dark. It is written to `state.color`; clearing removes the key rather than
+storing a null, so "no colour chosen" has one representation and the client's automatic
+per-position accent takes over again. See `docs/division-state.md`.
+
+Rejections:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `INVALID_DIVISION_COLOUR` | Not one of the twelve palette tokens |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 404 | `DIVISION_NOT_FOUND` | No such division |
+
+There is deliberately no 409. Neither the tournament's status nor the division's results
+bear on its colour.
+
+Success returns `{ divisionId, color }`, with `color` null when the choice was cleared.
+
 ### Saving a schedule
 
 `PUT /api/tournaments/:tournamentId/schedule`. Body: `{ "schedule": { … } }`, the whole

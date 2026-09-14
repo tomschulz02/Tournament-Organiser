@@ -404,6 +404,49 @@ describe("updateStateRounds", () => {
     });
 });
 
+describe("updateStateColor", () => {
+    it("patches state.color and stamps last_update, leaving the rest of state alone", async () => {
+        expect(await divisionsRepository.updateStateColor("div-1", "accent-3"))
+            .toEqual({ message: "Division colour updated" });
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = jsonb_set(state, '{color}', $2::jsonb), last_update = now() WHERE id = $1::uuid"
+        );
+        expect(params).toEqual(["div-1", JSON.stringify("accent-3")]);
+    });
+
+    // A cleared colour removes the key rather than storing a null, so "no colour
+    // chosen" has one representation and the automatic accent takes over.
+    it("removes the key when the colour is cleared", async () => {
+        await divisionsRepository.updateStateColor("div-1", null);
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = state - 'color', last_update = now() WHERE id = $1::uuid"
+        );
+        expect(params).toEqual(["div-1"]);
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await divisionsRepository.updateStateColor("div-1", "accent-3", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.updateStateColor("div-1", "accent-3"),
+            "Failed to update division colour",
+            underlying
+        );
+    });
+});
+
 describe("getTeamsByIds", () => {
     // By id rather than by division_id, even though the column now exists:
     // state.teams is authoritative for seed order and a query by division would

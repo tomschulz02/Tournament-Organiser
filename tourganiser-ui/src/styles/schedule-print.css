@@ -631,6 +631,111 @@
 	display: none;
 }
 
+/* ---------------------------------------------------------------------------
+ * Reading the pages on a phone.
+ *
+ * A printed page is a fixed shape, and this route is a preview of one. Fitting
+ * it to a 375px screen is the wrong trade: twelve courts across that width
+ * leaves each column a few characters wide, so the page is on screen and
+ * unreadable. The page keeps its real proportions and the reader moves around
+ * it instead — which is also what makes the preview honest, because what is on
+ * screen is still what will print.
+ *
+ * Every rule below is screen-only and scoped to .schedule-print-root. The
+ * @media print block above is unaffected, and schedule-export.css — which is
+ * the same text the standalone document is built from — is not touched at all.
+ * ------------------------------------------------------------------------- */
+@media screen and (max-width: 768px) {
+	/* The grey mat around the sheet costs width that the sheet needs, and the
+	   sheet's own generous print padding costs more. */
+	.schedule-print-root .schedule-export-page {
+		padding: var(--space-4, 16px);
+		margin-bottom: var(--space-3, 12px);
+	}
+
+	/* Columns wide enough to read a team name in, which is what makes the grid
+	   overflow and therefore scroll. Without this the tracks are free to shrink
+	   to nothing (minmax(0, 1fr)) and nothing ever overflows — the grid just
+	   gets narrower and less legible the more courts there are. */
+	.schedule-print-root .schedule-export-grid-table {
+		--schedule-grid-time-col: 64px;
+		--schedule-grid-court-col: 116px;
+		/* Not cosmetic, and the reason the locked columns below work at all. A
+		   block-level grid is as wide as the box it sits in, so its columns
+		   overflow while the grid box itself stays 343px — and a sticky child
+		   is held inside its containing block, which is that 343px box. The
+		   time column would therefore stick for one screen's worth of scrolling
+		   and then slide away, which is worse than not sticking at all.
+		   fit-content sizes the box to the columns, so the sticky cells can
+		   travel the full width; with few enough courts to fit, it collapses
+		   back to the container and the tracks share the width as before. */
+		width: fit-content;
+	}
+
+	/* The scroll container, and the containing block the sticky rules below
+	   resolve against. Bounded in height deliberately: the column headers can
+	   only stay locked while the thing being scrolled past them is this box
+	   rather than the document. What is left on screen above it is the day and
+	   court-range header, which is the context the times and courts need. */
+	.schedule-print-root .schedule-export-grid {
+		overflow: auto;
+		/* A grid item's automatic minimum size is its content, which would push
+		   the sheet wider instead of letting this box scroll. */
+		min-width: 0;
+		max-height: calc(100vh - 190px);
+		overscroll-behavior: contain;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	/* The court names. Locked to the top of the scroller, so a time slot half
+	   way down the day still says which court each column is. */
+	.schedule-print-root .schedule-export-grid-head {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+	}
+
+	/* The times. Locked to the left, so a court scrolled to from the right
+	   still says what time each row is. Opaque: these cells sit over the grid
+	   rather than beside it once it scrolls, and the export stylesheet leaves
+	   them transparent because on paper nothing ever passes under them. */
+	.schedule-print-root .schedule-export-grid-time {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: #fff;
+	}
+
+	/* The corner. It belongs to both locked bands, so it has to outrank both —
+	   otherwise it slides under the time column on a horizontal scroll and
+	   under the header row on a vertical one. */
+	.schedule-print-root .schedule-export-grid-head:first-child {
+		left: 0;
+		z-index: 3;
+	}
+
+	/* The list layout has no time column and nothing to lock, but its four
+	   fixed-ish columns still come to more than a phone is wide. It scrolls
+	   sideways as one block so the columns stay aligned row to row. */
+	.schedule-print-root .schedule-export-list {
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+	}
+
+	.schedule-print-root .schedule-export-list-row {
+		min-width: 560px;
+	}
+
+	/* The route's own chrome, which is competing for the same narrow bar. */
+	.schedule-print-bar {
+		padding: var(--space-2, 8px) var(--space-3, 12px);
+	}
+
+	.schedule-print-bar-actions {
+		gap: var(--space-1, 4px);
+	}
+}
+
 @media print {
 	/* On paper the sheet supplies its own ground — .schedule-export-page paints
 	   white — so the route's screen background must not print as a grey wash. */

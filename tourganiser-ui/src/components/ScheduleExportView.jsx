@@ -173,9 +173,17 @@ function ScheduleExportGridPages({
 					courtRangeLabel={rangeLabel}
 				/>
 				<div className="schedule-export-grid">
+					{/* The court count travels as a custom property rather than as a
+					    finished grid-template-columns string. The track sizes
+					    themselves belong in the stylesheet, where the print route
+					    can give the columns a real minimum width on a narrow screen
+					    and let the grid scroll — an inline template would outrank
+					    any rule that tried. The default values in
+					    schedule-export.css reproduce what this used to compute, so
+					    paper and the standalone document are unchanged. */}
 					<div
 						className="schedule-export-grid-table"
-						style={{ gridTemplateColumns: `88px repeat(${courts.length}, minmax(0, 1fr))` }}>
+						style={{ '--schedule-grid-courts': courts.length }}>
 						<div className="schedule-export-grid-head">Time</div>
 						{courts.map((court) => (
 							<div key={court.id} className="schedule-export-grid-head">

@@ -328,6 +328,16 @@ export const updateRounds = (divisionId, rounds, qualifiedTeams, standings, fixt
 export const updateDivisionTeams = (divisionId, { teams, num_groups, knockout_teams }) =>
 	request(`divisions/${divisionId}`, { method: 'PUT', body: { teams, num_groups, knockout_teams } });
 
+// The division's accent, as a palette token ("accent-3"), or null to go back to
+// the automatic one.
+//
+// Its own request rather than a field on updateDivisionTeams above, because that
+// endpoint refuses a reorder or a rebuild once the tournament has started and a
+// colour is presentation — the organiser may change it whenever they like. See
+// docs/api.md.
+export const updateDivisionColour = (divisionId, color) =>
+	request(`divisions/${divisionId}/colour`, { method: 'PUT', body: { color } });
+
 // Removes the division outright. Cascades to its teams and its fixtures, and the
 // tournament's saved schedule is repaired — the removed division's entries go,
 // everything else stays where it was. There is no undo. Refused with a 409 once

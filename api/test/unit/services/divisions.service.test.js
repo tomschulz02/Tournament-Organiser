@@ -21,7 +21,8 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
         deleteDivision: vi.fn(),
         getDivisionsByTournamentId: vi.fn(),
         replaceState: vi.fn(),
-        updateTeamOrder: vi.fn()
+        updateTeamOrder: vi.fn(),
+        updateStateColor: vi.fn()
     }
 }));
 
@@ -73,6 +74,7 @@ beforeEach(() => {
     divisionsRepository.getDivisionsByTournamentId.mockReset();
     divisionsRepository.replaceState.mockReset();
     divisionsRepository.updateTeamOrder.mockReset();
+    divisionsRepository.updateStateColor.mockReset();
     fixturesRepository.createFixture.mockReset();
     fixturesRepository.getResults.mockReset();
     fixturesRepository.getResults.mockResolvedValue([]);
@@ -1444,4 +1446,77 @@ describe("divisionService.deleteDivision", () => {
         expect(clientSql()).toEqual([]);
         expect(fixturesRepository.deleteByDivisionId).not.toHaveBeenCalled();
     });
+});
+
+describe("divisionService.updateDivisionColour", () => {
+    const division = (overrides = {}) => ({
+        id: "div-1",
+        tournament_id: "tour-1",
+        name: "Division A",
+        type: "Classic",
+        state: { teams: ["t1", "t2"], rounds: [], currentRound: 0 },
+        created_by: "user-1",
+        tournament_status: "Not Started",
+        ...overrides
+    });
+
+    beforeEach(() => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(division());
+        divisionsRepository.updateStateColor.mockResolvedValue({ message: "Division colour updated" });
+    });
+
+    it("reports a division that does not exist", async () => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(null);
+
+        await expect(divisionService.updateDivisionColour("div-1", "user-1", "accent-3"))
+            .rejects.toMatchObject({ code: "DIVISION_NOT_FOUND", status: 404 });
+        expect(divisionsRepository.updateStateColor).not.toHaveBeenCalled();
+    });
+
+    it("refuses somebody else's division", async () => {
+        await expect(divisionService.updateDivisionColour("div-1", "user-2", "accent-3"))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        expect(divisionsRepository.updateStateColor).not.toHaveBeenCalled();
+    });
+
+    it("stores a palette token", async () => {
+        await expect(divisionService.updateDivisionColour("div-1", "user-1", "accent-3"))
+            .resolves.toEqual({ divisionId: "div-1", color: "accent-3" });
+        expect(divisionsRepository.updateStateColor).toHaveBeenCalledWith("div-1", "accent-3");
+    });
+
+    it("accepts the last token in the palette", async () => {
+        await divisionService.updateDivisionColour("div-1", "user-1", " accent-12 ");
+
+        expect(divisionsRepository.updateStateColor).toHaveBeenCalledWith("div-1", "accent-12");
+    });
+
+    // The gate the endpoint exists to avoid. Teams and structure are frozen once
+    // a tournament is under way; a colour is presentation and is not.
+    it.each(["In Progress", "Finished"])("still allows a change once the tournament is %s", async (status) => {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({ tournament_status: status }));
+
+        await divisionService.updateDivisionColour("div-1", "user-1", "accent-5");
+
+        expect(divisionsRepository.updateStateColor).toHaveBeenCalledWith("div-1", "accent-5");
+    });
+
+    // Null clears the key, which is how a division goes back to the automatic
+    // accent. An empty string and an omitted value mean the same thing.
+    it.each([null, undefined, ""])("clears the choice for %p", async (value) => {
+        await expect(divisionService.updateDivisionColour("div-1", "user-1", value))
+            .resolves.toEqual({ divisionId: "div-1", color: null });
+        expect(divisionsRepository.updateStateColor).toHaveBeenCalledWith("div-1", null);
+    });
+
+    // Refused rather than coerced: a token the stylesheet has no rule for would
+    // leave the division with no colour at all, everywhere, with nothing said.
+    it.each(["accent-0", "accent-13", "accent-", "red", "#ff0000", "accent-1; drop", 3, {}, true])(
+        "refuses %p",
+        async (value) => {
+            await expect(divisionService.updateDivisionColour("div-1", "user-1", value))
+                .rejects.toMatchObject({ code: "INVALID_DIVISION_COLOUR", status: 400 });
+            expect(divisionsRepository.updateStateColor).not.toHaveBeenCalled();
+        }
+    );
 });

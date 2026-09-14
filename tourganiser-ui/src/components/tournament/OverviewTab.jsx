@@ -15,7 +15,7 @@ import { useHelpTopic } from '../../HelpContext';
 // behavioural gain, and copying the modal would give the application two
 // definitions of what a valid division is.
 import DivisionModal from '../create/DivisionModal';
-import { createEmptyDivision, isConfigurableFormat } from '../create/divisionFormats';
+import { createEmptyDivision } from '../create/divisionFormats';
 import {
 	addDivision,
 	deleteDivision,
@@ -276,9 +276,13 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 
 	// The modal hands back its own draft, which carries a local id and no
 	// num_teams. The endpoint reads the same shape the creation page sends, so
-	// the payload is built the way buildPayload builds it: the count added, the
-	// pool and qualifier settings included only for a format that has them, and
-	// the local id dropped.
+	// the payload is built exactly the way CreateTournament.jsx's buildPayload
+	// builds it — Classic's pool/qualifier settings, or League's round-robin
+	// mode, each included only for the format that has them — and the local id
+	// dropped. Keep the two in sync; this one previously fell behind when
+	// League's round-robin config was added and only buildPayload was updated,
+	// which silently generated a single leg here regardless of what was
+	// entered.
 	const handleAdd = async (draft) => {
 		setAdding(false);
 
@@ -288,9 +292,15 @@ function DivisionsBand({ divisions, onOpenDivision, tournamentId, status, creato
 					name: draft.name,
 					type: draft.type,
 					num_teams: draft.teams.length,
-					...(isConfigurableFormat(draft.type) && {
+					...(draft.type === 'classic' && {
 						num_groups: Number(draft.num_groups),
 						knockout_teams: Number(draft.knockout_teams),
+					}),
+					...(draft.type === 'league' && {
+						round_robin_mode: draft.roundRobinMode,
+						...(draft.roundRobinMode === 'limited'
+							? { games_per_team: Number(draft.gamesPerTeam) }
+							: { round_robin_legs: Number(draft.roundRobinLegs) }),
 					}),
 					teams: draft.teams.map((team) => ({ name: team.name })),
 				}),

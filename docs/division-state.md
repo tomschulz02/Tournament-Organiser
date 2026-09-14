@@ -12,6 +12,22 @@ with it, the code is wrong.
 | `teams` | array of UUID strings | Team IDs in this division, in seeded order. References `teams.id`. |
 | `rounds` | array of round objects | Ordered. Index 0 is the first round played. |
 | `currentRound` | integer | Index into `rounds`. The round currently in progress. |
+| `color` | string, optional | The accent the organiser chose for this division: `"accent-1"` … `"accent-12"`. Absent means no choice. |
+
+`color` is the only key here that is presentation rather than structure, and the only one
+an organiser can change at any point in the tournament's life — it bears on neither teams
+nor results, so `PUT /api/divisions/:divisionId/colour` is ungated beyond ownership. It
+holds a **token name, not a colour value**: the twelve accents are declared in the UI's
+`App.css` and tuned separately for light and dark theme, so storing which one was chosen
+is what lets a division picked in light mode still read correctly in dark.
+
+The key is absent, not null, when no colour has been chosen — clearing it removes it —
+so "use the automatic accent" has one representation. The client's fallback, in
+`tourganiser-ui/src/utils/divisionColors.js`, assigns an accent by the division's sorted
+position among its tournament's divisions, which is collision-free within a tournament. A
+chosen colour overrides that for its own division only, so a manual choice can duplicate
+a sibling's automatic one; the organiser's picker marks which are in use but does not
+forbid it.
 
 `teams` holds ID strings only, never team objects. Names are resolved by joining to the
 `teams` table.

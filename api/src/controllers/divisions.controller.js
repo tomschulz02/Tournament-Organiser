@@ -35,6 +35,18 @@ async function updateDivision(req, res) {
     res.status(200).json({ success: true, message: "Division updated", data: result });
 }
 
+// The division's accent. A body of one field, and the only thing about a
+// division an organiser can change at any point in the tournament's life — it
+// is presentation and touches neither teams nor results. `color` is a palette
+// token or null to go back to the automatic one.
+async function updateDivisionColour(req, res) {
+    const { divisionId } = req.params;
+
+    const result = await divisionService.updateDivisionColour(divisionId, req.user.id, req.body?.color ?? null);
+
+    res.status(200).json({ success: true, message: "Division colour updated", data: result });
+}
+
 // Removes the division outright. There is no body: the id and the session are
 // everything the service needs, and what the removal takes with it is not the
 // caller's to choose.
@@ -53,5 +65,6 @@ export const divisionController = {
     getProgression,
     commitProgression,
     updateDivision,
+    updateDivisionColour,
     deleteDivision
 };

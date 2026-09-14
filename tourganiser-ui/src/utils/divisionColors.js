@@ -45,14 +45,53 @@ function positionInTournament(id, divisions) {
 	return ids.indexOf(id);
 }
 
+// The organiser's own choice, if this division has one and it names an accent
+// the stylesheet actually declares. Checked against the palette here rather than
+// trusted, for the same reason the server validates on write: a token with no
+// rule behind it resolves to nothing, and the division would lose its colour
+// everywhere at once with nothing on screen to explain it.
+//
+// Read from either shape a division arrives in — the full payload carries it as
+// `color` alongside `state`, and the dashboard's summaries, which have no state
+// at all, carry the same `color` field. See docs/division-state.md.
+function chosenAccent(id, divisions) {
+	const division = divisions.find((entry) => entry?.id === id);
+	const chosen = division?.color ?? division?.state?.color ?? null;
+	const match = typeof chosen === 'string' ? /^accent-(\d+)$/.exec(chosen.trim()) : null;
+	const index = match ? Number(match[1]) : 0;
+
+	return index >= 1 && index <= ACCENT_COUNT ? `--accent-${index}` : null;
+}
+
 // Returns the CSS custom property (e.g. "--accent-3") a division's accents should
-// use. Pass `divisions` — the full division list of the division's own tournament —
+// use.
+//
+// The organiser's choice wins when there is one, so a division keeps the colour
+// they picked wherever it appears. Otherwise the automatic assignment below
+// applies, which is what every division has until someone changes it.
+//
+// Pass `divisions` — the full division list of the division's own tournament —
 // whenever it's available, so sibling divisions never collide; a division past the
 // 12th (by sorted id) wraps and shares a colour with an earlier one rather than
 // inventing a 13th, same as the original design. Without `divisions` (or if `id`
 // isn't found in it), falls back to the old per-id hash, which is stable but not
-// collision-free against divisions it knows nothing about.
+// collision-free against divisions it knows nothing about — and cannot see a
+// chosen colour either, since the choice lives on the division object.
 export function getDivisionAccent(id, divisions = []) {
+	if (!id) return null;
+
+	return chosenAccent(id, divisions) ?? getAutomaticAccent(id, divisions);
+}
+
+// The palette an organiser picks from, as token names. Exported so the picker
+// renders exactly the set getDivisionAccent will accept, rather than keeping a
+// second list of what the twelve accents are.
+export const DIVISION_ACCENTS = Array.from({ length: ACCENT_COUNT }, (_, index) => `accent-${index + 1}`);
+
+// Which accent a division would get if nobody had chosen one. Split out of
+// getDivisionAccent so the picker's "Default" option can be shown as the real
+// colour it will produce rather than as an empty swatch.
+export function getAutomaticAccent(id, divisions = []) {
 	if (!id) return null;
 
 	const position = positionInTournament(id, divisions);

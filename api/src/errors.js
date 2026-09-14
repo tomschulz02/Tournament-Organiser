@@ -73,6 +73,11 @@ export const ERRORS = {
 	// only exists for 0 < g < n - 1 and, when n is odd, only for an even g.
 	INVALID_GAMES_PER_TEAM: [400, "Games per team must be less than the number of teams minus one"],
 	GAMES_PER_TEAM_PARITY: [400, "With an odd number of teams, games per team must be an even number"],
+	// The organiser's chosen division accent. The palette is a closed set of
+	// twelve tokens declared in the UI's App.css, so anything else is refused
+	// rather than stored — a value the stylesheet has no rule for would render
+	// as no colour at all, silently, everywhere the division appears.
+	INVALID_DIVISION_COLOUR: [400, "That is not one of the available division colours"],
 
 	// Accounts and sessions.
 	MISSING_FIELDS: [400, "Missing required fields"],

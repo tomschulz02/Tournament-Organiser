@@ -92,6 +92,7 @@ describe("tournamentController.fetchTournamentDetails", () => {
     it("returns the view alongside loggedIn and creator, all inside data", async () => {
         tournamentService.fetchTournamentDetails.mockResolvedValue({
             creator: true,
+            editor: false,
             view: { tournament: { id: "tour-1" }, dashboard: {}, divisions: [] }
         });
         const res = makeRes();
@@ -109,6 +110,7 @@ describe("tournamentController.fetchTournamentDetails", () => {
             data: {
                 loggedIn: true,
                 creator: true,
+                editor: false,
                 tournament: { id: "tour-1" },
                 dashboard: {},
                 divisions: []

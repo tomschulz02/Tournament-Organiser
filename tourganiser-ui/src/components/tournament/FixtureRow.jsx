@@ -1,5 +1,5 @@
 import DivisionBadge from './DivisionBadge';
-import { setScores, setsWon } from './fixtureUtils';
+import { enteredByLabel, setScores, setsWon } from './fixtureUtils';
 import { divisionColorStyle } from '../../utils/divisionColors';
 
 // One fixture, shared by both states of the Fixtures & Schedule tab. The
@@ -24,6 +24,10 @@ export default function FixtureRow({
 	divisions = [],
 }) {
 	const status = (fixture.status || 'upcoming').toLowerCase();
+	// Present only for the organiser and the tournament's editors, and only on a
+	// fixture someone is recorded as scoring — the server sends nothing otherwise,
+	// so there is no empty line to suppress here.
+	const enteredBy = enteredByLabel(fixture.enteredBy);
 	const sets = setsWon(fixture.result);
 	const scores = setScores(fixture.result);
 
@@ -73,6 +77,7 @@ export default function FixtureRow({
 				)}
 
 				{officials && <span className="tv-fixture-row-officials">Officials: {officials}</span>}
+				{enteredBy && <span className="tv-fixture-row-officials">Entered by {enteredBy}</span>}
 			</div>
 
 			<div className="tv-fixture-row-teams">

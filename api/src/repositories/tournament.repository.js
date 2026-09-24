@@ -167,7 +167,23 @@ async function getScheduleForUpdate(tournamentId, client) {
     }
 }
 
+// Moves tournaments.last_update without changing anything else, for a write the
+// tournament view shows but which lands in a table carrying no stamp — adding or
+// removing an editor changes what that editor is offered, and without this the
+// ETag would tell them their cached page is still current. Assigning the column
+// is itself a change, so the trigger's IS DISTINCT FROM guard lets it through.
+// The tournament-level counterpart of divisionsRepository.touchDivision.
+async function touchTournament(tournamentId, client = db) {
+    try {
+        const sql = "UPDATE tournaments SET last_update = now() WHERE id = $1::uuid";
+        await client.query(sql, [tournamentId]);
+    } catch (error) {
+        throw new Error("Failed to touch tournament", { cause: error });
+    }
+}
+
 export const tournamentRepository = {
+    touchTournament,
     createTournament,
     getAllTournaments,
     getTournamentById,

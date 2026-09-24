@@ -3,6 +3,7 @@ import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { userRepository } from "../repositories/users.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
+import { editorsRepository } from "../repositories/editors.repository.js";
 import { divisionService } from "./divisions.service.js";
 import { getISODate, getLongDate } from "../utils/DateHandler.js";
 import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
@@ -124,16 +125,25 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
         fixturesRepository.getFixturesByDivisionIds(divisionIds)
     ]);
 
+    const creator = viewerUserId !== null && viewerUserId === tournament.created_by;
+    // Only asked for a signed-in viewer who is not the organiser: anyone else
+    // cannot be an editor, and a public view costs no extra query.
+    const editor = !creator && viewerUserId !== null && (await editorsRepository.isEditor(tournamentId, viewerUserId));
+
     const fixturesByDivisionId = groupByDivisionId(fixtures);
     const view = formatTournamentViewPayload({
         tournament,
         divisions,
         teamsByDivisionId,
-        fixturesByDivisionId
+        fixturesByDivisionId,
+        // Who entered each result is for the people entering them. Everyone
+        // else is handed no attribution at all, not an empty one.
+        attribution: creator || editor ? await buildAttribution(tournament, fixtures, viewerUserId) : null
     });
 
     return {
-        creator: viewerUserId !== null && viewerUserId === tournament.created_by,
+        creator,
+        editor,
         // Derived from rows already loaded, so this costs no extra query. The
         // controller turns it into an ETag; it is not part of the payload.
         changeKey: buildChangeKey({ tournament, divisions }),
@@ -283,6 +293,33 @@ async function updateScoresheetTemplate(tournamentId, userId, templateKey) {
     await tournamentRepository.updateScoresheetTemplate(tournamentId, templateKey ?? null);
 
     return { id: tournamentId, scoresheet_template: templateKey ?? null };
+}
+
+// Names and roles for everyone who has entered a result in this tournament, keyed
+// by user id. The role is the one they hold now: someone removed as an editor is
+// still named on the results they entered, but no longer as an editor.
+async function buildAttribution(tournament, fixtures, viewerUserId) {
+    const ids = [...new Set(fixtures.map((fixture) => fixture.entered_by).filter(Boolean))];
+    if (ids.length === 0) {
+        return new Map();
+    }
+
+    const [users, editors] = await Promise.all([
+        userRepository.getUsernamesByIds(ids),
+        editorsRepository.getEditors(tournament.id)
+    ]);
+    const editorIds = new Set(editors.map((editor) => editor.id));
+
+    return new Map(
+        users.map((user) => [
+            user.id,
+            {
+                name: user.username,
+                role: user.id === tournament.created_by ? "organiser" : editorIds.has(user.id) ? "editor" : null,
+                self: user.id === viewerUserId
+            }
+        ])
+    );
 }
 
 // requireAuth proves the caller is logged in. This proves the tournament is

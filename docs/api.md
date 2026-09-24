@@ -163,8 +163,13 @@ Implemented:
 | DELETE | `/api/divisions/:divisionId` | required + owner | Remove a division. Cascades to its teams and fixtures; repairs the schedule. |
 | POST | `/api/tournaments/:tournamentId/divisions` | required + owner | Add a division to a Not Started tournament |
 | PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
+| PUT | `/api/divisions/:divisionId/settings` | required + owner | Ranking basis and placement depth. See below. |
+| GET | `/api/tournaments/:tournamentId/editors` | required + owner | The tournament's editors: `[{ id, username, addedAt }]` |
+| POST | `/api/tournaments/:tournamentId/editors` | required + owner | Add an editor. Body `{ identifier }` — an email or a username. |
+| DELETE | `/api/tournaments/:tournamentId/editors/:userId` | required + owner | Remove an editor |
+| PUT | `/api/fixtures/:fixtureId/result` | required + owner or editor | Record a result. See "Editors" below. |
 | GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
-| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. Cached — see below. |
+| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn`, `creator` and `editor` so the UI can adapt. Cached — see below. |
 | POST | `/api/tournaments/:tournamentId/save` | required | Save a tournament to the caller's profile. Idempotent — saving twice is not an error. Refuses the caller's own tournament with `CANNOT_SAVE_OWN_TOURNAMENT` (409). |
 | DELETE | `/api/tournaments/:tournamentId/save` | required | Unsave. A tournament that was never saved is also not an error. |
 
@@ -333,6 +338,59 @@ There is deliberately no 409. Neither the tournament's status nor the division's
 bear on its colour.
 
 Success returns `{ divisionId, color }`, with `color` null when the choice was cleared.
+
+### Division settings
+
+`PUT /api/divisions/:divisionId/settings`. Body: either or both of
+`{ "rankingBasis": "FIVB_POINTS", "placementDepth": 7 }`. Both are validated before
+either is written. PUT rather than PATCH because the CORS configuration allows no PATCH,
+and the colour endpoint above set the precedent for a one-concern PUT.
+
+- `rankingBasis` — `MATCHES_WON`, `FIVB_POINTS`, `SIMPLIFIED_POINTS` or `SETS_WON`.
+  Changeable at any time: it changes how standings are read and nothing else, so there is
+  no rebuild. See `docs/tournament-rules.md`, "Ranking order".
+- `placementDepth` — null, or an odd place from 5 up to the knockout stage's team count.
+  Classic only. Refused once the knockout stage has started, because it adds and removes
+  fixtures: the knockout rounds are redrawn and their fixtures reconciled by round name,
+  so every existing knockout fixture keeps its id and its schedule slot and only the
+  placement fixtures are created or deleted (their schedule entries go with them). See
+  `docs/tournament-rules.md`, "Placement matches".
+
+Rejections:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `INVALID_RANKING_BASIS` | Not one of the four |
+| 400 | `PLACEMENT_NOT_AVAILABLE` | Not a Classic division with a knockout stage |
+| 400 | `INVALID_PLACEMENT_DEPTH` | Not null or an odd place from 5 to the knockout's size |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 404 | `DIVISION_NOT_FOUND` | No such division |
+| 409 | `KNOCKOUT_ALREADY_STARTED` | Placement depth sent after the knockout stage began |
+
+Success returns `{ divisionId, rankingBasis, placementDepth }`. The division payload
+carries both as `ranking_basis` and `placement_depth`.
+
+### Editors
+
+An editor is a user the organiser has allowed to enter results. Adding is immediate —
+there is no invite to accept — and so is removing. Both move `tournaments.last_update`,
+because the editor's view of the tournament changes and the ETag has to say so.
+
+`POST /editors` resolves `identifier` with the same lookup sign-in uses and refuses
+with `USER_NOT_FOUND` (404), `EDITOR_IS_ORGANISER` (409) or `EDITOR_ALREADY_ADDED`
+(409). `DELETE /editors/:userId` refuses someone who is not an editor with
+`EDITOR_NOT_FOUND` (404) rather than succeeding silently.
+
+The only thing an editor can do is `PUT /api/fixtures/:fixtureId/result`, and only for a
+fixture in the division's current round — the highest round in `state.rounds` holding a
+fixture with both teams bound. Outside it they get `EDITOR_ROUND_NOT_CURRENT` (403). The
+organiser may write to any round. Every other endpoint stays organiser-only.
+
+Every successful result write stamps `fixtures.entered_by` with the caller. The tournament
+view sends the organiser and the tournament's current editors an `enteredBy` on each
+fixture that has a result and an author — `{ name, role, self }`, where `role` is
+`"organiser"`, `"editor"` or null for someone no longer an editor. Nobody else receives
+the key at all.
 
 ### Saving a schedule
 

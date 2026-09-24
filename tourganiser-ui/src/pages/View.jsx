@@ -11,12 +11,13 @@ import FixturesTab from '../components/tournament/FixturesTab';
 import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
 import TeamsTab from '../components/tournament/TeamsTab';
+import SettingsTab from '../components/tournament/SettingsTab';
 import RoundCompleteBanner from '../components/tournament/RoundCompleteBanner';
 import LoadingScreen from '../components/LoadingScreen';
 import Icon from '../components/Icons';
 import ScoreUpdateModal from '../components/ScoreUpdateModal';
 import NextRoundModal from '../components/NextRoundModal';
-import { flattenFixtures } from '../components/tournament/fixtureUtils';
+import { editableFixtureIds, flattenFixtures } from '../components/tournament/fixtureUtils';
 import { useMessage } from '../MessageContext';
 import { updateFixtureResult, updateTournamentSchedule } from '../requests';
 import { getScheduleForTournament, getCourtName } from '../utils/scheduleUtils';
@@ -202,7 +203,15 @@ export default function ViewPage() {
 	// tournamentViewFormatter.js — so a pool game freezes the moment the
 	// quarterfinals start, while the round it belongs to is still ongoing it
 	// stays editable.
+	//
+	// An editor gets this and nothing else the organiser has, and only on the
+	// current round's fixtures. The server enforces both — see
+	// resolveResultRole in fixtures.service.js — this only decides where the
+	// control is offered.
+	const editorFixtureIds = result.data?.editor ? editableFixtureIds(result.data.divisions ?? []) : null;
+
 	const renderScoreAction = (fixture) => {
+		if (!result.data?.creator && !editorFixtureIds?.has(fixture.id)) return null;
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
 		if ((result.data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
 		if (fixture.locked) return null;
@@ -306,6 +315,8 @@ export default function ViewPage() {
 	// ways as the toolbar's "Print all": selected at all, and resolvable on
 	// this device. Absent rather than shown-and-erroring for anything else.
 	const renderScoresheetAction = (fixture) => {
+		// The organiser's tool. An editor enters results and nothing more.
+		if (!result.data?.creator) return null;
 		if (!scoresheetTemplateKey) return null;
 
 		return (
@@ -413,10 +424,10 @@ export default function ViewPage() {
 
 			{/* Mounted only while open, so the fixture set is not rebuilt on every
 			    render of the page behind it. */}
-			{/* Organiser only, and only while a fixture is chosen. Guarded on
-			    creator as well as on the id, so a session that ends while the
-			    modal is open cannot leave a write control on screen. */}
-			{scoringFixture && result.data?.creator && (
+			{/* The organiser or an editor, and only while a fixture is chosen.
+			    Guarded on the role as well as on the id, so a session that ends
+			    while the modal is open cannot leave a write control on screen. */}
+			{scoringFixture && (result.data?.creator || result.data?.editor) && (
 				<ScoreUpdateModal
 					fixture={scoringFixture}
 					onClose={() => setScoringFixtureId(null)}
@@ -469,7 +480,9 @@ export default function ViewPage() {
 						onOpenSchedule={() => setScheduleOpen(true)}
 						onReload={reload}
 						onDeleted={handleDeleted}
-						renderFixtureAction={renderFixtureAction}
+						// Only for someone who can act on a fixture at all. Everyone
+						// else's rows carry no action slot.
+						renderFixtureAction={result.data.creator || result.data.editor ? renderFixtureAction : undefined}
 						onProgressRound={setProgressingDivisionId}
 						onSelectTab={selectTab}
 						onPrintAllScoresheets={handlePrintAllScoresheets}
@@ -498,7 +511,21 @@ function TabPanel({
 	scoresheetTemplateSelected,
 	scoresheetTemplateReady,
 }) {
-	if (tab === 'overview') {
+	// The organiser's settings. The tab is only offered to them, and a link to it
+	// followed by anyone else lands on Overview rather than an empty page — the
+	// server's owner check on every endpoint below it is the real gate.
+	if (tab === 'settings' && data.creator) {
+		return (
+			<SettingsTab
+				tournament={data.tournament}
+				divisions={data.divisions ?? []}
+				onChanged={onReload}
+				onDeleted={onDeleted}
+			/>
+		);
+	}
+
+	if (tab === 'overview' || tab === 'settings') {
 		return (
 			<OverviewTab
 				tournament={data.tournament}
@@ -506,7 +533,6 @@ function TabPanel({
 				onOpenDivision={onOpenDivision}
 				creator={data.creator}
 				onChanged={onReload}
-				onDeleted={onDeleted}
 			/>
 		);
 	}

@@ -25,12 +25,17 @@ vi.mock("../../../src/repositories/users.repository.js", () => ({
     userRepository: {
         getSavedTournaments: vi.fn(),
         joinTournament: vi.fn(),
-        unfollowTournament: vi.fn()
+        unfollowTournament: vi.fn(),
+        getUsernamesByIds: vi.fn()
     }
 }));
 
 // The validator has its own suite, which owns every rejection rule. Here we only
 // care that it is handed the right context and that a rejection stops the write.
+vi.mock("../../../src/repositories/editors.repository.js", () => ({
+    editorsRepository: { isEditor: vi.fn(async () => false), getEditors: vi.fn(async () => []) }
+}));
+
 vi.mock("../../../src/utils/scheduleValidator.js", () => ({
     validateSchedule: vi.fn()
 }));
@@ -429,7 +434,7 @@ describe("tournamentService.fetchTournamentDetails", () => {
         // changeKey is the ETag's data half, derived from rows already loaded.
         // The fixtures carry no last_update, so it is null here; buildChangeKey
         // is tested directly in test/unit/utils/etag.test.js.
-        expect(result).toEqual({ creator: true, changeKey: null, view: { formatted: true } });
+        expect(result).toEqual({ creator: true, editor: false, changeKey: null, view: { formatted: true } });
         expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledTimes(2);
         expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(1, ["t1", "t2"]);
         expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(2, ["t3"]);
@@ -464,6 +469,79 @@ describe("tournamentService.fetchTournamentDetails", () => {
         loadable();
 
         expect((await tournamentService.fetchTournamentDetails("tour-1", "user-2")).creator).toBe(false);
+    });
+
+    describe("editors and attribution", () => {
+        let editorsRepository;
+        let userRepository;
+
+        beforeEach(async () => {
+            ({ editorsRepository } = await import("../../../src/repositories/editors.repository.js"));
+            ({ userRepository } = await import("../../../src/repositories/users.repository.js"));
+            loadable();
+            fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([
+                { id: "f1", division_id: "div-2", entered_by: "user-1" },
+                { id: "f2", division_id: "div-2", entered_by: "user-3" },
+                { id: "f3", division_id: "div-2", entered_by: "user-4" },
+                { id: "f4", division_id: "div-2", entered_by: "user-3" },
+                { id: "f5", division_id: "div-2", entered_by: null }
+            ]);
+            editorsRepository.isEditor.mockReset().mockResolvedValue(false);
+            editorsRepository.getEditors.mockReset().mockResolvedValue([{ id: "user-3", username: "priya" }]);
+            userRepository.getUsernamesByIds.mockReset().mockResolvedValue([
+                { id: "user-1", username: "tom" },
+                { id: "user-3", username: "priya" },
+                { id: "user-4", username: "sam" }
+            ]);
+        });
+
+        it("marks a signed-in editor, and names every result's author by current role", async () => {
+            editorsRepository.isEditor.mockResolvedValue(true);
+
+            const result = await tournamentService.fetchTournamentDetails("tour-1", "user-3");
+
+            expect(result.editor).toBe(true);
+            expect(result.creator).toBe(false);
+            expect(editorsRepository.isEditor).toHaveBeenCalledWith("tour-1", "user-3");
+            expect(userRepository.getUsernamesByIds).toHaveBeenCalledWith(["user-1", "user-3", "user-4"]);
+
+            const [args] = vi.mocked(formatTournamentViewPayload).mock.calls.at(-1);
+            expect([...args.attribution.entries()]).toEqual([
+                ["user-1", { name: "tom", role: "organiser", self: false }],
+                ["user-3", { name: "priya", role: "editor", self: true }],
+                // Removed as an editor since: still named, no longer as one.
+                ["user-4", { name: "sam", role: null, self: false }]
+            ]);
+        });
+
+        it("gives the organiser attribution without asking whether they are an editor", async () => {
+            const result = await tournamentService.fetchTournamentDetails("tour-1", "user-1");
+
+            expect(result.editor).toBe(false);
+            expect(editorsRepository.isEditor).not.toHaveBeenCalled();
+            expect(vi.mocked(formatTournamentViewPayload).mock.calls.at(-1)[0].attribution.get("user-1").self).toBe(true);
+        });
+
+        it("hands the formatter no attribution for anyone else", async () => {
+            await tournamentService.fetchTournamentDetails("tour-1", "user-9");
+            await tournamentService.fetchTournamentDetails("tour-1");
+
+            vi.mocked(formatTournamentViewPayload).mock.calls.slice(-2).forEach(([args]) => {
+                expect(args.attribution).toBeNull();
+            });
+            expect(userRepository.getUsernamesByIds).not.toHaveBeenCalled();
+            // An anonymous viewer cannot be an editor, so is not looked up either.
+            expect(editorsRepository.isEditor).toHaveBeenCalledTimes(1);
+        });
+
+        it("looks nobody up when no result has an author yet", async () => {
+            fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-2" }]);
+
+            await tournamentService.fetchTournamentDetails("tour-1", "user-1");
+
+            expect(userRepository.getUsernamesByIds).not.toHaveBeenCalled();
+            expect(vi.mocked(formatTournamentViewPayload).mock.calls.at(-1)[0].attribution).toEqual(new Map());
+        });
     });
 
     it("lets a repository failure propagate untouched", async () => {

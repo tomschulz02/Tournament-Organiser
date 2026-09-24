@@ -5,7 +5,7 @@ import TournamentPattern from '../TournamentPattern';
 import { useMessage } from '../../MessageContext';
 import { saveTournament, unsaveTournament } from '../../requests';
 import { tournamentAccentStyle } from '../../utils/tournamentIdentity';
-import { TOURNAMENT_TABS, useTournamentTab } from './tournamentTabs';
+import { SETTINGS_TAB, TOURNAMENT_TABS, useTournamentTab } from './tournamentTabs';
 import '../../styles/tournament-view.css';
 
 // Subheader and navigation. Both render on mount, before any data arrives — only
@@ -45,7 +45,7 @@ export default function TournamentShell({ tournamentId, name, creator, children 
 					{!creator && <FollowButton tournamentId={tournamentId} />}
 				</div>
 
-				<TournamentNav activeTab={activeTab} onSelect={selectTab} />
+				<TournamentNav activeTab={activeTab} onSelect={selectTab} creator={creator} />
 			</div>
 
 			<div className="tv-content">{children}</div>
@@ -56,7 +56,10 @@ export default function TournamentShell({ tournamentId, name, creator, children 
 // One row, always. It scrolls sideways rather than wrapping to a second row,
 // because a wrapping tab bar changes the page's height as the window narrows and
 // pushes the content below it around.
-function TournamentNav({ activeTab, onSelect }) {
+function TournamentNav({ activeTab, onSelect, creator = false }) {
+	// Settings is the organiser's alone, so nobody else is shown the tab.
+	const tabs = creator ? [...TOURNAMENT_TABS, SETTINGS_TAB] : TOURNAMENT_TABS;
+
 	const listRef = useRef(null);
 
 	// Keep the active tab visible when it is off-screen — on a narrow viewport the
@@ -102,7 +105,7 @@ function TournamentNav({ activeTab, onSelect }) {
 	return (
 		<nav className="tv-nav" aria-label="Tournament sections">
 			<div className="tv-nav-list" ref={listRef}>
-				{TOURNAMENT_TABS.map((tab) => (
+				{tabs.map((tab) => (
 					<button
 						key={tab.id}
 						type="button"

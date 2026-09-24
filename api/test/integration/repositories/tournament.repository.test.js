@@ -275,3 +275,30 @@ describe.each([
         expect(failure.cause).toBe(underlying);
     });
 });
+
+describe("touchTournament", () => {
+    it("moves only the stamp", async () => {
+        await tournamentRepository.touchTournament("tour-1");
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe("UPDATE tournaments SET last_update = now() WHERE id = $1::uuid");
+        expect(params).toEqual(["tour-1"]);
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await tournamentRepository.touchTournament("tour-1", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.touchTournament("tour-1").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to touch tournament");
+        expect(failure.cause).toBe(underlying);
+    });
+});

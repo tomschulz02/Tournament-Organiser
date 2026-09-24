@@ -22,6 +22,12 @@ divisionRouter.put('/:divisionId', requireAuth, divisionController.updateDivisio
 // required — the service checks it.
 divisionRouter.put('/:divisionId/colour', requireAuth, divisionController.updateDivisionColour);
 
+// The Settings page's per-division controls — ranking basis and placement
+// depth. Its own route for the same reason as the colour: neither is part of
+// the teams-and-structure edit, and the ranking basis in particular may change
+// mid-tournament. The service checks ownership and gates placement depth.
+divisionRouter.put('/:divisionId/settings', requireAuth, divisionController.updateDivisionSettings);
+
 // Removing the division. The delete cascades to its teams and its fixtures, and
 // the tournament's saved schedule is repaired in the same transaction — the
 // removed division's entries go, every other division's placements and all

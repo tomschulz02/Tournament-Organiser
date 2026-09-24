@@ -358,6 +358,48 @@ describe("normalizeFixture", () => {
         makeTeam({ id: "t2", name: "Bears" })
     ]);
 
+    describe("result attribution", () => {
+        const attribution = new Map([["user-3", { name: "priya", role: "editor", self: false }]]);
+        const scored = (overrides = {}) =>
+            makeFixture({ status: "COMPLETED", team_1: "t1", team_2: "t2", entered_by: "user-3", ...overrides });
+
+        it("names who entered a result when the viewer is handed attribution", () => {
+            expect(normalizeFixture(scored(), teamLookup, new Set(), attribution).enteredBy)
+                .toEqual({ name: "priya", role: "editor", self: false });
+            expect(normalizeFixture(scored({ status: "LIVE" }), teamLookup, new Set(), attribution).enteredBy)
+                .toEqual({ name: "priya", role: "editor", self: false });
+        });
+
+        it("carries no key at all for a public viewer", () => {
+            expect(normalizeFixture(scored(), teamLookup)).not.toHaveProperty("enteredBy");
+        });
+
+        // Decision 6: a result from before attribution shows nothing, not a blank.
+        it("carries no key for a result nobody is recorded as entering", () => {
+            expect(normalizeFixture(scored({ entered_by: null }), teamLookup, new Set(), attribution))
+                .not.toHaveProperty("enteredBy");
+        });
+
+        it("carries no key for a fixture with no result, or no status", () => {
+            expect(normalizeFixture(scored({ status: "UPCOMING" }), teamLookup, new Set(), attribution))
+                .not.toHaveProperty("enteredBy");
+            expect(normalizeFixture(scored({ status: null }), teamLookup, new Set(), attribution))
+                .not.toHaveProperty("enteredBy");
+        });
+
+        it("is passed down from the tournament payload to every division's fixtures", () => {
+            const view = formatTournamentViewPayload({
+                tournament: makeTournament(),
+                divisions: [makeDivision({ id: "div-1", state: makeState({ teams: ["t1", "t2"] }) })],
+                teamsByDivisionId: new Map([["div-1", [makeTeam({ id: "t1" }), makeTeam({ id: "t2" })]]]),
+                fixturesByDivisionId: new Map([["div-1", [scored({ division_id: "div-1" })]]]),
+                attribution
+            });
+
+            expect(view.divisions[0].fixtures[0].enteredBy.name).toBe("priya");
+        });
+    });
+
     it("renames the database columns and resolves both team names", () => {
         const fixture = makeFixture({
             id: "f1",

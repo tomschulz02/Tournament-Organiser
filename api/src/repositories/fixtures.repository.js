@@ -63,15 +63,16 @@ async function getFixtureWithOwner(fixtureId) {
 }
 
 // Writes a result. The status is decided by the service from the scores and the
-// organiser's intent — it is never taken from the client.
+// organiser's intent — it is never taken from the client. `enteredBy` is the
+// user making the write, organiser or editor, and replaces whoever wrote last.
 //
 // `client` is required, not defaulted: a result is only ever written alongside
 // the division's completedGames count, and the two have to commit together. The
 // service owns that transaction, as it does for tournament creation.
-async function updateResult(fixtureId, score, status, client) {
+async function updateResult(fixtureId, score, status, client, enteredBy) {
     try {
-        const sql = "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3 WHERE id = $4::uuid";
-        await client.query(sql, [score[0], score[1], status, fixtureId]);
+        const sql = "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3, entered_by = $5::uuid WHERE id = $4::uuid";
+        await client.query(sql, [score[0], score[1], status, fixtureId, enteredBy]);
 
         return { message: "Fixture updated" };
     } catch (error) {
@@ -129,6 +130,33 @@ async function deleteByDivisionId(divisionId, client) {
     }
 }
 
+// Moves a knockout fixture to a new slot in a redrawn bracket: its number, its
+// round name and its placeholders. The id — what the schedule references — is
+// the point of keeping the row. Requires the client: it commits with the rest of
+// the redraw. See divisionService.updateDivisionSettings.
+async function updateFixtureSlot(fixtureId, matchNo, round, team1Placeholder, team2Placeholder, client) {
+    try {
+        const sql = "UPDATE fixtures SET match_no = $1, round = $2, team_1_placeholder = $3, team_2_placeholder = $4 WHERE id = $5::uuid";
+        await client.query(sql, [matchNo, round, team1Placeholder, team2Placeholder, fixtureId]);
+    } catch (error) {
+        throw new Error("Failed to move fixture", { cause: error });
+    }
+}
+
+// Deletes the named fixtures. An empty list needs no query.
+async function deleteByIds(fixtureIds, client) {
+    if (!Array.isArray(fixtureIds) || fixtureIds.length === 0) {
+        return;
+    }
+
+    try {
+        const sql = "DELETE FROM fixtures WHERE id = ANY($1::uuid[]);";
+        await client.query(sql, [fixtureIds]);
+    } catch (error) {
+        throw new Error("Failed to delete fixtures", { cause: error });
+    }
+}
+
 // used to update the team names in fixtures after a round has been completed
 async function updateFixtures(divisionId, fixtures) {
     const client = await db.pool.connect();
@@ -160,5 +188,7 @@ export const fixturesRepository = {
     countCompletedInRounds,
     createFixture,
     deleteByDivisionId,
+    deleteByIds,
+    updateFixtureSlot,
     updateFixtures
 };

@@ -347,10 +347,15 @@ function checkRoundOrder(placements, fixturesById, roundOrderByDivision) {
 // rather than imported because a util reaching into a service inverts the
 // dependency. See docs/tournament-rules.md.
 const THIRD_PLACE = "3rd Place Playoff";
+const PLACEMENT_SEPARATOR = " · ";
 const FINALS = "Finals";
 
 function roundHolding(fixtureRound) {
-    return fixtureRound === THIRD_PLACE ? FINALS : fixtureRound;
+    if (fixtureRound === THIRD_PLACE) return FINALS;
+    // A placement match names its holding round before the separator — see
+    // isPlacementRound in fixtures.service.js.
+    const separator = String(fixtureRound).indexOf(PLACEMENT_SEPARATOR);
+    return separator === -1 ? fixtureRound : fixtureRound.slice(0, separator);
 }
 
 // Round names are unique within a division's state.rounds, and their position in

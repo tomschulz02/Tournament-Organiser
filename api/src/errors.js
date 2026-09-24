@@ -59,6 +59,15 @@ export const ERRORS = {
 	// A group or qualifier count the new team count cannot support. Refused
 	// rather than corrected — the organiser chose these numbers.
 	INVALID_STRUCTURE: [400, "The group and qualifier counts do not fit the number of teams"],
+	// The Settings page's per-division controls. The basis is one of the four in
+	// utils/standings.js's RANKING_BASES.
+	INVALID_RANKING_BASIS: [400, "That is not one of the available ranking options"],
+	// Placement depth: Classic only, an odd rank from 5 to the knockout's team
+	// count, and fixed once the knockout stage is under way, because changing it
+	// adds and removes fixtures.
+	PLACEMENT_NOT_AVAILABLE: [400, "Placement matches need a division with a knockout stage"],
+	INVALID_PLACEMENT_DEPTH: [400, "Placement matches must go down to an odd place from 5th to the number of knockout teams"],
+	KNOCKOUT_ALREADY_STARTED: [409, "The knockout stage has already started"],
 	FORMAT_NOT_IMPLEMENTED: [400, "This format is not available yet"],
 	UNSUPPORTED_FORMAT: [400, "This format is not supported"],
 	// A round whose type no fixture generator handles. Distinct from
@@ -102,6 +111,16 @@ export const ERRORS = {
 	// Saving a tournament. An organiser's own tournament is already on their
 	// profile as a created tournament, so saving it too would just double it up.
 	CANNOT_SAVE_OWN_TOURNAMENT: [409, "You cannot save a tournament you created"],
+
+	// Editors. Adding is immediate — there is no invite to accept — so every
+	// refusal is decided here, at the moment the organiser asks. A user who does
+	// not exist is USER_NOT_FOUND, from the accounts section above.
+	EDITOR_IS_ORGANISER: [409, "You are the organiser of this tournament already"],
+	EDITOR_ALREADY_ADDED: [409, "That user is already an editor of this tournament"],
+	EDITOR_NOT_FOUND: [404, "That user is not an editor of this tournament"],
+	// An editor enters results for the round being played and nothing else. The
+	// organiser is not held to it — see resolveResultRole in fixtures.service.js.
+	EDITOR_ROUND_NOT_CURRENT: [403, "Editors can only enter results for the current round"],
 
 	// Saving a schedule. One code per rule rather than one INVALID_SCHEDULE: the
 	// message is display-ready by contract, and "that schedule is invalid" tells

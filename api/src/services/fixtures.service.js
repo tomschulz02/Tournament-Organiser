@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import DatabaseConnection from "../config/db.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
+import { editorsRepository } from "../repositories/editors.repository.js";
 import { AppError } from "../errors.js";
 
 const db = DatabaseConnection();
@@ -40,9 +41,11 @@ async function updateResult(fixtureId, userId, sets, finished) {
         throw new AppError("FIXTURE_NOT_FOUND");
     }
 
-    // requireAuth proves the caller is logged in. This proves the tournament is
-    // theirs, the same check progression's loadDivision makes one level up.
-    if (fixture.created_by !== userId) {
+    // requireAuth proves the caller is logged in. This proves they may write
+    // here: the organiser always, an editor only within the current round, which
+    // is checked inside the transaction below once the division is locked.
+    const role = await resolveResultRole(fixture, userId);
+    if (role === NONE) {
         throw new AppError("NOT_TOURNAMENT_OWNER");
     }
 
@@ -59,17 +62,68 @@ async function updateResult(fixtureId, userId, sets, finished) {
     return await db.withTransaction(async (client) => {
         await assertRoundNotLocked(fixture, client);
 
+        if (role === EDITOR) {
+            await assertCurrentRound(fixture, client);
+        }
+
+        // entered_by is stamped on every write, the organiser's included, so the
+        // attribution always names whoever last touched the result.
         await fixturesRepository.updateResult(
             fixtureId,
             [scored.map((set) => set[0]), scored.map((set) => set[1])],
             status,
-            client
+            client,
+            userId
         );
 
         const completedGames = await syncCompletedGames(fixture, client);
 
         return { id: fixtureId, status, completedGames };
     });
+}
+
+// Who may write a result, for the one endpoint where that is more than the
+// organiser. OWNER is tournaments.created_by. EDITOR is anyone holding a
+// tournament_editors row — whether the fixture is in a round they may touch is a
+// separate question, answered by assertCurrentRound. NONE is everyone else.
+//
+// Every other mutating endpoint keeps its own owner-only check; this resolver is
+// deliberately not shared with them. See docs/decisions.md.
+const OWNER = "OWNER";
+const EDITOR = "EDITOR";
+const NONE = "NONE";
+
+async function resolveResultRole(fixture, userId) {
+    if (fixture.created_by === userId) {
+        return OWNER;
+    }
+
+    return (await editorsRepository.isEditor(fixture.tournament_id, userId)) ? EDITOR : NONE;
+}
+
+// An editor writes to the current round only. The current round is the highest
+// index in state.rounds holding a fixture with both teams bound — the round being
+// played, as opposed to one whose fixtures still read "Rank 1". The organiser is
+// not held to this: a result entered wrongly in an earlier round has to have a
+// route to correction, and that route is the organiser.
+async function assertCurrentRound(fixture, client) {
+    const state = normalizeState(await divisionsRepository.getStateForUpdate(fixture.division_id, client));
+    const rounds = Array.isArray(state.rounds) ? state.rounds : [];
+    const fixtures = await fixturesRepository.getFixtures(fixture.division_id);
+
+    if (holdingIndex(fixture, rounds) !== currentRoundIndex(fixtures, rounds)) {
+        throw new AppError("EDITOR_ROUND_NOT_CURRENT");
+    }
+}
+
+function currentRoundIndex(fixtures, rounds) {
+    return fixtures
+        .filter((fixture) => fixture.team_1 && fixture.team_2)
+        .reduce((current, fixture) => Math.max(current, holdingIndex(fixture, rounds)), -1);
+}
+
+function holdingIndex(fixture, rounds) {
+    return rounds.findIndex((round) => round.name === roundHolding(fixture.round));
 }
 
 // A round is locked for editing the moment progression commits its results —
@@ -112,7 +166,7 @@ async function syncCompletedGames(fixture, client) {
 
     const completedGames = await fixturesRepository.countCompletedInRounds(
         fixture.division_id,
-        fixtureRoundsOf(rounds[roundIndex].name),
+        fixtureRoundsOf(rounds[roundIndex].name, rounds[roundIndex].placement),
         client
     );
 
@@ -126,21 +180,39 @@ async function syncCompletedGames(fixture, client) {
 }
 
 // The third-place playoff carries its own round name but lives inside the
-// Finals round — see generateKnockoutFixtures. These two functions are that one
-// exception, read in each direction.
+// Finals round — see generateKnockoutFixtures. Placement matches do the same in
+// whichever round holds them, and name it: "<round> · <label>", so the holding
+// round can be read off the name alone, without the division's state. These two
+// functions are that mapping, read in each direction.
 
 // Which round in state.rounds holds a fixture carrying this round name.
 function roundHolding(fixtureRound) {
-    return fixtureRound === THIRD_PLACE ? FINALS : fixtureRound;
+    if (fixtureRound === THIRD_PLACE) return FINALS;
+    if (isPlacementRound(fixtureRound)) return fixtureRound.slice(0, fixtureRound.indexOf(PLACEMENT_SEPARATOR));
+    return fixtureRound;
 }
 
-// Which fixture round names belong to this round in state.rounds.
-function fixtureRoundsOf(roundName) {
-    return roundName === FINALS ? [FINALS, THIRD_PLACE] : [roundName];
+// Which fixture round names belong to this round in state.rounds. `placement`
+// is the round's own placement list, when it has one — see
+// divisions.service.js's addPlacementMatches.
+function fixtureRoundsOf(roundName, placement = []) {
+    const names = roundName === FINALS ? [FINALS, THIRD_PLACE] : [roundName];
+    const placementNames = (Array.isArray(placement) ? placement : [])
+        .map((entry) => entry.name)
+        .filter((name) => name && !names.includes(name));
+
+    return [...names, ...new Set(placementNames)];
+}
+
+// A placement match's fixture round, as opposed to a round's own name or the
+// 3rd-place playoff's.
+export function isPlacementRound(fixtureRound) {
+    return typeof fixtureRound === "string" && fixtureRound.includes(PLACEMENT_SEPARATOR);
 }
 
 const FINALS = "Finals";
 const THIRD_PLACE = "3rd Place Playoff";
+export const PLACEMENT_SEPARATOR = " · ";
 
 // Scores arrive as [[teamOneScore, teamTwoScore], ...], one pair per set. An
 // empty list is valid and clears the result, which is how a match is reopened.
@@ -213,8 +285,10 @@ export const fixtureService = {
 
 // helper functions
 
-export function generateFixtures(rounds){
-    let matchNo = 1;
+// `firstMatchNo` lets a caller generate the tail of a division — its knockout
+// rounds alone — numbered on from the fixtures it keeps.
+export function generateFixtures(rounds, firstMatchNo = 1){
+    let matchNo = firstMatchNo;
     let fixtures = [];
     rounds.forEach(round => {
         let result;
@@ -360,6 +434,13 @@ export function generatePartialRoundRobinPairs(teamIds, gamesPerTeam){
 
 function generateKnockoutFixtures(matchNo, round){
     const fixtures = [];
+    // A placement group's fixture carries the name addPlacementMatches gave it.
+    const placementNames = new Map(
+        (Array.isArray(round.placement) ? round.placement : [])
+            .filter((entry) => entry.name)
+            .map((entry) => [entry.group, entry.name])
+    );
+
     round.groups.forEach((group, index) => {
         if (group.length < 2) return;
 
@@ -368,7 +449,7 @@ function generateKnockoutFixtures(matchNo, round){
             matchNo: matchNo++,
             team1: group[0],
             team2: group[1],
-            round: (round.name === "Finals" && index === 0) ? "3rd Place Playoff" : round.name,
+            round: placementNames.get(index) ?? ((round.name === "Finals" && index === 0) ? "3rd Place Playoff" : round.name),
             placeholder1: Number.isInteger(group[0]),
             placeholder2: Number.isInteger(group[1]),
         })
@@ -418,5 +499,7 @@ export {
     validateSets,
     deriveStatus,
     roundHolding,
-    fixtureRoundsOf
+    fixtureRoundsOf,
+    resolveResultRole,
+    currentRoundIndex
 };

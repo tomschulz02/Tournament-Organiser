@@ -105,7 +105,7 @@ export default function FixturesTab({ divisions = [], creator = false, onCreateS
 								key={fixture.id}
 								fixture={fixture}
 								showDivision={divisions.length > 1}
-								action={creator && renderFixtureAction ? renderFixtureAction(fixture) : null}
+								action={renderFixtureAction ? renderFixtureAction(fixture) : null}
 								divisions={divisions}
 							/>
 						))}

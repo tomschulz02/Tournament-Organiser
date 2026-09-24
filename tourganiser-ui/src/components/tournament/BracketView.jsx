@@ -94,13 +94,20 @@ export default function BracketView({ rounds = [] }) {
 
 			{/* Distinct from the bracket, not another node in it. The playoff decides
 			    third and fourth; it feeds nothing and nothing feeds out of it, so
-			    drawing it in the flow would imply a progression that does not exist. */}
-			{placements.map((match) => (
-				<div key={match.id} className="tv-bracket-placement">
-					<h4 className="tv-bracket-round-name">{PLACEMENT_ROUND}</h4>
-					<MatchCard match={match} />
-				</div>
-			))}
+			    drawing it in the flow would imply a progression that does not exist.
+			    Placement matches below 4th sit with it for the same reason, one block
+			    per fixture round — "Semifinals · Places 5-8" holds both of its
+			    matches. */}
+			<div className="tv-bracket-placements">
+				{groupPlacements(placements).map((block) => (
+					<div key={block.label} className="tv-bracket-placement">
+						<h4 className="tv-bracket-round-name">{block.label}</h4>
+						{block.matches.map((match) => (
+							<MatchCard key={match.id} match={match} />
+						))}
+					</div>
+				))}
+			</div>
 		</div>
 	);
 }
@@ -114,6 +121,22 @@ export default function BracketView({ rounds = [] }) {
 // the other side.
 function isPlacement(match) {
 	return Boolean(match.isPlacementMatch) || match.round === PLACEMENT_ROUND;
+}
+
+// The 3rd-place playoff first, as it always was, then every other placement
+// round in the order the bracket reaches it.
+function groupPlacements(placements) {
+	const blocks = new Map();
+
+	placements.forEach((match) => {
+		const label = match.round || PLACEMENT_ROUND;
+		if (!blocks.has(label)) blocks.set(label, { label, matches: [] });
+		blocks.get(label).matches.push(match);
+	});
+
+	return [...blocks.values()].sort(
+		(a, b) => Number(b.label === PLACEMENT_ROUND) - Number(a.label === PLACEMENT_ROUND),
+	);
 }
 
 function splitPlacements(rounds) {

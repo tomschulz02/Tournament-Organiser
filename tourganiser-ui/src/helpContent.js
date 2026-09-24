@@ -90,7 +90,7 @@ export const HELP_TOPICS = {
 				heading: "If you're the organiser",
 				paragraphs: [
 					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament stops any further results being recorded, once the tournament is Ongoing.',
-					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Delete (the trash icon) removes the whole tournament, including every division, fixture and result — this cannot be undone, and is available at every status.",
+					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Deleting the tournament, adding editors and each division's ranking and placement options are on the Settings tab.",
 					"While the tournament hasn't started, each division's card also offers a way to add or remove divisions — Add Division opens the same screen the creation page uses, and a division's own card can be removed (which takes its teams, fixtures and any scheduled slots with it). Both close once the tournament starts, since the schedule and standings would otherwise be describing a division that no longer matches them.",
 				],
 			},
@@ -98,6 +98,42 @@ export const HELP_TOPICS = {
 				heading: 'Division cards',
 				paragraphs: [
 					'Each card summarises one division — its team count, fixture count and how far through it is — and links into that division\'s Standings or Teams tab. A viewer sees the same cards without the edit controls.',
+				],
+			},
+		],
+	},
+	'tournament-settings': {
+		title: 'Tournament settings',
+		icon: 'structure',
+		sections: [
+			{
+				paragraphs: [
+					'Only the organiser sees this tab. It holds who else can enter results, how each division ranks its teams and plays out its knockout, and deleting the tournament.',
+				],
+			},
+			{
+				heading: 'Editors',
+				paragraphs: [
+					"Add someone by their email or username and they can enter results straight away — there's no invitation for them to accept. An editor can score the fixtures in each division's current round and nothing else: they can't change teams, the schedule, divisions or settings. Removing an editor takes effect immediately; results they already entered stay as they are.",
+					'You and your editors see who entered each result on its fixture. Nobody else does.',
+				],
+			},
+			{
+				heading: 'Ranking',
+				paragraphs: [
+					"Rank teams by chooses what decides pool positions first: matches won, FIVB match points (3 for a clear win, 2 for a win in the deciding set, 1 for a loss in it), simpler match points (2 for any win, 1 for a deciding-set loss) or total sets won. The tiebreakers after it never change. It can be changed at any time, and standings re-sort straight away.",
+				],
+			},
+			{
+				heading: 'Placement matches',
+				paragraphs: [
+					"For a division with a knockout stage, Play for places down to adds real matches for the places below 4th — a 5th place match, a 7th, and so on — instead of settling them by tiebreak. The teams knocked out in each round play for the places between them, the same way the main bracket is drawn. It can only be changed before the knockout stage starts, because it adds and removes fixtures.",
+				],
+			},
+			{
+				heading: 'Danger Zone',
+				paragraphs: [
+					'Delete Tournament removes the whole tournament, including every division, fixture and result. It cannot be undone, and is available at every status.',
 				],
 			},
 		],
@@ -120,7 +156,7 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Entering results and scheduling',
 				paragraphs: [
-					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match.",
+					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match. An editor the organiser has added can do the same for the current round's fixtures.",
 					"If you organise this tournament, Create Schedule opens the schedule builder, where you assign fixtures to courts and times — see its own help entry once it's open.",
 				],
 			},

@@ -11,7 +11,9 @@ CREATE TABLE "divisions" (
 	"num_teams" integer DEFAULT 0,
 	"type" varchar(50),
 	"state" jsonb,
-	"last_update" timestamp DEFAULT now() NOT NULL
+	"last_update" timestamp DEFAULT now() NOT NULL,
+	"ranking_basis" varchar(30) DEFAULT 'MATCHES_WON' NOT NULL,
+	"placement_depth" integer
 );
 CREATE TABLE "fixtures" (
 	"id" uuid PRIMARY KEY,
@@ -24,7 +26,8 @@ CREATE TABLE "fixtures" (
 	"team_2_result" integer[],
 	"round" text,
 	"team_1_placeholder" text,
-	"team_2_placeholder" text
+	"team_2_placeholder" text,
+	"entered_by" uuid
 );
 CREATE TABLE "saved_tournaments" (
 	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "saved_tournaments_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
@@ -35,6 +38,12 @@ CREATE TABLE "teams" (
 	"id" uuid PRIMARY KEY,
 	"name" text NOT NULL,
 	"division_id" uuid NOT NULL
+);
+CREATE TABLE "tournament_editors" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	"tournament_id" uuid NOT NULL,
+	"user_id" uuid NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL
 );
 CREATE TABLE "tournaments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,6 +69,7 @@ CREATE UNIQUE INDEX "divisions_pkey" ON "divisions" ("id");
 CREATE UNIQUE INDEX "fixtures_pkey" ON "fixtures" ("id");
 CREATE UNIQUE INDEX "saved_tournaments_pkey" ON "saved_tournaments" ("id");
 CREATE UNIQUE INDEX "teams_pkey" ON "teams" ("id");
+CREATE UNIQUE INDEX "tournament_editors_unique" ON "tournament_editors" ("tournament_id", "user_id");
 CREATE UNIQUE INDEX "tournaments_pkey" ON "tournaments" ("id");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
 CREATE UNIQUE INDEX "users_pkey" ON "users" ("id");
@@ -71,6 +81,9 @@ ALTER TABLE "fixtures" ADD CONSTRAINT "team2_fixture_fkey" FOREIGN KEY ("team_2"
 ALTER TABLE "saved_tournaments" ADD CONSTRAINT "tournaments_saved_fkey" FOREIGN KEY ("tournament_id") REFERENCES "tournaments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "saved_tournaments" ADD CONSTRAINT "users_saved_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "teams" ADD CONSTRAINT "division_teams_fkey" FOREIGN KEY ("division_id") REFERENCES "divisions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "fixtures" ADD CONSTRAINT "fixtures_entered_by_fkey" FOREIGN KEY ("entered_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "tournament_editors" ADD CONSTRAINT "tournament_editors_tournament_fkey" FOREIGN KEY ("tournament_id") REFERENCES "tournaments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "tournament_editors" ADD CONSTRAINT "tournament_editors_user_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "tournaments" ADD CONSTRAINT "tournament_owner" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE CASCADE;
 
 CREATE FUNCTION "update_last_updated"() RETURNS trigger AS $$
@@ -105,6 +118,21 @@ Both triggers only fire when `row(NEW.*) IS DISTINCT FROM row(OLD.*)`, so an UPD
 that changes nothing does not move the stamp. Queries that set `last_update = now()`
 themselves — `replaceState`, `updateRounds`, `updateStateRounds`, `touchDivision` —
 are unaffected by that guard, because assigning the column is itself a change.
+
+### Release 1.1 additions (applied 2026-09-24)
+
+- `tournament_editors` grants a user result-entry rights on one tournament. A row is
+  the whole membership: adding inserts, removing deletes. There is no pending state.
+- `divisions.ranking_basis` is the primary standings criterion ahead of the fixed
+  tiebreaker chain: `MATCHES_WON` (default), `FIVB_POINTS`, `SIMPLIFIED_POINTS` or
+  `SETS_WON`.
+- `divisions.placement_depth` is the lowest rank decided by a played match. Null keeps
+  the final and 3rd-place match only; otherwise an odd number from 5 upwards.
+- `fixtures.entered_by` names the user who last wrote the fixture's result. Results
+  from before 2026-09-24 are null and are not backfilled.
+
+None of these carry a trigger. Writes to `tournament_editors` and
+`fixtures.entered_by` move no ETag stamp on their own, and nothing reads them for one.
 
 ### What the stamps are for
 

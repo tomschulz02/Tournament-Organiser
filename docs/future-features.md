@@ -5,6 +5,9 @@ requested.
 
 ## Configurable Ranking Basis
 
+> Shipped 2026-09-24 in release 1.1 — `divisions.ranking_basis`, set from the Settings
+> tab. See `docs/tournament-rules.md`, "Ranking order". Kept below as the original brief.
+
 Pool position is currently decided by matches won, hardcoded. The organiser should be
 able to choose the basis per division:
 
@@ -50,6 +53,10 @@ Editors (1.1) will eventually want to *invite* someone by email too, and the two
 may end up wanting the same infrastructure.
 
 ### Editors and scorers
+
+> Shipped 2026-09-24 in release 1.1 as editors: result entry for the current round only,
+> added by email or username with no invite step. See `docs/api.md`, "Editors". An
+> invite/accept flow and any wider editor rights remain future work.
 
 > This supersedes **Friends**, which was removed on 2026-08-11. Friends was a step
 > towards letting someone other than the organiser update a tournament, and a per-

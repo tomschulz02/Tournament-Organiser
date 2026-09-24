@@ -184,7 +184,7 @@ export default function ScheduleTab({
 											showDivision={showDivision}
 											court={getCourtName(schedule, entry.courtId)}
 											officials={entry.officials}
-											action={creator && renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
+											action={renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
 												divisions={divisions}
 											/>
 									),
@@ -203,7 +203,7 @@ export default function ScheduleTab({
 								key={fixture.id}
 								fixture={fixture}
 								showDivision={showDivision}
-								action={creator && renderFixtureAction ? renderFixtureAction(fixture) : null}
+								action={renderFixtureAction ? renderFixtureAction(fixture) : null}
 								divisions={divisions}
 							/>
 						))}

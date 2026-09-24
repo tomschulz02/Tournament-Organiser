@@ -128,14 +128,15 @@ describe("getFixtureWithOwner", () => {
 // which commits this together with the division's completedGames count.
 describe("updateResult", () => {
     it("writes the scores and the status on the client it is given", async () => {
-        expect(await fixturesRepository.updateResult("f1", [[21, 15], [18, 21]], "COMPLETED", client))
+        expect(await fixturesRepository.updateResult("f1", [[21, 15], [18, 21]], "COMPLETED", client, "user-1"))
             .toEqual({ message: "Fixture updated" });
 
         const [sql, params] = client.query.mock.calls[0];
         expect(squash(sql)).toBe(
-            "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3 WHERE id = $4::uuid"
+            "UPDATE fixtures SET team_1_result = $1, team_2_result = $2, status = $3, entered_by = $5::uuid WHERE id = $4::uuid"
         );
-        expect(params).toEqual([[21, 15], [18, 21], "COMPLETED", "f1"]);
+        // entered_by is whoever made this write, replacing whoever made the last.
+        expect(params).toEqual([[21, 15], [18, 21], "COMPLETED", "f1", "user-1"]);
         // No transaction of its own, and no BEGIN/COMMIT to conflict with the
         // caller's.
         expect(clientSql().map(squash)).not.toContain("BEGIN");
@@ -285,5 +286,54 @@ describe("updateFixtures", () => {
         expect(failure.cause).toBe(underlying);
         expect(clientSql()).toContain("ROLLBACK");
         expect(client.release).toHaveBeenCalledOnce();
+    });
+});
+
+describe("updateFixtureSlot", () => {
+    it("moves the fixture to its new number, round and placeholders, keeping its id", async () => {
+        await fixturesRepository.updateFixtureSlot("f1", 12, "Finals · 5th Place", "Rank 3", null, client);
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE fixtures SET match_no = $1, round = $2, team_1_placeholder = $3, team_2_placeholder = $4 WHERE id = $5::uuid"
+        );
+        expect(params).toEqual([12, "Finals · 5th Place", "Rank 3", null, "f1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        const failure = await fixturesRepository.updateFixtureSlot("f1", 1, "Finals", null, null, client).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to move fixture");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+describe("deleteByIds", () => {
+    it("deletes the named fixtures", async () => {
+        await fixturesRepository.deleteByIds(["f1", "f2"], client);
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe("DELETE FROM fixtures WHERE id = ANY($1::uuid[]);");
+        expect(params).toEqual([["f1", "f2"]]);
+    });
+
+    it("runs no query for an empty or missing list", async () => {
+        await fixturesRepository.deleteByIds([], client);
+        await fixturesRepository.deleteByIds(undefined, client);
+
+        expect(client.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        const failure = await fixturesRepository.deleteByIds(["f1"], client).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to delete fixtures");
+        expect(failure.cause).toBe(underlying);
     });
 });

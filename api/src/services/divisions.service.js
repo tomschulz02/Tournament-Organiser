@@ -3,7 +3,9 @@ import DatabaseConnection from "../config/db.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { tournamentRepository } from "../repositories/tournament.repository.js";
-import { generateFixtures, fixtureService, generatePartialRoundRobinPairs } from "./fixtures.service.js";
+import { generateFixtures, fixtureService, generatePartialRoundRobinPairs, roundHolding } from "./fixtures.service.js";
+import { qualifierCount } from "./progression.service.js";
+import { RANKING_BASES } from "../utils/standings.js";
 import { v4 as uuidv4 } from "uuid";
 
 const db = DatabaseConnection();
@@ -149,6 +151,157 @@ async function updateDivisionColour(divisionId, userId, colour) {
     return { divisionId, color: value };
 }
 
+// PUT /api/divisions/:divisionId/settings — the Settings page's per-division
+// controls. Its own endpoint, like the colour, because neither setting is part
+// of the teams-and-structure editor: the ranking basis changes how standings are
+// read and nothing else, so it is changeable at any point and takes effect on
+// the next view with no rebuild.
+//
+// Placement depth is different: it adds or removes real fixtures, so it can only
+// change before the knockout stage starts, and a change regenerates the knockout
+// rounds — see replaceKnockoutRounds.
+//
+// Only the keys present in the body are touched, and both are validated before
+// either is written.
+async function updateDivisionSettings(divisionId, userId, payload = {}) {
+    const division = await divisionsRepository.getDivisionWithOwner(divisionId);
+    if (!division) {
+        throw new AppError("DIVISION_NOT_FOUND");
+    }
+
+    if (division.created_by !== userId) {
+        throw new AppError("NOT_TOURNAMENT_OWNER");
+    }
+
+    const current = {
+        rankingBasis: division.ranking_basis ?? "MATCHES_WON",
+        placementDepth: division.placement_depth ?? null
+    };
+
+    const rankingBasis = payload.rankingBasis === undefined ? current.rankingBasis : readRankingBasis(payload.rankingBasis);
+    const placementDepth =
+        payload.placementDepth === undefined ? current.placementDepth : readPlacementDepth(division, payload.placementDepth);
+
+    if (placementDepth !== current.placementDepth) {
+        await db.withTransaction(async (client) => {
+            if (rankingBasis !== current.rankingBasis) {
+                await divisionsRepository.updateRankingBasis(divisionId, rankingBasis, client);
+            }
+
+            await replaceKnockoutRounds(division, placementDepth, client);
+            await divisionsRepository.updatePlacementDepth(divisionId, placementDepth, client);
+        });
+    } else if (rankingBasis !== current.rankingBasis) {
+        await divisionsRepository.updateRankingBasis(divisionId, rankingBasis);
+    }
+
+    return { divisionId, rankingBasis, placementDepth };
+}
+
+function readRankingBasis(value) {
+    if (!RANKING_BASES.includes(value)) {
+        throw new AppError("INVALID_RANKING_BASIS");
+    }
+
+    return value;
+}
+
+// Null clears the setting. Otherwise an odd rank from 5 — ranks 1 to 4 are the
+// final and the 3rd-place playoff already — up to the number of teams in the
+// knockout stage, which is the lowest rank a match there could decide.
+function readPlacementDepth(division, value) {
+    const rounds = Array.isArray(division.state?.rounds) ? division.state.rounds : [];
+    const firstKnockout = rounds.findIndex((round) => round.type === "knockout");
+
+    // Classic only: a League has no knockout stage to extend.
+    if (division.type !== "Classic" || firstKnockout < 1) {
+        throw new AppError("PLACEMENT_NOT_AVAILABLE");
+    }
+
+    const currentRound = Number(division.state.currentRound) || 0;
+    if (currentRound >= firstKnockout) {
+        throw new AppError("KNOCKOUT_ALREADY_STARTED");
+    }
+
+    if (value === null) {
+        return null;
+    }
+
+    const depth = toCount(value);
+    if (depth === null || depth < 5 || depth % 2 === 0 || depth > qualifierCount(rounds[firstKnockout])) {
+        throw new AppError("INVALID_PLACEMENT_DEPTH");
+    }
+
+    return depth;
+}
+
+// Redraws the knockout rounds for a new placement depth, keeping the pool round
+// and its fixtures exactly as they are.
+//
+// The knockout fixtures are reconciled rather than replaced. A knockout fixture
+// has no teams until progression binds them, so nothing about one is worth
+// keeping except its id — and the id is what the saved schedule references. So
+// each regenerated fixture takes the id of an existing one with the same round
+// name, in match order: every main knockout match keeps its schedule slot, and
+// only the placement matches the new depth adds or drops are created or removed.
+async function replaceKnockoutRounds(division, placementDepth, client) {
+    const rounds = division.state.rounds;
+    const firstKnockout = rounds.findIndex((round) => round.type === "knockout");
+    const poolRounds = rounds.slice(0, firstKnockout);
+    const poolNames = new Set(poolRounds.map((round) => round.name));
+
+    const regenerated = createClassicState(
+        teamIdsOf(division.state),
+        teamIdsOf(division.state).length,
+        poolRounds[0].groups.length,
+        qualifierCount(rounds[firstKnockout]),
+        placementDepth
+    ).rounds.slice(firstKnockout);
+
+    const existing = await divisionsRepository.getFixturesByDivisionId(division.id);
+    const poolFixtures = existing.filter((fixture) => poolNames.has(roundHolding(fixture.round)));
+    const firstMatchNo = Math.max(0, ...poolFixtures.map((fixture) => fixture.match_no)) + 1;
+    const { rounds: knockoutRounds, fixtures } = generateFixtures(regenerated, firstMatchNo);
+
+    // Oldest first within each round name, the same order the new ones come in.
+    const reusable = new Map();
+    existing
+        .filter((fixture) => !poolNames.has(roundHolding(fixture.round)))
+        .sort((a, b) => a.match_no - b.match_no)
+        .forEach((fixture) => {
+            if (!reusable.has(fixture.round)) reusable.set(fixture.round, []);
+            reusable.get(fixture.round).push(fixture.id);
+        });
+
+    for (const fixture of fixtures) {
+        const reusedId = reusable.get(fixture.round)?.shift();
+
+        if (reusedId) {
+            knockoutRounds.forEach((round) => {
+                round.fixtures = round.fixtures.map((id) => (id === fixture.id ? reusedId : id));
+            });
+            // Before the knockout starts every slot is still a rank placeholder,
+            // which is the only time this runs.
+            await fixturesRepository.updateFixtureSlot(
+                reusedId,
+                fixture.matchNo,
+                fixture.round,
+                "Rank " + (fixture.team1 + 1),
+                "Rank " + (fixture.team2 + 1),
+                client
+            );
+        } else {
+            await fixtureService.createFixture(division.id, fixture, client);
+        }
+    }
+
+    const removedIds = [...reusable.values()].flat();
+    await fixturesRepository.deleteByIds(removedIds, client);
+    await repairSchedule(division.tournament_id, removedIds, client);
+
+    await divisionsRepository.updateStateRounds(division.id, [...poolRounds, ...knockoutRounds], client);
+}
+
 // The rename path. No gate: a name has no bearing on results, so there is no
 // reason to forbid fixing a typo once the tournament is under way.
 async function renameTeams(divisionId, entries, existingIds) {
@@ -219,7 +372,8 @@ async function reorderTeams(division, entries, payload) {
         entries.length,
         numGroups,
         knockoutTeams,
-        leagueConfigFromState(division.state, entries.length)
+        leagueConfigFromState(division.state, entries.length),
+        division.placement_depth ?? null
     );
 
     return await db.withTransaction(async (client) => {
@@ -289,7 +443,8 @@ async function rebuildDivision(division, entries, payload) {
         teams.length,
         numGroups,
         knockoutTeams,
-        leagueConfigFromState(division.state, teams.length)
+        leagueConfigFromState(division.state, teams.length),
+        division.placement_depth ?? null
     );
 
     const kept = new Set(teams.map((team) => team.id));
@@ -419,6 +574,7 @@ export const divisionService = {
     createDivision,
     updateDivision,
     updateDivisionColour,
+    updateDivisionSettings,
     deleteDivision
 }
 
@@ -509,8 +665,8 @@ function readTeamEntries(teams, existingIds) {
 // The generation sequence, shared so a rebuilt division is indistinguishable
 // from a freshly created one. generateFixtures mutates the rounds it is given
 // and hands them back, which is why the state's rounds are reassigned from it.
-function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig) {
-    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig);
+function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig, placementDepth = null) {
+    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig, placementDepth);
 
     const generated = generateFixtures(division.state.rounds);
     division.state.rounds = generated.rounds;
@@ -575,11 +731,11 @@ function validateStructure(numGroups, knockoutTeams, teamCount) {
     }
 }
 
-function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0, leagueConfig){
+function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0, leagueConfig, placementDepth = null){
     let division = {};
     if (format === 'classic'){
         division.type = "Classic";
-        division.state = createClassicState(teams, num_teams, num_groups, qualifyingTeams);
+        division.state = createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth);
     } else if (format === 'league'){
         division.type = "League";
         division.state = createLeagueState(teams, num_teams, leagueConfig);
@@ -712,7 +868,7 @@ function leagueConfigFromState(state, teamCount) {
     return { mode: 'legs', legs: 1 };
 }
 
-function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
+function createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth = null) {
     const state = {
         teams: teams,
         rounds: [],
@@ -796,7 +952,191 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams) {
         state.rounds.push(round);
     }
 
+    // Additive, and only when asked for: with no depth the rounds above are
+    // exactly what they have always been.
+    if (placementDepth !== null && placementDepth !== undefined) {
+        addPlacementMatches(state.rounds, placementDepth);
+    }
+
     return state;
+}
+
+// --- placement matches -------------------------------------------------------
+//
+// Extends a Classic knockout so ranks below 4th are played for rather than
+// decided by tiebreak, down to `depth` — the lowest rank a match decides. See
+// docs/tournament-rules.md, "Placement Matches".
+//
+// Built on the machinery the winners' bracket already uses rather than beside
+// it. Every placement match is one more group in an existing knockout round,
+// holding indices into the previous round's results, so progression binds it,
+// the bracket draws it and the final standings read it the way they already
+// read the 3rd-place playoff. Three rules make the indices work:
+//
+//   - A round's results are every group's advancing team in group order, then
+//     every match's loser in match order (seedKnockoutResults). Placement groups
+//     come after the main ones, so the main winners keep their indices and only
+//     the main losers' move — remapMainGroups corrects those.
+//   - Placement groups are ordered by the ranks they play for, best first. The
+//     losers no later round references are therefore always the tail of the
+//     list, so progression confirms exactly the referenced teams and everyone
+//     left over is ranked by the existing tiebreak.
+//   - Every final — the match for Nth and N+1th — is played in the last round,
+//     like the 3rd-place playoff. A pair ready earlier waits in one-team groups,
+//     which is how a bye already carries a team into the next round.
+//
+// Each eliminated tier is classified with the fold the winners' bracket uses:
+// populateGroups pairs the loser of match 1 with the loser of the last match,
+// and an uneven tier byes its top teams exactly as a Round of 6 does.
+function addPlacementMatches(rounds, depth) {
+    const firstKnockout = rounds.findIndex((round) => round.type === "knockout");
+    const last = rounds.length - 1;
+    if (firstKnockout === -1 || firstKnockout === last) {
+        return rounds;
+    }
+
+    // The previous round's groups in stored order, main first, and how many are
+    // main. A token names an entry of this list by identity.
+    let previous = { groups: rounds[firstKnockout].groups, mainCount: rounds[firstKnockout].groups.length };
+    let pending = [];
+
+    for (let roundIndex = firstKnockout + 1; roundIndex <= last; roundIndex += 1) {
+        const round = rounds[roundIndex];
+        const isFinal = roundIndex === last;
+        const mainCount = round.groups.length;
+
+        // The previous round's main losers are a new tier — unless it was the
+        // semifinal, whose losers already play for 3rd.
+        if (!isFinal) {
+            pending.push({
+                first: previous.mainCount + 1,
+                tokens: losersOf(previous.groups.slice(0, previous.mainCount), (group) => group)
+            });
+        }
+
+        const entries = [];
+        const next = [];
+        pending
+            .sort((a, b) => a.first - b.first)
+            .forEach((tier) => scheduleTier(tier, isFinal, depth, round.name, entries, next));
+
+        const resolve = indexIn(previous.groups);
+        const main = remapMainGroups(round.groups, previous);
+
+        round.groups = [...main, ...entries.map((entry) => entry.members.map(resolve))];
+        if (entries.length > 0) {
+            round.placement = entries.map((entry, offset) => ({
+                group: mainCount + offset,
+                ...(entry.name ? { name: entry.name } : {}),
+                ...(entry.ranks ? { ranks: entry.ranks } : {})
+            }));
+        }
+
+        // Tokens handed on name this round's entries, so this is the list that
+        // resolves them when the next round is drawn.
+        previous = { groups: [...main, ...entries], mainCount };
+        pending = next;
+    }
+
+    return rounds;
+}
+
+// Adds one tier's groups to this round, and hands on whatever it leaves for the
+// next one.
+function scheduleTier({ tokens, first }, isFinal, depth, roundName, entries, next) {
+    // Below the requested depth, or nobody in it: left to the tiebreak.
+    if (first > depth || tokens.length === 0) {
+        return;
+    }
+
+    const size = tokens.length;
+
+    if (isFinal) {
+        if (size === 1) {
+            // A tier of one needs no match: getting here decides its rank.
+            entries.push({ members: tokens, ranks: [first] });
+        } else if (size === 2) {
+            entries.push({ members: tokens, name: `${roundName} · ${ordinal(first)} Place`, ranks: [first, first + 1] });
+        }
+        // Larger cannot happen — a tier never needs more rounds than remain —
+        // and would be left to the tiebreak rather than drawn wrongly.
+        return;
+    }
+
+    // A pair plays its final in the last round, so it waits until then.
+    if (size <= 2) {
+        const carried = tokens.map((token) => {
+            const entry = { members: [token] };
+            entries.push(entry);
+            return { kind: "W", group: entry };
+        });
+        next.push({ first, tokens: carried });
+        return;
+    }
+
+    // One round of the tier's own bracket, drawn the way createClassicState draws
+    // the winners': a power of two plays in full, anything else byes its top
+    // teams so that a power of two carries on.
+    const advancing = Number.isInteger(Math.log2(size)) ? size / 2 : Math.pow(2, Math.floor(Math.log2(size)));
+    const byes = 2 * advancing - size;
+    const name = `${roundName} · Places ${first}-${first + size - 1}`;
+
+    const groups = [
+        ...tokens.slice(0, byes).map((token) => ({ members: [token] })),
+        ...populateGroups(size - advancing, tokens.slice(byes)).map((members) => ({ members, name }))
+    ];
+    entries.push(...groups);
+
+    next.push({ first, tokens: groups.map((group) => ({ kind: "W", group })) });
+    next.push({ first: first + advancing, tokens: losersOf(groups, (group) => group.members) });
+}
+
+// A tier's tokens are kept best first, the order the winners' bracket keeps its
+// seeds in, so a bye goes to the strongest team exactly as it does there. Winners
+// in group order already are. Losers in match order are the reverse: the fold
+// pairs the best with the worst, so the loser of the first match is the weakest.
+// Reversing changes no pairing — the loser of match 1 still meets the loser of
+// the last — only which end of an uneven tier receives the byes.
+function losersOf(groups, membersOf) {
+    return groups
+        .filter((group) => membersOf(group).length === 2)
+        .map((group) => ({ kind: "L", group }))
+        .reverse();
+}
+
+// A token's index in the previous round's results: its group's position for the
+// team that advanced from it, or past every group for a match's loser.
+function indexIn(groups) {
+    const membersOf = (group) => (Array.isArray(group) ? group : group.members);
+    const matchesBefore = (position) =>
+        groups.slice(0, position).filter((group) => membersOf(group).length === 2).length;
+
+    return (token) => {
+        const position = groups.indexOf(token.group);
+        return token.kind === "W" ? position : groups.length + matchesBefore(position);
+    };
+}
+
+// The main groups were drawn against a previous round of main groups only, so a
+// loser's index assumed the losers began right after them. Placement groups now
+// sit in between and push those losers along by as many groups as there are.
+function remapMainGroups(groups, previous) {
+    const shift = previous.groups.length - previous.mainCount;
+    return groups.map((group) =>
+        group.map((index) => (Number.isInteger(index) && index >= previous.mainCount ? index + shift : index))
+    );
+}
+
+function ordinal(value) {
+    const lastTwo = value % 100;
+    if (lastTwo >= 11 && lastTwo <= 13) return `${value}th`;
+
+    switch (value % 10) {
+        case 1: return `${value}st`;
+        case 2: return `${value}nd`;
+        case 3: return `${value}rd`;
+        default: return `${value}th`;
+    }
 }
 
 function populateGroups(numGroups, teamList) {
@@ -827,6 +1167,8 @@ export {
     generateDivisionDetails,
     createLeagueState,
     createClassicState,
+    addPlacementMatches,
+    ordinal,
     populateGroups,
     validateTeamNames,
     readTeamEntries,
@@ -834,7 +1176,9 @@ export {
     toCount,
     validateStructure,
     leagueConfigFromPayload,
-    leagueConfigFromState
+    leagueConfigFromState,
+    readRankingBasis,
+    readPlacementDepth
 };
 
 // const division = createClassicState(["Team1", "Team2", "team3","team4","team5","team6","team7","team8","team9"], 9, 2, 6);

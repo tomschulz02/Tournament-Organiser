@@ -254,3 +254,32 @@ describe("unfollowTournament", () => {
         await expect(userRepository.unfollowTournament("user-1", "tour-1")).rejects.toThrow("UNFOLLOW_TOURNAMENT_ERROR");
     });
 });
+
+describe("getUsernamesByIds", () => {
+    it("selects only id and username for the given ids", async () => {
+        const rows = [{ id: "user-1", username: "tom" }];
+        db.query.mockResolvedValue(rows);
+
+        expect(await userRepository.getUsernamesByIds(["user-1"])).toBe(rows);
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe("SELECT id, username FROM users WHERE id = ANY($1::uuid[])");
+        expect(params).toEqual([["user-1"]]);
+    });
+
+    it("runs no query for an empty or missing list", async () => {
+        expect(await userRepository.getUsernamesByIds([])).toEqual([]);
+        expect(await userRepository.getUsernamesByIds(undefined)).toEqual([]);
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await userRepository.getUsernamesByIds(["user-1"]).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to look up usernames");
+        expect(failure.cause).toBe(underlying);
+    });
+});

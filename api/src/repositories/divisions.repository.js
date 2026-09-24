@@ -234,6 +234,29 @@ async function updateStateColor(divisionId, color, client = db) {
     }
 }
 
+// Sets the division's primary ranking criterion. A column rather than a state
+// key: it describes how standings are read, not what was played. The division
+// trigger stamps last_update, so the tournament view's ETag moves with it.
+async function updateRankingBasis(divisionId, basis, client = db) {
+    try {
+        const sql = "UPDATE divisions SET ranking_basis = $1 WHERE id = $2::uuid";
+        await client.query(sql, [basis, divisionId]);
+    } catch (error) {
+        throw new Error("Failed to update ranking basis", { cause: error });
+    }
+}
+
+// Sets how far down the knockout ranks are played for. Only ever written
+// together with the knockout rounds it reshapes, so the client is required.
+async function updatePlacementDepth(divisionId, depth, client) {
+    try {
+        const sql = "UPDATE divisions SET placement_depth = $1 WHERE id = $2::uuid";
+        await client.query(sql, [depth, divisionId]);
+    } catch (error) {
+        throw new Error("Failed to update placement depth", { cause: error });
+    }
+}
+
 // Fetches a division together with the id of the user who owns its tournament,
 // so the service can authorise before mutating anything.
 //
@@ -243,7 +266,7 @@ async function updateStateColor(divisionId, color, client = db) {
 async function getDivisionWithOwner(divisionId) {
     try {
         const sql = `
-            SELECT d.id, d.tournament_id, d.name, d.type, d.state, t.created_by, t.status AS tournament_status
+            SELECT d.id, d.tournament_id, d.name, d.type, d.state, d.ranking_basis, d.placement_depth, t.created_by, t.status AS tournament_status
             FROM divisions d
             JOIN tournaments t ON t.id = d.tournament_id
             WHERE d.id = $1::uuid`;
@@ -311,6 +334,8 @@ export const divisionsRepository = {
     getStateForUpdate,
     updateStateRounds,
     updateStateColor,
+    updateRankingBasis,
+    updatePlacementDepth,
     getDivisionWithOwner,
     getTeamsByIds,
     getFixturesByDivisionId,

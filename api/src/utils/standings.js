@@ -168,11 +168,60 @@ export function isCountableFixture(fixture) {
     );
 }
 
+// The primary criterion, chosen per division in divisions.ranking_basis. Only
+// this first link of the chain is configurable; the tiebreakers behind it are
+// fixed. See docs/tournament-rules.md.
+export const RANKING_BASES = ["MATCHES_WON", "FIVB_POINTS", "SIMPLIFIED_POINTS", "SETS_WON"];
+
+// The value a row is ranked on first, higher is better. Match points come from
+// setOutcomes, the per-scoreline counter applyFixtureToStandings already keeps,
+// so no extra state is carried on the row. Anything unrecognised — including
+// the absent basis every caller that predates this passes — is matches won.
+export function primaryScore(row, basis) {
+    switch (basis) {
+        case "FIVB_POINTS":
+            return matchPoints(row, fivbPoints);
+        case "SIMPLIFIED_POINTS":
+            return matchPoints(row, simplifiedPoints);
+        case "SETS_WON":
+            return row.setsWon;
+        default:
+            return row.won;
+    }
+}
+
+function matchPoints(row, pointsFor) {
+    return Object.entries(row.setOutcomes || {}).reduce((total, [scoreline, count]) => {
+        const [won, lost] = scoreline.split("-").map(Number);
+        return total + pointsFor(won, lost) * count;
+    }, 0);
+}
+
+// A match went to a deciding set when the loser took at least one set and the
+// margin is one: 3-2 and 2-1, but not 3-1 and not a single-set 1-0.
+function decidingSet(won, lost) {
+    return Math.min(won, lost) > 0 && Math.abs(won - lost) === 1;
+}
+
+// 3 for a win outright, 2 for a win in the deciding set, 1 for a loss in it.
+function fivbPoints(won, lost) {
+    if (won > lost) return decidingSet(won, lost) ? 2 : 3;
+    return decidingSet(won, lost) ? 1 : 0;
+}
+
+// 2 for any win, 1 for a loss in the deciding set.
+function simplifiedPoints(won, lost) {
+    if (won > lost) return 2;
+    return decidingSet(won, lost) ? 1 : 0;
+}
+
 // The ranking chain from docs/tournament-rules.md:
-//   matches won -> set ratio -> point ratio -> head-to-head -> seeding.
+//   primary criterion -> set ratio -> point ratio -> head-to-head -> seeding.
+// The primary criterion is matches won unless the division chose otherwise.
 // Seeding is a total order over the division, so this always resolves.
-export function compareTeams(a, b, { headToHead = new Map(), seedIndex = new Map() } = {}) {
-    if (b.won !== a.won) return b.won - a.won;
+export function compareTeams(a, b, { headToHead = new Map(), seedIndex = new Map(), basis } = {}) {
+    const byPrimary = primaryScore(b, basis) - primaryScore(a, basis);
+    if (byPrimary !== 0) return byPrimary;
 
     const bySets = compareRatio(a.setsRatio, b.setsRatio);
     if (bySets !== 0) return bySets;
@@ -197,7 +246,7 @@ export function buildSeedIndex(teamIds) {
 }
 
 export function rankGroup(rows, context = {}) {
-    const { headToHead = new Map(), seedIndex = new Map() } = context;
+    const { headToHead = new Map(), seedIndex = new Map(), basis } = context;
 
     // Teams tied on every criterion ahead of head-to-head (wins, set ratio,
     // point ratio) are grouped into a tier before head-to-head is applied. A
@@ -208,21 +257,22 @@ export function rankGroup(rows, context = {}) {
     // docs/tournament-rules.md. Comparing pairs independently with Array.sort,
     // the previous approach, produced a non-transitive comparator whose result
     // depended on sort implementation details instead.
-    const tiers = groupTiedRows(rows);
+    const tiers = groupTiedRows(rows, basis);
 
     return tiers.flatMap((tier) => {
         if (tier.length > 2 && headToHeadCycle(tier, headToHead)) {
             return tier.slice().sort((a, b) => seedOf(a, seedIndex) - seedOf(b, seedIndex));
         }
 
-        return tier.slice().sort((a, b) => compareTeams(a, b, { headToHead, seedIndex }));
+        return tier.slice().sort((a, b) => compareTeams(a, b, { headToHead, seedIndex, basis }));
     });
 }
 
-// Ordering ahead of head-to-head: matches won, then set ratio, then point
-// ratio. Rows that compare equal on all three belong in the same tier.
-function compareBeforeHeadToHead(a, b) {
-    if (b.won !== a.won) return b.won - a.won;
+// Ordering ahead of head-to-head: the primary criterion, then set ratio, then
+// point ratio. Rows that compare equal on all three belong in the same tier.
+function compareBeforeHeadToHead(a, b, basis) {
+    const byPrimary = primaryScore(b, basis) - primaryScore(a, basis);
+    if (byPrimary !== 0) return byPrimary;
 
     const bySets = compareRatio(a.setsRatio, b.setsRatio);
     if (bySets !== 0) return bySets;
@@ -230,13 +280,13 @@ function compareBeforeHeadToHead(a, b) {
     return compareRatio(a.pointsRatio, b.pointsRatio);
 }
 
-function groupTiedRows(rows) {
-    const sorted = rows.slice().sort(compareBeforeHeadToHead);
+function groupTiedRows(rows, basis) {
+    const sorted = rows.slice().sort((a, b) => compareBeforeHeadToHead(a, b, basis));
     const tiers = [];
 
     for (const row of sorted) {
         const currentTier = tiers[tiers.length - 1];
-        if (currentTier && compareBeforeHeadToHead(currentTier[0], row) === 0) {
+        if (currentTier && compareBeforeHeadToHead(currentTier[0], row, basis) === 0) {
             currentTier.push(row);
         } else {
             tiers.push([row]);
@@ -290,7 +340,7 @@ function headToHeadCycle(tier, headToHead) {
 //
 // The default of 0 makes no tier clean, so every tier sorts: a caller that passes no
 // count keeps the old behaviour untouched.
-export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0) {
+export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0, basis) {
     const ordered = [];
     const depth = Math.max(0, ...rankedGroups.map((group) => group.length));
     const cleanTiers = Math.floor(qualifyingTeams / rankedGroups.length);
@@ -301,7 +351,7 @@ export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0) {
             .filter(Boolean);
 
         if (position >= cleanTiers){
-            atPosition.sort((a, b) => compareTeams(a, b, { seedIndex }));
+            atPosition.sort((a, b) => compareTeams(a, b, { seedIndex, basis }));
         }
 
         ordered.push(...atPosition);

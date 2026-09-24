@@ -565,6 +565,21 @@ describe("progressionService.getProposal", () => {
         expect(proposal.eligibleTeams).toEqual(proposal.computedResults);
     });
 
+    it("names the next round's placement matches, so the preview can label them", async () => {
+        const placement = [{ group: 2, name: "Finals · 5th Place", ranks: [5, 6] }];
+        loadable({ rounds: [poolRound(), finalsRound({ groups: [[2, 3], [0, 1], [4, 5]], placement })] });
+
+        const proposal = await progressionService.getProposal("div-1", "user-1");
+
+        expect(proposal.nextRound.placement).toEqual(placement);
+    });
+
+    it("adds no placement key for a round without placement matches", async () => {
+        loadable();
+
+        expect(await progressionService.getProposal("div-1", "user-1")).not.toHaveProperty("nextRound.placement");
+    });
+
     // A League leg-to-leg transition: nextRound.type lets the client tell this
     // apart from a real knockout transition, per docs/decisions.md.
     it("carries the next round's type, roundRobin for a leg-to-leg transition", async () => {

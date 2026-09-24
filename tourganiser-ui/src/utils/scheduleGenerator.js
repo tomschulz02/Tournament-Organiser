@@ -55,9 +55,18 @@ import {
 const DEFAULT_REST_MULTIPLE = 1;
 
 // A fixture's round name is not always a round name in state.rounds: the
-// third-place playoff carries its own while belonging to the Finals round.
+// third-place playoff carries its own while belonging to the Finals round, and a
+// placement match names its round before " · ".
 const THIRD_PLACE_ROUND = '3rd Place Playoff';
 const FINALS_ROUND = 'Finals';
+const PLACEMENT_SEPARATOR = ' · ';
+
+function roundHolding(fixtureRound) {
+	if (fixtureRound === THIRD_PLACE_ROUND) return FINALS_ROUND;
+
+	const separator = String(fixtureRound).indexOf(PLACEMENT_SEPARATOR);
+	return separator === -1 ? fixtureRound : fixtureRound.slice(0, separator);
+}
 
 // The formatter's own sentinel for a knockout slot with no team bound yet. See
 // getTeamKeys.
@@ -193,7 +202,7 @@ function buildRoundOrder(divisions = []) {
 // nothing constrains it, which is the same treatment the server's validator
 // gives it.
 function getRoundIndex(fixture, roundOrder) {
-	const name = fixture.round === THIRD_PLACE_ROUND ? FINALS_ROUND : fixture.round;
+	const name = roundHolding(fixture.round);
 	const position = roundOrder.get(fixture.division_id)?.get(name);
 
 	return position === undefined ? null : position;

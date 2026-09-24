@@ -430,6 +430,30 @@ describe("validateSchedule — court division restriction", () => {
         ).toThrowError(expect.objectContaining({ code: "SCHEDULE_COURT_DIVISION", status: 409 }));
     });
 
+    // A placement match names its holding round before " · ", so it sorts with
+    // that round's own matches.
+    it("holds a placement match to the place of the round it is played in", () => {
+        const placementSemi = makeFixture({ id: "p-semi", division_id: "div-1", round: "Semifinals · Places 5-8", team_1: null, team_2: null });
+
+        rejects(
+            [
+                entry({ id: "a", fixtureId: "pool-1", courtId: "court-1", startTime: "11:00", endTime: "12:00" }),
+                entry({ id: "b", fixtureId: "p-semi", courtId: "court-2", startTime: "09:00", endTime: "10:00" })
+            ],
+            "SCHEDULE_ROUND_ORDER",
+            { ...CONTEXT, fixtures: [...FIXTURES, placementSemi] }
+        );
+        expect(() =>
+            validateSchedule(
+                schedule([
+                    entry({ id: "a", fixtureId: "semi-1", courtId: "court-1", startTime: "11:00", endTime: "12:00" }),
+                    entry({ id: "b", fixtureId: "p-semi", courtId: "court-2", startTime: "11:00", endTime: "12:00" })
+                ]),
+                { ...CONTEXT, fixtures: [...FIXTURES, placementSemi] }
+            )
+        ).not.toThrow();
+    });
+
     it("names the offending entry in details", () => {
         try {
             run([{ id: "court-1", name: "Court 1", divisions: ["div-2"] }], [entry({ id: "bad", fixtureId: "pool-1" })]);

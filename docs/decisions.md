@@ -482,6 +482,38 @@ Tournaments are publicly browsable, so their existence is already public.
 The JWT carries an `admin` claim and nothing reads it. Whether an admin bypasses the
 ownership check is undecided. Until it is, `admin` grants nothing.
 
+### Extension: result entry resolves a role
+
+Decided 2026-09-24, release 1.1.
+
+`PUT /api/fixtures/:fixtureId/result` is the one endpoint where more than the organiser may
+write. `resolveResultRole` in `fixtures.service.js` returns `OWNER` for
+`tournaments.created_by`, `EDITOR` for a `tournament_editors` member and `NONE` otherwise.
+An editor is further held to the division's current round, checked inside the write's
+transaction once the division row is locked. Every other endpoint keeps its own
+owner-only check; the resolver is deliberately not shared with them, so widening one
+endpoint cannot widen another.
+
+## Placement Matches Are Groups In The Existing Rounds
+
+Decided 2026-09-24, release 1.1.
+
+Placement matches below 4th are generated as extra groups inside the existing knockout
+rounds, the way the 3rd-place playoff already sits inside Finals, rather than as a
+parallel bracket or a second progression mechanism. Progression, fixture binding, the
+bracket's `sources` and the final standings all work unchanged on groups of indices,
+so the only new rule is where the groups go and how indices shift — see
+`docs/tournament-rules.md`, "Placement matches".
+
+Their fixtures are named `"<round> · <label>"` so the round holding one is readable from
+the name alone. The schedule validator and the client's schedule generator both map a
+fixture to its round without the division's state, and a name that carries the answer
+keeps them working without it.
+
+Changing the depth redraws only the knockout rounds and reconciles their fixtures by
+round name, so existing knockout fixtures keep their ids and their schedule slots. It is
+refused once the knockout stage starts.
+
 ## One Fixture Status Vocabulary, Derived By The Server
 
 Decided 2026-08-08.

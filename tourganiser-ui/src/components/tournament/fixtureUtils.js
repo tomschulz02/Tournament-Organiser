@@ -99,11 +99,68 @@ export function setScores(result) {
 	return [result.map(([one]) => one), result.map(([, two]) => two)];
 }
 
+// A fixture's round name is not always a round in state.rounds. The 3rd-place
+// playoff carries its own name inside Finals, and a placement match is named
+// "<round> · <label>" — "Semifinals · Places 5-8" — inside the round before the
+// separator. The client mirror of roundHolding in fixtures.service.js.
+const THIRD_PLACE_ROUND = '3rd Place Playoff';
+export const PLACEMENT_SEPARATOR = ' · ';
+
+export function isPlacementRound(fixtureRound) {
+	return typeof fixtureRound === 'string' && fixtureRound.includes(PLACEMENT_SEPARATOR);
+}
+
+export function roundHolding(fixtureRound) {
+	if (fixtureRound === THIRD_PLACE_ROUND) return 'Finals';
+	if (isPlacementRound(fixtureRound)) return fixtureRound.slice(0, fixtureRound.indexOf(PLACEMENT_SEPARATOR));
+	return fixtureRound;
+}
+
+// Whether a fixture belongs to the round for progression's purposes: its own
+// matches and its placement matches, but not the 3rd-place playoff — see
+// playedIn in progression.service.js.
+function playedIn(round, fixture) {
+	return fixture.round === round.name || (isPlacementRound(fixture.round) && roundHolding(fixture.round) === round.name);
+}
+
+// The fixtures an editor may enter a result for: those in the division's current
+// round, which is the highest round in state.rounds holding a fixture with both
+// teams bound. Mirrors assertCurrentRound in fixtures.service.js — the server is
+// the gate, and this only decides where the control is offered.
+export function editableFixtureIds(divisions = []) {
+	const ids = new Set();
+
+	divisions.forEach((division) => {
+		const rounds = Array.isArray(division.state?.rounds) ? division.state.rounds : [];
+		const fixtures = division.fixtures ?? [];
+		const holdingIndex = (fixture) => rounds.findIndex((round) => round.name === roundHolding(fixture.round));
+		const current = fixtures
+			.filter((fixture) => fixture.team_1_id && fixture.team_2_id)
+			.reduce((highest, fixture) => Math.max(highest, holdingIndex(fixture)), -1);
+
+		fixtures.forEach((fixture) => {
+			if (current !== -1 && holdingIndex(fixture) === current) ids.add(fixture.id);
+		});
+	});
+
+	return ids;
+}
+
+// "you", or a name with the role it is held under now: "Priya (editor)". The
+// server only sends enteredBy to the organiser and the tournament's editors.
+export function enteredByLabel(enteredBy) {
+	if (!enteredBy) return null;
+	if (enteredBy.self) return 'you';
+
+	return enteredBy.role ? `${enteredBy.name} (${enteredBy.role})` : enteredBy.name;
+}
+
 // Whether the division's current round can advance to another one.
 //
 // Deliberately a mirror of isRoundComplete in progression.service.js, down to
-// matching fixtures on `round === round.name` with no third-place special case
-// and treating a round with no fixtures as incomplete. The client's job is to
+// its playedIn — a round's own fixtures and its placement matches, with no
+// third-place special case — and treating a round with no fixtures as
+// incomplete. The client's job is to
 // predict the server, not to out-think it: any rule here that the server does
 // not share would show a trigger that 409s, or hide one that would have worked.
 //
@@ -121,7 +178,7 @@ export function canProgress(division) {
 	// The last round has nothing to advance to — the server answers NO_NEXT_ROUND.
 	if (!round || !rounds[index + 1]) return false;
 
-	const roundFixtures = (division.fixtures ?? []).filter((fixture) => fixture.round === round.name);
+	const roundFixtures = (division.fixtures ?? []).filter((fixture) => playedIn(round, fixture));
 	if (roundFixtures.length === 0) return false;
 
 	// A cancelled match never happened, so it does not hold the round open.

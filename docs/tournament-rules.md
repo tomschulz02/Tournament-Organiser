@@ -116,7 +116,17 @@ so a team's counts sum to its played total minus any level matches.
 
 Applied in sequence. Move to the next criterion only when the current one ties.
 
-1. **Matches won**, descending.
+1. **The division's ranking basis**, descending — `divisions.ranking_basis`, one of:
+   - **Matches won** (`MATCHES_WON`, the default).
+   - **FIVB match points** (`FIVB_POINTS`) — 3 for a win outright, 2 for a win in the
+     deciding set, 1 for a loss in the deciding set, 0 otherwise. A deciding set is one
+     where the loser took at least one set and the margin is one (3-2, 2-1); a single-set
+     match is won outright.
+   - **Simplified match points** (`SIMPLIFIED_POINTS`) — 2 for any win, 1 for a loss in
+     the deciding set, 0 otherwise.
+   - **Sets won** (`SETS_WON`), in total.
+
+   Only this first criterion is configurable. Everything below it is fixed.
 2. **Set ratio**, descending.
 3. **Point ratio**, descending.
 4. **Head-to-head**, if the tied teams have played each other.
@@ -222,6 +232,35 @@ It is never read from a stored key and never inferred from the round's name or f
 configured knockout size. There is no `qualifyingTeams` key on a round: none has ever
 been written, and `state` is JSONB that no migration reaches, so deriving is the only
 approach that works on divisions that already exist.
+
+### Placement matches
+
+By default a knockout decides 1st to 4th by play — the final and the 3rd-place playoff —
+and every other knockout team is ranked by the tiebreak for the round it went out in. A
+Classic division's `placement_depth` extends play down to that place: an odd rank `N`
+means the match for `N` and `N + 1` is played, and so is everything needed to reach it.
+
+- The teams knocked out of one round form a **tier** with the places between them: the
+  Quarterfinals' losers play for 5th to 8th. A tier plays its own bracket, drawn with the
+  same fold as the winners' — the loser of match 1 meets the loser of the last match —
+  and, if uneven, byes its strongest teams exactly as a Round of 6 does.
+- A tier's teams are ordered strongest first. Losers in match order are the reverse —
+  the fold pairs best with worst, so the loser of match 1 lost to the top seed — so the
+  list is reversed before drawing. No pairing changes; only which end receives the byes.
+- Each round of a tier's bracket splits it: winners play on for its upper places, losers
+  for its lower ones. A part entirely below the depth is not played, and its teams are
+  ranked by the tiebreak as before.
+- A tier's matches start in the round after it forms. Every placement **final** is played
+  in the last round, alongside the 3rd-place playoff; a pair ready earlier waits in
+  one-team groups, the way a bye already carries a team on. A tier of one needs no final
+  and is placed when it reaches the last round.
+- Placement groups are ordinary knockout groups after the round's own, holding indices
+  into the previous round's results, so progression confirms and binds them like any
+  other. They are ordered by the places they play for, best first, which keeps every
+  unplayed team at the tail of the results, so what progression confirms is exactly what
+  later rounds reference.
+
+Nothing about places 1 to 4 changes. With no depth set the draw is exactly what it was.
 
 ### Qualification
 

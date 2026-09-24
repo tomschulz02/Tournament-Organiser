@@ -11,7 +11,7 @@ vi.mock("../../../src/services/progression.service.js", () => ({
 }));
 
 vi.mock("../../../src/services/divisions.service.js", () => ({
-    divisionService: { updateDivision: vi.fn(), updateDivisionColour: vi.fn(), deleteDivision: vi.fn() }
+    divisionService: { updateDivision: vi.fn(), updateDivisionColour: vi.fn(), updateDivisionSettings: vi.fn(), deleteDivision: vi.fn() }
 }));
 
 const app = (await import("../../../src/app.js")).default;
@@ -30,7 +30,42 @@ beforeEach(() => {
     vi.mocked(divisionService.updateDivision).mockReset();
     vi.mocked(divisionService.updateDivisionColour).mockReset();
     vi.mocked(divisionService.deleteDivision).mockReset();
+    vi.mocked(divisionService.updateDivisionSettings).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("PUT /api/divisions/:divisionId/settings", () => {
+    const SETTINGS_URL = "/api/divisions/div-1/settings";
+
+    it("requires a session", async () => {
+        const response = await request(app).put(SETTINGS_URL).send({ rankingBasis: "SETS_WON" });
+
+        expect(response.status).toBe(401);
+        expect(divisionService.updateDivisionSettings).not.toHaveBeenCalled();
+    });
+
+    it("updates the settings for the organiser", async () => {
+        const result = { divisionId: "div-1", rankingBasis: "SETS_WON", placementDepth: null };
+        divisionService.updateDivisionSettings.mockResolvedValue(result);
+
+        const response = await request(app)
+            .put(SETTINGS_URL)
+            .set("Cookie", authCookie({ id: "user-1" }))
+            .send({ rankingBasis: "SETS_WON" });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Division settings updated", data: result });
+        expect(divisionService.updateDivisionSettings).toHaveBeenCalledWith("div-1", "user-1", { rankingBasis: "SETS_WON" });
+    });
+
+    it("answers 409 once the knockout has started", async () => {
+        divisionService.updateDivisionSettings.mockRejectedValue(new AppError("KNOCKOUT_ALREADY_STARTED"));
+
+        const response = await request(app).put(SETTINGS_URL).set("Cookie", authCookie()).send({ placementDepth: 5 });
+
+        expect(response.status).toBe(409);
+        expect(response.body.message).toBe("The knockout stage has already started");
+    });
 });
 
 describe("GET /api/divisions/:divisionId/progression", () => {

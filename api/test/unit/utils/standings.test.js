@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
     RATIO_UNDEFINED,
+    RANKING_BASES,
+    primaryScore,
     applyFixtureToStandings,
     buildHeadToHeadMap,
     buildSeedIndex,
@@ -572,5 +574,76 @@ describe("seedKnockoutResults", () => {
 
     it("returns an empty list when no matches were played", () => {
         expect(seedKnockoutResults([])).toEqual([]);
+    });
+});
+
+describe("primaryScore and the ranking basis", () => {
+    // setOutcomes is keyed by the scoreline from the team's own side.
+    const row = (setOutcomes, extra = {}) => makeStandingsRow({ setOutcomes, ...extra });
+
+    it("is matches won by default and for an unrecognised basis", () => {
+        expect(primaryScore(row({}, { won: 3 }))).toBe(3);
+        expect(primaryScore(row({}, { won: 3 }), "MATCHES_WON")).toBe(3);
+        expect(primaryScore(row({}, { won: 3 }), "SOMETHING_ELSE")).toBe(3);
+    });
+
+    it("is total sets won for SETS_WON", () => {
+        expect(primaryScore(row({}, { setsWon: 7 }), "SETS_WON")).toBe(7);
+    });
+
+    it("scores FIVB points: 3 for a clear win, 2 for a deciding-set win, 1 for a deciding-set loss", () => {
+        const outcomes = { "3-0": 1, "3-1": 1, "3-2": 1, "2-3": 1, "1-3": 1, "0-3": 1 };
+
+        expect(primaryScore(row(outcomes), "FIVB_POINTS")).toBe(3 + 3 + 2 + 1);
+    });
+
+    it("scores simplified points: 2 for any win, 1 for a deciding-set loss", () => {
+        const outcomes = { "2-0": 2, "2-1": 1, "1-2": 1, "0-2": 1 };
+
+        expect(primaryScore(row(outcomes), "SIMPLIFIED_POINTS")).toBe(2 * 2 + 2 + 1);
+    });
+
+    it("treats a single-set match as won outright, not in a deciding set", () => {
+        expect(primaryScore(row({ "1-0": 1 }), "FIVB_POINTS")).toBe(3);
+        expect(primaryScore(row({ "0-1": 1 }), "SIMPLIFIED_POINTS")).toBe(0);
+    });
+
+    it("reads a row with no setOutcomes as no points", () => {
+        expect(primaryScore(row(undefined), "FIVB_POINTS")).toBe(0);
+    });
+
+    it("lists the four bases the Settings page offers", () => {
+        expect(RANKING_BASES).toEqual(["MATCHES_WON", "FIVB_POINTS", "SIMPLIFIED_POINTS", "SETS_WON"]);
+    });
+
+    // The whole feature: the same rows, sorted differently, with nothing rebuilt.
+    // P won three matches, all 3-2, and lost one 0-3. Q won two 3-0 and lost two
+    // 2-3. More wins for P; more of everything else for Q.
+    const p = makeStandingsRow({ id: "p", won: 3, lost: 1, setsWon: 9, setsLost: 9, setOutcomes: { "3-2": 3, "0-3": 1 } });
+    const q = makeStandingsRow({ id: "q", won: 2, lost: 2, setsWon: 10, setsLost: 6, setOutcomes: { "3-0": 2, "2-3": 2 } });
+    [p, q].forEach(computeRatios);
+    const order = (basis) => rankGroup([p, q], { basis }).map((team) => team.id);
+
+    it.each([
+        [undefined, ["p", "q"]],
+        ["MATCHES_WON", ["p", "q"]],
+        // FIVB: P 2 + 2 + 2 = 6, Q 3 + 3 + 1 + 1 = 8.
+        ["FIVB_POINTS", ["q", "p"]],
+        // Sets won: P 9, Q 10.
+        ["SETS_WON", ["q", "p"]],
+        // Simplified: 6 apiece, so the unchanged chain behind it decides — set
+        // ratio, P 1.0 against Q 1.67.
+        ["SIMPLIFIED_POINTS", ["q", "p"]]
+    ])("ranks by %s", (basis, expected) => {
+        expect(order(basis)).toEqual(expected);
+    });
+
+    it("carries the basis into cross-pool seeding", () => {
+        const e = makeStandingsRow({ id: "e", won: 2, setsWon: 6, setsLost: 0, setOutcomes: { "3-0": 2 } });
+        const f = makeStandingsRow({ id: "f", won: 1, lost: 1, setsWon: 7, setsLost: 3, setOutcomes: { "3-0": 1, "4-3": 1 } });
+        [e, f].forEach(computeRatios);
+
+        expect(seedAcrossGroups([[e], [f]], new Map()).map((row) => row.id)).toEqual(["e", "f"]);
+        expect(seedAcrossGroups([[e], [f]], new Map(), 0, "SETS_WON").map((row) => row.id)).toEqual(["f", "e"]);
     });
 });

@@ -18,21 +18,34 @@ const QUALIFIER_DRAG = 'qualifier:';
 // the server's confirmed list, so the preview updates before anything is saved.
 // Ported rather than shared for the same reason divisionPreview.js is: there is
 // no frontend/backend module boundary to import a server file across.
-function nextRoundFixtures(groups, selectedIds) {
+//
+// A group the round lists under `placement` is a match for places below the
+// title, labelled with its fixture round's own text ("Places 5-8", "5th Place"),
+// and a one-team placement group is a team waiting for its placement final
+// rather than a bye into the next round of the bracket.
+function nextRoundFixtures(groups, selectedIds, placement = []) {
 	if (!Array.isArray(groups)) return [];
 
+	const placementByGroup = new Map((placement ?? []).map((entry) => [entry.group, entry]));
+
 	return groups
-		.filter((group) => Array.isArray(group) && group.length > 0)
-		.map((group) => {
+		.map((group, groupIndex) => {
+			if (!Array.isArray(group) || group.length === 0) return null;
+
+			const entry = placementByGroup.get(groupIndex);
+			const label = entry?.name ? entry.name.split(' · ').pop() : null;
+
 			if (group.length < 2) {
 				const index = group[0];
-				return Number.isInteger(index) ? { type: 'bye', teamId: selectedIds[index] ?? null } : null;
+				if (!Number.isInteger(index)) return null;
+
+				return { type: entry ? 'waiting' : 'bye', teamId: selectedIds[index] ?? null };
 			}
 
 			const [one, two] = group;
 			if (!Number.isInteger(one) || !Number.isInteger(two)) return null;
 
-			return { type: 'match', team1Id: selectedIds[one] ?? null, team2Id: selectedIds[two] ?? null };
+			return { type: 'match', team1Id: selectedIds[one] ?? null, team2Id: selectedIds[two] ?? null, label };
 		})
 		.filter(Boolean);
 }
@@ -363,22 +376,27 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 							<>
 								<h3>{proposal.nextRoundName} Matchups</h3>
 								<div className="fixtures-list">
-									{nextRoundFixtures(proposal.nextRound.groups, selectedIds).map((entry, index) => (
-										<div key={index} className="preview-fixture preview-fixture--matchup">
-											{entry.type === 'bye' ? (
-												<>
-													<TeamIdentity name={nameFor(entry.teamId)} size="small" />
-													<span className="tv-status-pill tv-status-pill--ongoing">Bye</span>
-												</>
-											) : (
-												<>
-													<TeamIdentity name={nameFor(entry.team1Id)} size="small" />
-													<span className="vs">vs</span>
-													<TeamIdentity name={nameFor(entry.team2Id)} size="small" />
-												</>
-											)}
-										</div>
-									))}
+									{nextRoundFixtures(proposal.nextRound.groups, selectedIds, proposal.nextRound.placement).map(
+										(entry, index) => (
+											<div key={index} className="preview-fixture preview-fixture--matchup">
+												{entry.type === 'bye' || entry.type === 'waiting' ? (
+													<>
+														<TeamIdentity name={nameFor(entry.teamId)} size="small" />
+														<span className="tv-status-pill tv-status-pill--ongoing">
+															{entry.type === 'bye' ? 'Bye' : 'Awaiting placement match'}
+														</span>
+													</>
+												) : (
+													<>
+														<TeamIdentity name={nameFor(entry.team1Id)} size="small" />
+														<span className="vs">vs</span>
+														<TeamIdentity name={nameFor(entry.team2Id)} size="small" />
+														{entry.label && <span className="tv-status-pill">{entry.label}</span>}
+													</>
+												)}
+											</div>
+										),
+									)}
 								</div>
 							</>
 						) : (

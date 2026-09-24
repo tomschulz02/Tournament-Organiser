@@ -12,6 +12,7 @@ import {
     seedKnockoutResults
 } from "../utils/standings.js";
 import { AppError } from "../errors.js";
+import { roundHolding, isPlacementRound } from "./fixtures.service.js";
 
 // Round progression.
 //
@@ -36,7 +37,8 @@ async function getProposal(divisionId, userId) {
 
     const computed = computeRoundResults(round, state, fixtures, {
         nextRound,
-        previousResults: rounds[roundIndex - 1]?.results
+        previousResults: rounds[roundIndex - 1]?.results,
+        basis: division.ranking_basis
     }).map((row) => ({
         ...row,
         name: teamNames.get(row.id) || "Unknown"
@@ -62,7 +64,18 @@ async function getProposal(divisionId, userId) {
         // bindFixturesToResults), exposed read-only so the client can preview the
         // next round's matchups from the organiser's current qualifier order,
         // before anything is confirmed. Null on the final round, which has none.
-        nextRound: nextRound ? { name: nextRound.name, type: nextRound.type, groups: nextRound.groups } : null
+        //
+        // A round with placement matches also names them, so the preview can tell
+        // a match for 5th place from one for the title, and a team waiting for its
+        // placement final from a bye.
+        nextRound: nextRound
+            ? {
+                  name: nextRound.name,
+                  type: nextRound.type,
+                  groups: nextRound.groups,
+                  ...(nextRound.placement ? { placement: nextRound.placement } : {})
+              }
+            : null
     };
 }
 
@@ -89,7 +102,8 @@ async function commit(divisionId, userId, confirmedTeamIds) {
 
     const computed = computeRoundResults(round, state, fixtures, {
         nextRound,
-        previousResults: rounds[roundIndex - 1]?.results
+        previousResults: rounds[roundIndex - 1]?.results,
+        basis: division.ranking_basis
     });
     const confirmed = validateConfirmedTeams(confirmedTeamIds, computed, nextRound);
 
@@ -217,8 +231,9 @@ function sameOrder(a, b) {
 //
 // The tail is an options object rather than two more positional parameters:
 // nextRound gives the qualifier count, previousResults are the results a knockout
-// round's groups index into, which is the only way to name a bye team.
-function computeRoundResults(round, state, fixtures, { nextRound = null, previousResults = [] } = {}) {
+// round's groups index into, which is the only way to name a bye team. basis is
+// the division's ranking_basis, which only a pool round's ranking reads.
+function computeRoundResults(round, state, fixtures, { nextRound = null, previousResults = [], basis } = {}) {
     const seedIndex = buildSeedIndex(state.teams);
 
     if (round.type === "knockout") {
@@ -249,10 +264,10 @@ function computeRoundResults(round, state, fixtures, { nextRound = null, previou
         });
 
         rows.forEach(computeRatios);
-        return rankGroup(rows, { headToHead, seedIndex });
+        return rankGroup(rows, { headToHead, seedIndex, basis });
     });
 
-    return seedAcrossGroups(rankedGroups, seedIndex, qualifierCount(nextRound));
+    return seedAcrossGroups(rankedGroups, seedIndex, qualifierCount(nextRound), basis);
 }
 
 // The next round's groups hold indices into this round's results, so the number
@@ -282,12 +297,10 @@ function qualifierCount(nextRound) {
 function buildKnockoutOutcomes(round, fixtures, previousResults = []) {
     // The same selection rule the bracket formatter uses. Without the playoff the
     // Finals round sees one fixture for two groups and the cursor misaligns.
+    // roundHolding also brings in the round's placement matches, which follow
+    // its own in match order just as their groups follow in group order.
     const roundFixtures = fixtures
-        .filter(
-            (fixture) =>
-                fixture.round === round.name ||
-                (round.name === "Finals" && fixture.round === "3rd Place Playoff")
-        )
+        .filter((fixture) => roundHolding(fixture.round) === round.name)
         .sort((a, b) => (a.match_no ?? 0) - (b.match_no ?? 0));
 
     const groups = Array.isArray(round.groups) ? round.groups : [];
@@ -426,8 +439,14 @@ function normalizeFixtureResult(fixture) {
     return { ...rest, team_1_id: team_1 ?? null, team_2_id: team_2 ?? null, result };
 }
 
+// A round's placement matches hold it open like its own do: their outcomes are
+// part of its results, and a skipped one would shift every index after it.
+function playedIn(round, fixture) {
+    return fixture.round === round.name || (isPlacementRound(fixture.round) && roundHolding(fixture.round) === round.name);
+}
+
 function isRoundComplete(round, fixtures) {
-    const roundFixtures = fixtures.filter((fixture) => fixture.round === round.name);
+    const roundFixtures = fixtures.filter((fixture) => playedIn(round, fixture));
     if (roundFixtures.length === 0) return false;
 
     // CANCELLED matches never happened, so they do not hold a round open.
@@ -439,7 +458,7 @@ function isRoundComplete(round, fixtures) {
 function hasPlayedFixtures(round, fixtures) {
     return fixtures.some(
         (fixture) =>
-            fixture.round === round.name &&
+            playedIn(round, fixture) &&
             (fixture.status === "COMPLETED" || fixture.status === "LIVE")
     );
 }

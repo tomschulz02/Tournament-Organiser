@@ -297,6 +297,17 @@ export const updateTournamentSchedule = (tournamentId, schedule) =>
 export const updateTournamentScoresheetTemplate = (tournamentId, scoresheetTemplate) =>
 	request(`tournaments/${tournamentId}/scoresheet-template`, { method: 'PUT', body: { scoresheetTemplate } });
 
+// Editors: users the organiser has allowed to enter results. All three are
+// organiser-only. Adding and removing take effect at once — there is no invite
+// to accept. `identifier` is an email or a username.
+export const getTournamentEditors = (tournamentId) => request(`tournaments/${tournamentId}/editors`);
+
+export const addTournamentEditor = (tournamentId, identifier) =>
+	request(`tournaments/${tournamentId}/editors`, { method: 'POST', body: { identifier } });
+
+export const removeTournamentEditor = (tournamentId, userId) =>
+	request(`tournaments/${tournamentId}/editors/${userId}`, { method: 'DELETE' });
+
 // Fixtures
 
 // Records a result. `sets` is [[teamOneScore, teamTwoScore], ...] and `finished`
@@ -337,6 +348,14 @@ export const updateDivisionTeams = (divisionId, { teams, num_groups, knockout_te
 // docs/api.md.
 export const updateDivisionColour = (divisionId, color) =>
 	request(`divisions/${divisionId}/colour`, { method: 'PUT', body: { color } });
+
+// The Settings page's per-division controls. `settings` holds either or both of
+// `rankingBasis` (MATCHES_WON, FIVB_POINTS, SIMPLIFIED_POINTS, SETS_WON) and
+// `placementDepth` (null, or an odd place from 5). The basis can change at any
+// time; the depth is refused with a 409 once the knockout stage has started,
+// because it adds and removes fixtures.
+export const updateDivisionSettings = (divisionId, settings) =>
+	request(`divisions/${divisionId}/settings`, { method: 'PUT', body: settings });
 
 // Removes the division outright. Cascades to its teams and its fixtures, and the
 // tournament's saved schedule is repaired — the removed division's entries go,

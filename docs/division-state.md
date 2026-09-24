@@ -63,6 +63,8 @@ nothing. Nothing enforces agreement. Write both together, inside the same transa
 | `totalGames` | integer | Fixture count for the round. |
 | `completedGames` | integer | Fixtures with status `COMPLETED`. Round is over when this equals `totalGames`. |
 
+| `placement` | array | Knockout rounds of a division with a placement depth only. Absent otherwise. See below. |
+
 Not yet present, but required by `docs/tournament-rules.md`: match format is defined
 **per round**, so a round needs a key recording its best-of. Pool play at best-of-3 and
 knockout at best-of-5 in the same division cannot currently be expressed. Add it when
@@ -97,6 +99,21 @@ the full `n - 1` a cycle would give — via `generatePartialRoundRobinPairs` in
 truncating the circle-method rotation gives an uneven schedule whenever `n` is odd). The
 round object itself is indistinguishable from any other `roundRobin` round once
 generated — `totalGames` is just smaller than `n * (n - 1) / 2`.
+
+### placement
+
+Present on a knockout round only when the division has a `placement_depth` and the round
+holds placement groups — see `docs/tournament-rules.md`, "Placement matches". One entry
+per placement group, in group order; placement groups always follow the round's own:
+
+| Key | Description |
+|---|---|
+| `group` | Index into this round's `groups`. |
+| `name` | The fixture round name its match is stored under, e.g. `"Semifinals · Places 5-8"` or `"Finals · 5th Place"`. Absent for a one-team group, which has no fixture. |
+| `ranks` | The places the group decides, winner first: `[5, 6]` for a placement final, `[7]` for a tier of one that reaches the last round. Absent for a match or a waiting group that decides nothing yet. |
+
+The part of `name` before `" · "` is the round that holds the fixture, so any code
+mapping a fixture to its round (`roundHolding`) reads it from the name alone.
 
 ### results
 

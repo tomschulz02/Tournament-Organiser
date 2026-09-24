@@ -5,7 +5,9 @@ vi.mock("../../../src/repositories/editors.repository.js", () => ({
         getEditors: vi.fn(),
         isEditor: vi.fn(),
         addEditor: vi.fn(),
-        removeEditor: vi.fn()
+        removeEditor: vi.fn(),
+        getWorkedWith: vi.fn(),
+        searchByUsernamePrefix: vi.fn()
     }
 }));
 
@@ -126,5 +128,80 @@ describe("removeEditor", () => {
 
         await expect(editorService.removeEditor("t-1", OWNER, "user-9")).rejects.toMatchObject({ code: "EDITOR_NOT_FOUND" });
         expect(tournamentRepository.touchTournament).not.toHaveBeenCalled();
+    });
+});
+
+describe("searchCandidates", () => {
+    const user = (id, username) => ({ id, username });
+
+    beforeEach(() => {
+        editorsRepository.getWorkedWith.mockReset().mockResolvedValue([]);
+        editorsRepository.searchByUsernamePrefix.mockReset().mockResolvedValue([]);
+    });
+
+    it("refuses anyone but the organiser", async () => {
+        await expect(editorService.searchCandidates("t-1", "someone-else", "pri"))
+            .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER" });
+        expect(editorsRepository.getWorkedWith).not.toHaveBeenCalled();
+    });
+
+    it("offers previous collaborators before anything is typed, and searches nobody else", async () => {
+        editorsRepository.getWorkedWith.mockResolvedValue([user("user-3", "priya")]);
+
+        expect(await editorService.searchCandidates("t-1", OWNER, undefined)).toEqual([
+            { username: "priya", workedWith: true }
+        ]);
+        expect(editorsRepository.getWorkedWith).toHaveBeenCalledWith(OWNER, "t-1", null, 5);
+        expect(editorsRepository.searchByUsernamePrefix).not.toHaveBeenCalled();
+    });
+
+    it("filters collaborators from the first character, but searches everyone only from three", async () => {
+        await editorService.searchCandidates("t-1", OWNER, " PR ");
+
+        expect(editorsRepository.getWorkedWith).toHaveBeenCalledWith(OWNER, "t-1", "pr%", 5);
+        expect(editorsRepository.searchByUsernamePrefix).not.toHaveBeenCalled();
+    });
+
+    it("lists collaborators first, then everyone else, without repeats, up to five", async () => {
+        editorsRepository.getWorkedWith.mockResolvedValue([user("user-3", "priya"), user("user-5", "prim")]);
+        editorsRepository.searchByUsernamePrefix.mockResolvedValue([
+            user("user-3", "priya"),
+            user("user-6", "pria"),
+            user("user-7", "pric"),
+            user("user-8", "prid"),
+            user("user-9", "prie")
+        ]);
+
+        expect(await editorService.searchCandidates("t-1", OWNER, "Pri")).toEqual([
+            { username: "priya", workedWith: true },
+            { username: "prim", workedWith: true },
+            { username: "pria", workedWith: false },
+            { username: "pric", workedWith: false },
+            { username: "prid", workedWith: false }
+        ]);
+        expect(editorsRepository.searchByUsernamePrefix).toHaveBeenCalledWith(OWNER, "t-1", "pri%", 7);
+    });
+
+    it("searches nobody else once collaborators fill the list", async () => {
+        editorsRepository.getWorkedWith.mockResolvedValue(
+            ["a", "b", "c", "d", "e"].map((name) => user(`user-${name}`, `pri${name}`))
+        );
+
+        expect(await editorService.searchCandidates("t-1", OWNER, "pri")).toHaveLength(5);
+        expect(editorsRepository.searchByUsernamePrefix).not.toHaveBeenCalled();
+    });
+
+    it("treats % and _ as the characters they are, not wildcards", async () => {
+        await editorService.searchCandidates("t-1", OWNER, "a%_\\b");
+
+        expect(editorsRepository.getWorkedWith.mock.calls[0][2]).toBe("a\\%\\_\\\\b%");
+    });
+
+    it("answers nothing for text longer than any username, or a non-string", async () => {
+        expect(await editorService.searchCandidates("t-1", OWNER, "x".repeat(101))).toEqual([]);
+        expect(editorsRepository.getWorkedWith).not.toHaveBeenCalled();
+
+        await editorService.searchCandidates("t-1", OWNER, ["pri"]);
+        expect(editorsRepository.getWorkedWith).toHaveBeenCalledWith(OWNER, "t-1", null, 5);
     });
 });

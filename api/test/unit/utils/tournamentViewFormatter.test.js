@@ -62,13 +62,13 @@ describe("toISODate", () => {
 
 describe("getGroupLabel", () => {
     it("labels groups A, B, C by index", () => {
-        expect(getGroupLabel(0)).toBe("Group A");
-        expect(getGroupLabel(1)).toBe("Group B");
-        expect(getGroupLabel(25)).toBe("Group Z");
+        expect(getGroupLabel(0)).toBe("Pool A");
+        expect(getGroupLabel(1)).toBe("Pool B");
+        expect(getGroupLabel(25)).toBe("Pool Z");
     });
 
     it("does not wrap after Z", () => {
-        expect(getGroupLabel(26)).toBe("Group [");
+        expect(getGroupLabel(26)).toBe("Pool [");
     });
 });
 
@@ -715,7 +715,7 @@ describe("buildDivisionStandings", () => {
 
         expect(standings).toHaveLength(1);
         expect(standings[0]).toMatchObject({ round: "Pool Play", roundIndex: 0 });
-        expect(standings[0].groups[0].name).toBe("Group A");
+        expect(standings[0].groups[0].name).toBe("Pool A");
         expect(standings[0].groups[0].standings.map((row) => [row.name, row.won, row.setsWon]))
             .toEqual([["Aces", 1, 2], ["Bears", 0, 0]]);
     });
@@ -827,11 +827,11 @@ describe("buildDivisionStandings", () => {
 
         const groups = buildDivisionStandings(state, fixtures, nineTeams)[0].groups;
 
-        expect(groups[0].name).toBe("Group A");
+        expect(groups[0].name).toBe("Pool A");
         expect(groups[0].standings.map((row) => [row.id, row.won])).toEqual([
             ["t1", 2], ["t2", 1], ["t3", 0]
         ]);
-        expect(groups[1].name).toBe("Group B");
+        expect(groups[1].name).toBe("Pool B");
         expect(groups[1].standings.map((row) => [row.id, row.won])).toEqual([
             ["t5", 1], ["t4", 0]
         ]);
@@ -1575,15 +1575,15 @@ describe("buildFinalStandings", () => {
         const standings = [{
             round: "Pool Play",
             groups: [{
-                name: "Group A",
+                name: "Pool A",
                 standings: [{ id: "t1", name: "Aces" }, { id: "t2", name: "Bears" }]
             }]
         }];
 
         expect(buildFinalStandings({ division, fixtures: completeFixtures, standings, bracket: { rounds: [] }, teams }))
             .toEqual([
-                { rank: 1, team_id: "t1", name: "Aces", note: "Group A" },
-                { rank: 2, team_id: "t2", name: "Bears", note: "Group A" }
+                { rank: 1, team_id: "t1", name: "Aces", note: "Pool A" },
+                { rank: 2, team_id: "t2", name: "Bears", note: "Pool A" }
             ]);
     });
 
@@ -1591,8 +1591,8 @@ describe("buildFinalStandings", () => {
         const standings = [{
             round: "Pool Play",
             groups: [
-                { name: "Group A", standings: [{ id: "t1", name: "Aces" }] },
-                { name: "Group B", standings: [{ id: "t1", name: "Aces" }, { id: "t2", name: "Bears" }] }
+                { name: "Pool A", standings: [{ id: "t1", name: "Aces" }] },
+                { name: "Pool B", standings: [{ id: "t1", name: "Aces" }, { id: "t2", name: "Bears" }] }
             ]
         }];
 
@@ -2498,6 +2498,136 @@ describe("formatDivisionPayload", () => {
         });
     });
 
+    // The fixture list and the schedule show the crossovers the bracket draws:
+    // "Winner of #N" once a match feeds the slot, the rank placeholder before.
+    it("names a later knockout slot after the match that feeds it", () => {
+        const division = makeDivision({
+            state: makeState({
+                rounds: [
+                    makeRound({ name: "Pool Play" }),
+                    makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]] }),
+                    makeRound({ name: "Finals", type: "knockout", groups: [[2, 3], [0, 1]] })
+                ]
+            })
+        });
+        const knockout = (id, match_no, round) =>
+            makeFixture({ id, match_no, round, team_1: null, team_2: null, team_1_placeholder: "Rank 1", team_2_placeholder: "Rank 4" });
+        const fixtures = [
+            knockout("sf1", 1, "Semifinals"),
+            knockout("sf2", 2, "Semifinals"),
+            knockout("bronze", 3, "3rd Place Playoff"),
+            knockout("gold", 4, "Finals")
+        ];
+
+        const byId = new Map(
+            formatDivisionPayload({ division, teams: [], fixtures }).fixtures.map((fixture) => [fixture.id, fixture])
+        );
+
+        expect([byId.get("sf1").team1, byId.get("sf1").team2]).toEqual(["Rank 1", "Rank 4"]);
+        expect([byId.get("gold").team1, byId.get("gold").team2]).toEqual(["Winner of #1", "Winner of #2"]);
+        expect([byId.get("bronze").team1, byId.get("bronze").team2]).toEqual(["Loser of #1", "Loser of #2"]);
+        // The stored placeholder and the teams shape are untouched.
+        expect(byId.get("gold").team_1_placeholder).toBe("Rank 1");
+        expect(byId.get("gold").teams.team_1.placeholder).toBe("Rank 1");
+    });
+
+    describe("pool names", () => {
+        const twoPools = () =>
+            makeDivision({
+                state: makeState({
+                    teams: ["t1", "t2", "t3", "t4"],
+                    rounds: [
+                        makeRound({ name: "Pool Play", groups: [["t1", "t2"], ["t3", "t4"]] }),
+                        makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]] })
+                    ]
+                })
+            });
+        const teams = ["t1", "t2", "t3", "t4"].map((id) => makeTeam({ id, name: id.toUpperCase() }));
+        const fixtures = [
+            makeFixture({ id: "a", match_no: 1, team_1: "t1", team_2: "t2" }),
+            makeFixture({ id: "b", match_no: 2, team_1: "t3", team_2: "t4" }),
+            makeFixture({ id: "sf1", match_no: 3, round: "Semifinals", team_1_placeholder: "Rank 1", team_2_placeholder: "Rank 4" }),
+            makeFixture({ id: "sf2", match_no: 4, round: "Semifinals", team_1_placeholder: "Rank 2", team_2_placeholder: "Rank 3" })
+        ];
+
+        it("names each fixture's pool when the round has more than one", () => {
+            const byId = new Map(
+                formatDivisionPayload({ division: twoPools(), teams, fixtures }).fixtures.map((fixture) => [fixture.id, fixture])
+            );
+
+            expect(byId.get("a")).toMatchObject({ round: "Pool Play · Pool A", pool: "Pool A" });
+            expect(byId.get("b")).toMatchObject({ round: "Pool Play · Pool B", pool: "Pool B" });
+            expect(byId.get("sf1").round).toBe("Semifinals");
+        });
+
+        it("still reads the pools' standings from the round name", () => {
+            const payload = formatDivisionPayload({ division: twoPools(), teams, fixtures });
+
+            expect(payload.standings[0].groups).toHaveLength(2);
+        });
+
+        it("names a first-round knockout slot by its pool position, as the bracket does", () => {
+            const byId = new Map(
+                formatDivisionPayload({ division: twoPools(), teams, fixtures }).fixtures.map((fixture) => [fixture.id, fixture])
+            );
+
+            expect([byId.get("sf1").team1, byId.get("sf1").team2]).toEqual(["A1 (Rank 1)", "B2 (Rank 4)"]);
+            expect([byId.get("sf2").team1, byId.get("sf2").team2]).toEqual(["B1 (Rank 2)", "A2 (Rank 3)"]);
+            expect(byId.get("sf1").team_1_placeholder).toBe("Rank 1");
+        });
+
+        it("names nothing when the stored state carries no rounds", () => {
+            const division = makeDivision({ state: JSON.stringify({ teams: [] }) });
+
+            const [fixture] = formatDivisionPayload({ division, teams, fixtures: [fixtures[0]] }).fixtures;
+
+            expect(fixture.round).toBe("Pool Play");
+        });
+
+        it("skips a malformed pool and still names the others", () => {
+            const division = makeDivision({
+                state: makeState({ teams: ["t1", "t2"], rounds: [makeRound({ groups: [null, ["t1", "t2"]] })] })
+            });
+
+            const [fixture] = formatDivisionPayload({ division, teams, fixtures: [fixtures[0]] }).fixtures;
+
+            expect(fixture.round).toBe("Pool Play · Pool B");
+        });
+
+        it("leaves a single pool's fixtures as they are", () => {
+            const division = makeDivision({
+                state: makeState({ teams: ["t1", "t2"], rounds: [makeRound({ groups: [["t1", "t2"]] })] })
+            });
+
+            const [fixture] = formatDivisionPayload({ division, teams, fixtures: [fixtures[0]] }).fixtures;
+
+            expect(fixture.round).toBe("Pool Play");
+            expect(fixture).not.toHaveProperty("pool");
+        });
+    });
+
+    it("keeps a bound team's name over the feeding match", () => {
+        const teams = [makeTeam({ id: "t1", name: "Aces" })];
+        const division = makeDivision({
+            state: makeState({
+                teams: ["t1"],
+                rounds: [
+                    makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]] }),
+                    makeRound({ name: "Finals", type: "knockout", groups: [[0, 1]] })
+                ]
+            })
+        });
+        const fixtures = [
+            makeFixture({ id: "sf1", match_no: 1, round: "Semifinals" }),
+            makeFixture({ id: "sf2", match_no: 2, round: "Semifinals" }),
+            makeFixture({ id: "gold", match_no: 3, round: "Finals", team_1: "t1", team_2: null, team_2_placeholder: "Rank 2" })
+        ];
+
+        const gold = formatDivisionPayload({ division, teams, fixtures }).fixtures.find((fixture) => fixture.id === "gold");
+
+        expect([gold.team1, gold.team2]).toEqual(["Aces", "Winner of #2"]);
+    });
+
     it("treats fixtures with no match number as first", () => {
         const division = makeDivision();
         const fixtures = [
@@ -2550,7 +2680,7 @@ describe("formatTournamentViewPayload", () => {
 
         const [formatted] = payload.divisions;
         expect(formatted.teams.map((team) => team.name)).toEqual(teams.map((team) => team.name));
-        expect(formatted.standings[0].groups.map((group) => group.name)).toEqual(["Group A", "Group B"]);
+        expect(formatted.standings[0].groups.map((group) => group.name)).toEqual(["Pool A", "Pool B"]);
         expect(formatted.bracket.rounds.map((round) => round.name)).toEqual(["Semifinals", "Finals"]);
         // Nothing is finished, so there is no final ranking yet.
         expect(formatted.finalStandings).toEqual([]);

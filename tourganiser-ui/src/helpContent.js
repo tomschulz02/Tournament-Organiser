@@ -150,7 +150,7 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Filtering the list',
 				paragraphs: [
-					'Filter by division (only shown when there is more than one), by stage/round, by status, or search by team name — each control only appears when it would actually narrow something down, so a tournament with one division shows no division filter.',
+					'Filter by division (only shown when there is more than one), by stage (Preliminary Round for all pool and round-robin matches, then each knockout round in order, then Playoffs for the 3rd, 5th, 7th… place matches), by status, or search by team name — each control only appears when it would actually narrow something down, so a tournament with one division shows no division filter.',
 				],
 			},
 			{
@@ -427,7 +427,10 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Generating automatically',
 				paragraphs: [
-					'The generator (opened from the toolbar) fills the whole board at once from a few settings — daily start and end time, and how long each match takes — respecting every hard rule (no team or court double-booked, no round starting before the one before it in the same division has finished, a minimum rest between two matches for the same team) and preferring to keep a division on the same court and to spread rest evenly. It can also assign officiating teams automatically, kept off by default. Anything it can\'t place is left unscheduled with a warning naming which rule stopped it — add a court, extend the day, or add another day, whichever the warning points at.',
+					'The generator (opened from the toolbar) fills the whole board at once from your courts, day start and end, and match length. Open "Match length by round" to give a round its own length, for example longer finals; blank rounds use the main match length. It works through the day like you would on a whiteboard. At each time it plays the matches whose teams have the most still to play, in any order within a round. Divisions sharing a court take turns whenever that finishes sooner. Your settings are saved with the schedule.',
+					'Some rules always apply: rounds are played in order (no knockout match starts until every pool match of its division has finished), no team or court is double-booked, and courts limited to certain divisions are respected. Four rules are yours to switch: a minimum rest between a team\'s matches (off allows back-to-back matches), a maximum number of matches per team per day, the longest a team should wait between two matches on the same day (teams near it play first; a longer wait is reported), and a break before each knockout round (minimum rest can\'t cover knockout teams, because they aren\'t known in advance). After a break in play, courts restart the moment the break ends.',
+					'With "Bend rules to fit every fixture" on, a fixture that has nowhere else to go may shorten a rest or a knockout break, or exceed the daily limit. The generator bends as few times as it can and spreads the bends across teams instead of repeating them for one. "Run past the day\'s end time" is the last resort. It adds time after the final day only when bending isn\'t enough. The Generation Report in the overview lists every bend with the teams affected. Show highlights those matches on the board. Anything still left out is listed with the rule that stopped it.',
+					'Preferences decide the court, never whether a match plays: keeping a pool on one court, and keeping a court on one division. "Spread matches evenly across days" shares the matches between days instead of finishing as early as possible. Officials can also be assigned automatically, kept off by default.',
 					'Generating replaces whatever is currently on the board — any hand-placed entries are discarded and regenerated with everything else.',
 				],
 			},

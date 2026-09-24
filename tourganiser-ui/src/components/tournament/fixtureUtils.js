@@ -8,14 +8,82 @@ export const ALL = '';
 
 export const EMPTY_FILTERS = { divisionId: ALL, round: ALL, status: ALL, team: '', day: ALL, courtId: ALL };
 
+// The stage a fixture is filtered by: coarser than its round, so the filter reads
+// as the shape of the tournament rather than a list of every pool and leg.
+export const PRELIMINARY_STAGE = 'Preliminary Round';
+export const PLAYOFFS_STAGE = 'Playoffs';
+
+// Sort keys for the stages. Knockout rounds sit between the two, nearest the
+// final last. A round no division's state names comes after them all, before
+// the playoffs.
+const PRELIMINARY_RANK = 0;
+const UNKNOWN_RANK = 150;
+const PLAYOFFS_RANK = 200;
+
+// Which stage a fixture belongs to, and where that stage sorts:
+//   - Preliminary Round: every pool-play and round-robin round, whatever it is
+//     called and however many pools or legs it has.
+//   - Playoffs: every placement match — the 3rd place playoff and anything
+//     named "<round> · <label>", such as "Semifinals · Places 5-8".
+//   - Otherwise the knockout round's own name, ordered by how far it is from the
+//     division's last round, so Quarterfinals, Semifinals, Finals in that order
+//     whatever divisions they come from.
+function buildStageLookup(divisions) {
+	const roundTypes = new Map(); // `${divisionId}|${roundName}` -> type
+	const distanceFromEnd = new Map(); // knockout round name -> rounds to the end
+
+	divisions.forEach((division) => {
+		const rounds = Array.isArray(division.state?.rounds) ? division.state.rounds : [];
+
+		rounds.forEach((round, index) => {
+			if (!round?.name) return;
+
+			roundTypes.set(`${division.id}|${round.name}`, round.type);
+			if (round.type === 'knockout') {
+				distanceFromEnd.set(round.name, Math.max(distanceFromEnd.get(round.name) ?? 0, rounds.length - index));
+			}
+		});
+	});
+
+	return (fixture) => {
+		// A pool fixture carries its pool, and its round reads "Pool Play · Pool A"
+		// — the same separator a placement match uses, so the pool is checked
+		// first.
+		if (fixture.pool) return { stage: PRELIMINARY_STAGE, stageRank: PRELIMINARY_RANK };
+		if (fixture.round === THIRD_PLACE_ROUND || isPlacementRound(fixture.round)) {
+			return { stage: PLAYOFFS_STAGE, stageRank: PLAYOFFS_RANK };
+		}
+
+		const type = roundTypes.get(`${fixture.division_id}|${fixture.round}`);
+		if (type && type !== 'knockout') return { stage: PRELIMINARY_STAGE, stageRank: PRELIMINARY_RANK };
+
+		const distance = distanceFromEnd.get(fixture.round);
+		return { stage: fixture.round || null, stageRank: distance === undefined ? UNKNOWN_RANK : 100 - distance };
+	};
+}
+
+// The stages present among these fixtures, in tournament order.
+export function orderedStages(fixtures = []) {
+	const ranks = new Map();
+
+	fixtures.forEach((fixture) => {
+		if (fixture.stage && !ranks.has(fixture.stage)) ranks.set(fixture.stage, fixture.stageRank ?? UNKNOWN_RANK);
+	});
+
+	// Stable, so two stages with one rank keep the order they first appear in.
+	return [...ranks.keys()].sort((left, right) => ranks.get(left) - ranks.get(right));
+}
+
 // Every division's fixtures in one list. division_id is already on each fixture;
-// division_name is not, and the row needs it to show a badge.
+// division_name is not, and the row needs it to show a badge. Each fixture is
+// also given its stage, which the stage filter reads.
 export function flattenFixtures(divisions = []) {
 	const all = [];
+	const stageOf = buildStageLookup(divisions);
 
 	divisions.forEach((division) => {
 		(division.fixtures ?? []).forEach((fixture) => {
-			all.push({ ...fixture, division_name: division.name });
+			all.push({ ...fixture, division_name: division.name, ...stageOf(fixture) });
 		});
 	});
 
@@ -35,7 +103,9 @@ export function indexById(fixtures = []) {
 export function matchesFixtureFilters(fixture, filters) {
 	if (!fixture) return false;
 	if (filters.divisionId && fixture.division_id !== filters.divisionId) return false;
-	if (filters.round && fixture.round !== filters.round) return false;
+	// filters.round holds a stage. A fixture that never went through
+	// flattenFixtures has none, and is matched on its round as before.
+	if (filters.round && (fixture.stage ?? fixture.round) !== filters.round) return false;
 	if (filters.status && fixture.status !== filters.status) return false;
 
 	const query = filters.team.trim().toLowerCase();

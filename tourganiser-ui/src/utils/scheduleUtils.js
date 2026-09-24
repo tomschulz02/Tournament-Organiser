@@ -12,6 +12,78 @@ export const DEFAULT_SLOT_MINUTES = 30;
 // scheduleExportDocument.js's @page rules have always used.
 export const DEFAULT_PRINT_ORIENTATION = { grid: 'landscape', list: 'portrait' };
 
+// The generator's rules and preferences, as the organiser last generated with
+// them. Stored at settings.generator — see docs/schedule.md. Presentation of a
+// choice, not a constraint on entries: the server stores it as given.
+//
+// A null duration or rest means "not chosen": the duration falls back to the
+// grid's slotMinutes and the rest to the duration, which is what both always
+// came out at before they were saved.
+export const DEFAULT_GENERATOR_SETTINGS = {
+	fixtureDurationMinutes: null,
+	restEnabled: true,
+	restMinutes: null,
+	maxPerDayEnabled: false,
+	maxMatchesPerDay: 3,
+	maxWaitEnabled: false,
+	maxWaitMinutes: 120,
+	knockoutGapEnabled: false,
+	knockoutGapMinutes: null,
+	fitAll: true,
+	allowOverrun: false,
+	spreadDays: false,
+	courtAffinity: true,
+	groupDivisions: true,
+	assignOfficials: false,
+	// Round name -> match length in minutes, for the rounds that differ from the
+	// default. A round not named here takes fixtureDurationMinutes.
+	roundDurations: {},
+};
+
+function readRoundDurations(raw) {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+	return Object.fromEntries(
+		Object.entries(raw)
+			.map(([round, minutes]) => [round, readCount(minutes, 1)])
+			.filter(([round, minutes]) => round && minutes !== null)
+	);
+}
+
+function readCount(value, minimum) {
+	if (value === null || value === undefined || value === '') return null;
+	const number = Number(value);
+	return Number.isFinite(number) && number >= minimum ? Math.round(number) : null;
+}
+
+// null in, null out: a schedule that has never been generated has no saved
+// rules, and the panel shows the defaults. Anything else is read key by key, so
+// a payload from before a key existed takes that key's default.
+export function normaliseGeneratorSettings(raw) {
+	if (!raw || typeof raw !== 'object') return null;
+
+	const flag = (key) => (typeof raw[key] === 'boolean' ? raw[key] : DEFAULT_GENERATOR_SETTINGS[key]);
+
+	return {
+		fixtureDurationMinutes: readCount(raw.fixtureDurationMinutes, 1),
+		restEnabled: flag('restEnabled'),
+		restMinutes: readCount(raw.restMinutes, 0),
+		maxPerDayEnabled: flag('maxPerDayEnabled'),
+		maxMatchesPerDay: readCount(raw.maxMatchesPerDay, 1) ?? DEFAULT_GENERATOR_SETTINGS.maxMatchesPerDay,
+		maxWaitEnabled: flag('maxWaitEnabled'),
+		maxWaitMinutes: readCount(raw.maxWaitMinutes, 0) ?? DEFAULT_GENERATOR_SETTINGS.maxWaitMinutes,
+		knockoutGapEnabled: flag('knockoutGapEnabled'),
+		knockoutGapMinutes: readCount(raw.knockoutGapMinutes, 0),
+		fitAll: flag('fitAll'),
+		allowOverrun: flag('allowOverrun'),
+		spreadDays: flag('spreadDays'),
+		courtAffinity: flag('courtAffinity'),
+		groupDivisions: flag('groupDivisions'),
+		assignOfficials: flag('assignOfficials'),
+		roundDurations: readRoundDurations(raw.roundDurations),
+	};
+}
+
 export function createScheduleId(prefix = 'schedule') {
 	return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 }
@@ -263,6 +335,7 @@ export function buildEmptySchedule({ startDate, endDate, existingDays = [] }) {
 			dayStartTime: DEFAULT_SCHEDULE_START,
 			dayEndTime: DEFAULT_SCHEDULE_END,
 			slotMinutes: DEFAULT_SLOT_MINUTES,
+			generator: null,
 		},
 		// null per type means "nothing saved, compute the smart default" — see
 		// normalisePrintLayouts. A brand-new schedule has never been printed.
@@ -532,6 +605,7 @@ export function normaliseSchedule(rawSchedule, { startDate, endDate }) {
 			dayStartTime: rawSchedule.settings?.dayStartTime || DEFAULT_SCHEDULE_START,
 			dayEndTime: rawSchedule.settings?.dayEndTime || DEFAULT_SCHEDULE_END,
 			slotMinutes: Number(rawSchedule.settings?.slotMinutes) || DEFAULT_SLOT_MINUTES,
+			generator: normaliseGeneratorSettings(rawSchedule.settings?.generator),
 		},
 		print: normalisePrintLayouts(rawSchedule.print),
 	};
@@ -839,6 +913,7 @@ export function serialiseScheduleForSave(schedule) {
 			dayStartTime: schedule.settings.dayStartTime,
 			dayEndTime: schedule.settings.dayEndTime,
 			slotMinutes: schedule.settings.slotMinutes,
+			generator: normaliseGeneratorSettings(schedule.settings.generator),
 		},
 		print: serialisePrintLayouts(schedule.print),
 	};

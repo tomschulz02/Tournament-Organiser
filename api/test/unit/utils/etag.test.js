@@ -83,6 +83,15 @@ describe("buildTournamentEtag", () => {
         expect(buildTournamentEtag("1000", "user-1")).not.toBe(buildTournamentEtag("1001", "user-1"));
     });
 
+    // A deploy that changes what the payload says about unchanged data must not
+    // be answered with a 304 for a body built before it.
+    it("covers the payload version, not only the data and the viewer", async () => {
+        const { createHash } = await import("node:crypto");
+        const unversioned = `"${createHash("sha256").update("1000|user-1").digest("base64url").slice(0, 27)}"`;
+
+        expect(buildTournamentEtag("1000", "user-1")).not.toBe(unversioned);
+    });
+
     it("treats undefined and null viewers as the same anonymous reader", () => {
         expect(buildTournamentEtag("1000", undefined)).toBe(buildTournamentEtag("1000", null));
     });

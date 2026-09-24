@@ -314,16 +314,23 @@ applies it at generation time, as a hard constraint rather than a score, so a ge
 schedule never breaks it. `api/src/utils/scheduleValidator.js` applies it again on write,
 because a schedule can also be built and edited by hand. See `docs/schedule.md`.
 
-A partial schedule is legal, so an earlier round may be entirely unplaced. The constraint
-is measured against every earlier round that *has* been placed, not only the immediately
-preceding one.
+A partial schedule is legal, so an earlier round may be entirely unplaced. The server
+measures the constraint against every earlier round that *has* been placed, not only the
+immediately preceding one. The generator is stricter. Since 2026-09-24 it places no
+fixture of a round until every fixture of the earlier rounds has been placed, so a
+knockout round is left out rather than scheduled ahead of a pool match that could not
+be placed.
 
-### A team never plays two matches back to back
+### A team gets its minimum rest between matches
 
-At least one slot of rest between a team's two matches on the same day. Settled
-2026-08-11 and enforced from 2026-08-13 as a hard constraint in the generator, not a
-preference it can trade away: a tight tournament now reports a fixture it cannot place
-rather than placing it against a team that has just come off court.
+A minimum gap between a team's two matches on the same day, set by the organiser and
+one match length by default. Settled 2026-08-11 as a hard constraint. Revised
+2026-09-24: it is now the organiser's rule. It can be switched off, and when the
+organiser allows it the generator bends it to fit a fixture that has nowhere else to go.
+It bends as few times as possible and never twice for one team where once for another
+would do. Every bend is reported after generating. With bending off, a tight tournament
+reports the fixture it cannot place rather than placing it against a team that has just
+come off court.
 
 Only the generator enforces it. The server accepts a hand-placed back-to-back match,
 because the organiser may have a reason — a walkover, a team that asked for it — and
@@ -333,8 +340,10 @@ whether a schedule is good.
 **It cannot apply across the pool-to-knockout boundary.** A semifinal's teams are not
 known until pool play has finished, so the generator has nobody to give rest to and will
 place a semifinal in the slot immediately after the last pool match. The round-order rule
-above still holds, so the match is playable; it may not be kind. An organiser who wants a
-gap there adds a break. Recorded in `docs/known-limitations.md`.
+above still holds, so the match is playable, though it may not be kind. The organiser
+can switch on "Break before knockout rounds" in the generator settings. The generator
+then holds each knockout round back that long after the round before it ends. Recorded
+in `docs/known-limitations.md`.
 
 The full priority order the generator works to is in `docs/schedule.md` under Generation
 objectives.

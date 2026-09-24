@@ -84,6 +84,7 @@ function formatDivisionPayload({ division, teams, fixtures, attribution = null }
     const results = normalizedFixtures.filter((fixture) => isResultFixture(fixture));
     const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup, division.ranking_basis);
     const bracket = buildDivisionBracket(state, normalizedFixtures, teamLookup);
+    labelFedSlots(normalizedFixtures, bracket);
     const finalStandings = buildFinalStandings({
         division,
         state,
@@ -99,6 +100,8 @@ function formatDivisionPayload({ division, teams, fixtures, attribution = null }
         results,
         state
     });
+    // Last, because everything above matches fixtures to state.rounds by name.
+    labelPools(normalizedFixtures, state);
 
     return {
         id: division.id,
@@ -525,6 +528,72 @@ function resolveByeTeam(index, previousRound, teamLookup) {
     }
 
     return resolveByeTeam(entry, previousRound.earlierRound, teamLookup);
+}
+
+// An unbound knockout slot is named the way the bracket names it, so the fixture
+// list and the schedule show the crossovers too. A slot fed by a known match
+// reads "Winner of #12" or "Loser of #9". A first-round slot the bracket can pin
+// to a pool position reads "A1 (Rank 1)". Any other slot keeps its "Rank N"
+// label, and a bound team always wins. Only team1/team2, the display names,
+// change: team_N_placeholder keeps the stored "Rank N" and teams keeps its shape.
+function labelFedSlots(fixtures, bracket) {
+    const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+
+    bracket.rounds.forEach((round) => {
+        round.matches.forEach((match) => {
+            const fixture = byId.get(match.id);
+            if (!fixture) {
+                return;
+            }
+
+            [1, 2].forEach((side) => {
+                const source = match.sources?.[side - 1];
+                const participant = match.participants?.[side - 1];
+                if (fixture[`team_${side}_id`] || !participant?.placeholder) {
+                    return;
+                }
+
+                if (source?.matchNo != null) {
+                    fixture[`team${side}`] = `${source.outcome === "LOSER" ? "Loser" : "Winner"} of #${source.matchNo}`;
+                } else if (!source && participant.name) {
+                    fixture[`team${side}`] = participant.name;
+                }
+            });
+        });
+    });
+}
+
+// A pool round played in more than one pool names each fixture's pool, in the
+// same "<round> · <label>" form a placement match already uses — "Pool Play ·
+// Pool A" — so the fixture list, its stage filter and the schedule say which
+// pool a match belongs to. The pool is also set on its own, as pool, which the
+// schedule generator keeps a pool on one court by. Every reader that asks which
+// round a fixture belongs to strips the label first (roundHolding), so nothing
+// that counts or orders rounds sees a difference. A single-pool round is left as
+// it is: "Pool A" of one pool says nothing.
+function labelPools(fixtures, state) {
+    const rounds = Array.isArray(state.rounds) ? state.rounds : [];
+
+    rounds.forEach((round) => {
+        if (round.type === "knockout" || !Array.isArray(round.groups) || round.groups.length < 2) {
+            return;
+        }
+
+        const poolOf = new Map();
+        round.groups.forEach((group, groupIndex) => {
+            (Array.isArray(group) ? group : []).forEach((teamId) => poolOf.set(teamId, groupIndex));
+        });
+
+        fixtures.forEach((fixture) => {
+            const groupIndex = poolOf.get(fixture.team_1_id);
+            if (fixture.round !== round.name || groupIndex === undefined) {
+                return;
+            }
+
+            fixture.pool = `Pool ${String.fromCharCode(65 + groupIndex)}`;
+            fixture.round = `${round.name} · ${fixture.pool}`;
+        });
+    });
 }
 
 function describeMatchSource(match, outcome) {
@@ -1111,7 +1180,7 @@ function getCurrentRoundName(state) {
 }
 
 function getGroupLabel(groupIndex) {
-    return `Group ${String.fromCharCode(65 + groupIndex)}`;
+    return `Pool ${String.fromCharCode(65 + groupIndex)}`;
 }
 
 function isResultFixture(fixture) {

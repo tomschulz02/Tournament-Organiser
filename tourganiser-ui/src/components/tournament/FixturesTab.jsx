@@ -5,10 +5,10 @@ import FixtureFilters from './FixtureFilters';
 import FixtureGroup from './FixtureGroup';
 import {
 	EMPTY_FILTERS,
-	distinct,
 	distinctStatuses,
 	flattenFixtures,
 	matchesFixtureFilters,
+	orderedStages,
 } from './fixtureUtils';
 import { useHelpTopic } from '../../HelpContext';
 
@@ -32,8 +32,8 @@ export default function FixturesTab({ divisions = [], creator = false, onCreateS
 	const [filters, setFilters] = useState(EMPTY_FILTERS);
 
 	// Derived from the fixtures actually present, so the filters never offer a
-	// round or a status that would match nothing.
-	const rounds = useMemo(() => distinct(fixtures.map((fixture) => fixture.round)), [fixtures]);
+	// stage or a status that would match nothing. Stages come in tournament order.
+	const rounds = useMemo(() => orderedStages(fixtures), [fixtures]);
 	const statuses = useMemo(() => distinctStatuses(fixtures), [fixtures]);
 
 	const visible = useMemo(

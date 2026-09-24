@@ -9,6 +9,7 @@ import {
 	deleteTournament,
 	getTournamentEditors,
 	removeTournamentEditor,
+	searchEditorCandidates,
 	updateDivisionSettings,
 } from '../../requests';
 
@@ -67,6 +68,62 @@ function EditorsBand({ tournamentId }) {
 		};
 	}, [tournamentId, version]);
 
+	// Suggestions as the organiser types. Asked for once typing pauses, and only
+	// while the field has focus. Anyone they have worked with is offered from the
+	// first keystroke (and on focus, before anything is typed); everyone else
+	// from three characters, which the server enforces. Nothing is suggested
+	// once an @ appears: an email is never searched for, only typed in full.
+	const [focused, setFocused] = useState(false);
+	const [results, setResults] = useState({ query: null, items: [] });
+	const [activeIndex, setActiveIndex] = useState(-1);
+	const query = identifier.trim();
+	const searchable = focused && !query.includes('@');
+
+	useEffect(() => {
+		if (!tournamentId || !searchable) return undefined;
+		let active = true;
+
+		const timer = setTimeout(async () => {
+			try {
+				const response = await searchEditorCandidates(tournamentId, query);
+				if (active) setResults({ query, items: response.data ?? [] });
+			} catch {
+				// Suggestions are a convenience. A failure, a rate limit included,
+				// leaves the field working exactly as it did without them.
+				if (active) setResults({ query, items: [] });
+			}
+		}, SUGGEST_DELAY_MS);
+
+		return () => {
+			active = false;
+			clearTimeout(timer);
+		};
+	}, [tournamentId, query, searchable, version]);
+
+	// Only results for exactly what is in the field now — a slower answer for an
+	// earlier prefix must not show under a later one.
+	const suggestions = searchable && results.query === query ? results.items : [];
+
+	const choose = (suggestion) => {
+		setIdentifier(suggestion.username);
+		setActiveIndex(-1);
+	};
+
+	const handleKeyDown = (event) => {
+		if (event.key === 'ArrowDown' && suggestions.length > 0) {
+			event.preventDefault();
+			setActiveIndex((index) => (index + 1) % suggestions.length);
+		} else if (event.key === 'ArrowUp' && suggestions.length > 0) {
+			event.preventDefault();
+			setActiveIndex((index) => (index <= 0 ? suggestions.length - 1 : index - 1));
+		} else if (event.key === 'Enter') {
+			if (suggestions[activeIndex]) choose(suggestions[activeIndex]);
+			else handleAdd();
+		} else if (event.key === 'Escape') {
+			setFocused(false);
+		}
+	};
+
 	const handleAdd = async () => {
 		const value = identifier.trim();
 		if (!value) return;
@@ -122,11 +179,43 @@ function EditorsBand({ tournamentId }) {
 							disabled={busy}
 							maxLength={100}
 							placeholder="Email or username"
-							onChange={(event) => setIdentifier(event.target.value)}
-							onKeyDown={(event) => {
-								if (event.key === 'Enter') handleAdd();
+							role="combobox"
+							aria-autocomplete="list"
+							aria-expanded={suggestions.length > 0}
+							aria-controls="tv-editor-suggestions"
+							aria-activedescendant={activeIndex >= 0 ? `tv-editor-suggestion-${activeIndex}` : undefined}
+							onFocus={() => setFocused(true)}
+							onBlur={() => setFocused(false)}
+							onChange={(event) => {
+								setIdentifier(event.target.value);
+								setActiveIndex(-1);
 							}}
+							onKeyDown={handleKeyDown}
 						/>
+
+						{/* In the flow rather than floating: the card clips overflow,
+						    and a short list pushing the rows below down is fine. */}
+						{suggestions.length > 0 && (
+							<ul id="tv-editor-suggestions" className="tv-editor-suggestions" role="listbox">
+								{suggestions.map((suggestion, index) => (
+									<li
+										key={suggestion.username}
+										id={`tv-editor-suggestion-${index}`}
+										role="option"
+										aria-selected={index === activeIndex}
+										className={`tv-editor-suggestion${index === activeIndex ? ' is-active' : ''}`}
+										// mousedown, not click: a click lands after the input's blur
+										// has already closed the list.
+										onMouseDown={(event) => {
+											event.preventDefault();
+											choose(suggestion);
+										}}>
+										<span>{suggestion.username}</span>
+										{suggestion.workedWith && <span className="tv-editor-suggestion-note">Worked with before</span>}
+									</li>
+								))}
+							</ul>
+						)}
 					</label>
 
 					<div className="tv-inline-form-actions">
@@ -164,6 +253,10 @@ function EditorsBand({ tournamentId }) {
 		</section>
 	);
 }
+
+// Long enough that a steady typist sends one search per word rather than one
+// per keystroke, short enough that the list keeps up.
+const SUGGEST_DELAY_MS = 250;
 
 // The four primary criteria from docs/tournament-rules.md. Only the first link
 // of the ranking chain changes; the tiebreakers behind it do not.

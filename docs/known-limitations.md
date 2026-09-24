@@ -293,8 +293,9 @@ here. What is left:
   `team_1` — so the generator has nobody to give rest to and will place it in the slot
   immediately after the last pool match of its division. Found while auditing the
   2026-08-13 rewrite. It is playable, because the round-order rule still holds, and it is
-  not fixable without either guessing who advances or inventing a per-round gap that the
-  server's validator would not share. An organiser who wants the gap adds a break. See
+  not fixable without guessing who advances. Since 2026-09-24 the organiser can switch on a
+  break before knockout rounds in the generator settings, a per-round gap that only the
+  generator applies. The server's validator does not share it. See
   `docs/tournament-rules.md`.
 - **Unbound teams do not constrain the generator at all**, which is the same rule seen
   from the other side and is deliberate: two semifinals both waiting on the pools are not
@@ -303,12 +304,19 @@ here. What is left:
   than a constraint, so conflating them merely produced an odd schedule; now it would
   report those fixtures as unschedulable, which is why the placeholder case is handled
   explicitly rather than left to the name fallback.
-- **The generator is greedy and does not backtrack.** A fixture that takes a slot another
-  needed more is never reconsidered, so `unscheduledFixtures` can name fixtures that some
-  arrangement would have fitted. Settled deliberately in the 2026-08-13 rewrite: the
-  honest fix is backtracking, and surfacing the failure with the constraint that caused it
-  was judged to serve the organiser better than a much larger algorithm. The warning names
-  the constraint precisely so the reported failure is actionable.
+- **The generator is greedy within a pass and does not backtrack.** Since 2026-09-24 it
+  walks the day choosing the most urgent ready match for each free court. It runs several
+  passes, strict first and then bending the organiser's rules at different slack margins,
+  and keeps the best. A pass never revisits a placement, so the chosen schedule is a good
+  one, not a proven optimum. `unscheduledFixtures` can still name a fixture that some
+  arrangement would have fitted, and a bend can occasionally be avoidable. The warning
+  names the constraint that kept a court idle, so a reported failure stays actionable.
+- **Match length is set per round, not per match.** Since 2026-09-24 the organiser can
+  give each round its own length (`roundDurations`), and a court's clock restarts when a
+  break ends. A single match can't be given a length of its own, and the 3rd place playoff
+  shares the Finals length.
+- **Overrun goes only on the last enabled day.** An earlier day never runs past its end
+  time. Matches that don't fit roll forward to later days instead.
 - **A schedule is stored as it is sent, beyond the structural checks.** There is no cap
   on entry count or on the length of `title`, `notes` and `officials`, so the column will
   hold whatever an authenticated organiser sends. That belongs with **B9** input

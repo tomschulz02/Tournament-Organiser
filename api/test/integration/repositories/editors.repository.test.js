@@ -106,3 +106,61 @@ describe("removeEditor", () => {
         expect(failure.cause).toBe(pgError);
     });
 });
+
+describe("getWorkedWith", () => {
+    it("finds both directions of past collaboration, minus the organiser and this tournament's editors", async () => {
+        const rows = [{ id: "user-3", username: "priya" }];
+        db.query.mockResolvedValue(rows);
+
+        expect(await editorsRepository.getWorkedWith("user-1", "t-1", "pri%", 5)).toBe(rows);
+
+        const [sql, params] = db.query.mock.calls[0];
+        const flat = squash(sql);
+        expect(flat).toContain("WHERE t.created_by = $1::uuid UNION SELECT t.created_by FROM tournament_editors e");
+        expect(flat).toContain("WHERE e.user_id = $1::uuid");
+        expect(flat).toContain("AND u.id <> $1::uuid");
+        expect(flat).toContain("AND u.id NOT IN (SELECT user_id FROM tournament_editors WHERE tournament_id = $2::uuid)");
+        expect(flat).toContain("AND ($3::text IS NULL OR lower(u.username) LIKE $3 ESCAPE '\\')");
+        expect(flat).toContain("LIMIT $4");
+        // Never an email.
+        expect(flat).toMatch(/^SELECT u\.id, u\.username FROM users u/);
+        expect(params).toEqual(["user-1", "t-1", "pri%", 5]);
+    });
+
+    it("rethrows with the pg error as cause", async () => {
+        const pgError = new Error("boom");
+        db.query.mockRejectedValue(pgError);
+
+        const failure = await editorsRepository.getWorkedWith("user-1", "t-1", null, 5).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch previous collaborators");
+        expect(failure.cause).toBe(pgError);
+    });
+});
+
+describe("searchByUsernamePrefix", () => {
+    it("matches a username prefix only, never an email, minus the organiser and this tournament's editors", async () => {
+        const rows = [{ id: "user-4", username: "prince" }];
+        db.query.mockResolvedValue(rows);
+
+        expect(await editorsRepository.searchByUsernamePrefix("user-1", "t-1", "pri%", 6)).toBe(rows);
+
+        const [sql, params] = db.query.mock.calls[0];
+        const flat = squash(sql);
+        expect(flat).toContain("WHERE lower(u.username) LIKE $3 ESCAPE '\\'");
+        expect(flat).not.toContain("email");
+        expect(flat).toContain("AND u.id <> $1::uuid");
+        expect(flat).toContain("tournament_id = $2::uuid");
+        expect(params).toEqual(["user-1", "t-1", "pri%", 6]);
+    });
+
+    it("rethrows with the pg error as cause", async () => {
+        const pgError = new Error("boom");
+        db.query.mockRejectedValue(pgError);
+
+        const failure = await editorsRepository.searchByUsernamePrefix("user-1", "t-1", "pri%", 5).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to search users");
+        expect(failure.cause).toBe(pgError);
+    });
+});

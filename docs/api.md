@@ -165,6 +165,7 @@ Implemented:
 | PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
 | PUT | `/api/divisions/:divisionId/settings` | required + owner | Ranking basis and placement depth. See below. |
 | GET | `/api/tournaments/:tournamentId/editors` | required + owner | The tournament's editors: `[{ id, username, addedAt }]` |
+| GET | `/api/tournaments/:tournamentId/editors/search?q=` | required + owner, rate-limited | Suggestions for the add field. See "Editors" below. |
 | POST | `/api/tournaments/:tournamentId/editors` | required + owner | Add an editor. Body `{ identifier }` — an email or a username. |
 | DELETE | `/api/tournaments/:tournamentId/editors/:userId` | required + owner | Remove an editor |
 | PUT | `/api/fixtures/:fixtureId/result` | required + owner or editor | Record a result. See "Editors" below. |
@@ -206,12 +207,13 @@ The server sends an `ETag`, plus `Vary: Cookie` and `Cache-Control: no-cache`. A
 client may store the body but must revalidate before reusing it. Send the stored
 value back as `If-None-Match`; an unchanged tournament answers **304** with no body.
 
-The validator is built from two things, and both matter:
+The validator is built from three things, and all of them matter:
 
-| Half | What it is |
+| Part | What it is |
 |---|---|
 | Data | The greatest `last_update` across the tournament row and its divisions |
 | Viewer | The requesting user's id, or anonymous |
+| Payload version | `PAYLOAD_VERSION` in `api/src/utils/etag.js`. Bump it whenever the formatter changes what it emits for unchanged data, or clients holding a body from before the deploy keep being told it's current. Added 2026-09-24 at version 2. |
 
 **The viewer half is not optional.** The payload carries `creator` and `loggedIn`,
 which depend on who is asking rather than on when anything changed. An ETag built
@@ -380,6 +382,14 @@ because the editor's view of the tournament changes and the ETag has to say so.
 with `USER_NOT_FOUND` (404), `EDITOR_IS_ORGANISER` (409) or `EDITOR_ALREADY_ADDED`
 (409). `DELETE /editors/:userId` refuses someone who is not an editor with
 `EDITOR_NOT_FOUND` (404) rather than succeeding silently.
+
+`GET /editors/search?q=` returns up to five `{ username, workedWith }`: people the
+organiser has worked with first (their editors elsewhere, and organisers whose
+tournaments they edit), then anyone whose username starts with `q`. Collaborators match
+from the first character and are returned for an empty `q`; everyone else needs three.
+Usernames only — never an email, never an id — and `%` and `_` match literally. The
+organiser and this tournament's editors are left out. Limited to 30 requests a minute
+per user; over that is `TOO_MANY_REQUESTS` (429).
 
 The only thing an editor can do is `PUT /api/fixtures/:fixtureId/result`, and only for a
 fixture in the division's current round — the highest round in `state.rounds` holding a

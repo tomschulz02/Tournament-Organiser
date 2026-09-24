@@ -30,6 +30,18 @@ async function addEditor(req, res) {
     res.status(201).json({ success: true, message: "Editor added", data });
 }
 
+// ?q= is whatever has been typed so far. What it may match is the service's.
+async function searchEditorCandidates(req, res) {
+    const { tournamentId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+
+    const data = await editorService.searchCandidates(tournamentId, req.user.id, req.query?.q);
+
+    res.status(200).json({ success: true, message: "Suggestions fetched", data });
+}
+
 async function removeEditor(req, res) {
     const { tournamentId, userId } = req.params;
     if (!isUuid(tournamentId)) {
@@ -48,5 +60,6 @@ async function removeEditor(req, res) {
 export const editorController = {
     listEditors,
     addEditor,
-    removeEditor
+    removeEditor,
+    searchEditorCandidates
 };

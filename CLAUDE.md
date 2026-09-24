@@ -124,7 +124,14 @@ suite is a specification for outstanding fixes rather than a regression guard. I
 excluded from the default run so that npm test stays a usable signal. When a bug is
 fixed, move its test into the matching unit or integration file.
 
-No test suite exists for tourganiser-ui/.
+Tests (run from tourganiser-ui/):
+- npm test (vitest run --coverage — pure modules only, no React or DOM)
+- npm run test:watch
+
+The UI suite lives in tourganiser-ui/test/ and covers only the files listed in
+tourganiser-ui/vitest.config.js's coverage include. It has no coverage threshold, on
+purpose; components are not tested.
+
 No lint setup exists for api/.
 
 ## Source of Truth

@@ -29,6 +29,30 @@ export const authLimiter = rateLimit({
     handler: (req, res, next) => next(new AppError("TOO_MANY_REQUESTS"))
 });
 
+// The editor suggestions. Typing fires one search per pause, so thirty a minute
+// is far more than a person uses and far too few to sweep the username list.
+// Keyed by user rather than IP: the route is signed-in only, and one person on a
+// shared network should not spend everyone else's budget.
+export const SEARCH_WINDOW_MS = 60 * 1000;
+export const SEARCH_MAX_REQUESTS = 30;
+
+const searchStore = new MemoryStore();
+
+export const searchLimiter = rateLimit({
+    windowMs: SEARCH_WINDOW_MS,
+    limit: SEARCH_MAX_REQUESTS,
+    store: searchStore,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    // Runs after requireAuth, so there is always a user.
+    keyGenerator: (req) => req.user.id,
+    handler: (req, res, next) => next(new AppError("TOO_MANY_REQUESTS"))
+});
+
+export function resetSearchLimiter() {
+    searchStore.resetAll();
+}
+
 export function resetAuthLimiter() {
     store.resetAll();
 }

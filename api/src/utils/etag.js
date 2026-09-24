@@ -38,6 +38,15 @@ function toMillis(value) {
     return Number.isNaN(time) ? null : time;
 }
 
+// The shape of the payload the formatter builds, as a third half. Neither the
+// data nor the viewer moves when a deploy changes what the payload says about
+// the same data, so without this a client holding a body from before the deploy
+// is told on every request that its copy is still current. Bump it whenever
+// tournamentViewFormatter.js changes what it emits for unchanged data.
+// 2: knockout slots named after their feeding match, pool names on pool fixtures.
+// 3: standings groups named "Pool A" rather than "Group A".
+export const PAYLOAD_VERSION = 3;
+
 // Hashed rather than concatenated so the header carries no user id. A viewer
 // already knows their own, but an ETag is echoed back by clients and stored by
 // caches, and there is no reason to put an identifier in either.
@@ -45,7 +54,7 @@ export function buildTournamentEtag(changeKey, viewerUserId) {
     if (!changeKey) return null;
 
     const digest = createHash("sha256")
-        .update(`${changeKey}|${viewerUserId ?? "anonymous"}`)
+        .update(`${changeKey}|${viewerUserId ?? "anonymous"}|${PAYLOAD_VERSION}`)
         .digest("base64url")
         .slice(0, 27);
 

@@ -6,7 +6,7 @@ import FixtureFilters from './FixtureFilters';
 import FixtureGroup from './FixtureGroup';
 import {
 	EMPTY_FILTERS,
-	distinct,
+	orderedStages,
 	distinctStatuses,
 	flattenFixtures,
 	hasFixtureFilter,
@@ -49,7 +49,7 @@ export default function ScheduleTab({
 
 	const [filters, setFilters] = useState(EMPTY_FILTERS);
 
-	const rounds = useMemo(() => distinct(fixtures.map((fixture) => fixture.round)), [fixtures]);
+	const rounds = useMemo(() => orderedStages(fixtures), [fixtures]);
 	const statuses = useMemo(() => distinctStatuses(fixtures), [fixtures]);
 	const stats = useMemo(() => calculateScheduledStats(schedule, fixtures), [schedule, fixtures]);
 

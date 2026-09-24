@@ -2,57 +2,58 @@ import {
 	buildCourtList,
 	compareTimes,
 	createFixtureEntry,
+	DEFAULT_GENERATOR_SETTINGS,
 	isTimeRangeValid,
 	minutesToTime,
+	normaliseGeneratorSettings,
 	normaliseSchedule,
-	rangesOverlap,
+	sortScheduleEntries,
 	timeToMinutes,
 } from './scheduleUtils';
 
 /*
 	The schedule generator.
 
-	The objectives and the hard constraints are written down in docs/schedule.md
-	under "Generation objectives". This file implements them and nothing else. If
-	a rule here is not in that section, one of the two is wrong.
+	The objectives, the rules and which of them may bend are written down in
+	docs/schedule.md under "Generation objectives". This file implements them and
+	nothing else. If a rule here is not in that section, one of the two is wrong.
 
-	Two ideas carry the whole thing.
+	It schedules the way a person with a whiteboard would: walk the day from the
+	first slot to the last, and at each time decide which matches play now, then
+	which court each goes on.
 
-	FEASIBILITY IS SEPARATE FROM PREFERENCE. A slot either satisfies every hard
-	constraint or it is not a candidate at all. Nothing below can buy off a hard
-	constraint with a good enough score, which is what let the previous generator
-	place a team in back-to-back matches whenever the arithmetic happened to
-	favour it.
+	WHICH MATCHES PLAY NOW is decided by urgency, not by the order the fixtures
+	were generated in. Order within a round is free. A match is ready when every
+	earlier round of its division has been placed and has finished. Among the
+	ready matches, the one whose teams have the most still to play goes first,
+	because those teams are the ones that set the finishing time. Nothing idles
+	while a ready match could legally fill the court.
 
-	THE COMPARISON IS LEXICOGRAPHIC, NOT WEIGHTED. Two candidate slots are
-	compared on the first objective, and only where they tie is the second
-	consulted. The generator this replaced summed weights — court affinity +180
-	against earliness -2 per slot index — so ninety slots of delay cost exactly
-	one affinity bonus, and `slotIndex` counted the *filtered available* slots, so
-	the same slot scored differently on every iteration. There are no weights here
-	to tune and none to drift.
+	THREE RULES NEVER BEND: round order, one match per team at a time, and one
+	match per court at a time, with the court division restrictions honoured. The
+	server rejects a schedule that breaks any of them, so the generator never
+	produces one.
 
-	Because the first objective is the slot's start instant and slots are of fixed
-	size, compactness falls out of the structure rather than being scored: take
-	the earliest feasible time, then choose among the courts free at that time.
+	THE REST CAN BEND, AS LITTLE AS POSSIBLE. The minimum rest and the daily match
+	limit are the organiser's rules. When the organiser allows it and the schedule
+	cannot fit without bending them, a match may bend one, but only when the court
+	would otherwise stand idle and the remaining time is running out. "Running
+	out" is a slack margin, and the generator tries several margins and keeps the
+	result that bends the least. The cost escalates for each team, so three teams
+	each playing back to back once beats one team playing back to back to back.
+	Running past the day's end time is the last resort. It is tried only when
+	bending cannot fit everything, and only on the last day, a slot at a time.
 
-	Under capacity a fixture is left unplaced and the warning names the constraint
-	that blocked it. Backtracking would place more of them and is deliberately not
-	here — docs/schedule.md decided to surface the failure rather than solve it.
+	Every result is deterministic. The same input produces the same schedule.
 */
 
-// docs/schedule.md: a team gets a rest gap between two matches on the same day.
-//
-// The gap is a number of minutes in its own right. It used to be a multiple of
-// the match length, which read as "one slot of rest" and was only a sensible
-// unit because rest and duration were the same number by construction — the
-// generator gave every fixture one duration and then drew the grid to match. Now
-// that the grid is the organiser's and a fixture's length is its own, rest has
-// to be its own value too, or it means nothing.
-//
-// When the caller asks for no particular rest it falls back to the fixture
-// duration, which is numerically what the old rule always produced.
+// docs/schedule.md: when the caller asks for no particular rest, it falls back to
+// the fixture duration, which is numerically what the old rule always produced.
 const DEFAULT_REST_MULTIPLE = 1;
+
+// The latest minute an entry may end. endTime is HH:MM within one day, so an
+// overrun can never cross midnight.
+const LAST_MINUTE = 23 * 60 + 59;
 
 // A fixture's round name is not always a round name in state.rounds: the
 // third-place playoff carries its own while belonging to the Finals round, and a
@@ -69,63 +70,8 @@ function roundHolding(fixtureRound) {
 }
 
 // The formatter's own sentinel for a knockout slot with no team bound yet. See
-// getTeamKeys.
+// getTeamKey.
 const UNBOUND_TEAM_NAME = 'TBD';
-
-// --- the slot grid ----------------------------------------------------------
-
-// Every place a fixture could go, in the order the objectives want them
-// considered: day, then time, then court. That ordering is not cosmetic — the
-// first objective is the instant and the final tiebreak is court order, so a
-// linear scan of this list resolves both without a sort.
-//
-// Day bounds are a hard constraint and are enforced here by construction: a slot
-// that would end after dayEndTime is never built, so nothing downstream has to
-// check for one.
-function buildCandidateSlots(days, courts, startTime, endTime, durationMinutes) {
-	const slots = [];
-	const dayEndMinutes = timeToMinutes(endTime);
-	const firstMinute = timeToMinutes(startTime);
-
-	days.filter((day) => day.enabled !== false).forEach((day) => {
-		for (let cursor = firstMinute; cursor + durationMinutes <= dayEndMinutes; cursor += durationMinutes) {
-			courts.forEach((court, courtIndex) => {
-				slots.push({
-					day: day.date,
-					courtId: court.id,
-					courtIndex,
-					// The divisions this court is reserved for. Empty means it
-					// takes any division. Attached here so findSlotFailure can
-					// check it without a courtId lookup — the list is built once
-					// and scanned per fixture.
-					divisions: Array.isArray(court.divisions) ? court.divisions : [],
-					startMinutes: cursor,
-					startTime: minutesToTime(cursor),
-					endTime: minutesToTime(cursor + durationMinutes),
-					// Day and time are both fixed width and zero padded, so
-					// string order is chronological order.
-					instant: `${day.date}T${minutesToTime(cursor)}`,
-				});
-			});
-		}
-	});
-
-	return slots;
-}
-
-// Existing breaks are preserved and treated as blocked time. They are the only
-// entries that survive generation, they never move while it runs, and they are
-// the only ones that can sit off a slot boundary — so they are filtered out of
-// the candidate list once, up front, and court exclusivity below reduces to "has
-// this slot already been used".
-function buildBlockedSlotChecker(entries) {
-	return (slot) =>
-		entries.some((entry) => {
-			if (entry.day !== slot.day) return false;
-			if (entry.courtId !== null && entry.courtId !== slot.courtId) return false;
-			return rangesOverlap(entry.startTime, entry.endTime, slot.startTime, slot.endTime);
-		});
-}
 
 // --- identity ---------------------------------------------------------------
 
@@ -134,15 +80,15 @@ function buildBlockedSlotChecker(entries) {
 //
 // An unbound knockout slot carries a placeholder rather than a team — `Rank 1`,
 // `Winner of SF1`, `TBD` — and constrains nothing, which is how the server's
-// validator treats a null `team_1`. This matters more here than it did before:
-// team exclusivity used to be a penalty that a slot could outscore, and is now a
-// hard constraint, so conflating two divisions' "Rank 1" would forbid two
-// semifinals from ever running at once and report them unschedulable.
+// validator treats a null `team_1`. Conflating two divisions' "Rank 1" would
+// forbid two semifinals from ever running at once.
 //
 // Ids where the payload carries them, names only as a fallback, and the division
 // scopes both — two divisions may well each have a "Team A".
-function getTeamKeys(fixture) {
-	return [1, 2].map((side) => getTeamKey(fixture, side)).filter(Boolean);
+function getTeams(fixture) {
+	return [1, 2]
+		.map((side) => ({ key: getTeamKey(fixture, side), name: fixture[`team${side}`] || '' }))
+		.filter((team) => team.key !== null);
 }
 
 function getTeamKey(fixture, side) {
@@ -169,11 +115,11 @@ function getFixtureCourtKey(fixture) {
 
 // --- round order ------------------------------------------------------------
 //
-// A round cannot begin until the round feeding it has finished. Nothing in the
-// scoring model expressed that, so a semifinal would take an early slot on a
-// later court while pool play was still running — plausible-looking and
-// unplayable. See docs/tournament-rules.md; the server enforces the same rule on
-// write.
+// A round cannot begin until every fixture of the rounds before it, in the same
+// division, has been placed and has finished. See docs/tournament-rules.md; the
+// server enforces the same rule on write. A round whose predecessor could not be
+// placed in full is not placed at all — a semifinal scheduled while a pool match
+// has nowhere to go would be unplayable the moment that match was hand-placed.
 //
 // The constraint is per division. Two divisions running in parallel is correct
 // and desirable, so this must never become a tournament-wide barrier.
@@ -184,14 +130,17 @@ function buildRoundOrder(divisions = []) {
 	divisions.forEach((division) => {
 		const rounds = Array.isArray(division?.state?.rounds) ? division.state.rounds : [];
 		const positions = new Map();
+		// The positions of the knockout rounds, for the break before them.
+		const knockout = new Set();
 
 		rounds.forEach((round, position) => {
 			if (round?.name && !positions.has(round.name)) {
 				positions.set(round.name, position);
+				if (round.type === 'knockout') knockout.add(position);
 			}
 		});
 
-		byDivision.set(division.id, positions);
+		byDivision.set(division.id, { positions, knockout });
 	});
 
 	return byDivision;
@@ -203,211 +152,629 @@ function buildRoundOrder(divisions = []) {
 // gives it.
 function getRoundIndex(fixture, roundOrder) {
 	const name = roundHolding(fixture.round);
-	const position = roundOrder.get(fixture.division_id)?.get(name);
+	const position = roundOrder.get(fixture.division_id)?.positions.get(name);
 
 	return position === undefined ? null : position;
 }
 
-// The latest any earlier round of this division finishes. A fixture of this
-// round may not start before it.
-function findRoundBarrier(roundEndByDivision, divisionId, roundIndex) {
-	if (roundIndex === null) return null;
+// --- preparation ------------------------------------------------------------
 
-	const rounds = roundEndByDivision.get(divisionId);
-	if (!rounds) return null;
+// Everything about a fixture that placement asks more than once, worked out once.
+//
+// A fixture's length is its round's own length where the organiser set one —
+// keyed by the round it belongs to, so the 3rd place playoff takes the Finals
+// length and "Semifinals · Places 5-8" the Semifinals one — and the default
+// match length otherwise.
+function prepareItems(fixtures, roundOrder, { durationMinutes, roundDurations }) {
+	const items = fixtures.map((fixture, order) => ({
+		fixture,
+		order,
+		duration: roundDurations[roundHolding(fixture.round)] || durationMinutes,
+		divisionId: fixture.division_id,
+		roundIndex: getRoundIndex(fixture, roundOrder),
+		teams: getTeams(fixture),
+		isKnockout: false,
+		courtKey: getFixtureCourtKey(fixture),
+		roundsAfter: 0,
+	}));
 
-	let latest = null;
-	rounds.forEach((end, index) => {
-		if (index < roundIndex && (latest === null || end > latest)) {
-			latest = end;
+	// How many rounds of the division still have to follow this one. A semifinal
+	// with a final behind it is two rounds from the end, and that chain is as
+	// much a part of the finishing time as a team's remaining pool matches.
+	const roundsByDivision = new Map();
+	items.forEach((item) => {
+		if (item.roundIndex === null) return;
+		const rounds = roundsByDivision.get(item.divisionId) || new Set();
+		rounds.add(item.roundIndex);
+		roundsByDivision.set(item.divisionId, rounds);
+	});
+
+	items.forEach((item) => {
+		if (item.roundIndex === null) return;
+		item.isKnockout = roundOrder.get(item.divisionId).knockout.has(item.roundIndex);
+		item.roundsAfter = [...roundsByDivision.get(item.divisionId)].filter((index) => index > item.roundIndex).length;
+	});
+
+	return items;
+}
+
+function courtAccepts(court, fixture) {
+	return court.divisions.length === 0 || court.divisions.includes(fixture.division_id);
+}
+
+// --- the time grid ----------------------------------------------------------
+
+// The day, per court: when it opens, when it must be finished by, and the breaks
+// it is closed for. Matches are then placed court by court from the opening
+// time, each court moving on by the length of whatever it was given — which
+// differs by round when the organiser gives rounds their own match lengths.
+//
+// A break closes the court until it ends, and the court picks up again the
+// moment it does rather than at the next multiple of a match length. A lunch
+// break ending at 12:45 therefore loses no time to a 13:00 restart. A break
+// spanning every court moves every court; a break on one court moves only that
+// court, so courts can run to different clocks.
+//
+// Day bounds are enforced by construction: no match is placed that would end
+// after the day's end, except on the last day when the organiser allows an
+// overrun, one match length at a time.
+function buildTimetable(days, courts, breaks, { startMinutes, endMinutes, durationMinutes, overrunSlots }) {
+	const enabledDays = days.filter((day) => day.enabled !== false);
+	const breakSpans = breaks.map((entry) => ({
+		day: entry.day,
+		courtId: entry.courtId,
+		start: timeToMinutes(entry.startTime),
+		end: timeToMinutes(entry.endTime),
+	}));
+
+	const timetable = enabledDays.map((day, dayIndex) => {
+		const isLastDay = dayIndex === enabledDays.length - 1;
+		const limit = isLastDay ? Math.min(LAST_MINUTE, endMinutes + overrunSlots * durationMinutes) : endMinutes;
+
+		return {
+			day: day.date,
+			dayIndex,
+			limit,
+			courts: courts.map((court, courtIndex) => ({
+				id: court.id,
+				courtIndex,
+				// Empty means the court takes any division.
+				divisions: Array.isArray(court.divisions) ? court.divisions : [],
+				breaks: breakSpans.filter(
+					(span) => span.day === day.date && (span.courtId === null || span.courtId === court.id)
+				),
+			})),
+		};
+	});
+
+	// Capacity in matches of the default length, for the slack and for sharing
+	// matches across days. An estimate once rounds have their own lengths, which
+	// is all either use needs.
+	timetable.forEach((entry) => {
+		entry.capacity = entry.courts.reduce(
+			(sum, court) => sum + countSlots(court, startMinutes, entry.limit, durationMinutes),
+			0
+		);
+	});
+
+	let later = 0;
+	for (let index = timetable.length - 1; index >= 0; index -= 1) {
+		timetable[index].laterCapacity = later;
+		later += timetable[index].capacity;
+	}
+
+	return { days: timetable, startMinutes, endMinutes, durationMinutes, capacity: later };
+}
+
+// The first minute at or after `from` that the court is not under a break.
+function skipBreaks(court, from) {
+	let cursor = from;
+	let moved = true;
+
+	while (moved) {
+		moved = false;
+		court.breaks.forEach((span) => {
+			if (span.start <= cursor && span.end > cursor) {
+				cursor = span.end;
+				moved = true;
+			}
+		});
+	}
+
+	return cursor;
+}
+
+// Whether a match of this length can start on the court at this minute.
+function fitsOn(court, start, length, limit) {
+	const end = start + length;
+	return end <= limit && !court.breaks.some((span) => span.start < end && span.end > start);
+}
+
+// How many matches of `length` the court still has room for from `from`,
+// restarting after each break the way placement does.
+function countSlots(court, from, limit, length) {
+	let slots = 0;
+	let cursor = skipBreaks(court, from);
+
+	while (cursor + length <= limit) {
+		if (fitsOn(court, cursor, length, limit)) {
+			slots += 1;
+			cursor = skipBreaks(court, cursor + length);
+		} else {
+			// A break starts before this match would end: pick up after it.
+			const blocking = court.breaks.filter((span) => span.start < cursor + length && span.end > cursor);
+			cursor = skipBreaks(court, Math.max(...blocking.map((span) => span.end)));
+		}
+	}
+
+	return slots;
+}
+
+// A candidate start: one day, one minute, one match length.
+function makeInstant(entry, startMinutes, length, dayEndMinutes) {
+	const startTime = minutesToTime(startMinutes);
+	const endTime = minutesToTime(startMinutes + length);
+
+	return {
+		day: entry.day,
+		dayIndex: entry.dayIndex,
+		startMinutes,
+		endMinutes: startMinutes + length,
+		startTime,
+		endTime,
+		// Day and time are both fixed width and zero padded, so string order is
+		// chronological order.
+		instant: `${entry.day}T${startTime}`,
+		end: `${entry.day}T${endTime}`,
+		overrun: startMinutes + length > dayEndMinutes,
+	};
+}
+
+// --- one pass ---------------------------------------------------------------
+
+function createPassState(items) {
+	const state = {
+		unplaced: new Set(items),
+		placements: [],
+		// teamKey -> day -> [{ start, end }] in minutes.
+		teamPlay: new Map(),
+		teamRemaining: new Map(),
+		// teamKey -> the instant its last match ended. Only ever grows, because
+		// placement walks forward in time.
+		teamLastEnd: new Map(),
+		// teamKey -> how many times a rule has already been bent for it. Makes a
+		// second bend for the same team dearer than a first bend for another.
+		teamBends: new Map(),
+		roundRemaining: new Map(), // divisionId -> roundIndex -> unplaced count
+		roundEnd: new Map(), // divisionId -> roundIndex -> latest end instant
+		courtHandover: new Map(), // `${day}_${courtId}_${endMinutes}` -> divisionId
+		courtAffinity: new Map(), // courtKey -> courtId
+		reasons: new Map(), // item -> Set of failure names
+		cost: 0,
+	};
+
+	items.forEach((item) => {
+		item.teams.forEach((team) => state.teamRemaining.set(team.key, (state.teamRemaining.get(team.key) || 0) + 1));
+
+		if (item.roundIndex !== null) {
+			const rounds = state.roundRemaining.get(item.divisionId) || new Map();
+			rounds.set(item.roundIndex, (rounds.get(item.roundIndex) || 0) + 1);
+			state.roundRemaining.set(item.divisionId, rounds);
 		}
 	});
+
+	return state;
+}
+
+function noteFailure(state, item, reason) {
+	const reasons = state.reasons.get(item) || new Set();
+	reasons.add(reason);
+	state.reasons.set(item, reasons);
+}
+
+function playedOn(state, teamKey, day) {
+	return state.teamPlay.get(teamKey)?.get(day) || [];
+}
+
+// null unless every earlier round of the division is placed in full and has
+// finished by now. Otherwise the instant the latest of them ended, or '' when
+// there is none, which the break before knockout rounds is measured from.
+function earlierRoundsEnd(item, instant, state) {
+	if (item.roundIndex === null) return '';
+
+	const remaining = state.roundRemaining.get(item.divisionId);
+	const ends = state.roundEnd.get(item.divisionId);
+	let latest = '';
+
+	for (const [index, count] of remaining) {
+		if (index >= item.roundIndex) continue;
+		if (count > 0) return null;
+
+		const end = ends?.get(index) || '';
+		if (end > instant.instant) return null;
+		if (end > latest) latest = end;
+	}
 
 	return latest;
 }
 
-function recordRoundEnd(roundEndByDivision, divisionId, roundIndex, end) {
-	if (roundIndex === null) return;
-
-	const rounds = roundEndByDivision.get(divisionId) || new Map();
-	if (!rounds.has(roundIndex) || end > rounds.get(roundIndex)) {
-		rounds.set(roundIndex, end);
-	}
-
-	roundEndByDivision.set(divisionId, rounds);
-}
-
-// --- what has been placed so far --------------------------------------------
-
-// Indexed for the four questions the constraints and objectives ask, rather than
-// scanned. Every placement the generator makes is one whole slot, so a start
-// minute identifies it and adjacency is arithmetic.
-function createPlacementState() {
-	return {
-		usedSlots: new Set(), // `${day}_${courtId}_${startMinutes}`
-		// teamKey -> day -> array of { start, end } in minutes. The end is stored
-		// rather than recomputed from a duration because the rest rule measures
-		// the gap between two matches, and a duration is no longer a property of
-		// the run that every placement shares.
-		teamSlots: new Map(),
-		courtHandover: new Map(), // `${day}_${courtId}_${endMinutes}` -> divisionId
-		courtAffinity: new Map(), // `${divisionId}:${poolKey}` -> courtId
-		roundEndByDivision: new Map(),
-	};
-}
-
-function slotKey(slot) {
-	return `${slot.day}_${slot.courtId}_${slot.startMinutes}`;
-}
-
-// Every match this team has already been given on this day, earliest first only
-// by accident — nothing here depends on the order.
-function playedIntervals(state, teamKey, day) {
-	return state.teamSlots.get(teamKey)?.get(day) || [];
-}
-
-function playsAt(state, teamKey, day, startMinutes) {
-	return playedIntervals(state, teamKey, day).some((played) => played.start === startMinutes);
-}
-
-function recordPlacement(state, slot, fixture, durationMinutes) {
-	state.usedSlots.add(slotKey(slot));
-
-	// Keyed on the minute this entry ENDS, so the slot that starts there can ask
-	// "what was on this court immediately before me" with one lookup.
-	state.courtHandover.set(
-		`${slot.day}_${slot.courtId}_${slot.startMinutes + durationMinutes}`,
-		fixture.division_id ?? null
-	);
-
-	getTeamKeys(fixture).forEach((team) => {
-		const byDay = state.teamSlots.get(team) || new Map();
-		const played = byDay.get(slot.day) || [];
-
-		played.push({ start: slot.startMinutes, end: slot.startMinutes + durationMinutes });
-		byDay.set(slot.day, played);
-		state.teamSlots.set(team, byDay);
-	});
-
-	const affinityKey = getFixtureCourtKey(fixture);
-	if (affinityKey && !state.courtAffinity.has(affinityKey)) {
-		state.courtAffinity.set(affinityKey, slot.courtId);
-	}
-}
-
-// --- feasibility ------------------------------------------------------------
-
-// The hard constraints, and nothing else. Returns the name of the first one this
-// slot fails, or null when the slot is a candidate.
-//
-// The order is not arbitrary: each check assumes the ones before it passed, so a
-// slot reported as failing on `rest` is a slot where rest is the SOLE reason it
-// cannot be used. That is what makes the warnings in describeFailure honest —
-// they can say "the only free slots would leave a team playing back to back"
-// rather than blaming capacity for everything.
-function findSlotFailure(slot, fixture, state, { durationMinutes, restMinutes, barrier, teams }) {
-	// A court reserved for a set of divisions is closed to every other, whether or
-	// not anything is on it — so this comes before the usedSlots check. Reporting
-	// "every court is booked" for a court that was never open to this division
-	// would send the organiser to the wrong fix. A fixture with no division_id
-	// belongs to no division and is refused by any restricted court, the same way
-	// a division the court does not name is.
-	if (slot.divisions.length > 0 && !slot.divisions.includes(fixture.division_id)) return 'division';
-
-	if (state.usedSlots.has(slotKey(slot))) return 'court';
-
-	if (teams.some((team) => playsAt(state, team, slot.day, slot.startMinutes))) return 'team';
-
-	if (barrier !== null && slot.instant < barrier) return 'round';
-
-	// Rest, checked on BOTH sides. The original handover phrased it as the
-	// immediately preceding slot, but fixtures are not placed in time order —
-	// within a round each takes the earliest slot left, so a fixture placed later
-	// can land before one placed earlier. Checking only backwards would let that
-	// pair end up back to back, which is the thing the rule exists to forbid.
-	//
-	// Expressed as a gap rather than as "the slot restMinutes away". Probing two
-	// exact instants only worked while every match was the same length and every
-	// start sat on the same lattice; with rest independent of duration, the
-	// instant probed is one nothing is ever placed at, so the rule would silently
-	// stop applying. The gap between the two matches is what the rule is about,
-	// so that is what is measured. With restMinutes equal to durationMinutes on a
-	// uniform grid this refuses and allows exactly the same slots as before.
-	const slotEnd = slot.startMinutes + durationMinutes;
-	const tooClose = teams.some((team) =>
-		playedIntervals(state, team, slot.day).some(
-			(played) => slot.startMinutes < played.end + restMinutes && played.start < slotEnd + restMinutes
+function teamIsBusy(state, item, instant) {
+	return item.teams.some((team) =>
+		playedOn(state, team.key, instant.day).some(
+			(played) => played.start < instant.endMinutes && instant.startMinutes < played.end
 		)
 	);
-	if (tooClose) return 'rest';
-
-	return null;
 }
 
-// --- the objectives ---------------------------------------------------------
+// The organiser's rules this placement would break, each naming the teams it
+// breaks it for. Rest is measured as the gap on both sides. Placement walks
+// forward, so only the backward gap can fail today, but the rule is about the
+// gap, not the direction.
+//
+// The break before a knockout round is measured from the end of the rounds
+// before it, on the same day only; a round that ended the day before has had
+// the night.
+function findBentRules(item, instant, state, rules, earlierEnd) {
+	const bent = [];
 
-// A note on the second objective, "maximise rest beyond the hard minimum, where
-// it costs nothing above" — it is not in the comparison below, because under the
-// first objective it can never fire.
+	if (rules.knockoutGap !== null && item.isKnockout && earlierEnd.slice(0, 10) === instant.day) {
+		const endMinutes = timeToMinutes(earlierEnd.slice(11));
+		if (endMinutes + rules.knockoutGap > instant.startMinutes) bent.push({ rule: 'gap', teams: [] });
+	}
+
+	if (rules.restMinutes !== null) {
+		const teams = item.teams.filter((team) =>
+			playedOn(state, team.key, instant.day).some(
+				(played) =>
+					instant.startMinutes < played.end + rules.restMinutes &&
+					played.start < instant.endMinutes + rules.restMinutes
+			)
+		);
+		if (teams.length > 0) bent.push({ rule: 'rest', teams });
+	}
+
+	if (rules.maxPerDay !== null) {
+		const teams = item.teams.filter((team) => playedOn(state, team.key, instant.day).length >= rules.maxPerDay);
+		if (teams.length > 0) bent.push({ rule: 'daily', teams });
+	}
+
+	return bent;
+}
+
+// Each bend costs one more than the last bend for the same team. A bend that
+// belongs to no team — the break before a knockout round — costs one.
+function bendCost(bent, state) {
+	return bent.reduce(
+		(total, { teams }) =>
+			total +
+			(teams.length === 0 ? 1 : teams.reduce((sum, team) => sum + 1 + (state.teamBends.get(team.key) || 0), 0)),
+		0
+	);
+}
+
+// The longest wait, measured from each team's previous match on the same day.
+// breached names the teams this placement leaves waiting longer than the limit.
+// overdue says whether a team would breach it if the match waited one more match
+// length, which is what moves the match up the queue.
 //
-// Two candidate slots are only ever compared when they share an instant, and two
-// slots at one instant give a team exactly the same rest whichever court they
-// are on. Taking a later slot for the sake of a longer gap is the one thing the
-// first objective forbids, and choosing which fixture should wait instead is
-// global reasoning — backtracking, which docs/schedule.md rules out.
-//
-// So the objective is met the only way it can be: the hard rest minimum
-// guarantees the floor, and nothing above it is ever available for free. A
-// comparison here would be a branch that no input can reach. If the first
-// objective ever stops being the slot's instant, this has to come back — as the
-// step above changeover, per the priority order.
+// A wait is never a reason to refuse a match: refusing it would only make the
+// team wait longer. It is played sooner where possible, and reported where not.
+function findWaits(item, instant, state, rules) {
+	if (rules.maxWait === null) return { breached: [], overdue: false };
+
+	let overdue = false;
+	const breached = item.teams.filter((team) => {
+		const previous = playedOn(state, team.key, instant.day)
+			.filter((played) => played.end <= instant.startMinutes)
+			.reduce((latest, played) => Math.max(latest, played.end), -1);
+		if (previous < 0) return false;
+
+		const wait = instant.startMinutes - previous;
+		if (wait + rules.durationMinutes > rules.maxWait) overdue = true;
+		return wait > rules.maxWait;
+	});
+
+	return { breached, overdue };
+}
+
+// The longest chain of matches still hanging off this fixture: its busiest
+// team's remaining matches, plus the knockout rounds that must follow.
+function urgencyOf(item, state) {
+	const teamLoad = item.teams.reduce((most, team) => Math.max(most, state.teamRemaining.get(team.key) || 0), 1);
+	return teamLoad + item.roundsAfter;
+}
+
+// When the most recently busy of the two teams last finished. Earlier is better:
+// it spreads rest evenly rather than feeding the same teams again.
+function lastPlayedOf(item, state) {
+	return item.teams.reduce((latest, team) => {
+		const end = state.teamLastEnd.get(team.key) || '';
+		return end > latest ? end : latest;
+	}, '');
+}
+
+// Which ready match plays now. Lower is better on every key, and the fixture's
+// own position is the total tiebreak that keeps generation deterministic.
+function compareCandidates(left, right) {
+	return (
+		left.cost - right.cost ||
+		Number(right.overdue) - Number(left.overdue) ||
+		right.urgency - left.urgency ||
+		(left.lastPlayed < right.lastPlayed ? -1 : left.lastPlayed > right.lastPlayed ? 1 : 0) ||
+		left.item.order - right.item.order
+	);
+}
 
 // 0 continues the division already on this court, 1 starts a court that was
-// idle, 2 changes the court over from another division. Lower is better.
-//
-// Local by design. A global contiguity measure would be expensive and would
-// start competing with finishing early, which the priority order puts above it.
-function changeoverCost(slot, fixture, state) {
-	const preceding = state.courtHandover.get(`${slot.day}_${slot.courtId}_${slot.startMinutes}`);
+// idle, 2 changes the court over from another division.
+function changeoverCost(court, item, instant, state) {
+	const preceding = state.courtHandover.get(`${instant.day}_${court.id}_${instant.startMinutes}`);
 
 	if (preceding === undefined) return 1;
 
-	return preceding === (fixture.division_id ?? null) ? 0 : 2;
+	return preceding === (item.divisionId ?? null) ? 0 : 2;
 }
 
 // 0 when the pool has no established court yet or this is it, 1 otherwise.
-function affinityCost(slot, fixture, state) {
-	const key = getFixtureCourtKey(fixture);
-	if (!key) return 0;
+function affinityCost(court, item, state) {
+	if (!item.courtKey) return 0;
 
-	const court = state.courtAffinity.get(key);
-	if (court === undefined) return 0;
+	const established = state.courtAffinity.get(item.courtKey);
+	if (established === undefined) return 0;
 
-	return court === slot.courtId ? 0 : 1;
+	return established === court.id ? 0 : 1;
 }
 
-// The priority order from docs/schedule.md, as a comparison. Negative means the
-// left slot is the better place for this fixture.
+// Which court the chosen match goes on. The preferences, in docs/schedule.md's
+// order and each only when switched on, then a court reserved for this division
+// before an open one (so the open one stays free for anyone), then court order.
+function chooseCourt(courts, item, instant, state, rules) {
+	const score = (court) => [
+		rules.groupDivisions ? changeoverCost(court, item, instant, state) : 0,
+		rules.courtAffinity ? affinityCost(court, item, state) : 0,
+		court.divisions.length > 0 ? 0 : 1,
+		court.courtIndex,
+	];
+
+	return courts.reduce((best, court) => {
+		const left = score(court);
+		const right = score(best);
+		const difference = left.map((value, index) => value - right[index]).find((value) => value !== 0) || 0;
+		return difference < 0 ? court : best;
+	});
+}
+
+function recordPlacement(state, candidate, court, instant) {
+	const { item, bent, cost, breached } = candidate;
+	const waits = breached.length > 0 ? [{ rule: 'wait', teams: breached }] : [];
+
+	state.placements.push({ item, instant, court, bent: [...bent, ...waits] });
+	state.unplaced.delete(item);
+	state.cost += cost + breached.length;
+
+	item.teams.forEach((team) => {
+		const byDay = state.teamPlay.get(team.key) || new Map();
+		const played = byDay.get(instant.day) || [];
+		played.push({ start: instant.startMinutes, end: instant.endMinutes });
+		byDay.set(instant.day, played);
+		state.teamPlay.set(team.key, byDay);
+
+		state.teamRemaining.set(team.key, state.teamRemaining.get(team.key) - 1);
+		state.teamLastEnd.set(team.key, instant.end);
+	});
+
+	bent.forEach(({ teams }) =>
+		teams.forEach((team) => state.teamBends.set(team.key, (state.teamBends.get(team.key) || 0) + 1))
+	);
+
+	if (item.roundIndex !== null) {
+		const remaining = state.roundRemaining.get(item.divisionId);
+		remaining.set(item.roundIndex, remaining.get(item.roundIndex) - 1);
+
+		const ends = state.roundEnd.get(item.divisionId) || new Map();
+		if ((ends.get(item.roundIndex) || '') < instant.end) ends.set(item.roundIndex, instant.end);
+		state.roundEnd.set(item.divisionId, ends);
+	}
+
+	state.courtHandover.set(`${instant.day}_${court.id}_${instant.endMinutes}`, item.divisionId ?? null);
+
+	if (item.courtKey && !state.courtAffinity.has(item.courtKey)) {
+		state.courtAffinity.set(item.courtKey, court.id);
+	}
+}
+
+// One walk through the days. `margin` is null for a strict pass, where the
+// organiser's rules are as hard as the others. Otherwise a rule may bend for a
+// court that would stand idle, once the slack falls below the margin. Slack is
+// the free court time left, in matches, minus the matches still to place.
+// Placing a match leaves it unchanged and an idle court lowers it, so once it
+// drops below the margin it stays there, and bending is confined to the tail of
+// the schedule.
 //
-// The chain ends on court index, which is total: two slots that tie on every
-// objective are distinguished by their column, so the same input always produces
-// the same schedule.
-function compareSlots(left, right, fixture, state) {
-	// 1. Earliest time wins. With fixed-size slots, filling from the front is
-	//    what minimises the finish time.
-	if (left.instant !== right.instant) return left.instant < right.instant ? -1 : 1;
+// Each court keeps its own clock. The walk always takes the earliest of them,
+// together with every other court free at that same minute, and fills those
+// courts the way it always has: the best ready match first, then the best court
+// for it. A court left with nothing moves on to the next moment anything could
+// change — another court coming free, or one shortest match length later.
+function runPass(items, timetable, rules, { margin, spread }) {
+	const state = createPassState(items);
+	const { startMinutes, endMinutes: dayEndMinutes, durationMinutes } = timetable;
+	const lastDayIndex = timetable.days.length > 0 ? timetable.days[timetable.days.length - 1].dayIndex : -1;
+	const shortest = () => [...state.unplaced].reduce((least, item) => Math.min(least, item.duration), Infinity);
 
-	// 2. More rest wins — see the note above; it cannot discriminate here.
+	for (const entry of timetable.days) {
+		if (state.unplaced.size === 0) break;
 
-	// 3. Fewer division changeovers wins.
-	const changeoverDifference = changeoverCost(left, fixture, state) - changeoverCost(right, fixture, state);
-	if (changeoverDifference !== 0) return changeoverDifference;
+		// Spreading across days: each day takes its share of what is left, in
+		// proportion to its court time. The last day takes whatever remains.
+		let quota = Infinity;
+		if (spread && entry.dayIndex !== lastDayIndex) {
+			const capacityLeft = entry.capacity + entry.laterCapacity;
+			quota = capacityLeft > 0 ? Math.ceil((state.unplaced.size * entry.capacity) / capacityLeft) : Infinity;
+		}
 
-	// 4. Court affinity wins, last and least.
-	const affinityDifference = affinityCost(left, fixture, state) - affinityCost(right, fixture, state);
-	if (affinityDifference !== 0) return affinityDifference;
+		let placedToday = 0;
+		const clock = new Map(entry.courts.map((court) => [court.id, skipBreaks(court, startMinutes)]));
 
-	return left.courtIndex - right.courtIndex;
+		while (state.unplaced.size > 0 && placedToday < quota) {
+			const least = shortest();
+			const live = entry.courts.filter((court) => clock.get(court.id) + least <= entry.limit);
+			if (live.length === 0) break;
+
+			const now = Math.min(...live.map((court) => clock.get(court.id)));
+			const free = live.filter((court) => clock.get(court.id) === now);
+
+			while (free.length > 0 && placedToday < quota) {
+				const capacityLeft =
+					entry.laterCapacity +
+					entry.courts.reduce(
+						(sum, court) => sum + countSlots(court, clock.get(court.id), entry.limit, durationMinutes),
+						0
+					);
+				const mayBend = margin !== null && capacityLeft - state.unplaced.size < margin;
+				let best = null;
+				// Why each match could not take a court now. Kept only if a court is
+				// left idle: a refusal while another match fills the court anyway
+				// says nothing about why the refused match went unplaced.
+				const refusals = [];
+
+				for (const item of state.unplaced) {
+					const courts = free.filter(
+						(court) => courtAccepts(court, item.fixture) && fitsOn(court, now, item.duration, entry.limit)
+					);
+					if (courts.length === 0) continue;
+
+					const instant = makeInstant(entry, now, item.duration, dayEndMinutes);
+
+					const earlierEnd = earlierRoundsEnd(item, instant, state);
+					if (earlierEnd === null) {
+						refusals.push([item, 'round']);
+						continue;
+					}
+
+					if (teamIsBusy(state, item, instant)) {
+						refusals.push([item, 'team']);
+						continue;
+					}
+
+					const bent = findBentRules(item, instant, state, rules, earlierEnd);
+					if (bent.length > 0 && !mayBend) {
+						bent.forEach(({ rule }) => refusals.push([item, rule]));
+						continue;
+					}
+
+					const { breached, overdue } = findWaits(item, instant, state, rules);
+					const candidate = {
+						item,
+						instant,
+						bent,
+						breached,
+						overdue,
+						courts,
+						cost: bendCost(bent, state),
+						urgency: urgencyOf(item, state),
+						lastPlayed: lastPlayedOf(item, state),
+					};
+
+					if (best === null || compareCandidates(candidate, best) < 0) best = candidate;
+				}
+
+				if (best === null) {
+					refusals.forEach(([item, reason]) => noteFailure(state, item, reason));
+					break;
+				}
+
+				const court = chooseCourt(best.courts, best.item, best.instant, state, rules);
+				recordPlacement(state, best, court, best.instant);
+				clock.set(court.id, skipBreaks(court, best.instant.endMinutes));
+				free.splice(free.indexOf(court), 1);
+				placedToday += 1;
+			}
+
+			// The courts still free at `now` had nothing they could take. Move each
+			// on to the next moment something could change.
+			const step = state.unplaced.size > 0 ? shortest() : durationMinutes;
+			const later = entry.courts.map((court) => clock.get(court.id)).filter((minute) => minute > now);
+			const next = Math.min(now + step, ...later);
+			free.forEach((court) => clock.set(court.id, skipBreaks(court, next)));
+		}
+	}
+
+	return state;
+}
+
+// --- choosing between passes ------------------------------------------------
+
+function summarise(state, dayEndMinutes) {
+	let finish = '';
+	let overrunMinutes = 0;
+	let mostBends = 0;
+
+	state.placements.forEach(({ instant }) => {
+		if (instant.end > finish) finish = instant.end;
+		if (instant.overrun) overrunMinutes = Math.max(overrunMinutes, instant.endMinutes - dayEndMinutes);
+	});
+	state.teamBends.forEach((count) => {
+		mostBends = Math.max(mostBends, count);
+	});
+
+	return { placed: state.placements.length, overrunMinutes, cost: state.cost, mostBends, finish };
+}
+
+// Most fixtures placed, then the least overrun, then the least bending, then
+// the fewest bends for any single team, then the earliest finish.
+function compareResults(left, right) {
+	const a = left.summary;
+	const b = right.summary;
+
+	return (
+		b.placed - a.placed ||
+		a.overrunMinutes - b.overrunMinutes ||
+		a.cost - b.cost ||
+		a.mostBends - b.mostBends ||
+		(a.finish < b.finish ? -1 : a.finish > b.finish ? 1 : 0)
+	);
+}
+
+// Slack margins to try, tightest first: 0, 1, 2, 4, … and finally one no slack
+// can fall under, which bends wherever a court would otherwise idle.
+function slackMargins(timetable) {
+	const { capacity } = timetable;
+	const margins = [];
+	for (let margin = 0; margin <= capacity; margin = margin === 0 ? 1 : margin * 2) margins.push(margin);
+	margins.push(capacity + 1);
+	return margins;
+}
+
+function searchSchedule(items, context, { spread }) {
+	const { rules, fitAll, allowOverrun, dayEndMinutes, durationMinutes } = context;
+	let best = null;
+
+	const consider = (state) => {
+		const result = { state, summary: summarise(state, dayEndMinutes) };
+		if (best === null || compareResults(result, best) < 0) best = result;
+	};
+	const complete = () => best !== null && best.summary.placed === items.length;
+
+	const tryWithOverrun = (overrunSlots) => {
+		const timetable = context.buildTimetable(overrunSlots);
+
+		consider(runPass(items, timetable, rules, { margin: null, spread }));
+		if (complete() && best.summary.cost === 0 && best.summary.overrunMinutes === 0) return;
+		if (!fitAll) return;
+
+		slackMargins(timetable).forEach((margin) => consider(runPass(items, timetable, rules, { margin, spread })));
+	};
+
+	tryWithOverrun(0);
+
+	if (allowOverrun) {
+		for (let slots = 1; !complete() && context.dayEndMinutes + (slots - 1) * durationMinutes < LAST_MINUTE; slots += 1) {
+			tryWithOverrun(slots);
+		}
+	}
+
+	return best;
 }
 
 // --- warnings ---------------------------------------------------------------
@@ -415,20 +782,22 @@ function compareSlots(left, right, fixture, state) {
 // Which constraint to name when several blocked a fixture. Ordered by how much
 // the answer tells an organiser: "a team would have played back to back" points
 // at a fix, "every court is busy" is the one they would have guessed.
-const FAILURE_PRIORITY = ['division', 'rest', 'round', 'team', 'court'];
+const FAILURE_PRIORITY = ['division', 'daily', 'rest', 'gap', 'round', 'team', 'court'];
 
 const FAILURE_REASONS = {
 	division: 'no court is open to the fixture’s division. Open a court to that division, or add one.',
 	rest: 'the only free slots would leave a team playing two matches back to back. Add a court or extend the day.',
+	daily: 'the teams involved had already reached their daily match limit. Raise the limit, add a day, or let the generator bend rules.',
+	gap: 'no free slot is left after the break before the knockout round. Shorten the break, extend the day, or let the generator bend rules.',
 	round: 'no free slot is left once the earlier rounds of the same division have finished. Extend the day or add another day.',
 	team: 'the teams involved are already playing in every remaining slot. Add a court or extend the day.',
 	court: 'every court is booked for the whole day. Add a court, extend the day, or shorten matches.',
 };
 
-// The most informative reason across every slot this fixture was refused. A
-// fixture with no candidate slots at all — a day shorter than one match — has no
-// reason recorded, and capacity is the true answer.
-function describeFailure(failures) {
+function describeFailure(item, state, courts) {
+	if (!courts.some((court) => courtAccepts(court, item.fixture))) return 'division';
+
+	const failures = state.reasons.get(item) || new Set();
 	return FAILURE_PRIORITY.find((reason) => failures.has(reason)) || 'court';
 }
 
@@ -443,6 +812,47 @@ function buildWarnings(unplacedReasons) {
 
 		return `${count} ${noun} could not be scheduled: ${FAILURE_REASONS[reason]}`;
 	});
+}
+
+function plural(count, singular, pluralForm = `${singular}s`) {
+	return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+// The rules the chosen schedule had to bend, grouped by rule, naming the entries
+// and the teams it was bent for. The report the organiser is shown after
+// generating, and the source of the warnings below.
+function buildRuleBreaks(placements, entryIdByItem, { restMinutes, maxPerDay, maxWait, knockoutGap }) {
+	const groups = new Map();
+	const add = (rule, placement, teams) => {
+		const group = groups.get(rule) || { rule, entryIds: [], teams: new Set() };
+		group.entryIds.push(entryIdByItem.get(placement.item));
+		teams.forEach((team) => group.teams.add(team.name || team.key));
+		groups.set(rule, group);
+	};
+
+	placements.forEach((placement) => {
+		placement.bent.forEach(({ rule, teams }) => add(rule, placement, teams));
+		if (placement.instant.overrun) add('overrun', placement, []);
+	});
+
+	const describe = {
+		rest: (group) =>
+			`Minimum rest (${restMinutes} min) shortened for ${plural(group.teams.size, 'team')} in ${plural(group.entryIds.length, 'match', 'matches')}.`,
+		daily: (group) =>
+			`Daily limit of ${plural(maxPerDay, 'match', 'matches')} per team exceeded for ${plural(group.teams.size, 'team')} in ${plural(group.entryIds.length, 'match', 'matches')}.`,
+		wait: (group) =>
+			`Longest wait (${maxWait} min) exceeded for ${plural(group.teams.size, 'team')} in ${plural(group.entryIds.length, 'match', 'matches')}.`,
+		gap: (group) =>
+			`Break before knockout rounds (${knockoutGap} min) shortened in ${plural(group.entryIds.length, 'match', 'matches')}.`,
+		overrun: (group) => `${plural(group.entryIds.length, 'match', 'matches')} run past the daily end time.`,
+	};
+
+	return ['rest', 'daily', 'gap', 'wait', 'overrun']
+		.filter((rule) => groups.has(rule))
+		.map((rule) => {
+			const group = groups.get(rule);
+			return { rule, entryIds: group.entryIds, teams: [...group.teams].sort(), message: describe[rule](group) };
+		});
 }
 
 // --- officials --------------------------------------------------------------
@@ -604,6 +1014,10 @@ function buildOfficialsWarning(unassigned) {
 
 // --- generation -------------------------------------------------------------
 
+// The rules and preferences are the keys of DEFAULT_GENERATOR_SETTINGS in
+// scheduleUtils.js, passed at the top level. Anything not passed takes that
+// default, so a caller that has never heard of a rule generates with it at its
+// default.
 export function generateAutomaticSchedule({
 	baseSchedule,
 	fixtures,
@@ -615,12 +1029,24 @@ export function generateAutomaticSchedule({
 	dailyEndTime,
 	fixtureDurationMinutes,
 	restMinutes: requestedRestMinutes,
-	assignOfficials = false,
+	restEnabled = DEFAULT_GENERATOR_SETTINGS.restEnabled,
+	maxPerDayEnabled = DEFAULT_GENERATOR_SETTINGS.maxPerDayEnabled,
+	maxMatchesPerDay = DEFAULT_GENERATOR_SETTINGS.maxMatchesPerDay,
+	maxWaitEnabled = DEFAULT_GENERATOR_SETTINGS.maxWaitEnabled,
+	maxWaitMinutes = DEFAULT_GENERATOR_SETTINGS.maxWaitMinutes,
+	knockoutGapEnabled = DEFAULT_GENERATOR_SETTINGS.knockoutGapEnabled,
+	knockoutGapMinutes: requestedKnockoutGap,
+	fitAll = DEFAULT_GENERATOR_SETTINGS.fitAll,
+	allowOverrun = DEFAULT_GENERATOR_SETTINGS.allowOverrun,
+	spreadDays = DEFAULT_GENERATOR_SETTINGS.spreadDays,
+	courtAffinity = DEFAULT_GENERATOR_SETTINGS.courtAffinity,
+	groupDivisions = DEFAULT_GENERATOR_SETTINGS.groupDivisions,
+	assignOfficials = DEFAULT_GENERATOR_SETTINGS.assignOfficials,
+	roundDurations = DEFAULT_GENERATOR_SETTINGS.roundDurations,
 }) {
 	const durationMinutes = Number(fixtureDurationMinutes);
 	// Absent, blank or nonsensical means "whatever one match lasts", which is the
-	// number the old rest rule always came out at. A caller that has never heard
-	// of rest therefore generates exactly what it used to. Zero is a real answer —
+	// number the old rest rule always came out at. Zero is a real answer —
 	// back-to-back matches allowed — so it is only rejected when it is not a
 	// number at all.
 	const parsedRestMinutes = Number(requestedRestMinutes);
@@ -628,12 +1054,27 @@ export function generateAutomaticSchedule({
 		Number.isFinite(parsedRestMinutes) && parsedRestMinutes >= 0 && requestedRestMinutes !== '' && requestedRestMinutes !== null
 			? parsedRestMinutes
 			: durationMinutes * DEFAULT_REST_MULTIPLE;
+	const parsedMaxPerDay = Math.floor(Number(maxMatchesPerDay));
+	const maxPerDay = maxPerDayEnabled && parsedMaxPerDay >= 1 ? parsedMaxPerDay : null;
+	const parsedMaxWait = Number(maxWaitMinutes);
+	const maxWait = maxWaitEnabled && maxWaitMinutes !== '' && parsedMaxWait >= 0 ? parsedMaxWait : null;
+	// Like rest: blank or unreadable means one match length.
+	const parsedKnockoutGap = Number(requestedKnockoutGap);
+	const knockoutGapMinutes =
+		requestedKnockoutGap !== '' && requestedKnockoutGap !== null && Number.isFinite(parsedKnockoutGap) && parsedKnockoutGap >= 0
+			? parsedKnockoutGap
+			: durationMinutes;
+	const knockoutGap = knockoutGapEnabled ? knockoutGapMinutes : null;
+	// Only the lengths that read as a positive whole number; the rest fall back to
+	// the default match length.
+	const savedRoundDurations = normaliseGeneratorSettings({ roundDurations }).roundDurations;
 
 	if (!courtCount || !durationMinutes || !isTimeRangeValid(dailyStartTime, dailyEndTime)) {
 		return {
 			schedule: baseSchedule,
 			unscheduledFixtures: fixtures,
 			warnings: ['Enter valid court, time, and duration values before generating the schedule.'],
+			report: null,
 		};
 	}
 
@@ -642,10 +1083,8 @@ export function generateAutomaticSchedule({
 
 	// The generator reassigns every slot, so the placement does not survive — but
 	// the fixture-scoped text the organiser typed does. Keyed by fixtureId, so it
-	// rides along to wherever the fixture is placed this run, even a different
-	// court or time. A fixture left unplaced has no entry to carry it, which is
-	// correct. Without this every officials value is destroyed on every
-	// regeneration.
+	// rides along to wherever the fixture is placed this run. Without this every
+	// officials value is destroyed on every regeneration.
 	const carriedText = new Map(
 		normalised.entries
 			.filter((entry) => entry.type === 'fixture' && entry.fixtureId)
@@ -661,100 +1100,94 @@ export function generateAutomaticSchedule({
 			dayStartTime: dailyStartTime,
 			dayEndTime: dailyEndTime,
 			// slotMinutes is deliberately NOT written here. It is the height of a
-			// grid row — how the board is drawn — and it used to be overwritten
-			// with whatever duration the last run happened to use, so the grid an
-			// organiser had chosen could not survive a regeneration. A fixture's
-			// length is its own startTime/endTime and nothing else; the grid is a
-			// reading aid over the top of it. normaliseSchedule has already seeded
-			// a default for a schedule that never had one.
+			// grid row — how the board is drawn — and a fixture's length is its
+			// own startTime/endTime. See docs/schedule.md.
+			//
+			// The rules this run used, so the panel opens on them next time.
+			generator: normaliseGeneratorSettings({
+				fixtureDurationMinutes: durationMinutes,
+				restEnabled,
+				restMinutes,
+				maxPerDayEnabled,
+				maxMatchesPerDay,
+				maxWaitEnabled,
+				maxWaitMinutes,
+				knockoutGapEnabled,
+				knockoutGapMinutes,
+				fitAll,
+				allowOverrun,
+				spreadDays,
+				courtAffinity,
+				groupDivisions,
+				assignOfficials,
+				roundDurations,
+			}),
 		},
 	};
 
-	const blockedByBreak = buildBlockedSlotChecker(preservedBreaks);
-	const candidateSlots = buildCandidateSlots(
-		schedule.days,
-		courts,
-		dailyStartTime,
-		dailyEndTime,
-		durationMinutes
-	).filter((slot) => !blockedByBreak(slot));
-
-	const state = createPlacementState();
-	const roundOrder = buildRoundOrder(divisions);
-
-	// Round by round, so that every earlier round of a division has been placed
-	// before anything is measured against it. The sort is stable, so fixtures
-	// within one round keep their generated order and two runs over the same
-	// input still produce the same schedule. An unordered fixture sorts with the
-	// first round, which is where it already sat.
-	const fixturesToSchedule = fixtures
-		.map((fixture) => ({ fixture, roundIndex: getRoundIndex(fixture, roundOrder) }))
-		.sort((left, right) => (left.roundIndex ?? 0) - (right.roundIndex ?? 0));
-
-	const unscheduledFixtures = [];
-	const unplacedReasons = [];
-
-	for (const { fixture, roundIndex } of fixturesToSchedule) {
-		const context = {
+	const startMinutes = timeToMinutes(dailyStartTime);
+	const dayEndMinutes = timeToMinutes(dailyEndTime);
+	const items = prepareItems(fixtures, buildRoundOrder(divisions), { durationMinutes, roundDurations: savedRoundDurations });
+	const context = {
+		rules: {
+			restMinutes: restEnabled ? restMinutes : null,
+			maxPerDay,
+			maxWait,
+			knockoutGap,
 			durationMinutes,
-			restMinutes,
-			barrier: findRoundBarrier(state.roundEndByDivision, fixture.division_id, roundIndex),
-			teams: getTeamKeys(fixture),
-		};
+			courtAffinity,
+			groupDivisions,
+		},
+		fitAll,
+		allowOverrun,
+		dayEndMinutes,
+		durationMinutes,
+		buildTimetable: (overrunSlots) =>
+			buildTimetable(schedule.days, courts, preservedBreaks, {
+				startMinutes,
+				endMinutes: dayEndMinutes,
+				durationMinutes,
+				overrunSlots,
+			}),
+	};
 
-		let best = null;
-		const failures = new Set();
+	let best = searchSchedule(items, context, { spread: spreadDays });
 
-		// Every feasible slot is compared, and the comparison alone decides. The
-		// candidates are already in instant order, so this settles on the earliest
-		// one and then picks among the courts free at that instant — but it is
-		// compareSlots that says so, not the loop. Keeping the priority order in
-		// one place is the whole point of the rewrite, and an early exit here
-		// would be a second, silent statement of the first objective.
-		for (const slot of candidateSlots) {
-			const failure = findSlotFailure(slot, fixture, state, context);
-			if (failure) {
-				failures.add(failure);
-				continue;
-			}
-
-			if (best === null || compareSlots(slot, best, fixture, state) < 0) {
-				best = slot;
-			}
-		}
-
-		if (best === null) {
-			unscheduledFixtures.push(fixture);
-			unplacedReasons.push(describeFailure(failures));
-			continue;
-		}
-
-		const carried = carriedText.get(fixture.id) || {};
-		schedule.entries.push(
-			createFixtureEntry({
-				day: best.day,
-				courtId: best.courtId,
-				startTime: best.startTime,
-				endTime: best.endTime,
-				fixtureId: fixture.id,
-				officials: carried.officials || '',
-				notes: carried.notes || '',
-			})
-		);
-
-		recordPlacement(state, best, fixture, durationMinutes);
-		recordRoundEnd(state.roundEndByDivision, fixture.division_id, roundIndex, `${best.day}T${best.endTime}`);
+	// Spreading is a preference. When it costs a fixture its place, the
+	// schedule that places more wins.
+	if (spreadDays && best.summary.placed < items.length) {
+		const packed = searchSchedule(items, context, { spread: false });
+		if (packed.summary.placed > best.summary.placed) best = packed;
 	}
 
-	schedule.entries.sort((left, right) => {
-		if (left.day !== right.day) return left.day.localeCompare(right.day);
-		if (left.startTime !== right.startTime) return compareTimes(left.startTime, right.startTime);
-		return (left.courtId || '').localeCompare(right.courtId || '');
+	const { state } = best;
+	const entryIdByItem = new Map();
+
+	state.placements.forEach(({ item, instant, court }) => {
+		const carried = carriedText.get(item.fixture.id) || {};
+		const entry = createFixtureEntry({
+			day: instant.day,
+			courtId: court.id,
+			startTime: instant.startTime,
+			endTime: instant.endTime,
+			fixtureId: item.fixture.id,
+			officials: carried.officials || '',
+			notes: carried.notes || '',
+		});
+
+		entryIdByItem.set(item, entry.id);
+		schedule.entries.push(entry);
 	});
 
+	schedule.entries = sortScheduleEntries(schedule.entries, schedule);
+
+	const unplacedItems = items.filter((item) => state.unplaced.has(item));
+	const unscheduledFixtures = unplacedItems.map((item) => item.fixture);
+	const unplacedReasons = unplacedItems.map((item) => describeFailure(item, state, courts));
+	const ruleBreaks = buildRuleBreaks(state.placements, entryIdByItem, { restMinutes, maxPerDay, maxWait, knockoutGap });
+
 	// Officials are assigned over the finished schedule, only when asked. Off — the
-	// default — leaves the officials carried from the previous run untouched
-	// (Decision 8, and the toggle's honest off state).
+	// default — leaves the officials carried from the previous run untouched.
 	let officialsWarnings = [];
 	if (assignOfficials) {
 		const fixturesById = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
@@ -765,6 +1198,12 @@ export function generateAutomaticSchedule({
 	return {
 		schedule,
 		unscheduledFixtures,
-		warnings: [...buildWarnings(unplacedReasons), ...officialsWarnings],
+		warnings: [...buildWarnings(unplacedReasons), ...ruleBreaks.map((group) => group.message), ...officialsWarnings],
+		report: {
+			total: fixtures.length,
+			placed: state.placements.length,
+			finish: best.summary.finish,
+			ruleBreaks,
+		},
 	};
 }

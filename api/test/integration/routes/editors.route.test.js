@@ -7,13 +7,14 @@ vi.mock("../../../src/config/db.js", async () => {
 });
 
 vi.mock("../../../src/services/editors.service.js", () => ({
-    editorService: { listEditors: vi.fn(), addEditor: vi.fn(), removeEditor: vi.fn() }
+    editorService: { listEditors: vi.fn(), addEditor: vi.fn(), removeEditor: vi.fn(), searchCandidates: vi.fn() }
 }));
 
 const app = (await import("../../../src/app.js")).default;
 const { editorService } = await import("../../../src/services/editors.service.js");
 const { AppError } = await import("../../../src/errors.js");
 const { authCookie } = await import("../../helpers/auth.js");
+const { resetSearchLimiter, SEARCH_MAX_REQUESTS } = await import("../../../src/middleware/rateLimit.js");
 
 const TOURNAMENT = "45bb764e-c07d-474e-8d01-9d9711d39a3a";
 const EDITOR = "9b2f6a1e-3c4d-4e5f-8a7b-1c2d3e4f5a6b";
@@ -135,5 +136,53 @@ describe("DELETE /api/tournaments/:tournamentId/editors/:userId", () => {
 
         expect(response.status).toBe(404);
         expect(response.body.message).toBe("Tournament not found");
+    });
+});
+
+describe("GET /api/tournaments/:tournamentId/editors/search", () => {
+    beforeEach(() => {
+        resetSearchLimiter();
+        editorService.searchCandidates.mockReset().mockResolvedValue([]);
+    });
+
+    it("requires a session", async () => {
+        const response = await request(app).get(`${BASE}/search?q=pri`);
+
+        expect(response.status).toBe(401);
+        expect(editorService.searchCandidates).not.toHaveBeenCalled();
+    });
+
+    it("returns the suggestions for what has been typed", async () => {
+        const data = [{ username: "priya", workedWith: true }];
+        editorService.searchCandidates.mockResolvedValue(data);
+
+        const response = await request(app).get(`${BASE}/search?q=pri`).set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Suggestions fetched", data });
+        expect(editorService.searchCandidates).toHaveBeenCalledWith(TOURNAMENT, "user-1", "pri");
+    });
+
+    it("answers 404 for a malformed tournament id without reaching the service", async () => {
+        const response = await request(app).get("/api/tournaments/nope/editors/search?q=pri").set("Cookie", authCookie());
+
+        expect(response.status).toBe(404);
+        expect(editorService.searchCandidates).not.toHaveBeenCalled();
+    });
+
+    it(`allows ${SEARCH_MAX_REQUESTS} searches a minute per user and refuses the next`, async () => {
+        const cookie = authCookie({ id: "user-1" });
+
+        for (let attempt = 1; attempt <= SEARCH_MAX_REQUESTS; attempt += 1) {
+            expect((await request(app).get(`${BASE}/search?q=pri`).set("Cookie", cookie)).status).toBe(200);
+        }
+
+        const refused = await request(app).get(`${BASE}/search?q=pri`).set("Cookie", cookie);
+        expect(refused.status).toBe(429);
+        expect(refused.body.message).toBe("Too many attempts. Please wait a minute and try again");
+
+        // Another user has their own budget.
+        const other = await request(app).get(`${BASE}/search?q=pri`).set("Cookie", authCookie({ id: "user-2" }));
+        expect(other.status).toBe(200);
     });
 });

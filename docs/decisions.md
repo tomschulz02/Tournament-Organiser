@@ -494,6 +494,19 @@ transaction once the division row is locked. Every other endpoint keeps its own
 owner-only check; the resolver is deliberately not shared with them, so widening one
 endpoint cannot widen another.
 
+## Editor Suggestions Search Usernames, Never Emails
+
+Decided 2026-09-24.
+
+The add-editor field suggests users as the organiser types. A user search makes the
+username list discoverable where nothing else in the application does, and anyone can
+become an organiser, so it is narrowed deliberately: usernames only, prefix match from
+three characters, five results, organiser-only, and rate-limited per user. Emails are
+never matched — an address is accepted only typed in full, as sign-in treats it, so the
+feature cannot be used to discover who is registered. People the organiser has already
+worked with are offered first and from the first keystroke, because they reveal nothing
+new.
+
 ## Placement Matches Are Groups In The Existing Rounds
 
 Decided 2026-09-24, release 1.1.

@@ -571,7 +571,7 @@ export default function TeamsTab({
 // frontend/backend module to import it from, so it's duplicated here — the
 // same reason divisionPreview.js ports server logic instead of importing it.
 function groupLabel(index) {
-	return `Group ${String.fromCharCode(65 + index)}`;
+	return `Pool ${String.fromCharCode(65 + index)}`;
 }
 
 // Read-only: shows what's already saved, not the tab's draft state. A

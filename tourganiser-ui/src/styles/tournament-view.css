@@ -2191,6 +2191,39 @@ body.dark .tv-division-badge {
 	margin-bottom: 0;
 }
 
+/* The editor suggestions, directly under the add field. */
+.tv-editor-suggestions {
+	margin: 0;
+	padding: var(--space-1);
+	list-style: none;
+	border: 1px solid var(--tv-border);
+	border-radius: 9px;
+	background: var(--tv-surface);
+}
+
+.tv-editor-suggestion {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: var(--space-2);
+	border-radius: 6px;
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+.tv-editor-suggestion:hover,
+.tv-editor-suggestion.is-active {
+	background: var(--tv-surface-alt);
+}
+
+.tv-editor-suggestion-note {
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+	white-space: nowrap;
+}
+
 .tv-settings-list {
 	margin: 0;
 	padding: 0;

@@ -2,6 +2,7 @@ import React, { startTransition, useDeferredValue, useEffect, useMemo, useReduce
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
+import Tooltip from './Tooltip';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmDialog';
 import { useHelpTopic } from '../HelpContext';
@@ -15,6 +16,7 @@ import {
 	calculateScheduledStats,
 	createBreakEntry,
 	createFixtureEntry,
+	DEFAULT_GENERATOR_SETTINGS,
 	formatDateLabel,
 	getCourtName,
 	getDayBounds,
@@ -39,6 +41,7 @@ import {
 	validateScheduleEntry,
 } from '../utils/scheduleUtils';
 import { divisionColorStyle } from '../utils/divisionColors';
+import { orderedStages, roundHolding } from './tournament/fixtureUtils';
 import SchedulePrintLayoutEditor from './SchedulePrintLayoutEditor';
 import '../styles/schedule-print.css';
 
@@ -214,19 +217,27 @@ export default function ScheduleMakerModal({
 	// highlighted on the grid and scrolled into view. Cleared on the next save or
 	// after a short delay.
 	const [highlightEntryIds, setHighlightEntryIds] = useState([]);
-	const [generatorDraft, setGeneratorDraft] = useState(() => ({
-		courtCount: Math.max(1, initialSchedule.courts.length || 2),
-		dailyStartTime: initialSchedule.settings.dayStartTime,
-		dailyEndTime: initialSchedule.settings.dayEndTime,
-		fixtureDurationMinutes: initialSchedule.settings.slotMinutes,
-		// The gap a team is guaranteed between two matches on one day, in minutes.
-		// Its own value rather than a multiple of the match length: matching the
-		// duration is only the default, not the definition. See docs/schedule.md.
-		restMinutes: initialSchedule.settings.slotMinutes,
-		// Off by default: generation preserves whatever officials were typed and
-		// assigns nothing. On, it assigns one team per match after placement.
-		assignOfficials: false,
-	}));
+	// Opens on the rules the schedule was last generated with — saved at
+	// settings.generator — or the defaults for one never generated. An unchosen
+	// duration is the grid's slot length and an unchosen rest is the duration,
+	// which is what both always were. See docs/schedule.md.
+	const [generatorDraft, setGeneratorDraft] = useState(() => {
+		const saved = initialSchedule.settings.generator || DEFAULT_GENERATOR_SETTINGS;
+		const duration = saved.fixtureDurationMinutes ?? initialSchedule.settings.slotMinutes;
+
+		return {
+			...saved,
+			courtCount: Math.max(1, initialSchedule.courts.length || 2),
+			dailyStartTime: initialSchedule.settings.dayStartTime,
+			dailyEndTime: initialSchedule.settings.dayEndTime,
+			fixtureDurationMinutes: duration,
+			restMinutes: saved.restMinutes ?? duration,
+			knockoutGapMinutes: saved.knockoutGapMinutes ?? duration,
+		};
+	});
+	// What the last generation had to bend or leave out, shown in the overview
+	// until the next generation or until dismissed. Not saved.
+	const [generationReport, setGenerationReport] = useState(null);
 	const [entryForm, setEntryForm] = useState(null);
 	const initialScheduleRef = useRef(null);
 	const modalRef = useRef(null);
@@ -320,15 +331,21 @@ export default function ScheduleMakerModal({
 		[schedule.entries, selectedEntryId]
 	);
 	const roundOptions = useMemo(() => {
-		return ['all', ...new Set(fixtures.map((fixture) => fixture.round).filter(Boolean))];
+		return ['all', ...orderedStages(fixtures)];
 	}, [fixtures]);
+	// The rounds a match length can be set for: the round each fixture belongs to,
+	// so a placement match or the 3rd place playoff shares its round's length.
+	const generatorRounds = useMemo(
+		() => [...new Set(fixtures.map((fixture) => roundHolding(fixture.round)).filter(Boolean))],
+		[fixtures]
+	);
 	const unscheduledFixtures = useMemo(() => getUnscheduledFixtures(schedule, fixtures), [schedule, fixtures]);
 	const filteredUnscheduledFixtures = useMemo(() => {
 		const search = deferredSearch.trim().toLowerCase();
 
 		return unscheduledFixtures.filter((fixture) => {
 			const matchesDivision = divisionFilter === 'all' || String(fixture.division_id) === divisionFilter;
-			const matchesRound = roundFilter === 'all' || fixture.round === roundFilter;
+			const matchesRound = roundFilter === 'all' || (fixture.stage ?? fixture.round) === roundFilter;
 			const matchesSearch = !search || fixture.searchText.includes(search);
 			return matchesDivision && matchesRound && matchesSearch;
 		});
@@ -446,6 +463,7 @@ export default function ScheduleMakerModal({
 		if (!confirmed) return;
 
 		dispatch({ type: 'reset', payload: initialScheduleRef.current || initialSchedule });
+		setGenerationReport(null);
 		setDirty(false);
 		setSelectedEntryId(null);
 		setPanelMode('overview');
@@ -476,6 +494,7 @@ export default function ScheduleMakerModal({
 		if (!confirmed) return;
 
 		dispatch({ type: 'replace', payload: { ...schedule, entries: [] } });
+		setGenerationReport(null);
 		setSelectedEntryId(null);
 		setSlotDraft(null);
 		setPendingFixtureId(null);
@@ -904,23 +923,46 @@ export default function ScheduleMakerModal({
 			// generator falls back to the fixture duration for anything it cannot
 			// read, which is the rest this generator has always given.
 			restMinutes: generatorDraft.restMinutes,
+			restEnabled: generatorDraft.restEnabled,
+			maxPerDayEnabled: generatorDraft.maxPerDayEnabled,
+			maxMatchesPerDay: generatorDraft.maxMatchesPerDay,
+			maxWaitEnabled: generatorDraft.maxWaitEnabled,
+			maxWaitMinutes: generatorDraft.maxWaitMinutes,
+			knockoutGapEnabled: generatorDraft.knockoutGapEnabled,
+			knockoutGapMinutes: generatorDraft.knockoutGapMinutes,
+			fitAll: generatorDraft.fitAll,
+			allowOverrun: generatorDraft.allowOverrun,
+			spreadDays: generatorDraft.spreadDays,
+			courtAffinity: generatorDraft.courtAffinity,
+			groupDivisions: generatorDraft.groupDivisions,
 			assignOfficials: generatorDraft.assignOfficials,
+			roundDurations: generatorDraft.roundDurations,
 		});
 
+		if (!result.report) {
+			showMessage(result.warnings.join(' '), 'warning', 9000);
+			return;
+		}
+
 		replaceSchedule(result.schedule);
+		setGenerationReport({ ...result.report, warnings: result.warnings });
 		setPanelMode('overview');
 		setMobilePanel('board');
 		setViewMode('grid');
 
-		if (result.warnings.length > 0) {
-			// All of them, not the first. The generator returns one warning per
-			// constraint that blocked something, and being told about the rest
-			// minimum while the round-order failure stays hidden sends the
-			// organiser to fix the wrong thing. See docs/schedule.md.
-			showMessage(result.warnings.join(' '), 'warning', 9000);
+		const { placed, total, ruleBreaks } = result.report;
+		if (placed < total) {
+			showMessage(`${total - placed} of ${total} fixtures could not be scheduled. See the report in the overview panel.`, 'warning', 9000);
+		} else if (ruleBreaks.length > 0) {
+			showMessage('Every fixture was scheduled, but some rules had to bend. See the report in the overview panel.', 'warning', 9000);
 		} else {
 			showMessage('Automatic schedule generated. You can edit any slot afterwards.', 'success');
 		}
+	};
+
+	const handleShowReportEntries = (entryIds) => {
+		highlightOffendingEntries({ entryIds });
+		setMobilePanel('board');
 	};
 
 	// The fixtures panel only exists for an editor, so a read-only viewer gets a
@@ -1358,6 +1400,7 @@ export default function ScheduleMakerModal({
 						) : panelMode === 'generate' ? (
 							<GeneratorPanel
 								draft={generatorDraft}
+								rounds={generatorRounds}
 								onChange={setGeneratorDraft}
 								onGenerate={handleGenerateSchedule}
 								onBack={handleBackToOverview}
@@ -1399,6 +1442,9 @@ export default function ScheduleMakerModal({
 								onAddCourt={handleAddCourt}
 								onRemoveCourt={handleRemoveCourt}
 								onEditSettings={handleOpenSettings}
+								report={generationReport}
+								onShowReportEntries={handleShowReportEntries}
+								onDismissReport={() => setGenerationReport(null)}
 								canEdit={canEdit}
 							/>
 						)}
@@ -2180,10 +2226,23 @@ function PanelBackButton({ onBack }) {
 	);
 }
 
-function ScheduleOverviewPanel({ stats, schedule, courtDraft, onCourtDraftChange, onAddCourt, onRemoveCourt, onEditSettings, canEdit }) {
+function ScheduleOverviewPanel({
+	stats,
+	schedule,
+	courtDraft,
+	onCourtDraftChange,
+	onAddCourt,
+	onRemoveCourt,
+	onEditSettings,
+	canEdit,
+	report,
+	onShowReportEntries,
+	onDismissReport,
+}) {
 	return (
 		<div className="schedule-panel">
 			<h3>Schedule Overview</h3>
+			{report && <GenerationReport report={report} multiDay={schedule.days.length > 1} onShowEntries={onShowReportEntries} onDismiss={onDismissReport} />}
 			<div className="schedule-stat-grid">
 				<div>
 					<strong>{stats.scheduledFixtures}</strong>
@@ -2493,19 +2552,42 @@ function BreakPanel({ draft, schedule, onChange, onSave, onBack }) {
 	);
 }
 
-function GeneratorPanel({ draft, onChange, onGenerate, onBack }) {
+// One generator rule or preference: a checkbox, an optional value beside it, and
+// a hover tooltip for anything the label cannot say in a few words. The longer
+// explanation lives in the help entry for this modal.
+function GeneratorOption({ label, checked, onToggle, hint, children }) {
+	return (
+		<div className="schedule-generator-option">
+			<label className="schedule-generator-toggle">
+				<input type="checkbox" checked={checked} onChange={(event) => onToggle(event.target.checked)} />
+				<span>{label}</span>
+			</label>
+			{children}
+			{hint && <Tooltip message={hint} />}
+		</div>
+	);
+}
+
+function GeneratorPanel({ draft, rounds, onChange, onGenerate, onBack }) {
+	const set = (key) => (value) => onChange({ ...draft, [key]: value });
+	const roundDurations = draft.roundDurations || {};
+	// Blank removes the round's own length, so it takes the default again.
+	const setRoundDuration = (round, value) => {
+		const next = { ...roundDurations };
+		if (value === '') delete next[round];
+		else next[round] = value;
+		onChange({ ...draft, roundDurations: next });
+	};
+	const customised = Object.keys(roundDurations).filter((round) => rounds.includes(round)).length;
+
 	return (
 		<div className="schedule-panel">
 			<PanelBackButton onBack={onBack} />
 			<h3>Generate Schedule</h3>
-			<p>
-				Fixtures are placed round by round, so a division's knockout matches never start before its pool play
-				finishes. Within a round they keep their generated order, with group affinity and team rest preferences
-				applied. Divisions still run alongside each other.
-			</p>
+			<p>Fills the board from scratch. Breaks are kept; every placed fixture is replaced.</p>
 			<div className="schedule-form-grid">
 				<label>
-					<span>Number of Courts</span>
+					<span>Courts</span>
 					<input
 						type="number"
 						min="1"
@@ -2514,7 +2596,7 @@ function GeneratorPanel({ draft, onChange, onGenerate, onBack }) {
 					/>
 				</label>
 				<label>
-					<span>Daily Start Time</span>
+					<span>Day Start</span>
 					<input
 						type="time"
 						value={draft.dailyStartTime}
@@ -2522,11 +2604,11 @@ function GeneratorPanel({ draft, onChange, onGenerate, onBack }) {
 					/>
 				</label>
 				<label>
-					<span>Daily End Time</span>
+					<span>Day End</span>
 					<input type="time" value={draft.dailyEndTime} onChange={(event) => onChange({ ...draft, dailyEndTime: event.target.value })} />
 				</label>
 				<label>
-					<span>Fixture Duration (min)</span>
+					<span>Match Length (min)</span>
 					<input
 						type="number"
 						min="10"
@@ -2535,32 +2617,203 @@ function GeneratorPanel({ draft, onChange, onGenerate, onBack }) {
 						onChange={(event) => onChange({ ...draft, fixtureDurationMinutes: event.target.value })}
 					/>
 				</label>
-				<label>
-					<span>Team Rest (min)</span>
+			</div>
+
+			{rounds.length > 1 && (
+				<details className="schedule-generator-rounds">
+					<summary>
+						Match length by round
+						{customised > 0 && <span className="schedule-generator-unit"> · {customised} set</span>}
+					</summary>
+					{rounds.map((round) => (
+						<label key={round} className="schedule-generator-option">
+							<span className="schedule-generator-round-name">{round}</span>
+							<input
+								type="number"
+								className="schedule-generator-value"
+								min="5"
+								step="5"
+								aria-label={`${round} match length in minutes`}
+								placeholder={String(draft.fixtureDurationMinutes || '')}
+								value={roundDurations[round] ?? ''}
+								onChange={(event) => setRoundDuration(round, event.target.value)}
+							/>
+							<span className="schedule-generator-unit">min</span>
+						</label>
+					))}
+					<small className="schedule-generator-note">Blank uses the match length above.</small>
+				</details>
+			)}
+
+			<div className="schedule-panel-section">
+				<h4>Rules</h4>
+				<GeneratorOption
+					label="Minimum rest"
+					checked={draft.restEnabled}
+					onToggle={set('restEnabled')}
+					hint="The gap a team gets between two of its own matches on the same day. Off allows back-to-back matches.">
 					<input
 						type="number"
+						className="schedule-generator-value"
 						min="0"
 						step="5"
+						aria-label="Minimum rest in minutes"
+						disabled={!draft.restEnabled}
 						value={draft.restMinutes}
-						onChange={(event) => onChange({ ...draft, restMinutes: event.target.value })}
+						onChange={(event) => set('restMinutes')(event.target.value)}
 					/>
-					<small>The gap every team gets between two of its own matches on a day.</small>
-				</label>
+					<span className="schedule-generator-unit">min</span>
+				</GeneratorOption>
+				<GeneratorOption
+					label="Max matches per team per day"
+					checked={draft.maxPerDayEnabled}
+					onToggle={set('maxPerDayEnabled')}
+					hint="The most matches one team plays on a single day.">
+					<input
+						type="number"
+						className="schedule-generator-value"
+						min="1"
+						step="1"
+						aria-label="Maximum matches per team per day"
+						disabled={!draft.maxPerDayEnabled}
+						value={draft.maxMatchesPerDay}
+						onChange={(event) => set('maxMatchesPerDay')(event.target.value)}
+					/>
+				</GeneratorOption>
+				<GeneratorOption
+					label="Longest wait between matches"
+					checked={draft.maxWaitEnabled}
+					onToggle={set('maxWaitEnabled')}
+					hint="The most time a team should wait between two of its matches on the same day. Teams near the limit play first; any wait over it is reported.">
+					<input
+						type="number"
+						className="schedule-generator-value"
+						min="0"
+						step="5"
+						aria-label="Longest wait in minutes"
+						disabled={!draft.maxWaitEnabled}
+						value={draft.maxWaitMinutes}
+						onChange={(event) => set('maxWaitMinutes')(event.target.value)}
+					/>
+					<span className="schedule-generator-unit">min</span>
+				</GeneratorOption>
+				<GeneratorOption
+					label="Break before knockout rounds"
+					checked={draft.knockoutGapEnabled}
+					onToggle={set('knockoutGapEnabled')}
+					hint="Time between the end of one round and the start of each knockout round. Knockout teams aren't known in advance, so minimum rest can't cover this.">
+					<input
+						type="number"
+						className="schedule-generator-value"
+						min="0"
+						step="5"
+						aria-label="Break before knockout rounds in minutes"
+						disabled={!draft.knockoutGapEnabled}
+						value={draft.knockoutGapMinutes}
+						onChange={(event) => set('knockoutGapMinutes')(event.target.value)}
+					/>
+					<span className="schedule-generator-unit">min</span>
+				</GeneratorOption>
+				<small className="schedule-generator-note">
+					Always applied: rounds in order, no team or court double-booked, court division limits.
+				</small>
 			</div>
-			<label className="schedule-generator-toggle">
-				<input
-					type="checkbox"
-					checked={draft.assignOfficials}
-					onChange={(event) => onChange({ ...draft, assignOfficials: event.target.checked })}
+
+			<div className="schedule-panel-section">
+				<h4>When fixtures won't fit</h4>
+				<GeneratorOption
+					label="Bend rules to fit every fixture"
+					checked={draft.fitAll}
+					onToggle={set('fitAll')}
+					hint="Shortens rest or a knockout break, or exceeds the daily limit, only where a fixture has nowhere else to go, as few times as possible. Every bend is listed after generating."
 				/>
-				<span>
-					Assign officials automatically — one team per match, never a team while it is playing and never from
-					another division. Leave off to keep any officials you have already entered.
-				</span>
-			</label>
+				<GeneratorOption
+					label="Run past the day's end time"
+					checked={draft.allowOverrun}
+					onToggle={set('allowOverrun')}
+					hint="Last resort: adds time after the end of the final day, only as much as needed."
+				/>
+			</div>
+
+			<div className="schedule-panel-section">
+				<h4>Preferences</h4>
+				<GeneratorOption
+					label="Keep each pool on one court"
+					checked={draft.courtAffinity}
+					onToggle={set('courtAffinity')}
+				/>
+				<GeneratorOption
+					label="Keep each court on one division"
+					checked={draft.groupDivisions}
+					onToggle={set('groupDivisions')}
+				/>
+				<GeneratorOption
+					label="Spread matches evenly across days"
+					checked={draft.spreadDays}
+					onToggle={set('spreadDays')}
+					hint="Off finishes as early as possible, filling the first day first."
+				/>
+				<GeneratorOption
+					label="Assign officials automatically"
+					checked={draft.assignOfficials}
+					onToggle={set('assignOfficials')}
+					hint="One team per match from the same division, never while it is playing. Off keeps any officials already entered."
+				/>
+			</div>
+
 			<button type="button" className="primary full-width" onClick={onGenerate}>
 				Generate Schedule
 			</button>
+		</div>
+	);
+}
+
+// What the last generation placed, what it had to bend and what it left out.
+// Each bent rule can highlight its matches on the board.
+function GenerationReport({ report, multiDay, onShowEntries, onDismiss }) {
+	const bendMessages = new Set(report.ruleBreaks.map((group) => group.message));
+	const otherWarnings = report.warnings.filter((warning) => !bendMessages.has(warning));
+	const clean = report.placed === report.total && report.ruleBreaks.length === 0 && otherWarnings.length === 0;
+
+	return (
+		<div className={`schedule-generation-report${clean ? ' is-clean' : ''}`} role="status">
+			<div className="schedule-panel-section-head">
+				<h4>Generation Report</h4>
+				<button type="button" className="schedule-panel-section-action" onClick={onDismiss}>
+					Dismiss
+				</button>
+			</div>
+			<p>
+				{report.placed} of {report.total} fixtures scheduled
+				{report.finish
+					? `, finishing ${multiDay ? `${formatDateLabel(report.finish.slice(0, 10))}, ` : ''}${report.finish.slice(11)}`
+					: ''}.
+				{clean ? ' No rules had to bend.' : ''}
+			</p>
+			{report.ruleBreaks.length > 0 && (
+				<ul>
+					{report.ruleBreaks.map((group) => (
+						<li key={group.rule}>
+							<span>
+								{group.message}
+								{group.teams.length > 0 && <small> {group.teams.join(', ')}</small>}
+							</span>
+							<button type="button" className="schedule-panel-section-action" onClick={() => onShowEntries(group.entryIds)}>
+								Show
+							</button>
+						</li>
+					))}
+				</ul>
+			)}
+			{otherWarnings.length > 0 && (
+				<ul>
+					{otherWarnings.map((warning) => (
+						<li key={warning}>
+							<span>{warning}</span>
+						</li>
+					))}
+				</ul>
+			)}
 		</div>
 	);
 }

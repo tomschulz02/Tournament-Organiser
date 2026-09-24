@@ -11,6 +11,9 @@ import {
 	formatResult,
 	setsWon,
 	setScores,
+	orderedStages,
+	PRELIMINARY_STAGE,
+	PLAYOFFS_STAGE,
 } from '../src/components/tournament/fixtureUtils';
 
 function filters(overrides = {}) {
@@ -269,5 +272,84 @@ describe('setScores', () => {
 		['a non-array', 'not a result'],
 	])('returns null for %s', (_label, value) => {
 		expect(setScores(value)).toBeNull();
+	});
+});
+
+describe('fixture stages', () => {
+	// Two divisions with different depths of knockout, so the order has to come
+	// from each round's distance to the final rather than from one division.
+	const divisions = [
+		{
+			id: 'd1',
+			name: 'Open',
+			state: {
+				rounds: [
+					{ name: 'Pool Play', type: 'roundRobin' },
+					{ name: 'Quarterfinals', type: 'knockout' },
+					{ name: 'Semifinals', type: 'knockout' },
+					{ name: 'Finals', type: 'knockout' },
+				],
+			},
+			fixtures: [
+				{ id: 'fin', match_no: 1, division_id: 'd1', round: 'Finals' },
+				{ id: 'bronze', match_no: 2, division_id: 'd1', round: '3rd Place Playoff' },
+				{ id: 'p5', match_no: 3, division_id: 'd1', round: 'Semifinals · Places 5-8' },
+				{ id: 'sf', match_no: 4, division_id: 'd1', round: 'Semifinals' },
+				{ id: 'qf', match_no: 5, division_id: 'd1', round: 'Quarterfinals' },
+				{ id: 'poolA', match_no: 6, division_id: 'd1', round: 'Pool Play · Pool A', pool: 'Pool A' },
+				{ id: 'poolB', match_no: 7, division_id: 'd1', round: 'Pool Play · Pool B', pool: 'Pool B' },
+			],
+		},
+		{
+			id: 'd2',
+			name: 'League',
+			state: {
+				rounds: [
+					{ name: 'Round Robin (Leg 1)', type: 'roundRobin' },
+					{ name: 'Round Robin (Leg 2)', type: 'roundRobin' },
+					{ name: 'Finals', type: 'knockout' },
+				],
+			},
+			fixtures: [
+				{ id: 'leg1', match_no: 8, division_id: 'd2', round: 'Round Robin (Leg 1)' },
+				{ id: 'leg2', match_no: 9, division_id: 'd2', round: 'Round Robin (Leg 2)' },
+				{ id: 'd2fin', match_no: 10, division_id: 'd2', round: 'Finals' },
+			],
+		},
+	];
+	const fixtures = flattenFixtures(divisions);
+	const stageOf = (id) => fixtures.find((f) => f.id === id).stage;
+
+	it('puts every pool and round-robin leg in the Preliminary Round', () => {
+		expect(['poolA', 'poolB', 'leg1', 'leg2'].map(stageOf)).toEqual(Array(4).fill(PRELIMINARY_STAGE));
+	});
+
+	it('puts every placement match in the Playoffs', () => {
+		expect(['bronze', 'p5'].map(stageOf)).toEqual([PLAYOFFS_STAGE, PLAYOFFS_STAGE]);
+	});
+
+	it('keeps knockout rounds under their own name', () => {
+		expect(['qf', 'sf', 'fin', 'd2fin'].map(stageOf)).toEqual(['Quarterfinals', 'Semifinals', 'Finals', 'Finals']);
+	});
+
+	it('orders the stages the way the tournament runs, not by match number', () => {
+		expect(orderedStages(fixtures)).toEqual([PRELIMINARY_STAGE, 'Quarterfinals', 'Semifinals', 'Finals', PLAYOFFS_STAGE]);
+	});
+
+	it('places a round no division names after the knockouts, before the playoffs', () => {
+		const unknown = flattenFixtures([
+			{ id: 'd', name: 'D', state: { rounds: [] }, fixtures: [
+				{ id: 'x', match_no: 1, division_id: 'd', round: '3rd Place Playoff' },
+				{ id: 'y', match_no: 2, division_id: 'd', round: 'Friendly' },
+			] },
+		]);
+
+		expect(orderedStages(unknown)).toEqual(['Friendly', PLAYOFFS_STAGE]);
+	});
+
+	it('filters by stage, so one choice covers every pool', () => {
+		const visible = fixtures.filter((fixture) => matchesFixtureFilters(fixture, filters({ round: PRELIMINARY_STAGE })));
+
+		expect(visible.map((f) => f.id)).toEqual(['poolA', 'poolB', 'leg1', 'leg2']);
 	});
 });

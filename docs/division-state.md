@@ -80,7 +80,22 @@ The meaning of `groups` depends on `type`:
 
 This is why knockout fixtures can be generated before the pool stage finishes: the
 matchups are expressed positionally and only resolve to teams once `results` is filled.
-Those pre-generated fixtures use `team_1_placeholder` / `team_2_placeholder` for display.
+Those pre-generated fixtures store `team_1_placeholder` / `team_2_placeholder` (`Rank N`).
+Since 2026-09-24 the view payload's display names `team1` / `team2` go one step further
+for a slot that a known match feeds. They read `Winner of #N` or `Loser of #N`, the same
+label the bracket draws, so the fixture list and the schedule show the crossovers.
+`labelFedSlots` in `tournamentViewFormatter.js` does it from the bracket's `sources`. A
+first-round slot that the bracket can pin to a pool position takes the bracket's name
+for it, `A1 (Rank 1)`. Any other slot whose feeder cannot be stated keeps the rank
+placeholder. The stored placeholder columns and `teams.team_N` are unchanged.
+
+A `roundRobin` round with more than one pool also names each fixture's pool in the view
+payload. `round` reads `Pool Play · Pool A`, the same `<round> · <label>` form placement
+matches use, and a new `pool` key holds `Pool A`. The pool is found from the pool array
+that holds `team_1`. `labelPools` applies it after standings, bracket and overview are
+built, because those match fixtures to `state.rounds` by name. Every client reader that
+needs a fixture's round strips the label with `roundHolding`. The stored `round` column
+is unchanged. A single-pool round is left as `Pool Play`.
 
 **A League division can have more than one `roundRobin` round.** Classic's Pool Play is
 always exactly one; League offers a "multiple legs" mode where each leg is its own round

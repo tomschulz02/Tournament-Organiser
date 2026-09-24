@@ -2,6 +2,7 @@ import express from 'express';
 import { tournamentController } from '../controllers/tournaments.controller.js';
 import { editorController } from '../controllers/editors.controller.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { searchLimiter } from '../middleware/rateLimit.js';
 
 const tournamentRouter = express.Router();
 tournamentRouter.use(express.json());
@@ -34,6 +35,10 @@ tournamentRouter.put('/:tournamentId/scoresheet-template', requireAuth, tourname
 // Organiser-only, all three — the service checks ownership. Adding and removing
 // take effect immediately; there is no invite step.
 tournamentRouter.get('/:tournamentId/editors', requireAuth, editorController.listEditors);
+// Suggestions for the add field: usernames only, previous collaborators first,
+// anyone else from a three-character prefix. Rate-limited per user, after
+// requireAuth so the limiter can key on who is asking.
+tournamentRouter.get('/:tournamentId/editors/search', requireAuth, searchLimiter, editorController.searchEditorCandidates);
 tournamentRouter.post('/:tournamentId/editors', requireAuth, editorController.addEditor);
 tournamentRouter.delete('/:tournamentId/editors/:userId', requireAuth, editorController.removeEditor);
 

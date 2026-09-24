@@ -123,6 +123,32 @@ server validates on write rather than relying on the client to have sent somethi
 | `dayStartTime` | string | `'09:00'` | `HH:MM`. First slot of the grid. |
 | `dayEndTime` | string | `'18:00'` | `HH:MM`. The grid stops before this. |
 | `slotMinutes` | integer | `30` | Row height of the grid, in minutes. **How the board is ruled, never how long a match is.** |
+| `generator` | generator object \| `null` | `null` | The rules and preferences the schedule was last generated with. Added 2026-09-24. `null` or absent means never generated; the panel shows the defaults. |
+
+#### Generator
+
+Written by the generator on every run and read back so the panel opens on the same
+rules. Stored as given, like the rest of `settings`. `normaliseGeneratorSettings` in
+`scheduleUtils.js` reads it key by key, so a missing key takes its default.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `fixtureDurationMinutes` | integer \| `null` | `null` | Match length. `null` falls back to `slotMinutes`. |
+| `restEnabled` | boolean | `true` | Whether a minimum rest applies at all. |
+| `restMinutes` | integer \| `null` | `null` | The minimum gap between a team's matches on one day. `null` falls back to the match length. |
+| `maxPerDayEnabled` | boolean | `false` | Whether a team's matches per day are capped. |
+| `maxMatchesPerDay` | integer | `3` | The cap, when enabled. |
+| `maxWaitEnabled` | boolean | `false` | Whether the longest wait applies. |
+| `maxWaitMinutes` | integer | `120` | The longest a team should wait between two of its matches on one day. |
+| `knockoutGapEnabled` | boolean | `false` | Whether knockout rounds wait for a break after the round before. |
+| `knockoutGapMinutes` | integer \| `null` | `null` | The break. `null` falls back to the match length. |
+| `fitAll` | boolean | `true` | Bend the rest and daily-limit rules where that is the only way to place a fixture. |
+| `allowOverrun` | boolean | `false` | Run past `dayEndTime` on the last day as a last resort. |
+| `spreadDays` | boolean | `false` | Share matches across days in proportion to their court time, instead of filling the first day first. |
+| `courtAffinity` | boolean | `true` | Prefer keeping a pool on one court. |
+| `groupDivisions` | boolean | `true` | Prefer keeping a court on one division. |
+| `assignOfficials` | boolean | `false` | Assign an officiating team per match after placement. |
+| `roundDurations` | object | `{}` | Round name → match length in minutes, for rounds that differ from `fixtureDurationMinutes`. Keyed by the round a fixture belongs to (`roundHolding`), so the 3rd place playoff takes `Finals` and `Semifinals · Places 5-8` takes `Semifinals`. Non-positive or unreadable values are dropped. |
 
 Settings describe the grid the organiser is looking at, not a constraint on entries — the
 server stores an entry outside them without complaint. Since 2026-08-13 the grid's axis is
@@ -203,87 +229,156 @@ earlier for a natural place to break: an empty slot row on the grid, the start o
 on the list. It never looks *later*, so a page is never longer than the estimate — a short
 page prints with blank space at the foot, a long one silently overflows.
 
-**The generator is stricter than the payload.** Everything it places lies inside the
-configured day and on a slot boundary, because it only ever builds candidate slots there —
-see Generation objectives below. Hand-placed entries and breaks are what the paragraph
-above is about.
+**The generator is stricter than the payload.** Everything it places starts when its
+court comes free: at the day's start, when the court's previous match ends, when a break
+ends, or when another court frees up. It also lies inside the configured day unless the organiser allowed an overrun.
+See Generation objectives below. The paragraph above is about hand-placed entries and
+breaks.
 
 ## Generation objectives
 
-Settled 2026-08-11, implemented 2026-08-13. This section is what
+Settled 2026-08-11 and implemented 2026-08-13. Revised 2026-09-24, when the rules became
+the organiser's to switch and bend. This section is what
 `tourganiser-ui/src/utils/scheduleGenerator.js` is judged against, and what any future
 change to it has to argue with. The generator stays in the client — see
-`docs/decisions.md`.
+`docs/decisions.md`. The organiser's choices are saved at `settings.generator` (see
+above).
 
-### Hard constraints
+### Rules that never bend
 
-Feasibility, not preference. A slot either satisfies all six or it is not a candidate,
-and none of them can be traded away for a better score on anything below.
+The server rejects any schedule that breaks one of these, so the generator never
+produces one, whatever the settings.
 
 1. **Court exclusivity.** No two entries overlap on one court on one day. An entry with
    `courtId: null` is a break spanning every court and blocks all of them.
 2. **Court division restriction.** A court whose `divisions` array is non-empty takes
-   only fixtures of those divisions. A fixture whose `division_id` is not in the array —
-   including one with no `division_id` at all — is not a candidate for that court. Absent
-   or empty means the court takes any division. The server enforces the same rule on
-   write.
+   only fixtures of those divisions. A fixture with no `division_id` is refused by any
+   restricted court.
 3. **Team exclusivity.** No team plays two matches at the same time.
 4. **Round order.** A fixture of round *n* in a division may not start before every
-   fixture of that division's earlier rounds has finished. The server enforces the same
-   rule on write; see `docs/tournament-rules.md`.
-5. **Rest.** A gap of at least `restMinutes` between the end of one of a team's matches
-   and the start of the next, on the same day, checked in both directions. A team never
-   plays back to back.
-
-   `restMinutes` is a generation input in its own right, alongside the fixture duration,
-   and defaults to the fixture duration when nothing is asked for — which is what the rule
-   always came out at while it was expressed as a multiple of the match length. It stopped
-   being expressed that way on 2026-09-10: with the grid no longer tied to the match
-   length, "one slot of rest" named a unit that no longer existed.
-6. **Day bounds.** Every entry lies within the configured `dayStartTime` and `dayEndTime`.
+   fixture of that division's earlier rounds has finished. The generator is stricter than
+   the server here: it places no fixture of a round until **every** fixture of the earlier
+   rounds has been placed. A knockout round is left out rather than scheduled ahead of a
+   pool match that could not be placed.
 
 A team is only a team when the fixture names one. An unbound knockout slot carries a
 placeholder — `Rank 1`, `TBD` — and constrains nothing, which is how the server's
-validator treats a null `team_1`. Two semifinals both waiting on the pools are not the
-same team and must be free to run at once. Where the payload carries team ids they are
-used; where it does not, the name is used, and either way the key is scoped to the
-division, because two divisions may both have a "Team A".
+validator treats a null `team_1`. Where the payload carries team ids they are used;
+where it does not, the name is used, and either way the key is scoped to the division.
 
-### Objectives, in priority order
+### The organiser's rules
 
-1. **Minimise the finish time.** The venue is booked for a window; compactness wins.
-2. **Maximise rest** beyond the hard minimum, where it costs nothing above.
-3. **Minimise division changeovers.** A division need not be strictly contiguous, but a
-   court should switch between divisions as seldom as possible.
-4. **Court affinity for pools.** Last and least — nice when it is free.
+Each can be switched on or off.
 
-### The algorithm is lexicographic, not weighted
+5. **Minimum rest** (`restEnabled`, `restMinutes`). A gap of at least `restMinutes`
+   between the end of one of a team's matches and the start of the next, on the same day,
+   measured on both sides. Defaults to one match length, which is what the rule always
+   came out at.
+6. **Daily limit** (`maxPerDayEnabled`, `maxMatchesPerDay`). No team plays more than
+   this many matches on one day. Off by default.
+7. **Break before knockout rounds** (`knockoutGapEnabled`, `knockoutGapMinutes`). A
+   knockout round (`type: 'knockout'` in `state.rounds`) may not start until this long
+   after the latest end of its division's earlier rounds on the same day. A round that
+   ended the day before has had the night. This is the rest that rule 5 can't give,
+   because knockout teams are unbound until the round before has been played. Off by
+   default.
+8. **Longest wait** (`maxWaitEnabled`, `maxWaitMinutes`). The most time a team should
+   wait between two of its matches on the same day. Unlike the others, it never refuses a
+   placement, because refusing would only lengthen the wait. A team that would run over
+   the limit if its match waited one more match length is played first. A wait that still
+   runs over is reported. Off by default.
+9. **Day bounds.** Every entry lies within `dayStartTime` and `dayEndTime`. This rule
+   can't be switched off, but `allowOverrun` lets it bend as a last resort (below).
 
-Two candidate slots are compared on the first objective; only where they tie is the
-second consulted, and so on, ending in a total tiebreak so that two genuinely equivalent
-slots always resolve the same way. Generation is deterministic: the same input produces
-the same schedule.
+### Bending to fit every fixture
 
-This is deliberate, and it is the whole point of the 2026-08-13 rewrite. The generator it
-replaced summed weights — court affinity `+180` against earliness `-2` per slot index —
-so ninety slots of delay cost exactly one affinity bonus and a pool match could be pushed
-hours later to stay on its court. Nobody could have justified those numbers, and nobody
-could predict what changing one would do. A weighted sum needs numbers that compose; a
-priority order needs only an order.
+With `fitAll` on, rules 5, 6 and 7 may bend where that is the only way to place a fixture,
+and as little as possible:
 
-Because the first objective is the slot's start instant and slots are of fixed size,
-compactness falls out of the structure rather than being scored: take the earliest
-feasible time, then choose among the courts free at that time using the objectives below
-it.
+- **A bend only fills a court that would otherwise stand idle.** A match that satisfies
+  every rule always wins the court over one that doesn't.
+- **A bend happens only once time is running out.** Slack is the free court time left
+  minus the matches still to place. It never rises during a pass: placing a match leaves
+  it unchanged and an idle court lowers it. A bend is allowed only once slack falls below
+  a margin, so bends collect at the tail of the schedule. The generator tries a range of
+  margins (0, 1, 2, 4, … and finally "always") and keeps the best result.
+- **Bends are spread across teams.** Each bend costs one more than the last bend for the
+  same team. Three teams each playing back to back once is preferred to one team playing
+  three in a row.
 
-### Under capacity, leave fixtures unplaced
+Results are ranked by: most fixtures placed, then the least overrun, then the lowest
+bend cost, then the fewest bends for any single team, then the earliest finish. A
+strict pass that places everything ends the search at once, with nothing bent.
 
-A fixture with no feasible slot goes to `unscheduledFixtures` and the schedule is returned
-without it. No hard constraint is relaxed to make it fit. A tight tournament will
-therefore report fixtures that an earlier generator would have placed back to back — that
-is the intended trade, and the warning names the constraint that blocked it rather than
-blaming capacity for everything, so an organiser knows whether to add a court, extend the
-day, or shorten matches.
+**Overrun** (`allowOverrun`) is tried only when bending can't place everything. It adds
+slots after `dayEndTime` on the **last enabled day only**, one at a time, and stops as
+soon as everything fits or the day reaches 23:59. An entry past `dayEndTime` is listed
+beneath the board's grid, as any entry outside the day is.
+
+Every bend is returned in the generator's `report.ruleBreaks`, grouped by rule with
+the entries and teams involved, and shown to the organiser after generating.
+
+### How a schedule is built
+
+The generator works like a person with a whiteboard. It walks the day from the first
+slot to the last, decides which matches play at each time, then which court each goes
+on.
+
+**Court clocks.** Each court keeps its own clock from `dayStartTime`. The walk always
+takes the earliest clock, together with every court free at that same minute, and fills
+those courts. A court then moves on by the length of the match it was given, which is
+the round's own length where `roundDurations` sets one. A court left with nothing moves
+to the next moment something could change: another court coming free, or one shortest
+remaining match length later. When every round has the same length, this is exactly a
+fixed run of slots one match length apart.
+
+A break closes the court until it ends, and the court restarts the moment the break ends,
+not at the next multiple of the match length. A lunch break ending at 12:45 loses no time
+to a 13:00 restart. A break spanning every court restarts all courts together. A break on
+one court moves only that court, so courts can run to different clocks. The slack and
+the day-spreading share are counted in matches of the default length, an estimate once
+lengths differ.
+
+**Which matches play now.** A match is a candidate when it is ready (rule 4), neither
+team is busy, and a free court accepts its division. Order within a round is free, so
+the generated fixture order counts only as the final tiebreak. Candidates are compared
+lexicographically:
+
+1. Bend cost. A match needing no bend always comes first.
+2. Overdue first: a match whose team would otherwise run over the longest wait.
+3. **Urgency**, highest first: the busiest team's remaining matches, plus the knockout
+   rounds of the division still to follow. Those teams set the finishing time.
+4. Whichever match's teams have waited longest since they last played, which spreads
+   rest evenly.
+5. Fixture order.
+
+Division is not a key. Two divisions sharing a court interleave whenever that finishes
+sooner, for example one division's match fills the court while the other's teams rest.
+
+**Which court.** Only preferences decide, each applied when switched on and in this order:
+
+1. Keep the court on the division it was already running (`groupDivisions`). 0 continues,
+   1 an idle court, 2 a changeover.
+2. Keep a pool on the court it started on (`courtAffinity`).
+3. A court reserved for this division before an open one, so the open one stays free
+   for anyone.
+4. Court order.
+
+**Spreading across days** (`spreadDays`). Each day but the last takes, at most, its
+share of the matches still to place, in proportion to its court time. The last day takes
+whatever remains. If spreading costs a fixture its place, the generator uses the
+unspread schedule instead.
+
+The priority is still lexicographic, not weighted. The one number, the escalating bend
+cost, counts bends. It is not traded against time. Generation is deterministic: the same
+input produces the same schedule.
+
+### When fixtures are still left out
+
+A fixture that can't be placed goes to `unscheduledFixtures`. The warning names the
+constraint that kept a court idle when the fixture could have used it: division,
+daily limit, rest, round order, team clash, or capacity. A refusal while another match
+filled the court anyway is not counted. Capacity was the real reason there.
 
 ## What the server validates
 

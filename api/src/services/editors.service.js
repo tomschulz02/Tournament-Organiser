@@ -63,6 +63,47 @@ async function removeEditor(tournamentId, userId, editorId) {
     return { id: editorId };
 }
 
+// Suggestions for the "Add an editor" field. Usernames only, and never an email —
+// an address is still accepted by addEditor, but only typed out in full, so this
+// cannot be used to discover who is registered. See docs/decisions.md.
+//
+// People the organiser has worked with come first and are offered from the first
+// keystroke, since they are already known to them. Everyone else needs a prefix
+// of SEARCH_MIN_LENGTH characters, and the route is rate-limited on top.
+export const SEARCH_MIN_LENGTH = 3;
+export const SEARCH_LIMIT = 5;
+
+async function searchCandidates(tournamentId, userId, query) {
+    await loadOwnedTournament(tournamentId, userId);
+
+    const text = typeof query === "string" ? query.trim().toLowerCase() : "";
+    // Longer than any username can be, so nothing could match.
+    if (text.length > 100) {
+        return [];
+    }
+
+    const pattern = text ? `${escapeLike(text)}%` : null;
+    const workedWith = await editorsRepository.getWorkedWith(userId, tournamentId, pattern, SEARCH_LIMIT);
+
+    let others = [];
+    if (text.length >= SEARCH_MIN_LENGTH && workedWith.length < SEARCH_LIMIT) {
+        const known = new Set(workedWith.map((user) => user.id));
+        const found = await editorsRepository.searchByUsernamePrefix(userId, tournamentId, pattern, SEARCH_LIMIT + workedWith.length);
+        others = found.filter((user) => !known.has(user.id)).slice(0, SEARCH_LIMIT - workedWith.length);
+    }
+
+    // No ids leave the server: the username is all the client needs to add them.
+    return [
+        ...workedWith.map((user) => ({ username: user.username, workedWith: true })),
+        ...others.map((user) => ({ username: user.username, workedWith: false }))
+    ];
+}
+
+// The typed text is data, not a pattern: a % or _ in it matches itself.
+function escapeLike(text) {
+    return text.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
 // requireAuth proves the caller is logged in. This proves the tournament is
 // theirs — the same check tournaments.service.js's loadOwnedTournament makes.
 async function loadOwnedTournament(tournamentId, userId) {
@@ -85,5 +126,8 @@ function toEditor(row) {
 export const editorService = {
     listEditors,
     addEditor,
-    removeEditor
+    removeEditor,
+    searchCandidates
 };
+
+export { escapeLike };

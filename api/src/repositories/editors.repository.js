@@ -61,7 +61,62 @@ async function removeEditor(tournamentId, userId) {
     }
 }
 
+// Candidates for the "Add an editor" suggestions. Both queries leave out the
+// organiser and anyone already an editor of this tournament, return id and
+// username only — never an email — and are capped by the caller.
+//
+// `pattern` is a lower-cased LIKE prefix the service has already escaped, or
+// null for no filter.
+
+// People the organiser has worked with: their editors on any of their
+// tournaments, and the organisers of tournaments they edit. Nothing here is new
+// to the caller, which is why it may be shown before anything is typed.
+async function getWorkedWith(userId, tournamentId, pattern, limit) {
+    try {
+        const sql = `
+            SELECT u.id, u.username
+            FROM users u
+            WHERE u.id IN (
+                SELECT e.user_id FROM tournament_editors e
+                JOIN tournaments t ON t.id = e.tournament_id
+                WHERE t.created_by = $1::uuid
+                UNION
+                SELECT t.created_by FROM tournament_editors e
+                JOIN tournaments t ON t.id = e.tournament_id
+                WHERE e.user_id = $1::uuid
+            )
+            AND u.id <> $1::uuid
+            AND u.id NOT IN (SELECT user_id FROM tournament_editors WHERE tournament_id = $2::uuid)
+            AND ($3::text IS NULL OR lower(u.username) LIKE $3 ESCAPE '\\')
+            ORDER BY lower(u.username)
+            LIMIT $4`;
+        return await db.query(sql, [userId, tournamentId, pattern, limit]);
+    } catch (err) {
+        throw new Error("Failed to fetch previous collaborators", { cause: err });
+    }
+}
+
+// Any user whose username starts with the pattern. A prefix, not a substring,
+// so the list cannot be swept any faster than one prefix at a time.
+async function searchByUsernamePrefix(userId, tournamentId, pattern, limit) {
+    try {
+        const sql = `
+            SELECT u.id, u.username
+            FROM users u
+            WHERE lower(u.username) LIKE $3 ESCAPE '\\'
+            AND u.id <> $1::uuid
+            AND u.id NOT IN (SELECT user_id FROM tournament_editors WHERE tournament_id = $2::uuid)
+            ORDER BY lower(u.username)
+            LIMIT $4`;
+        return await db.query(sql, [userId, tournamentId, pattern, limit]);
+    } catch (err) {
+        throw new Error("Failed to search users", { cause: err });
+    }
+}
+
 export const editorsRepository = {
+    getWorkedWith,
+    searchByUsernamePrefix,
     getEditors,
     isEditor,
     addEditor,

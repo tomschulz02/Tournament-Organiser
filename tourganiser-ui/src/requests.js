@@ -302,6 +302,12 @@ export const updateTournamentScoresheetTemplate = (tournamentId, scoresheetTempl
 // to accept. `identifier` is an email or a username.
 export const getTournamentEditors = (tournamentId) => request(`tournaments/${tournamentId}/editors`);
 
+// Suggestions for the add field: `[{ username, workedWith }]`, people the
+// organiser has worked with first. Usernames only — an email is never suggested
+// and has to be typed in full. Rate-limited server-side.
+export const searchEditorCandidates = (tournamentId, query) =>
+	request(`tournaments/${tournamentId}/editors/search?q=${encodeURIComponent(query)}`);
+
 export const addTournamentEditor = (tournamentId, identifier) =>
 	request(`tournaments/${tournamentId}/editors`, { method: 'POST', body: { identifier } });
 

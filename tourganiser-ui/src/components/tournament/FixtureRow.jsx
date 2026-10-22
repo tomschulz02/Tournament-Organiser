@@ -28,8 +28,11 @@ export default function FixtureRow({
 	// fixture someone is recorded as scoring — the server sends nothing otherwise,
 	// so there is no empty line to suppress here.
 	const enteredBy = enteredByLabel(fixture.enteredBy);
-	const sets = setsWon(fixture.result);
-	const scores = setScores(fixture.result);
+	// A cancelled match was never played. Cancelling stores a single 0-0 set, a
+	// convention rather than a score, so it shows no score at all.
+	const result = fixture.status === 'CANCELLED' ? null : fixture.result;
+	const sets = setsWon(result);
+	const scores = setScores(result);
 
 	// The unscheduled state has no court and no officials, so the left column
 	// holds two lines rather than three. That is not missing data and gets no

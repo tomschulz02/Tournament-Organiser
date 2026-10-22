@@ -145,15 +145,15 @@ describe("app wiring", () => {
         expect(response.headers["access-control-allow-methods"]).toContain("POST");
     });
 
-    it("accepts a urlencoded body", async () => {
-        vi.mocked(userService.loginUser).mockResolvedValue("signed-token");
-
+    // The API is JSON-only. A urlencoded parser is how a cross-site form would
+    // deliver a body, so there is none; see app.csrf.test.js.
+    it("refuses a urlencoded body", async () => {
         const response = await request(app)
             .post("/api/users/login")
             .type("form")
             .send("email=tom@example.com&password=secret");
 
-        expect(response.status).toBe(200);
-        expect(userService.loginUser).toHaveBeenCalledWith("tom@example.com", "secret");
+        expect(response.status).toBe(415);
+        expect(userService.loginUser).not.toHaveBeenCalled();
     });
 });

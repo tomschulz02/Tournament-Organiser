@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 const { validateSchedule } = await import("../../../src/utils/scheduleValidator.js");
 const { makeFixture } = await import("../../helpers/fixtures.js");
+const { MAX_SCHEDULE_ENTRIES } = await import("../../../src/config/limits.js");
 
 // The validator is the only thing between the client and an arbitrary JSONB blob
 // in tournaments.schedule, so every rule in docs/schedule.md has a case here for
@@ -158,6 +159,37 @@ describe("validateSchedule — shape", () => {
         expect(() => validateSchedule({ entries: {} }, CONTEXT)).toThrowError(
             expect.objectContaining({ code: "SCHEDULE_MALFORMED" })
         );
+    });
+
+    // Checked before anything walks the entries, which is why these are not
+    // even entries: the count is refused before their shape is looked at.
+    it("refuses more entries than the cap, before checking any of them", () => {
+        expect(() => validateSchedule(schedule(Array(MAX_SCHEDULE_ENTRIES + 1).fill("x")), CONTEXT)).toThrowError(
+            expect.objectContaining({
+                code: "SCHEDULE_TOO_LARGE",
+                status: 400,
+                message: `A schedule can have at most ${MAX_SCHEDULE_ENTRIES} matches and breaks`
+            })
+        );
+    });
+
+    // Also the cost bound: the overlap checks are quadratic, and this is the
+    // largest schedule they will ever be asked to compare.
+    it("accepts exactly the cap", () => {
+        const half = MAX_SCHEDULE_ENTRIES / 2;
+        const time = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        const breaks = Array.from({ length: MAX_SCHEDULE_ENTRIES }, (_, index) =>
+            entry({
+                id: `break-${index}`,
+                type: "break",
+                fixtureId: null,
+                day: index < half ? "2026-09-12" : "2026-09-13",
+                startTime: time(index % half),
+                endTime: time((index % half) + 1)
+            })
+        );
+
+        expect(() => validateSchedule(schedule(breaks), CONTEXT)).not.toThrow();
     });
 
     it("refuses an entry that is not an object", () => {

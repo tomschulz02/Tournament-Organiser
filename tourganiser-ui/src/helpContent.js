@@ -341,6 +341,7 @@ export const HELP_TOPICS = {
 				heading: 'Saving, ending and cancelling',
 				paragraphs: [
 					'Save Score records what\'s entered so far without finishing the match — use this to update the score as it happens. End Match marks the match finished from the sets entered. Cancel Match records the match as cancelled rather than played, which counts for neither team in the standings.',
+					'A knockout match needs a winner, so End Match stays unavailable while the sets are level. If one team can\'t play, record the walkover as a winning score for the team that goes through. If neither team can play, use Cancel Match: neither team goes through, and the team due to meet the winner in the next round gets a walkover instead.',
 					'If the match is already finished, this screen instead offers Discard changes and Save changes, for correcting a result after the fact.',
 				],
 			},
@@ -365,7 +366,8 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Confirming',
 				paragraphs: [
-					'Reset to calculated appears once you\'ve changed anything, and puts the list back to the server\'s original order. Start Next Round confirms the current order and generates or binds the next round\'s fixtures — this is disabled until every slot is filled with no duplicates.',
+					'Reset to calculated appears once you\'ve changed anything, and puts the list back to the server\'s original order. Start Next Round confirms the current order and generates or binds the next round\'s fixtures — this is disabled while a team appears twice.',
+					'A place shown as No team was left empty by a cancelled knockout match: neither of its teams goes through, so whoever that place is drawn against gets a walkover, shown in the preview. You can leave it empty, or use the swap control to put a team that played the round into it.',
 				],
 			},
 		],

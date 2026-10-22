@@ -70,6 +70,7 @@ const { divisionService } = await import("../../../src/services/divisions.servic
 const { formatTournamentViewPayload } = await import("../../../src/utils/tournamentViewFormatter.js");
 const { validateSchedule } = await import("../../../src/utils/scheduleValidator.js");
 const { AppError } = await import("../../../src/errors.js");
+const { MAX_DIVISIONS_PER_TOURNAMENT } = await import("../../../src/config/limits.js");
 const { makeDivision, makeState, makeTournament } = await import("../../helpers/fixtures.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
 
@@ -171,6 +172,30 @@ describe("tournamentService.createTournament", () => {
         it("refuses a payload with no details, rather than throwing a TypeError", async () => {
             await expect(tournamentService.createTournament({ divisions: [] }, "user-1"))
                 .rejects.toMatchObject({ code: "MISSING_FIELDS", details: { field: "details" } });
+        });
+
+        // Each division is a run of sequential inserts on one client, so the
+        // count is a bound on how long one request can hold a connection.
+        it("refuses more than the division cap, before the transaction opens", async () => {
+            const divisions = Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT + 1 }, (_, index) => ({ name: `D${index}` }));
+
+            await expect(tournamentService.createTournament({ ...payload, divisions }, "user-1"))
+                .rejects.toMatchObject({
+                    code: "TOO_MANY_DIVISIONS",
+                    status: 400,
+                    message: `A tournament can have at most ${MAX_DIVISIONS_PER_TOURNAMENT} divisions`
+                });
+
+            expect(clientSql()).toEqual([]);
+            expect(divisionService.createDivision).not.toHaveBeenCalled();
+        });
+
+        it("accepts exactly the division cap", async () => {
+            tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
+            const divisions = Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT }, (_, index) => ({ name: `D${index}` }));
+
+            await expect(tournamentService.createTournament({ ...payload, divisions }, "user-1")).resolves.toBe("tour-1");
+            expect(divisionService.createDivision).toHaveBeenCalledTimes(MAX_DIVISIONS_PER_TOURNAMENT);
         });
     });
 
@@ -901,6 +926,11 @@ describe("tournamentService.addDivision", () => {
         teams: [{ name: "Aces" }, { name: "Bears" }]
     };
 
+    // The count read for the division cap. Empty unless a test is about the cap.
+    beforeEach(() => {
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([]);
+    });
+
     // The whole point of the function: it delegates to the same createDivision
     // createTournament calls, so a division added afterwards is indistinguishable
     // from one created with the tournament.
@@ -965,5 +995,30 @@ describe("tournamentService.addDivision", () => {
             .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
         expect(clientSql()).toEqual([]);
         expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("refuses a tournament that already holds the division cap", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(
+            Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT }, (_, index) => makeDivision({ id: `div-${index}` }))
+        );
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "TOO_MANY_DIVISIONS", status: 400 });
+        expect(divisionsRepository.getDivisionsByTournamentId).toHaveBeenCalledWith("tour-1");
+        expect(clientSql()).toEqual([]);
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("adds the division that reaches the cap", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(
+            Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT - 1 }, (_, index) => makeDivision({ id: `div-${index}` }))
+        );
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        expect(await tournamentService.addDivision("tour-1", "user-1", division)).toBe("div-9");
     });
 });

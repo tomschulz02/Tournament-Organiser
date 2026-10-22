@@ -5,7 +5,6 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { searchLimiter } from '../middleware/rateLimit.js';
 
 const tournamentRouter = express.Router();
-tournamentRouter.use(express.json());
 
 tournamentRouter.post('/create', requireAuth, tournamentController.createTournament);
 

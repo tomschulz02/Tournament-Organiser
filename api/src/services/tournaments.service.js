@@ -11,6 +11,7 @@ import { validateSchedule } from "../utils/scheduleValidator.js";
 import { AppError } from "../errors.js";
 import { assertText } from "../utils/validation.js";
 import { buildChangeKey } from "../utils/etag.js";
+import { MAX_DIVISIONS_PER_TOURNAMENT } from "../config/limits.js";
 
 const db = DatabaseConnection();
 
@@ -33,6 +34,10 @@ async function createTournament(tournamentData, userId) {
     assertText(details.location, "location", { max: TOURNAMENT_LOCATION_MAX });
     // description is the one nullable free-text column of the three.
     assertText(details.description, "description", { max: TOURNAMENT_DESCRIPTION_MAX, required: false });
+
+    if (tournamentData.divisions.length > MAX_DIVISIONS_PER_TOURNAMENT) {
+        throw new AppError("TOO_MANY_DIVISIONS");
+    }
 
     // One transaction for the whole creation: the tournament, its divisions,
     // their teams and their fixtures commit together or not at all.
@@ -219,6 +224,14 @@ async function addDivision(tournamentId, userId, division) {
 
     if (statusOf(tournament) !== "Not Started") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    // Read outside the transaction, so two adds racing at the cap can both pass.
+    // Accepted: the cap bounds the cost of a request, and one division over it
+    // is not the cost it exists to stop.
+    const existing = await divisionsRepository.getDivisionsByTournamentId(tournamentId);
+    if (existing.length >= MAX_DIVISIONS_PER_TOURNAMENT) {
+        throw new AppError("TOO_MANY_DIVISIONS");
     }
 
     return await db.withTransaction(async (client) =>

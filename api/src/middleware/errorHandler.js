@@ -1,5 +1,16 @@
 import { AppError } from "../errors.js";
 
+// JSON is UTF-8 by definition, so a body declaring any other charset is refused
+// the same way a body that is not JSON at all is, rather than as a fault. A
+// compression body-parser cannot undo gets a message of its own, since "send
+// JSON" would not tell the sender what was wrong.
+const BODY_PARSER_ERRORS = new Map([
+	["entity.parse.failed", "MALFORMED_JSON"],
+	["entity.too.large", "PAYLOAD_TOO_LARGE"],
+	["charset.unsupported", "UNSUPPORTED_MEDIA_TYPE"],
+	["encoding.unsupported", "UNSUPPORTED_CONTENT_ENCODING"]
+]);
+
 // The single place a failure becomes a response, and the single place a failure
 // is logged. Nothing below this line in the stack catches, so the cause chain
 // arrives here intact.
@@ -13,10 +24,11 @@ export function errorHandler(err, req, res, next) {
 		return next(err);
 	}
 
-	// body-parser rejects an unparseable body with a SyntaxError carrying this
-	// type. It is a client mistake rather than a fault, so it earns a 400 rather
-	// than the generic 500 below.
-	const failure = err.type === "entity.parse.failed" ? new AppError("MALFORMED_JSON", { cause: err }) : err;
+	// body-parser rejects an unparseable, over-size or wrongly encoded body with
+	// an error carrying one of these types. All are client mistakes rather than
+	// faults, so they earn a 4xx rather than the generic 500 below.
+	const parserCode = BODY_PARSER_ERRORS.get(err.type);
+	const failure = parserCode ? new AppError(parserCode, { cause: err }) : err;
 
 	// An expected domain failure. It is part of the contract, so its message is
 	// safe to return and there is nothing to log.

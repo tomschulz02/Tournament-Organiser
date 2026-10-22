@@ -413,6 +413,9 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
                 result: fixture?.result || [],
                 winner: determineFixtureWinner(fixture),
                 isPlacementMatch: fixture?.round === "3rd Place Playoff" || placement.has(groupIndex),
+                // Spread like placementRanks below, so an ordinary match keeps its
+                // shape. The client labels the match and its empty side from this.
+                ...(isWalkover(fixture) ? { walkover: true } : {}),
                 // Spread conditionally so a match that decides no placement —
                 // every match of a division without them — keeps its shape.
                 ...(placement.get(groupIndex)?.ranks ? { placementRanks: placement.get(groupIndex).ranks } : {})
@@ -522,6 +525,12 @@ function resolveByeTeam(index, previousRound, teamLookup) {
     }
 
     const teamId = previousRound.previousResults?.[entry];
+    // Null, unlike a missing entry, is a place a cancelled match left empty.
+    // Nobody is there, and walking further back would name someone who is not.
+    if (teamId === null) {
+        return null;
+    }
+
     if (teamId) {
         const team = teamLookup.get(teamId);
         return team ? { id: team.id, name: team.name, placeholder: null } : null;
@@ -536,6 +545,11 @@ function resolveByeTeam(index, previousRound, teamLookup) {
 // to a pool position reads "A1 (Rank 1)". Any other slot keeps its "Rank N"
 // label, and a bound team always wins. Only team1/team2, the display names,
 // change: team_N_placeholder keeps the stored "Rank N" and teams keeps its shape.
+//
+// The empty side of a walkover is nobody, so it says so rather than naming the
+// match that would have fed it.
+const WALKOVER_SIDE = "No team (walkover)";
+
 function labelFedSlots(fixtures, bracket) {
     const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
 
@@ -553,7 +567,9 @@ function labelFedSlots(fixtures, bracket) {
                     return;
                 }
 
-                if (source?.matchNo != null) {
+                if (match.walkover) {
+                    fixture[`team${side}`] = WALKOVER_SIDE;
+                } else if (source?.matchNo != null) {
                     fixture[`team${side}`] = `${source.outcome === "LOSER" ? "Loser" : "Winner"} of #${source.matchNo}`;
                 } else if (!source && participant.name) {
                     fixture[`team${side}`] = participant.name;
@@ -832,7 +848,25 @@ function teamsEliminatedIn(round, stateRound, fixtures, seedIndex, teamLookup) {
         .map((teamId) => teamLookup.get(teamId))
         .filter(Boolean);
 
-    return { note: round.name, participants: orderEliminatedTeams(losers, fixtures, seedIndex) };
+    // A team whose match here was cancelled — a double forfeit — went out
+    // without playing, so it ranks below every team that played and lost.
+    // Ordered among themselves by their earlier matches, it would otherwise
+    // climb above them on the strength of a pool win.
+    const forfeited = new Set(
+        round.matches
+            .filter((match) => match.status === "CANCELLED")
+            .flatMap((match) => match.participants)
+            .map((participant) => participant.id)
+            .filter(Boolean)
+    );
+
+    return {
+        note: round.name,
+        participants: [
+            ...orderEliminatedTeams(losers.filter((team) => !forfeited.has(team.id)), fixtures, seedIndex),
+            ...orderEliminatedTeams(losers.filter((team) => forfeited.has(team.id)), fixtures, seedIndex)
+        ]
+    };
 }
 
 // Teams eliminated in the same round are tied on elimination and are separated by
@@ -1105,7 +1139,23 @@ function resolveParticipant(value, teamLookup, fallbackPlaceholder = null, poolC
 }
 
 function determineFixtureWinner(fixture) {
-    if (!fixture || fixture.status !== "COMPLETED" || !Array.isArray(fixture.result) || fixture.result.length === 0) {
+    if (!fixture) {
+        return null;
+    }
+
+    // A walkover's one team went through; a cancelled match between two teams
+    // sent neither on. The same reading as matchOutcome in progression.service.js.
+    if (fixture.status === "CANCELLED") {
+        if (!isWalkover(fixture)) {
+            return null;
+        }
+
+        return fixture.team_1_id
+            ? { id: fixture.team_1_id, name: fixture.team1 }
+            : { id: fixture.team_2_id, name: fixture.team2 };
+    }
+
+    if (fixture.status !== "COMPLETED" || !Array.isArray(fixture.result) || fixture.result.length === 0) {
         return null;
     }
 
@@ -1129,8 +1179,17 @@ function determineFixtureWinner(fixture) {
         : { id: fixture.team_2_id, name: fixture.team2 };
 }
 
+// A knockout match bound one team short — a cancelled match before it sent
+// nobody to the other side — and so settled as cancelled when it was bound. See
+// bindFixturesToResults in progression.service.js.
+function isWalkover(fixture) {
+    return fixture?.status === "CANCELLED" && Boolean(fixture.team_1_id) !== Boolean(fixture.team_2_id);
+}
+
+// A walkover has a winner and nobody beaten: its other side is a placeholder,
+// which must never be ranked as the runner-up.
 function getFixtureLoser(match) {
-    if (!match || !match.winner || !Array.isArray(match.participants)) {
+    if (!match || !match.winner || match.status === "CANCELLED" || !Array.isArray(match.participants)) {
         return null;
     }
 

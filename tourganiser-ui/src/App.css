@@ -2134,6 +2134,21 @@ Score Update Modal styles
 	gap: var(--space-2);
 }
 
+/* Why End Match is unavailable on a knockout match with the sets level —
+   guidance rather than an error, so the secondary text colour. */
+.score-modal-note {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--secondary-text-color);
+	text-align: right;
+}
+
+@media (max-width: 768px) {
+	.score-modal-note {
+		text-align: left;
+	}
+}
+
 .cancel-btn,
 .cancel-match-btn,
 .save-btn,

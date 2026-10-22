@@ -540,6 +540,21 @@ describe("determineFixtureWinner", () => {
         expect(determineFixtureWinner({ ...completed, result: null })).toBeNull();
         expect(determineFixtureWinner({ ...completed, result: [] })).toBeNull();
     });
+
+    // A knockout match bound short of a team is stored as cancelled: a walkover,
+    // and the team in it went through — see bindFixturesToResults.
+    it("returns the only team in a cancelled match, which is a walkover", () => {
+        expect(determineFixtureWinner({ ...completed, status: "CANCELLED", team_1_id: null, team1: "Rank 3", result: [] }))
+            .toEqual({ id: "t2", name: "Bears" });
+        expect(determineFixtureWinner({ ...completed, status: "CANCELLED", team_2_id: null, team2: "Rank 6", result: [] }))
+            .toEqual({ id: "t1", name: "Aces" });
+    });
+
+    // Between two teams, cancelled means both forfeited and neither went through.
+    it("returns null for a cancelled match between two teams, or none", () => {
+        expect(determineFixtureWinner({ ...completed, status: "CANCELLED", result: [[0, 0]] })).toBeNull();
+        expect(determineFixtureWinner({ ...completed, status: "CANCELLED", team_1_id: null, team_2_id: null })).toBeNull();
+    });
 });
 
 describe("getFixtureLoser", () => {
@@ -558,6 +573,13 @@ describe("getFixtureLoser", () => {
 
     it("returns null when no participant differs from the winner", () => {
         expect(getFixtureLoser({ winner, participants: [winner, { id: "t1", name: "Aces" }] })).toBeNull();
+    });
+
+    // A walkover's other side is a placeholder, never a beaten team.
+    it("returns null for a walkover, whose other side is nobody", () => {
+        const placeholder = { id: null, name: "Rank 3", placeholder: "Rank 3" };
+
+        expect(getFixtureLoser({ status: "CANCELLED", winner, participants: [placeholder, winner] })).toBeNull();
     });
 });
 
@@ -1441,6 +1463,23 @@ describe("buildDivisionBracket", () => {
         expect(quarters.matches[0].participants[0]).toEqual({ id: "t1", name: "Aces", placeholder: null });
     });
 
+    // A committed null is a place a cancelled match left empty, unlike an entry
+    // not yet written. Walking back past it would name t1, who is not there.
+    it("names nobody on a bye whose place a cancelled match left empty", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({ name: "Pool Play", results: ["t1", "t2", "t3"] }),
+                makeRound({ name: "Round B", type: "knockout", groups: [[0], [1, 2]], results: [null, "t2", "t3"] }),
+                makeRound({ name: "Round C", type: "knockout", groups: [[0], [1, 2]] }),
+                makeRound({ name: "Quarterfinals", type: "knockout", groups: [[0, 1]] })
+            ]
+        });
+
+        const quarters = buildDivisionBracket(state, [], teamLookup).rounds[2];
+
+        expect(quarters.matches[0].participants[0]).toMatchObject({ id: null });
+    });
+
     it("labels both slots of a two-team knockout stage, bronze included", () => {
         // docs/tournament-rules.md: a two-team knockout still consumes four ranks.
         const state = makeState({
@@ -1514,6 +1553,37 @@ describe("buildFinalStandings", () => {
             { rank: 2, team_id: "t2", name: "Bears", note: "Runner-up" },
             { rank: 3, team_id: "t3", name: "Cubs", note: "Third Place" },
             { rank: 4, team_id: "t4", name: "Ducks", note: "Fourth Place" }
+        ]);
+    });
+
+    // A semifinal cancelled as a double forfeit leaves the final and the playoff
+    // each a walkover. The team in each goes through, and nobody is ranked behind
+    // it — its other side is a placeholder, not a beaten team.
+    it("crowns the team in a walkover final and ranks no runner-up behind it", () => {
+        const vacant = (name) => ({ id: null, name, placeholder: name });
+        const bracket = {
+            rounds: [{
+                name: "Finals",
+                matches: [
+                    {
+                        round: "3rd Place Playoff",
+                        status: "CANCELLED",
+                        participants: [vacant("Rank 3"), { id: "t3", name: "Cubs" }],
+                        winner: { id: "t3", name: "Cubs" }
+                    },
+                    {
+                        round: "Finals",
+                        status: "CANCELLED",
+                        participants: [vacant("Rank 1"), { id: "t2", name: "Bears" }],
+                        winner: { id: "t2", name: "Bears" }
+                    }
+                ]
+            }]
+        };
+
+        expect(buildFinalStandings({ division, fixtures: completeFixtures, standings: [], bracket, teams: [] })).toEqual([
+            { rank: 1, team_id: "t2", name: "Bears", note: "Champion" },
+            { rank: 3, team_id: "t3", name: "Cubs", note: "Third Place" }
         ]);
     });
 
@@ -1789,6 +1859,58 @@ describe("buildFinalStandings", () => {
             { rank: 6, team_id: "t7", name: "Team 7", note: "Quarterfinals" },
             { rank: 7, team_id: "t5", name: "Team 5", note: "Quarterfinals" },
             { rank: 8, team_id: "t8", name: "Team 8", note: "Quarterfinals" }
+        ]);
+    });
+
+    // Found testing review 4.1 live. Quarterfinal 1 (t1 v t8) was cancelled, a
+    // double forfeit: both are out, with empty places in the round's results and
+    // the two teams after the losers. Separated by their earlier matches alone,
+    // t1 — with a win behind it — ranked above three teams that played their
+    // quarterfinals and lost. A forfeit now ranks below every loss in the round.
+    it("ranks the teams out of a cancelled quarterfinal below the teams that lost theirs", () => {
+        const state = makeState({
+            rounds: [
+                makeRound({
+                    name: "Quarterfinals", type: "knockout",
+                    results: [null, "t2", "t3", "t4"],
+                    computedResults: [null, "t2", "t3", "t4", null, "t7", "t6", "t5", "t1", "t8"]
+                }),
+                makeRound({ name: "Semifinals", type: "knockout" })
+            ]
+        });
+        const fixtures = [
+            played("r16", 0, "t1", "t9", [[21, 5], [21, 5]]),
+            { id: "qf1", match_no: 1, status: "CANCELLED", team_1_id: "t1", team_2_id: "t8", result: [[0, 0]] },
+            played("qf2", 2, "t2", "t7", [[21, 19], [21, 19]]),
+            played("qf3", 3, "t3", "t6", [[21, 19], [19, 21], [21, 19]]),
+            played("qf4", 4, "t4", "t5", [[21, 15], [21, 15]]),
+            stillToPlay
+        ];
+        const bracket = {
+            rounds: [
+                {
+                    name: "Quarterfinals",
+                    roundIndex: 0,
+                    matches: [
+                        { id: "qf1", round: "Quarterfinals", status: "CANCELLED", participants: [{ id: "t1" }, { id: "t8" }], winner: null },
+                        decided("qf2", "t2", "t7", "t2"),
+                        decided("qf3", "t3", "t6", "t3"),
+                        decided("qf4", "t4", "t5", "t4")
+                    ]
+                },
+                {
+                    name: "Semifinals",
+                    roundIndex: 1,
+                    matches: [{ id: "sf1", round: "Semifinals", status: "CANCELLED", participants: [{ id: null, name: "Rank 1" }, { id: "t4" }], winner: { id: "t4" } }]
+                },
+                { name: "Finals", matches: [{ id: "gold", round: "Finals", participants: [{ id: null }, { id: null }], winner: null }] }
+            ]
+        };
+
+        const ranked = buildFinalStandings({ division, state, fixtures, standings: [], bracket, teams: eightTeams() });
+
+        expect(ranked.map((row) => [row.rank, row.team_id])).toEqual([
+            [4, "t6"], [5, "t7"], [6, "t5"], [7, "t1"], [8, "t8"]
         ]);
     });
 
@@ -2626,6 +2748,38 @@ describe("formatDivisionPayload", () => {
         const gold = formatDivisionPayload({ division, teams, fixtures }).fixtures.find((fixture) => fixture.id === "gold");
 
         expect([gold.team1, gold.team2]).toEqual(["Aces", "Winner of #2"]);
+    });
+
+    // A semifinal cancelled as a double forfeit sends nobody to the final, which
+    // is bound one team short and settled as cancelled: a walkover. Its empty side
+    // is nobody, not the match that would have fed it.
+    it("marks a walkover and names its empty side as nobody", () => {
+        const teams = [makeTeam({ id: "t1", name: "Aces" }), makeTeam({ id: "t2", name: "Bears" }), makeTeam({ id: "t3", name: "Cubs" })];
+        const division = makeDivision({
+            state: makeState({
+                teams: ["t1", "t2", "t3"],
+                rounds: [
+                    makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]] }),
+                    makeRound({ name: "Finals", type: "knockout", groups: [[0, 1]] })
+                ]
+            })
+        });
+        const fixtures = [
+            makeFixture({ id: "sf1", match_no: 1, round: "Semifinals", status: "COMPLETED", team_1: "t1", team_2: "t3", team_1_result: [25], team_2_result: [20] }),
+            makeFixture({ id: "sf2", match_no: 2, round: "Semifinals", status: "CANCELLED", team_1: "t2", team_2: "t3", team_1_result: [0], team_2_result: [0] }),
+            makeFixture({ id: "gold", match_no: 3, round: "Finals", status: "CANCELLED", team_1: "t1", team_2: null, team_2_placeholder: "Rank 2" })
+        ];
+
+        const payload = formatDivisionPayload({ division, teams, fixtures });
+        const gold = payload.fixtures.find((fixture) => fixture.id === "gold");
+        const [semis, finals] = payload.bracket.rounds;
+
+        expect([gold.team1, gold.team2]).toEqual(["Aces", "No team (walkover)"]);
+        expect(finals.matches[0]).toMatchObject({ walkover: true, winner: { id: "t1", name: "Aces" } });
+        // The double forfeit itself is cancelled, not a walkover: nobody went through.
+        expect(semis.matches[1]).not.toHaveProperty("walkover");
+        expect(semis.matches[1].winner).toBeNull();
+        expect(semis.matches[0]).not.toHaveProperty("walkover");
     });
 
     it("treats fixtures with no match number as first", () => {

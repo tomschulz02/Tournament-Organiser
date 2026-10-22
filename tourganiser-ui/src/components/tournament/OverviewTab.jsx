@@ -650,7 +650,8 @@ function FixturePreviewList({ title, fixtures, emptyMessage, divisions = [] }) {
 }
 
 function FixturePreview({ fixture, divisions = [] }) {
-	const score = formatResult(fixture.result);
+	// A cancelled match's stored 0-0 is a convention, not a score: show the status.
+	const score = fixture.status === 'CANCELLED' ? null : formatResult(fixture.result);
 
 	return (
 		<li className="tv-fixture-preview">

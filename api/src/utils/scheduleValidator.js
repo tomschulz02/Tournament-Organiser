@@ -1,4 +1,5 @@
 import { AppError } from "../errors.js";
+import { MAX_SCHEDULE_ENTRIES } from "../config/limits.js";
 
 // Validates a whole schedule against the tournament it belongs to, for
 // PUT /api/tournaments/:tournamentId/schedule.
@@ -38,6 +39,11 @@ export function validateSchedule(schedule, { startDate, endDate, divisions = [],
     const entries = schedule.entries ?? [];
     if (!Array.isArray(entries)) {
         throw new AppError("SCHEDULE_MALFORMED");
+    }
+
+    // Before any check runs: the overlap checks below are quadratic in this.
+    if (entries.length > MAX_SCHEDULE_ENTRIES) {
+        throw new AppError("SCHEDULE_TOO_LARGE");
     }
 
     checkEntryShapes(entries);

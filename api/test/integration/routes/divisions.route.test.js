@@ -327,6 +327,7 @@ describe.each([
     ["WRONG_QUALIFIER_COUNT", 400, "Wrong number of qualifying teams"],
     ["DUPLICATE_TEAM", 400, "A team appears more than once"],
     ["TEAM_NOT_IN_ROUND", 400, "A team did not play in this round"],
+    ["KNOCKOUT_MATCH_UNDECIDED", 409, "A knockout match in this round ended without a winner. Open it and enter the winning score"],
     // Not a declared condition, so it falls through to the generic fault.
     ["SOMETHING_UNEXPECTED", 500, "Internal server error"]
 ])("progression error %s", (code, status, message) => {

@@ -73,6 +73,30 @@ function completedPoolFixtures() {
     ];
 }
 
+// The semifinals in progress: semifinal 1 (t1 v t3) cancelled, both teams out;
+// semifinal 2 won by t4 over t2.
+function cancelledSemifinal() {
+    return {
+        rounds: [
+            poolRound({ results: ["t1", "t4", "t2", "t3"] }),
+            makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]], fixtures: ["f-sf1", "f-sf2"] }),
+            finalsRound()
+        ],
+        currentRound: 1,
+        fixtures: [
+            ...completedPoolFixtures(),
+            makeFixture({
+                id: "f-sf1", match_no: 3, round: "Semifinals", status: "CANCELLED",
+                team_1: "t1", team_2: "t3", team_1_result: [0], team_2_result: [0]
+            }),
+            makeFixture({
+                id: "f-sf2", match_no: 4, round: "Semifinals", status: "COMPLETED",
+                team_1: "t4", team_2: "t2", team_1_result: [21], team_2_result: [15]
+            })
+        ]
+    };
+}
+
 function loadable({ rounds = [poolRound(), finalsRound()], currentRound = 0, fixtures = completedPoolFixtures(), createdBy = "user-1" } = {}) {
     divisionsRepository.getDivisionWithOwner.mockResolvedValue({
         id: "div-1",
@@ -229,18 +253,52 @@ describe("buildKnockoutOutcomes", () => {
             .toEqual([{ winnerId: "t2", loserId: "t1", winnerSets: 1, loserSets: 0 }]);
     });
 
-    it("drops a match that ended level, so neither team carries forward", () => {
-        expect(buildKnockoutOutcomes(round, [knockoutFixture({ result: [[21, 15], [15, 21], [20, 20]] })]))
-            .toEqual([]);
+    // Was review 4.1. A level match used to be dropped, so every team after it
+    // moved up a place and a beaten team could reach the next round. A knockout
+    // match must have a winner, so it is refused, naming the match.
+    it("refuses a match that ended level, naming it", () => {
+        const fixture = knockoutFixture({ id: "f-qf1", match_no: 9, result: [[21, 15], [15, 21], [20, 20]] });
+
+        expect(() => buildKnockoutOutcomes(round, [fixture])).toThrow(expect.objectContaining({
+            code: "KNOCKOUT_MATCH_UNDECIDED",
+            status: 409,
+            details: { fixtureId: "f-qf1", matchNo: 9, round: "Finals" }
+        }));
     });
 
-    it("ignores fixtures from other rounds and fixtures that do not count", () => {
-        const fixtures = [
-            knockoutFixture({ round: "Semifinals" }),
-            knockoutFixture({ status: "UPCOMING" })
-        ];
+    it("refuses a match that has not been finished", () => {
+        expect(() => buildKnockoutOutcomes(round, [knockoutFixture({ status: "LIVE" })]))
+            .toThrow(expect.objectContaining({ code: "KNOCKOUT_MATCH_UNDECIDED" }));
+    });
 
-        expect(buildKnockoutOutcomes(round, fixtures)).toEqual([]);
+    it("ignores fixtures from other rounds", () => {
+        expect(buildKnockoutOutcomes(round, [knockoutFixture({ round: "Semifinals" })])).toEqual([]);
+    });
+
+    // A cancelled knockout match is a double forfeit: nobody played and nobody
+    // goes through, so both its places stay empty and the team due to meet its
+    // winner gets a walkover. Its two teams are carried for the ranking.
+    it("sends nobody on from a cancelled match between two teams", () => {
+        const fixture = knockoutFixture({ status: "CANCELLED", result: [[0, 0]] });
+
+        expect(buildKnockoutOutcomes(round, [fixture])).toEqual([
+            { winnerId: null, loserId: null, winnerSets: 0, loserSets: 0, withdrawnIds: ["t1", "t2"] }
+        ]);
+    });
+
+    // A match bound short of a team is stored as cancelled — see
+    // bindFixturesToResults — and the team that is there goes through.
+    it("sends on the only team in a cancelled match, which is a walkover", () => {
+        expect(buildKnockoutOutcomes(round, [knockoutFixture({ status: "CANCELLED", team_1_id: null, result: [] })]))
+            .toEqual([{ winnerId: "t2", loserId: null, winnerSets: 0, loserSets: 0 }]);
+    });
+
+    it("sends nobody on from a cancelled match with no teams in it", () => {
+        const fixture = knockoutFixture({ status: "CANCELLED", team_1_id: null, team_2_id: null, result: [] });
+
+        expect(buildKnockoutOutcomes(round, [fixture])).toEqual([
+            { winnerId: null, loserId: null, winnerSets: 0, loserSets: 0, withdrawnIds: [] }
+        ]);
     });
 
     // One entry per group, not per fixture. A one-team group is a bye: the team
@@ -251,22 +309,26 @@ describe("buildKnockoutOutcomes", () => {
 
         expect(buildKnockoutOutcomes(byeRound, fixtures, ["t1", "t2", "t3"]))
             .toEqual([
-                { winnerId: "t1", loserId: null, winnerSets: 0, loserSets: 0 },
+                { winnerId: "t1", loserId: null, winnerSets: 0, loserSets: 0, bye: true },
                 { winnerId: "t2", loserId: "t3", winnerSets: 1, loserSets: 0 }
             ]);
     });
 
-    it("emits nothing for a bye whose index names no team", () => {
+    // Changed with review 4.1: it used to emit nothing, which closed the gap and
+    // moved every later index along. An index naming nobody is a place a
+    // cancelled match left empty, and it keeps its place.
+    it("keeps an empty place for a bye whose index names no team", () => {
         const byeRound = makeRound({ name: "Round of 12", type: "knockout", groups: [[9], "nope"] });
 
-        expect(buildKnockoutOutcomes(byeRound, [], ["t1"])).toEqual([]);
+        expect(buildKnockoutOutcomes(byeRound, [], ["t1"]))
+            .toEqual([{ winnerId: null, loserId: null, winnerSets: 0, loserSets: 0, bye: true }]);
     });
 
     it("accepts a group holding a team id directly", () => {
         const byeRound = makeRound({ name: "Round of 12", type: "knockout", groups: [["t7"]] });
 
         expect(buildKnockoutOutcomes(byeRound, []))
-            .toEqual([{ winnerId: "t7", loserId: null, winnerSets: 0, loserSets: 0 }]);
+            .toEqual([{ winnerId: "t7", loserId: null, winnerSets: 0, loserSets: 0, bye: true }]);
     });
 });
 
@@ -380,10 +442,60 @@ describe("computeRoundResults", () => {
         expect(computeRoundResults(makeRound({ type: "knockout", groups: null }), state, [])).toEqual([]);
     });
 
-    it("ignores a knockout group entry that names no team", () => {
+    // Changed with review 4.1: the entry used to vanish, closing the gap.
+    it("keeps an empty place for a knockout group entry that names no team", () => {
         const round = makeRound({ name: "Semifinals", type: "knockout", groups: [[null]] });
 
-        expect(computeRoundResults(round, state, [], { previousResults: ["t1"] })).toEqual([]);
+        expect(computeRoundResults(round, state, [], { previousResults: ["t1"] })).toEqual([{ id: null }]);
+    });
+
+    // Review 4.1, reproduced: eight qualifiers, quarterfinal 1 (q1 v q8) cancelled.
+    // Before the fix its match was dropped, every later place moved up one, and a
+    // beaten quarterfinalist was proposed for the semifinals. Now its winner and
+    // loser places stay empty, every other team keeps its place, and q1 and q8
+    // follow the losers as eliminated here.
+    it("leaves a cancelled quarterfinal's places empty rather than shifting every later team", () => {
+        const teams = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"];
+        const eightState = makeState({ teams });
+        const round = makeRound({ name: "Quarterfinals", type: "knockout", groups: [[0, 7], [3, 4], [1, 6], [2, 5]] });
+        const pairs = [["q1", "q8"], ["q4", "q5"], ["q2", "q7"], ["q3", "q6"]];
+        const fixtures = normalised(pairs.map(([one, two], index) => makeFixture({
+            match_no: index + 1,
+            round: "Quarterfinals",
+            status: index === 0 ? "CANCELLED" : "COMPLETED",
+            team_1: one,
+            team_2: two,
+            team_1_result: index === 0 ? [0] : [25, 25],
+            team_2_result: index === 0 ? [0] : [20, 18]
+        })));
+
+        const results = computeRoundResults(round, eightState, fixtures, { previousResults: teams });
+
+        expect(results.map((row) => row.id)).toEqual([
+            null, "q4", "q2", "q3",
+            null, "q5", "q7", "q6",
+            "q1", "q8"
+        ]);
+        // A cancelled match is no loss: neither team played it.
+        expect(results.find((row) => row.id === "q1")).toEqual({ id: "q1", won: 0, lost: 0, setsWon: 0, setsLost: 0 });
+    });
+
+    // The semifinal a cancelled quarterfinal fed is bound short of a team, and so
+    // cancelled. Its one team takes the winner's place and goes to the final; its
+    // empty loser place leaves the 3rd place playoff a walkover in turn.
+    it("sends a walkover semifinal's team to the final and leaves its loser place empty", () => {
+        const round = makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 3], [1, 2]] });
+        const fixtures = normalised([
+            makeFixture({ match_no: 1, round: "Semifinals", status: "CANCELLED", team_1: null, team_2: "t4" }),
+            makeFixture({ match_no: 2, round: "Semifinals", status: "COMPLETED", team_1: "t2", team_2: "t3", team_1_result: [21], team_2_result: [15] })
+        ]);
+
+        expect(computeRoundResults(round, state, fixtures)).toEqual([
+            { id: "t4", won: 0, lost: 0, setsWon: 0, setsLost: 0 },
+            { id: "t2", won: 1, lost: 0, setsWon: 1, setsLost: 0 },
+            { id: null },
+            { id: "t3", won: 0, lost: 1, setsWon: 0, setsLost: 1 }
+        ]);
     });
 
     it("orders knockout fixtures that have no match number yet", () => {
@@ -450,8 +562,8 @@ describe("bindFixturesToResults", () => {
         const round = makeRound({ groups: [[2, 3], [0, 1]], fixtures: ["bronze", "gold"] });
 
         expect(bindFixturesToResults(round, confirmed)).toEqual([
-            { id: "bronze", team_1: "t2", team_2: "t3" },
-            { id: "gold", team_1: "t1", team_2: "t4" }
+            { id: "bronze", team_1: "t2", team_2: "t3", status: "UPCOMING" },
+            { id: "gold", team_1: "t1", team_2: "t4", status: "UPCOMING" }
         ]);
     });
 
@@ -459,15 +571,29 @@ describe("bindFixturesToResults", () => {
         const round = makeRound({ groups: [[0, 9], [8, 1]], fixtures: ["gold", "silver"] });
 
         expect(bindFixturesToResults(round, confirmed)).toEqual([
-            { id: "gold", team_1: "t1", team_2: null },
-            { id: "silver", team_1: null, team_2: "t4" }
+            { id: "gold", team_1: "t1", team_2: null, status: "CANCELLED" },
+            { id: "silver", team_1: null, team_2: "t4", status: "CANCELLED" }
         ]);
+    });
+
+    // An empty place — a cancelled match sent nobody on — makes the match it
+    // feeds a walkover. There is nothing to play, so it is settled on binding,
+    // and a match with nobody in it likewise.
+    it("binds a match short of a team as cancelled, which is a walkover", () => {
+        const round = makeRound({ groups: [[0, 3], [1, 2]], fixtures: ["sf1", "sf2"] });
+
+        expect(bindFixturesToResults(round, [null, "t2", null, "t4"])).toEqual([
+            { id: "sf1", team_1: null, team_2: "t4", status: "CANCELLED" },
+            { id: "sf2", team_1: "t2", team_2: null, status: "CANCELLED" }
+        ]);
+        expect(bindFixturesToResults(makeRound({ groups: [[0, 1]], fixtures: ["f"] }), [null, null]))
+            .toEqual([{ id: "f", team_1: null, team_2: null, status: "CANCELLED" }]);
     });
 
     it("skips a group with no fixture to bind", () => {
         const round = makeRound({ groups: [[0, 1], [2, 3]], fixtures: ["gold"] });
 
-        expect(bindFixturesToResults(round, confirmed)).toEqual([{ id: "gold", team_1: "t1", team_2: "t4" }]);
+        expect(bindFixturesToResults(round, confirmed)).toEqual([{ id: "gold", team_1: "t1", team_2: "t4", status: "UPCOMING" }]);
     });
 
     it("skips groups that are not positional, such as a round-robin pool", () => {
@@ -483,7 +609,7 @@ describe("bindFixturesToResults", () => {
         const round = makeRound({ groups: [[0], [1], [2, 3]], fixtures: ["match"] });
 
         expect(bindFixturesToResults(round, confirmed)).toEqual([
-            { id: "match", team_1: "t2", team_2: "t3" }
+            { id: "match", team_1: "t2", team_2: "t3", status: "UPCOMING" }
         ]);
     });
 
@@ -536,6 +662,33 @@ describe("validateConfirmedTeams", () => {
     it("rejects a team that did not play the round", () => {
         expect(() => validateConfirmedTeams(["t1", "t2", "t3", "stranger"], computed, nextRound))
             .toThrow(expect.objectContaining({ code: "TEAM_NOT_IN_ROUND" }));
+    });
+
+    // Going into a knockout round, null is a place left empty: whoever it is drawn
+    // against gets a walkover. More than one may be empty, and they are not
+    // duplicates of each other.
+    it("accepts empty places going into a knockout round", () => {
+        expect(validateConfirmedTeams([null, "t2", null, "t4"], computed, nextRound)).toEqual([null, "t2", null, "t4"]);
+    });
+
+    it("still checks the teams around an empty place", () => {
+        expect(() => validateConfirmedTeams([null, "t2", "t2", "t4"], computed, nextRound))
+            .toThrow(expect.objectContaining({ code: "DUPLICATE_TEAM" }));
+        expect(() => validateConfirmedTeams([null, "t2", "t3", "stranger"], computed, nextRound))
+            .toThrow(expect.objectContaining({ code: "TEAM_NOT_IN_ROUND" }));
+    });
+
+    it("rejects a list with every place empty", () => {
+        expect(() => validateConfirmedTeams([null, null, null, null], computed, nextRound))
+            .toThrow(expect.objectContaining({ code: "INVALID_RESULTS" }));
+    });
+
+    // A round-robin leg plays every team it is given; it has no place to empty.
+    it("rejects an empty place going into a round-robin leg", () => {
+        const leg = makeRound({ name: "Round Robin (Leg 2)", type: "roundRobin", groups: [TEAM_IDS] });
+
+        expect(() => validateConfirmedTeams([null, "t2", "t3", "t4"], computed, leg))
+            .toThrow(expect.objectContaining({ code: "INVALID_RESULTS" }));
     });
 });
 
@@ -629,6 +782,35 @@ describe("progressionService.getProposal", () => {
 
         expect(proposal.computedResults.map((row) => row.id)).toEqual(["t1", "t4", "t2"]);
         expect(proposal.qualifiers.map((row) => row.id)).toEqual(["t1", "t4"]);
+    });
+
+    // A double forfeit in a semifinal: its winner's and loser's places are empty,
+    // shown as such rather than named Unknown, and are not teams the organiser
+    // can substitute in. Its two teams can be, like anyone who played the round.
+    it("proposes empty places for a cancelled semifinal", async () => {
+        loadable(cancelledSemifinal());
+
+        const proposal = await progressionService.getProposal("div-1", "user-1");
+
+        expect(proposal.computedResults.map((row) => [row.id, row.name])).toEqual([
+            [null, null], ["t4", "Ducks"], [null, null], ["t2", "Bears"], ["t1", "Aces"], ["t3", "Cubs"]
+        ]);
+        expect(proposal.qualifiers.map((row) => row.id)).toEqual([null, "t4", null, "t2"]);
+        expect(proposal.eligibleTeams.map((row) => row.id)).toEqual(["t4", "t2", "t1", "t3"]);
+    });
+
+    it("refuses to propose past a knockout match recorded level, naming it", async () => {
+        const setup = cancelledSemifinal();
+        setup.fixtures[2] = makeFixture({
+            id: "f-sf1", match_no: 3, round: "Semifinals", status: "COMPLETED",
+            team_1: "t1", team_2: "t3", team_1_result: [25, 20], team_2_result: [20, 25]
+        });
+        loadable(setup);
+
+        await expect(progressionService.getProposal("div-1", "user-1")).rejects.toThrow(expect.objectContaining({
+            code: "KNOCKOUT_MATCH_UNDECIDED",
+            details: { fixtureId: "f-sf1", matchNo: 3, round: "Semifinals" }
+        }));
     });
 
     it("flags the final round", async () => {
@@ -733,8 +915,42 @@ describe("progressionService.commit", () => {
         expect(updatedRounds[1]).toEqual(finalsRound());
 
         expect(fixturesRepository.updateFixtures).toHaveBeenCalledWith("div-1", [
-            { id: "f-bronze", team_1: "t2", team_2: "t3" },
-            { id: "f-final", team_1: "t1", team_2: "t4" }
+            { id: "f-bronze", team_1: "t2", team_2: "t3", status: "UPCOMING" },
+            { id: "f-final", team_1: "t1", team_2: "t4", status: "UPCOMING" }
+        ]);
+    });
+
+    // The cancelled semifinal sent nobody on, so the final is a walkover for t4,
+    // the team that won the other semifinal, and the 3rd place playoff one for
+    // t2, the team it beat — rather than either being given a team from
+    // elsewhere. Both are settled as they are bound.
+    it("binds walkovers into the next round from a cancelled match's empty places", async () => {
+        loadable(cancelledSemifinal());
+
+        const result = await progressionService.commit("div-1", "user-1", [null, "t4", null, "t2"]);
+
+        expect(result).toMatchObject({ results: [null, "t4", null, "t2"], amended: false });
+        expect(fixturesRepository.updateFixtures).toHaveBeenCalledWith("div-1", [
+            { id: "f-bronze", team_1: null, team_2: "t2", status: "CANCELLED" },
+            { id: "f-final", team_1: null, team_2: "t4", status: "CANCELLED" }
+        ]);
+        expect(divisionsRepository.updateRounds.mock.calls[0][2][1]).toMatchObject({
+            results: [null, "t4", null, "t2"],
+            computedResults: [null, "t4", null, "t2", "t1", "t3"]
+        });
+    });
+
+    // The empty place is the default, not a requirement: the organiser may fill
+    // it with any team that played the round, as with any other substitution.
+    it("lets the organiser fill an empty place with a team that played the round", async () => {
+        loadable(cancelledSemifinal());
+
+        const result = await progressionService.commit("div-1", "user-1", ["t1", "t4", null, "t2"]);
+
+        expect(result.amended).toBe(true);
+        expect(fixturesRepository.updateFixtures).toHaveBeenCalledWith("div-1", [
+            { id: "f-bronze", team_1: null, team_2: "t2", status: "CANCELLED" },
+            { id: "f-final", team_1: "t1", team_2: "t4", status: "UPCOMING" }
         ]);
     });
 
@@ -843,7 +1059,7 @@ describe("progressionService.commit", () => {
         expect(result.results).toEqual(["t1", "t2"]);
         expect(result.amended).toBe(true);
         expect(fixturesRepository.updateFixtures).toHaveBeenCalledWith("div-1", [
-            { id: "f-final", team_1: "t1", team_2: "t2" }
+            { id: "f-final", team_1: "t1", team_2: "t2", status: "UPCOMING" }
         ]);
     });
 

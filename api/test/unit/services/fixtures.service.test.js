@@ -43,6 +43,7 @@ const {
     getFixturesForRound,
     validateSets,
     deriveStatus,
+    setsWon,
     roundHolding,
     fixtureRoundsOf,
     resolveResultRole,
@@ -516,6 +517,17 @@ describe("deriveStatus", () => {
     });
 });
 
+describe("setsWon", () => {
+    it("counts each set for whichever team scored more in it", () => {
+        expect(setsWon([[25, 20], [18, 25], [15, 10]])).toEqual([2, 1]);
+    });
+
+    it("counts a level set for neither team, and no sets as none each", () => {
+        expect(setsWon([[20, 20], [0, 0]])).toEqual([0, 0]);
+        expect(setsWon([])).toEqual([0, 0]);
+    });
+});
+
 describe("the third-place playoff exception", () => {
     // Its fixtures carry their own round name while living inside Finals.
     it("maps a third-place fixture onto the Finals round", () => {
@@ -848,6 +860,114 @@ describe("fixtureService.updateResult, round locking", () => {
         await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
 
         expect(fixturesRepository.updateResult).toHaveBeenCalled();
+    });
+});
+
+// Review 4.1. A knockout match decides who goes through, so it cannot end with
+// the sets level — progression would have nobody to send on. Cancelling one, when
+// neither team can play, is a different result and stays allowed.
+describe("fixtureService.updateResult, knockout matches", () => {
+    function knockout(overrides = {}) {
+        return makeFixture({
+            id: "f-qf1",
+            division_id: "div-1",
+            round: "Quarterfinals",
+            team_1: "t1",
+            team_2: "t8",
+            created_by: "user-1",
+            tournament_id: "tour-1",
+            ...overrides
+        });
+    }
+
+    beforeEach(() => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout());
+        divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({
+            rounds: [
+                makeRound({ name: "Pool Play" }),
+                makeRound({ name: "Quarterfinals", type: "knockout" }),
+                makeRound({ name: "Semifinals", type: "knockout" }),
+                makeRound({ name: "Finals", type: "knockout" })
+            ]
+        }));
+    });
+
+    it("refuses to end a knockout match with the sets level, writing nothing", async () => {
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER", status: 400 });
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+    });
+
+    // A level set counts for neither team, so two of them are still no winner.
+    it("refuses to end a knockout match whose every set was level", async () => {
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[0, 0], [0, 0]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER" });
+    });
+
+    it.each([
+        ["the 3rd place playoff", "3rd Place Playoff"],
+        ["a placement match", "Semifinals · Places 5-8"]
+    ])("holds %s to the same rule as the knockout round it sits in", async (_label, round) => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout({ round }));
+
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER" });
+    });
+
+    // Both teams forfeited: nobody goes through, and the next round's opponent
+    // gets a walkover. See buildKnockoutOutcomes in progression.service.js.
+    it("still lets a knockout match be cancelled", async () => {
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[0, 0]], true);
+
+        expect(result.status).toBe("CANCELLED");
+        expect(fixturesRepository.updateResult).toHaveBeenCalled();
+    });
+
+    it("records a knockout match in progress with the sets level", async () => {
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], false);
+
+        expect(result.status).toBe("LIVE");
+    });
+
+    it("ends a knockout match that has a winner without reading the state again", async () => {
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25], [15, 10]], true);
+
+        expect(result.status).toBe("COMPLETED");
+        // Once for the lock check and once for the count: the winner check reads
+        // nothing when the sets are not level.
+        expect(divisionsRepository.getStateForUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it("leaves a pool match free to end level, as before", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout({ round: "Pool Play" }));
+
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true);
+
+        expect(result.status).toBe("COMPLETED");
+    });
+
+    it("leaves a fixture whose round is not in state free to end level", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout({ round: "Some Other Round" }));
+
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true);
+
+        expect(result.status).toBe("COMPLETED");
+    });
+
+    it("reads a state that arrives as a JSON string, or with no rounds", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(JSON.stringify(makeState({
+            rounds: [makeRound({ name: "Quarterfinals", type: "knockout" })]
+        })));
+
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER" });
+
+        divisionsRepository.getStateForUpdate.mockResolvedValue({ teams: [] });
+
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .resolves.toMatchObject({ status: "COMPLETED" });
     });
 });
 

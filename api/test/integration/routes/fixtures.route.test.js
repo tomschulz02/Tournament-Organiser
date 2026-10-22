@@ -100,6 +100,19 @@ describe("PUT /api/fixtures/:fixtureId/result", () => {
         expect(response.body.message).toBe("Scores must be whole numbers between 0 and 999");
     });
 
+    it("answers 400 for a knockout match ended without a winner", async () => {
+        fixtureService.updateResult.mockRejectedValue(new AppError("KNOCKOUT_NEEDS_WINNER"));
+
+        const response = await request(app).put(PATH).set("Cookie", authCookie()).send({ sets: [[25, 20], [20, 25]], finished: true });
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({
+            success: false,
+            message: "A knockout match needs a winner, so it cannot end with the sets level. For a walkover, enter a winning score for the team that goes through, or use Cancel Match if neither team can play",
+            data: null
+        });
+    });
+
     it("hides an unexpected failure behind a generic 500", async () => {
         fixtureService.updateResult.mockRejectedValue(new Error("deadlock detected"));
 

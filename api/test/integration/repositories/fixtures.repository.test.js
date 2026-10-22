@@ -249,10 +249,12 @@ describe("deleteByDivisionId", () => {
 });
 
 describe("updateFixtures", () => {
-    it("updates every fixture inside one transaction", async () => {
+    // The status travels with the teams: a match bound short of a team is a
+    // walkover and is written as CANCELLED — see bindFixturesToResults.
+    it("updates every fixture inside one transaction, teams and status together", async () => {
         const fixtures = [
-            { id: "f1", team_1: "t1", team_2: "t2" },
-            { id: "f2", team_1: "t3", team_2: "t4" }
+            { id: "f1", team_1: "t1", team_2: "t2", status: "UPCOMING" },
+            { id: "f2", team_1: null, team_2: "t4", status: "CANCELLED" }
         ];
 
         expect(await fixturesRepository.updateFixtures("div-1", fixtures))
@@ -260,11 +262,11 @@ describe("updateFixtures", () => {
 
         expect(clientSql().map(squash)).toEqual([
             "BEGIN",
-            "UPDATE fixtures SET team_1 = $1, team_2 = $2 WHERE id = $3",
-            "UPDATE fixtures SET team_1 = $1, team_2 = $2 WHERE id = $3",
+            "UPDATE fixtures SET team_1 = $1, team_2 = $2, status = $3 WHERE id = $4",
+            "UPDATE fixtures SET team_1 = $1, team_2 = $2, status = $3 WHERE id = $4",
             "COMMIT"
         ]);
-        expect(client.query.mock.calls[2][1]).toEqual(["t3", "t4", "f2"]);
+        expect(client.query.mock.calls[2][1]).toEqual([null, "t4", "CANCELLED", "f2"]);
     });
 
     it("commits an empty batch without updating anything", async () => {

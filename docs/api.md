@@ -53,9 +53,14 @@ Status codes in use:
   `GET /api/tournaments/:tournamentId` returns it
 - 400 Bad Request — validation failure
 - 401 Unauthorized — missing or invalid token
-- 403 Forbidden — authenticated but not permitted
+- 403 Forbidden — authenticated but not permitted, or a write from an origin other than
+  the frontend's (`CROSS_ORIGIN_REQUEST`)
 - 404 Not Found — resource does not exist, or invalid UUID in path
 - 409 Conflict — the request is valid but the resource is in a state that forbids it
+- 413 Payload Too Large — the JSON body is over 1mb (`MAX_JSON_BODY`)
+- 415 Unsupported Media Type — a write whose body is not `application/json`, is JSON
+  declaring a charset other than UTF-8, or is compressed with anything but gzip, deflate
+  or br
 - 429 Too Many Requests — the auth rate limit was exceeded; only `POST /api/users/login`
   and `POST /api/users/signup` can return it
 - 500 Internal Server Error — unexpected failure
@@ -140,7 +145,8 @@ that they own the resource. See Security Recommendations.
 
 The frontend sends `credentials: 'include'` on every request. CORS is configured with
 `credentials: true` and an origin of `FRONTEND_URL` (plus `http://localhost:5173` when
-`NODE_ENV === 'development'`).
+`NODE_ENV === 'development'`). The same list decides which origins may send a write —
+see Security, "Cross-site request forgery".
 
 ## Endpoint Reference
 
@@ -295,7 +301,7 @@ Rejections:
 
 | Status | Meaning |
 |---|---|
-| 400 | Missing or nameless team list, a duplicate name or id, an id the division does not hold, or a group/qualifier count the team count cannot support |
+| 400 | Missing or nameless team list, a duplicate name or id, an id the division does not hold, or a group/qualifier count the team count cannot support. `TOO_MANY_TEAMS` over 128 teams; `TOO_MANY_FIXTURES` when the result would have more than 2000 matches |
 | 403 | Caller does not own the tournament |
 | 404 | No such division |
 | 409 | `TOURNAMENT_ALREADY_STARTED` — a rebuild or a reorder after the tournament has started, or `DIVISION_HAS_RESULTS` — a rebuild's or a reorder's division already holds a completed fixture |
@@ -422,6 +428,7 @@ which rule they broke. Each carries the offending entry ids in `data`.
 | Status | Code | Meaning |
 |---|---|---|
 | 400 | `SCHEDULE_MALFORMED` | Not the documented shape — a missing id, day or time, a duplicate entry id, an unrecognised `type`, a fixture entry with no `fixtureId` |
+| 400 | `SCHEDULE_TOO_LARGE` | More than 2000 entries, matches and breaks together |
 | 400 | `SCHEDULE_TIME_INVALID` | `endTime` is not after `startTime` |
 | 400 | `SCHEDULE_DAY_OUT_OF_RANGE` | An entry's `day` falls outside the tournament's dates |
 | 400 | `SCHEDULE_FIXTURE_UNKNOWN` | An entry names a fixture that is not this tournament's |
@@ -460,6 +467,14 @@ issued. Rejections:
 | 400 | Empty list, duplicate team, wrong qualifier count, or a team that did not play the round |
 | 403 | Caller does not own the tournament |
 | 409 | Round still has unplayed fixtures, is the final round, or the next round has already started |
+| 409 | `KNOCKOUT_MATCH_UNDECIDED`: a knockout match in the round is recorded as finished with the sets level. Both endpoints. `data` names it: `{ fixtureId, matchNo, round }` |
+
+Going into a knockout round, an entry in `teams` may be `null`: a place left empty, so
+whoever it is drawn against gets a walkover. A cancelled knockout match proposes exactly
+that — its places come back with `id: null` and `name: null`, and they are not in
+`eligibleTeams`. At least one entry must be a team. Binding stores a next-round match
+left short of a team as `CANCELLED`. See "A cancelled knockout match" in
+`docs/tournament-rules.md`.
 
 Both the confirmed list and the computed default are stored on the round, along with a
 `resultsAmended` flag, so an unexpected bracket can be traced to either the rules or a
@@ -598,6 +613,37 @@ Implemented:
   is Render's proxy and every visitor would share one rate-limit bucket. One hop rather
   than `true`, so the value cannot be forged: the trusted proxy appends the real peer to
   `X-Forwarded-For` after anything the client sent.
+- **Cross-site request forgery.** In production the session cookie is `SameSite=None`,
+  so the browser attaches it to requests other sites make. `api/src/middleware/csrf.js`
+  runs after `cors()` on every method except GET, HEAD and OPTIONS:
+  - an `Origin` that is present and not in the CORS list, including `null`, is a 403
+    `CROSS_ORIGIN_REQUEST`. A request with no `Origin` is allowed: browsers always send
+    one on a cross-origin write, so its absence means a non-browser client with no
+    victim's cookie;
+  - a `Content-Type` other than `application/json`, or a body with no `Content-Type`, is
+    a 415 `UNSUPPORTED_MEDIA_TYPE`. A write with no body and no `Content-Type` is fine —
+    that is how the frontend sends start, end, save, delete and logout.
+
+  The API is JSON-only. The urlencoded parser was removed, since that is how a form
+  delivers a body.
+- **Size caps**, in `api/src/config/limits.js`, which `errors.js` builds its messages
+  from:
+
+  | Cap | Value | Error |
+  |---|---|---|
+  | Teams per division | 128 | `TOO_MANY_TEAMS` |
+  | Divisions per tournament | 20 | `TOO_MANY_DIVISIONS` |
+  | Round-robin legs | 10, the UI's `MAX_ROUND_ROBIN_LEGS` | `TOO_MANY_LEGS` |
+  | Matches generated per division | 2000 | `TOO_MANY_FIXTURES` |
+  | Schedule entries | 2000 | `SCHEDULE_TOO_LARGE` |
+  | JSON body | 1mb | `PAYLOAD_TOO_LARGE` (413) |
+
+  All are 400 except the last. The match cap is the one that bounds the write: the
+  team and leg caps alone still allow 128 teams in one pool. Legs are checked only on
+  creation; a rebuild reads them back from the stored state.
+
+  `express.json` is mounted after `cors()`, so a 400 for a malformed body and a 413 for
+  an over-size one carry CORS headers the frontend can read.
 - bcrypt `saltRounds` raised from 10 to 12. No migration: bcrypt stores the cost inside
   the hash, so existing passwords keep verifying at 10 and only new ones are written at
   12. The dead duplicate of the constant in `users.repository.js` is gone — hashing has

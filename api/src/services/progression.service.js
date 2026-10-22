@@ -12,7 +12,7 @@ import {
     seedKnockoutResults
 } from "../utils/standings.js";
 import { AppError } from "../errors.js";
-import { roundHolding, isPlacementRound } from "./fixtures.service.js";
+import { roundHolding, isPlacementRound, setsWon } from "./fixtures.service.js";
 
 // Round progression.
 //
@@ -41,7 +41,9 @@ async function getProposal(divisionId, userId) {
         basis: division.ranking_basis
     }).map((row) => ({
         ...row,
-        name: teamNames.get(row.id) || "Unknown"
+        // A null id is a place left empty by a cancelled knockout match, not a
+        // team whose name is missing.
+        name: row.id === null ? null : teamNames.get(row.id) || "Unknown"
     }));
     const qualifyingTeams = qualifierCount(nextRound) || computed.length;
 
@@ -58,8 +60,9 @@ async function getProposal(divisionId, userId) {
         // edits the qualifier list; the ranking is shown for context.
         computedResults: computed,
         qualifiers: computed.slice(0, qualifyingTeams),
-        // Teams the organiser is permitted to substitute in.
-        eligibleTeams: computed,
+        // Teams the organiser is permitted to substitute in. An empty place is
+        // not one of them; it is restored by resetting to the calculated order.
+        eligibleTeams: computed.filter((row) => row.id !== null),
         // The same pairing structure commit() uses to bind fixtures (see
         // bindFixturesToResults), exposed read-only so the client can preview the
         // next round's matchups from the organiser's current qualifier order,
@@ -180,10 +183,18 @@ function bindFixturesToResults(nextRound, confirmed) {
         // A knockout group holds positional indices, not team ids.
         if (!Number.isInteger(one) || !Number.isInteger(two)) return;
 
+        const teamOne = confirmed[one] ?? null;
+        const teamTwo = confirmed[two] ?? null;
+
         bound.push({
             id: fixtureId,
-            team_1: confirmed[one] ?? null,
-            team_2: confirmed[two] ?? null
+            team_1: teamOne,
+            team_2: teamTwo,
+            // A match short of a team is a walkover: there is nothing to play, so
+            // it is settled as it is bound, and the team that is there goes
+            // through — see matchOutcome. A full match is set back to UPCOMING,
+            // so re-progressing over an earlier walkover leaves nothing stale.
+            status: teamOne && teamTwo ? "UPCOMING" : "CANCELLED"
         });
     });
 
@@ -195,12 +206,19 @@ function bindFixturesToResults(nextRound, confirmed) {
 // The organiser may reorder freely and may substitute in any team that played the
 // round — that covers withdrawals. They may not invent teams, duplicate one, or
 // change how many qualify.
+//
+// Going into a knockout round, a place may also be null: empty, because the team
+// due to fill it is out, so whoever it is drawn against gets a walkover. A
+// cancelled knockout match proposes exactly that. A round-robin leg plays every
+// team it is given, so it has no place to leave empty.
 function validateConfirmedTeams(confirmedTeamIds, computed, nextRound) {
     if (!Array.isArray(confirmedTeamIds) || confirmedTeamIds.length === 0) {
         throw new AppError("INVALID_RESULTS");
     }
 
-    if (!confirmedTeamIds.every((id) => typeof id === "string" && id.length > 0)) {
+    const vacancyAllowed = nextRound.type === "knockout";
+    const isEntry = (id) => (typeof id === "string" && id.length > 0) || (id === null && vacancyAllowed);
+    if (!confirmedTeamIds.every(isEntry)) {
         throw new AppError("INVALID_RESULTS");
     }
 
@@ -209,12 +227,18 @@ function validateConfirmedTeams(confirmedTeamIds, computed, nextRound) {
         throw new AppError("WRONG_QUALIFIER_COUNT");
     }
 
-    if (new Set(confirmedTeamIds).size !== confirmedTeamIds.length) {
+    const teamIds = confirmedTeamIds.filter((id) => id !== null);
+    // Every place empty would start a round with nobody in it.
+    if (teamIds.length === 0) {
+        throw new AppError("INVALID_RESULTS");
+    }
+
+    if (new Set(teamIds).size !== teamIds.length) {
         throw new AppError("DUPLICATE_TEAM");
     }
 
     const eligible = new Set(computed.map((row) => row.id));
-    if (!confirmedTeamIds.every((id) => eligible.has(id))) {
+    if (!teamIds.every((id) => eligible.has(id))) {
         throw new AppError("TEAM_NOT_IN_ROUND");
     }
 
@@ -294,6 +318,9 @@ function qualifierCount(nextRound) {
 // The cursor is the whole point: generateKnockoutFixtures skips one-team groups
 // when it builds round.fixtures, so the fixture at position N belongs to the Nth
 // group of two or more, not to group N. buildDivisionBracket is the model.
+//
+// Every group yields an outcome, even one that sends nobody on, because
+// seedKnockoutResults turns each into fixed places the next round indexes into.
 function buildKnockoutOutcomes(round, fixtures, previousResults = []) {
     // The same selection rule the bracket formatter uses. Without the playoff the
     // Finals round sees one fixture for two groups and the cursor misaligns.
@@ -312,50 +339,73 @@ function buildKnockoutOutcomes(round, fixtures, previousResults = []) {
 
         // A bye. The group holds one index into the previous round's results and
         // the team named there carries on without playing, so it has no sets to
-        // report.
+        // report. An index naming nobody — a place a cancelled match left empty —
+        // keeps its place, empty.
         if (group.length < 2) {
             const byeTeamId = resolveGroupTeam(group[0], previousResults);
-            if (byeTeamId) outcomes.push({ winnerId: byeTeamId, loserId: null, winnerSets: 0, loserSets: 0 });
+            outcomes.push({ winnerId: byeTeamId, loserId: null, winnerSets: 0, loserSets: 0, bye: true });
             return;
         }
 
         const fixture = roundFixtures[fixtureIndex++];
-        if (!fixture || !isCountableFixture(fixture)) return;
+        if (!fixture) return;
 
-        let oneSets = 0;
-        let twoSets = 0;
-        fixture.result.forEach(([one, two]) => {
-            if (one > two) oneSets += 1;
-            else if (two > one) twoSets += 1;
-        });
-
-        // A drawn or cancelled match contributes nothing, as before.
-        if (oneSets === twoSets) return;
-
-        outcomes.push(
-            oneSets > twoSets
-                ? { winnerId: fixture.team_1_id, loserId: fixture.team_2_id, winnerSets: oneSets, loserSets: twoSets }
-                : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id, winnerSets: twoSets, loserSets: oneSets }
-        );
+        outcomes.push(matchOutcome(fixture));
     });
 
     return outcomes;
+}
+
+// What one knockout match sends on. A knockout match must have a winner, so one
+// that ended level, or has not ended, is refused rather than skipped. Skipping it
+// moved every later team up a place: with a quarterfinal cancelled, a beaten
+// quarterfinalist reached the semifinals against the team that had just beaten it.
+//
+// CANCELLED is the exception: nobody played. Whoever is still in the match goes
+// through. With both teams in it, both forfeited and nobody does, so the team due
+// to meet the winner gets a walkover; with one, it is that walkover — see
+// bindFixturesToResults.
+function matchOutcome(fixture) {
+    if (fixture.status === "CANCELLED") {
+        const present = [fixture.team_1_id, fixture.team_2_id].filter(Boolean);
+
+        return present.length === 1
+            ? { winnerId: present[0], loserId: null, winnerSets: 0, loserSets: 0 }
+            : { winnerId: null, loserId: null, winnerSets: 0, loserSets: 0, withdrawnIds: present };
+    }
+
+    const [oneSets, twoSets] = isCountableFixture(fixture) ? setsWon(fixture.result) : [0, 0];
+
+    if (oneSets === twoSets) {
+        throw new AppError("KNOCKOUT_MATCH_UNDECIDED", {
+            details: { fixtureId: fixture.id, matchNo: fixture.match_no, round: fixture.round }
+        });
+    }
+
+    return oneSets > twoSets
+        ? { winnerId: fixture.team_1_id, loserId: fixture.team_2_id, winnerSets: oneSets, loserSets: twoSets }
+        : { winnerId: fixture.team_2_id, loserId: fixture.team_1_id, winnerSets: twoSets, loserSets: oneSets };
 }
 
 // The set score a knockout outcome carries is thrown away by seedKnockoutResults,
 // which only orders ids — so it is collected here, by id, before that happens.
 // Matches computeRatios' row shape (won/lost/setsWon/setsLost) so the frontend's
 // stats display needs no special-casing between a pool round and a knockout one.
+//
+// A walkover is no win and a cancelled match no loss: neither was played.
 function knockoutStatsById(outcomes) {
     const stats = new Map();
 
-    outcomes.forEach(({ winnerId, loserId, winnerSets, loserSets }) => {
+    outcomes.forEach(({ winnerId, loserId, winnerSets, loserSets, withdrawnIds = [] }) => {
         if (winnerId) {
             stats.set(winnerId, { won: loserId ? 1 : 0, lost: 0, setsWon: winnerSets, setsLost: loserSets });
         }
         if (loserId) {
             stats.set(loserId, { won: 0, lost: 1, setsWon: loserSets, setsLost: winnerSets });
         }
+        withdrawnIds.forEach((teamId) => {
+            stats.set(teamId, { won: 0, lost: 0, setsWon: 0, setsLost: 0 });
+        });
     });
 
     return stats;

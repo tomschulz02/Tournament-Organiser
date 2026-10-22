@@ -6,6 +6,7 @@ import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { generateFixtures, fixtureService, generatePartialRoundRobinPairs, roundHolding } from "./fixtures.service.js";
 import { qualifierCount } from "./progression.service.js";
 import { RANKING_BASES } from "../utils/standings.js";
+import { MAX_TEAMS_PER_DIVISION, MAX_ROUND_ROBIN_LEGS, MAX_FIXTURES_PER_DIVISION } from "../config/limits.js";
 import { v4 as uuidv4 } from "uuid";
 
 const db = DatabaseConnection();
@@ -622,6 +623,11 @@ function validateTeamNames(teams) {
         throw new AppError("MISSING_FIELDS");
     }
 
+    // Before anything walks the list, so an oversized one costs nothing.
+    if (teams.length > MAX_TEAMS_PER_DIVISION) {
+        throw new AppError("TOO_MANY_TEAMS");
+    }
+
     if (teams.some((team) => !team?.name?.trim())) {
         throw new AppError("MISSING_FIELDS");
     }
@@ -670,6 +676,13 @@ function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams, leag
 
     const generated = generateFixtures(division.state.rounds);
     division.state.rounds = generated.rounds;
+
+    // Checked on the output because no single input bounds it: 128 teams in one
+    // pool, or ten legs of a league, are each within their own caps. Generation
+    // is pure, so nothing has been written yet when this refuses.
+    if (generated.fixtures.length > MAX_FIXTURES_PER_DIVISION) {
+        throw new AppError("TOO_MANY_FIXTURES");
+    }
 
     return { division, fixtures: generated.fixtures };
 }
@@ -840,7 +853,15 @@ function leagueConfigFromPayload(payload) {
     }
 
     if (payload.round_robin_mode === 'legs') {
-        return { mode: 'legs', legs: toCount(payload.round_robin_legs) || 1 };
+        // Refused rather than clamped, like every other count the organiser
+        // chose. Only the create path reads legs from a payload; a rebuild reads
+        // them back from the stored state, so this is the one place to check.
+        const legs = toCount(payload.round_robin_legs) || 1;
+        if (legs > MAX_ROUND_ROBIN_LEGS) {
+            throw new AppError("TOO_MANY_LEGS");
+        }
+
+        return { mode: 'legs', legs };
     }
 
     return undefined;

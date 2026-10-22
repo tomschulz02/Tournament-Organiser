@@ -5,15 +5,18 @@ items are identified, and remove them as they are fixed.
 
 ## Backend Completeness
 
-- `divisions` has a route and controller for round progression only. Every other
-  division endpoint is missing, though the service and repository functions behind them
-  exist.
-- `fixtures` has one route as of 2026-08-09: `PUT /api/fixtures/:fixtureId/result`
-  records a result and maintains the round's `completedGames`. The rest of the router is
-  still empty.
-- The frontend calls endpoints that do not exist. `docs/api.md` lists them; start, end,
-  delete and score entry came off that list on 2026-08-09, and team editing on
-  2026-08-10.
+- ~~`divisions` has a route and controller for round progression only.~~ — **out of
+  date, corrected 2026-10-22.** `divisions` now has progression (GET/POST), the team and
+  structure edit (`PUT /:divisionId`), colour, settings and delete.
+- `fixtures` has one route: `PUT /api/fixtures/:fixtureId/result` records a result and
+  maintains the round's `completedGames`. Nothing else is needed today.
+- **There is no endpoint to edit a tournament's own details.** Name, location, dates and
+  description are fixed once created; a typo in the name is permanent. Found in the
+  2026-10-22 review (3.6).
+- `requests.js` still exports `updateTeams` and `updateRounds`, which call
+  `divisions/updateTeams/:id` and `divisions/updateRounds/:id` — routes that no longer
+  exist. Nothing imports either. The other endpoints the frontend once called without a
+  backend (start, end, delete, score entry, team editing) all exist now.
 - ~~`users.controller.js` `getUserProfile` is not implemented.~~ — **done 2026-08-23.**
   `GET /api/users/profile` is self-scoped from `req.user`, with two companion list
   endpoints for created and saved tournaments. See `docs/api.md`.
@@ -86,22 +89,56 @@ sought.
 
 ## Authentication
 
-- No ownership checks. Any authenticated user can act on any tournament. Mutation
-  endpoints should compare `req.user.id` against `tournaments.created_by` and return
-  403 on mismatch. Not yet implemented, and it becomes urgent as soon as the pending
-  division and fixture endpoints go in.
-- No rate limiting on login or signup.
-- No input validation at the service boundary. Input longer than the column width
-  surfaces as a 500 from Postgres instead of a 400.
-- `helmet` is not installed, so no baseline security headers are set.
-- bcrypt `saltRounds` is 10. 12 is the current recommendation.
+The five items this section used to list are all fixed in code, confirmed in the
+2026-10-22 review: every mutating service checks ownership against `created_by` (or
+editor membership for results), `authLimiter` throttles login and signup, `assertText`
+validates user and tournament fields, `helmet` is installed, and bcrypt runs at cost 12.
 
-Recommendations for all of the above are in `docs/api.md`.
+Outstanding, from the 2026-10-22 review (`docs/review-2026-10-22.md`, section 6):
+
+- **The session cookie is `SameSite=None` everywhere `NODE_ENV` is production.** Production
+  itself is same-site — `tourganiser.co.za` and `api.tourganiser.co.za`, confirmed
+  2026-10-22 — so `Lax` would work there. The testing servers are on `*.onrender.com`,
+  which is a public suffix: there the frontend and API are different sites, the cookie is
+  third-party, Safari blocks it by default and other browsers increasingly restrict it.
+  Moving production to `Lax` needs the cookie's `sameSite` to come from configuration
+  rather than from `NODE_ENV`, so the testing servers can keep `None`. Not done: the
+  CSRF exposure `None` created is closed by `middleware/csrf.js` (see `docs/api.md`,
+  Security), so this is now about third-party-cookie blocking on the testing servers,
+  not about safety.
+- **Sessions cannot be revoked.** Logout only clears the cookie and a password change
+  does not end other sessions; a copied token stays valid for its 24 hours. The JWT also
+  carries a snapshot of username and email.
+- **The password policy is client-side only.** The API accepts any non-empty password.
+- **Usernames and emails are not normalised.** "Tom" and "tom" can both register, emails
+  are case-sensitive at signup and login, and a username may contain "@". Registering
+  another user's email *as a username* makes `findUserByEmailOrUsername`
+  (`WHERE email = $1 OR username = $1`) match two rows, and the first one wins.
+- Login skips the bcrypt compare for an unknown identifier, a small timing difference.
+  Email enumeration through signup and add-editor is accepted in `docs/decisions.md`.
 
 Fixed on 2026-08-07: the auth middleware not rejecting requests (added `requireAuth`),
 the unguarded `req.user.id` in `createTournament`, the 7d token against 24h cookie
 mismatch, the `headers:` versus `allowedHeaders:` CORS typo, unreachable login error
 branches, and missing environment variables failing at request time instead of boot.
+
+## Request Size Limits
+
+From the 2026-10-22 review (6.3). Nothing on the server caps teams per division,
+divisions per tournament, round-robin legs (the UI stops at 10, `leagueConfigFromPayload`
+does not) or schedule entries (also listed under Scheduling). Combined with row-by-row
+inserts, one signed-in account can ask for a league with millions of fixtures and hold a
+pool connection for hours. `createTournament` also trusts its input more than the
+column-length checks suggest:
+
+- start and end dates are not validated server-side (end before start, or a malformed
+  value, reaches Postgres);
+- a missing `divisions` array is a `TypeError` 500, and `divisions: []` creates a
+  tournament with no divisions;
+- division and team name lengths are not checked (also in the roadmap's Phase 5 list);
+- `num_teams` is taken from the client rather than from `teams.length`.
+
+Being worked on together with the CSRF item as of 2026-10-22.
 
 ## Tournament Logic
 
@@ -109,6 +146,14 @@ branches, and missing environment variables failing at request time instead of b
   bound once the previous round's `results` are populated.
 - Standings are recomputed on every tournament detail fetch rather than stored. Correct
   but unoptimised.
+- **A cancelled final crowns nobody.** If both finalists forfeit, the final has no
+  winner, and final standings rank the two teams through the leftover tier, whose rank
+  numbering can clash with the places above it. Rare enough to leave for now.
+- **A knockout group with no fixture behind it is still skipped silently** in
+  `buildKnockoutOutcomes`, closing the gap the way a cancelled match used to. It needs
+  a division whose state and fixtures disagree, which nothing is known to produce.
+- A first-class forfeit result is still review 4.2. Until then a walkover is entered as
+  a winning score, which distorts point ratios.
 - ~~`round.completedGames` is stored but nothing ever increments it~~ — **fixed
   2026-08-09.** The score-entry endpoint recounts the round's `COMPLETED` fixtures from
   the rows and writes the count back in the same transaction as the result, so an edited
@@ -149,6 +194,43 @@ Outstanding:
   the API at all. Left alone: `progression.service.js` was out of scope for Phase 3.
 - Round objects cannot express a match format, so the per-round best-of rule is
   undeliverable until `divisions.state` gains a key for it.
+
+From the 2026-10-22 review (`docs/review-2026-10-22.md`, section 4):
+
+- **A cancelled or drawn knockout match corrupts progression.** `buildKnockoutOutcomes`
+  pushes no outcome for a knockout group whose fixture is `CANCELLED`, or `COMPLETED`
+  with level sets, so every later index in the round's results shifts by one. Reproduced:
+  with one quarterfinal cancelled, the proposal sent a quarterfinal *loser* into the
+  semifinal against the team that had just beaten it, and the two teams from the
+  cancelled match were missing from `eligibleTeams`, so the organiser could not repair
+  it. The UI offers both triggers (Cancel Match, and End Match with level sets). Being
+  fixed in its own session as of 2026-10-22.
+- **Organisers fake forfeits.** The live data has a team named "BYE" that wins 15-0
+  15-0, and forfeits typed in as 15-0/15-0, 0-0/15-15 or a single 0-15 set. These skew
+  point ratios, which decide tiebreaks. A forfeit status is in `future-features.md`; it
+  is a correctness issue as much as a feature.
+- **Same-pool teams can meet in the semifinals.** With four pools and eight qualifiers
+  the quarterfinals are A1–D2, B1–C2, C1–B2, D1–A2 and the semifinals `[0,3]` `[1,2]`,
+  so A1 and A2 sit in the same half (likewise each pool's 1st and 2nd). The rules only
+  guarantee that the *first* knockout round avoids same-pool matches. Standard
+  crossovers put each pool's 1st and 2nd in opposite halves.
+- **Cross-pool comparison ignores pool size.** The tier that `seedAcrossGroups` sorts
+  across pools is compared on raw matches won, points or sets, so with uneven pools a
+  team that played three matches is measured against one that played two. Separate from
+  the ordering gap above: this is about the comparison itself being unfair. Per-match
+  averages, or ratios only, would fix it.
+- **Results are accepted whatever the tournament status.** `updateResult` never checks
+  it, so the API takes a result before Start, and after End — which contradicts the End
+  Tournament confirmation ("No further results can be recorded") and the help text.
+  Verified on 2026-10-22. `View.jsx` keeps score entry open after End on purpose, so the
+  wording is what is wrong, unless the behaviour is changed instead.
+- **The ranking basis can change after progression.** The pool table re-sorts on the new
+  basis while the bracket keeps the qualifiers committed under the old one, so a viewer
+  can see a table that contradicts who advanced.
+- Scores are only checked as whole numbers from 0 to 999. A level set (25-25) is accepted
+  and counts for nobody.
+- `formatTournamentDates` returns `start_date` as "24 September 2026" and `end_date` as
+  "2026-09-25" in the same object.
 
 ## Teams
 
@@ -219,10 +301,10 @@ From the redesign of 2026-08-08.
   `overview-tab-*` block, `tournament-standings` / `pools-standings` / `round-header`,
   `tournament-teams*` / `teams-grid` / `team-card*`, `division-schedule-summary*`,
   `schedule-maker-launcher*`, and the `fixtures-doc` print template.
-- **`SummaryPage.jsx` (80 lines) is orphaned.** Nothing imports it. Kept because no
-  decision has been taken about it, unlike `NextRoundModal` and `Tooltip`, which are
-  deliberately retained. `ScoreUpdateModal` is no longer in this list — `View.jsx` mounts
-  it as of 2026-08-09.
+- ~~**`SummaryPage.jsx` (80 lines) is orphaned.**~~ — **out of date, corrected
+  2026-10-22.** The file no longer exists. Other unreferenced code still present:
+  `TeamNameChangePopup` in `pages/Browse.jsx`, `pages/NotYetImplemented.jsx` (not routed),
+  and the two dead exports in `requests.js` listed under Backend Completeness.
 - **A division can hold team ids that no longer exist.** The development database has a
   division whose `state.teams` lists eight ids with no matching rows, so Overview reports
   eight teams while Teams shows its empty state and every standings row reads `TBD`. The
@@ -252,6 +334,97 @@ From the redesign of 2026-08-08.
   **closed 2026-08-10.** `PUT /tournaments/:id/schedule` is implemented, and the state was
   exercised end to end against the development database: generated, saved, reloaded, and
   read back with its fixtures and a break intact.
+
+From the 2026-10-22 review (`docs/review-2026-10-22.md`, sections 2–3, where each item has
+its file references and a suggested direction). Spectator side first:
+
+- **Nothing refreshes on its own.** No polling, so a spectator sees new scores only on a
+  manual reload. The ETag already makes polling cheap once the 304 path is cheap too
+  (see Performance).
+- **Match numbers repeat across divisions.** A combined schedule shows several "#1"s at
+  the same time, and spectators, scorers and scoresheets all refer to matches by number.
+- **The status dot reads backwards.** Completed is red, live is green, upcoming is blue.
+  Red usually means live in sports apps, and error elsewhere.
+- **The Save button never shows saved state.** The view never reads `saved_tournaments`,
+  so after a reload a saved tournament shows "Save" again and cannot be unsaved from its
+  page. A signed-out click gives an error toast rather than a sign-in prompt. The comment
+  in `TournamentShell.jsx` still says the endpoints answer 501.
+- **Hard to share.** The chosen division and the fixture filters are not in the URL,
+  every page shares one `<title>`, and there are no Open Graph tags for link previews.
+  Discover cards are `<button>`s rather than links, so they cannot be opened in a new tab,
+  and the saved-tournament card nests a `<button>` inside its `<button>`.
+- **"Recent results" is sorted by `match_no`**, which restarts in each division, so it
+  shows the highest-numbered matches rather than the most recent ones.
+- **Standings show no qualification markers, and no points column** when the ranking
+  basis is FIVB or simplified points. The comment in `StandingsTab.jsx` saying no points
+  system exists is out of date. Finished divisions open on the pool tab rather than final
+  rankings, and tied placings (four quarterfinal losers) are shown as 5, 6, 7, 8.
+- **No team page.** There is no single place to see one team's fixtures, results and
+  next match.
+- On a phone, the site header, tournament header and five filters take about 600px before
+  the first fixture. Single-day events show "19 September 2026 — 19 September 2026".
+
+Organiser side:
+
+- **No setup guidance.** On a new tournament, Start Tournament — which permanently locks
+  teams and divisions — is the most prominent control.
+- **The score dialog has no context.** It shows "Match #N" with no division, pool, court
+  or time. Each save refetches the whole tournament payload (about 4s per save measured
+  locally). There is no match-format awareness: sets are added one at a time, no score
+  sanity check, and End Match is allowed with level sets. "Cancel Match" sits beside Save
+  and reads like "close". × discards edits without a warning, and Escape does nothing.
+- **The round-complete banner does not name the division**, and Go to Standings opens the
+  first division alphabetically rather than the one that is ready. The Next Round dialog
+  lists qualifiers without their pool positions.
+- **Confirmations are bare.** `ConfirmDialog` is the same untitled Yes/No for every action:
+  no danger styling, no action-named buttons, no Escape, no focus trap. Deleting a whole
+  tournament is a single Yes.
+- **Divisions are ordered alphabetically** (`ORDER BY name`), with no manual order.
+
+Site-wide:
+
+- **Toasts** (`MessageProvider`) last a fixed 3 seconds. A new message does not clear the
+  previous timer, so it can vanish early. They have no `aria-live` and no close button.
+- **Inaccessible controls.** The floating help button is a `<div onClick>` — not keyboard
+  reachable, no label — and it covers the footer's Terms of Service link. On the login
+  page the Login/Create toggle is a `<span onClick>`, the theme toggle an `<i onClick>`,
+  and the password field has `autoComplete="password"` rather than `current-password`.
+- **Copy that contradicts behaviour or oversells.** The help text says End Tournament
+  stops results; the home page advertises an Analytics feature that does not exist, with
+  out-of-date feature screenshots.
+- **Theme.** It starts as `light` and switches in an effect, so dark-mode users see a
+  flash on every load.
+- **Footer.** `rel="noreferror"` is a typo, the copyright says © 2025, and both legal links
+  go to the top of `/terms`.
+
+## Performance
+
+From the 2026-10-22 review (section 5). None of it is wrong today at this data volume;
+all of it grows with use.
+
+- **`getAllTournaments` is `SELECT * FROM tournaments`**, unpaginated. Every Discover
+  visit downloads every tournament's full `schedule` JSON (31.7 KB of a 38 KB response
+  with three tournaments), plus `created_by`, `scoresheet_template` and `last_update`.
+- **The tournament payload is about 342 KB uncompressed** for a 64-team tournament.
+  `results` duplicates `fixtures`, dates appear twice, raw `state` is included, and the
+  dashboard repeats each division's lists. The API has no compression middleware; whether
+  Render compresses at its edge is unverified.
+- **A 304 costs as much as a 200.** `fetchTournamentDetails` loads every fixture and team
+  and runs the formatter before the controller compares ETags. The change key needs only
+  the tournament and division rows.
+- **Writes go one row at a time.** Teams and fixtures are inserted one query each (10.5s
+  locally for 17 teams and 30 fixtures); rebuild, reorder and progression binding do the
+  same. `getTeamsByDivision` makes one sequential query per division, and `updateResult`
+  reads the division state `FOR UPDATE` up to three times.
+- **No foreign-key indexes.** `fixtures.division_id`, `divisions.tournament_id`,
+  `teams.division_id`, `saved_tournaments.user_id`, `tournaments.created_by` and
+  `tournament_editors.user_id` have none. Adding them is a schema change.
+- **The client retries writes.** `requests.js` retries any network-level failure five
+  times whatever the method, so a create, add-division or progression request whose
+  response is lost can run twice.
+- **Region match is unverified.** Neon is in eu-central-1. If the Render service is not
+  in Frankfurt too, every query pays a long round-trip, multiplied by the row-by-row
+  patterns above.
 
 ## Scheduling
 
@@ -296,7 +469,10 @@ here. What is left:
   not fixable without guessing who advances. Since 2026-09-24 the organiser can switch on a
   break before knockout rounds in the generator settings, a per-round gap that only the
   generator applies. The server's validator does not share it. See
-  `docs/tournament-rules.md`.
+  `docs/tournament-rules.md`. The break defaults **off**, so the default schedule still
+  puts a quarterfinal in the slot straight after the last pool match. Seen on 2026-10-22:
+  a team's last pool match at 12:00 and its quarterfinal at 12:30, with 30-minute
+  matches. That also leaves the organiser no time to run progression.
 - **Unbound teams do not constrain the generator at all**, which is the same rule seen
   from the other side and is deliberate: two semifinals both waiting on the pools are not
   the same team and must be free to run at once. `Rank 1` in one division and `Rank 1` in
@@ -317,13 +493,20 @@ here. What is left:
   shares the Finals length.
 - **Overrun goes only on the last enabled day.** An earlier day never runs past its end
   time. Matches that don't fit roll forward to later days instead.
-- **A schedule is stored as it is sent, beyond the structural checks.** There is no cap
-  on entry count or on the length of `title`, `notes` and `officials`, so the column will
-  hold whatever an authenticated organiser sends. That belongs with **B9** input
-  validation in Phase 5 rather than with the schedule rules.
-- **There is no `tournaments.last_update`**, so a schedule write stamps nothing and is
-  invisible to a cache keyed on `divisions.last_update`. Phase 5 has to decide this
-  before building the client-side cache.
+- **A schedule is stored as it is sent, beyond the structural checks.** Entries are
+  capped at 2000 and the body at 1mb, but there is no limit on the length of `title`,
+  `notes` and `officials` within that, so the column will hold whatever an authenticated
+  organiser sends. That belongs with **B9** input validation in Phase 5 rather than with
+  the schedule rules.
+- ~~**There is no `tournaments.last_update`**~~ — **out of date, corrected 2026-10-22.**
+  The column exists, `trg_tournaments_last_updated` stamps it, and the ETag change key
+  reads it.
+- Schedule maker, from the 2026-10-22 review:
+  - every toolbar button shares one style, so Reset and Discard look as safe as Save;
+  - Enter does not add a court (it does add a team);
+  - unsaved draft actions announce themselves as if saved ("Court 1 added to the
+    tournament schedule");
+  - the generator's Courts number duplicates the Courts & Fields list.
 
 ## Overlays and stacking
 
@@ -374,6 +557,11 @@ here. What is left:
   by hand against Neon and `docs/database.md` is updated by hand to match. This is a
   deliberate choice given how rarely the schema is expected to change; revisit it if
   that stops being true.
+- **Local development writes to the live database.** `api/.env` points at the same Neon
+  database the public site reads, so anything created while developing or testing appears
+  on the live Discover page. A Neon branch for development would separate the two at no
+  cost. The 2026-10-22 review left one test account behind: `uxtest-4d633236`, which
+  cannot be deleted from the app.
 - `docs/` and `CLAUDE.md` are untracked by git.
 - Claude's sandbox can create but not delete files under `.git/`, so any git command it
   runs can leave a stale `.git/index.lock` that blocks the developer's commits. Claude

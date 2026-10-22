@@ -143,6 +143,13 @@ contents belong in `results`.
 The ordering differs by round type — a flat cross-pool seeding for round-robin rounds,
 winners before losers for knockout rounds. `docs/tournament-rules.md` defines both.
 
+An entry may be `null` when the next round is a knockout round: a place left empty,
+usually by a cancelled knockout match, so whoever it is drawn against gets a walkover.
+The entry keeps its position so every later index still resolves to the right team.
+`computedResults` may hold `null` for the same reason. See "A cancelled knockout match"
+in `docs/tournament-rules.md`. Going into a round-robin leg, which plays every team it
+is given, `results` never holds `null`.
+
 ## Standings
 
 Standings are not stored. They are computed on the fly during the tournament detail

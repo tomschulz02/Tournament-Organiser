@@ -541,13 +541,36 @@ describe("seedKnockoutResults", () => {
         expect(seedKnockoutResults(matchups)).toEqual(["s3", "s1", "s0", "s2"]);
     });
 
-    it("takes one side of a matchup when the other is missing", () => {
+    // Changed with review 4.1: a missing side used to be skipped, closing the gap
+    // and moving every later place along. The next round indexes these places,
+    // so a side nobody fills holds null.
+    it("keeps a place empty when one side of a match is missing", () => {
         const matchups = [
             { winnerId: "s1", loserId: null },
             { winnerId: undefined, loserId: "s2" }
         ];
 
-        expect(seedKnockoutResults(matchups)).toEqual(["s1", "s2"]);
+        expect(seedKnockoutResults(matchups)).toEqual(["s1", null, null, "s2"]);
+    });
+
+    it("gives a bye a winner place and no loser place", () => {
+        const matchups = [
+            { winnerId: "s0", loserId: null, bye: true },
+            { winnerId: "s1", loserId: "s2" }
+        ];
+
+        expect(seedKnockoutResults(matchups)).toEqual(["s0", "s1", "s2"]);
+    });
+
+    // Both teams out of a cancelled match: past every place the next round reads,
+    // so they are ranked as eliminated without taking anyone's place.
+    it("puts the teams out of a match that sent nobody on after the losers", () => {
+        const matchups = [
+            { winnerId: null, loserId: null, withdrawnIds: ["s0", "s3"] },
+            { winnerId: "s1", loserId: "s2" }
+        ];
+
+        expect(seedKnockoutResults(matchups)).toEqual([null, "s1", null, "s2", "s0", "s3"]);
     });
 
     it("sorts unseeded teams last", () => {

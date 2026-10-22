@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
+import { PRELIMINARY_STAGE } from './tournament/fixtureUtils';
 import { useConfirm } from './ConfirmDialog';
 import { useHelpTopic } from '../HelpContext';
 import '../App.css';
@@ -40,6 +41,12 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	// changes replace them, and saving keeps the match COMPLETED rather than
 	// reverting it to LIVE the way a plain Save Score would.
 	const wasCompleted = fixture.status === 'COMPLETED';
+
+	// A knockout match decides who goes through, so it can't end with the sets
+	// level — the server refuses it (KNOCKOUT_NEEDS_WINNER in api/src/errors.js),
+	// and this only spares the organiser the round trip. `stage` is worked out by
+	// flattenFixtures: every pool and round-robin fixture is the preliminary stage.
+	const isKnockout = Boolean(fixture.stage) && fixture.stage !== PRELIMINARY_STAGE;
 
 	// Which submit action is in flight: null | 'save' | 'end' | 'cancel'.
 	// onSave/onEndMatch/onCancelMatch/onSaveChanges always resolve (pages/View.jsx
@@ -130,10 +137,15 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	// is implemented as a single 0-0 set server-side. That translation belongs
 	// in pages/View.jsx: this keeps the modal ignorant of the convention
 	// entirely, so if it ever changes, only View.jsx needs to.
+	// In a knockout round, cancelling is a double forfeit: neither team goes
+	// through, and the next round's match the winner would have played becomes a
+	// walkover. Said here because it is more than "cancelled" suggests.
 	const handleCancelMatchClick = async () => {
 		if (busy) return;
 		const confirmed = await confirm(
-			'Cancel this match? It will be marked as cancelled and the current score will not be recorded.'
+			isKnockout
+				? 'Cancel this match? Neither team goes through, and the team due to meet the winner in the next round gets a walkover. The current score will not be recorded.'
+				: 'Cancel this match? It will be marked as cancelled and the current score will not be recorded.'
 		);
 		if (!confirmed) return;
 
@@ -146,6 +158,8 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	};
 
 	const tally = tallySets(sets);
+	// Ending — End Match, or Save changes on a finished match — needs a winner.
+	const needsWinner = isKnockout && tally.team1 === tally.team2;
 
 	// Portalled onto document.body, the same as ScheduleMakerModal and
 	// CreateModal. Mounted inline from pages/View.jsx, inside <main id="app">,
@@ -278,7 +292,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 									<button type="button" className="cancel-match-btn" onClick={handleDiscardClick} disabled={busy}>
 										<span>Discard changes</span>
 									</button>
-									<button type="submit" className="save-btn" disabled={busy}>
+									<button type="submit" className="save-btn" disabled={busy || needsWinner}>
 										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 										<span>Save changes</span>
 									</button>
@@ -293,13 +307,20 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 										<span>Save Score</span>
 									</button>
-									<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy}>
+									<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy || needsWinner}>
 										{submitting === 'end' ? <LoadingScreen variant="inline" /> : null}
 										<span>End Match</span>
 									</button>
 								</>
 							)}
 						</div>
+						{needsWinner && (
+							<p className="score-modal-note">
+								{wasCompleted
+									? "A knockout match needs a winner, so it can't end with the sets level."
+									: "A knockout match needs a winner, so it can't end with the sets level. For a walkover, enter a winning score for the team that goes through. If neither team can play, use Cancel Match."}
+							</p>
+						)}
 					</div>
 				</form>
 			</div>

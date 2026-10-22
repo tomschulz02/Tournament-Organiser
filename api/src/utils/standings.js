@@ -363,16 +363,25 @@ export function seedAcrossGroups(rankedGroups, seedIndex, qualifyingTeams = 0, b
 // Knockout rounds rank winners first, then losers, each half keeping the match
 // order because the next round folds them bottom-up. Produces [w1, w2, l1, l2] for a semifinal, so
 // the next round can express bronze as [2, 3] and the final as [0, 1].
+//
+// Every place is fixed, because the next round's groups index into them: each
+// matchup takes one winner place, each match (not a bye) one loser place, and a
+// place nobody fills holds null rather than closing up. Closing up is what once
+// moved every later team a place along. The teams out of a match that sent
+// nobody on — both forfeited — come after the losers, past every place the next
+// round reads, so they are still ranked as eliminated in this round.
 export function seedKnockoutResults(matchups) {
     const winners = [];
     const losers = [];
+    const withdrawn = [];
 
-    matchups.forEach(({ winnerId, loserId }) => {
-        if (winnerId) winners.push(winnerId);
-        if (loserId) losers.push(loserId);
+    matchups.forEach(({ winnerId, loserId, bye = false, withdrawnIds = [] }) => {
+        winners.push(winnerId ?? null);
+        if (!bye) losers.push(loserId ?? null);
+        withdrawn.push(...withdrawnIds);
     });
 
-    return [...winners, ...losers];
+    return [...winners, ...losers, ...withdrawn];
 }
 
 // The inverse of seedAcrossGroups' tiering, for display purposes: given a flat rank

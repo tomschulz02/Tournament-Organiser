@@ -66,6 +66,10 @@ async function updateResult(fixtureId, userId, sets, finished) {
             await assertCurrentRound(fixture, client);
         }
 
+        if (status === "COMPLETED") {
+            await assertKnockoutHasWinner(fixture, scored, client);
+        }
+
         // entered_by is stamped on every write, the organiser's included, so the
         // attribution always names whoever last touched the result.
         await fixturesRepository.updateResult(
@@ -138,6 +142,28 @@ async function assertRoundNotLocked(fixture, client) {
 
     if (round && Array.isArray(round.results) && round.results.length > 0) {
         throw new AppError("ROUND_LOCKED");
+    }
+}
+
+// A knockout match decides who goes through, so it cannot end level: progression
+// would have nobody to send on, and once skipped such a match and moved every
+// later team up a place. Cancelling one is a different result — neither team
+// could play, and the next round's opponent gets a walkover — and the 0-0
+// convention derives CANCELLED, not COMPLETED, so it never reaches here.
+//
+// The state is read only once the sets are level, so an ordinary result costs
+// nothing extra. A fixture whose round is not in state is not held to this, as
+// it is not counted anywhere either — see syncCompletedGames.
+async function assertKnockoutHasWinner(fixture, sets, client) {
+    const [teamOneSets, teamTwoSets] = setsWon(sets);
+    if (teamOneSets !== teamTwoSets) return;
+
+    const state = normalizeState(await divisionsRepository.getStateForUpdate(fixture.division_id, client));
+    const rounds = Array.isArray(state.rounds) ? state.rounds : [];
+    const round = rounds.find((round) => round.name === roundHolding(fixture.round));
+
+    if (round?.type === "knockout") {
+        throw new AppError("KNOCKOUT_NEEDS_WINNER");
     }
 }
 
@@ -245,6 +271,17 @@ const MAX_SET_SCORE = 999;
 
 function isScore(value) {
     return Number.isInteger(value) && value >= 0 && value <= MAX_SET_SCORE;
+}
+
+// The sets each side took, as [teamOne, teamTwo]. A set counts for whichever team
+// scored more in it and a level set for neither — the rule applyFixtureToStandings
+// uses in utils/standings.js. Shared with progression, so the check on writing a
+// knockout result and the reading of it later cannot disagree about who won.
+export function setsWon(sets) {
+    return sets.reduce(
+        ([teamOne, teamTwo], [one, two]) => [teamOne + (one > two ? 1 : 0), teamTwo + (two > one ? 1 : 0)],
+        [0, 0]
+    );
 }
 
 // The four statuses, per docs/tournament-rules.md. CANCELLED is the one the

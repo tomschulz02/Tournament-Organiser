@@ -157,15 +157,17 @@ async function deleteByIds(fixtureIds, client) {
     }
 }
 
-// used to update the team names in fixtures after a round has been completed
+// used to update the team names in fixtures after a round has been completed.
+// The status comes with them: a match bound short of a team is a walkover, and is
+// settled as CANCELLED — see bindFixturesToResults in progression.service.js.
 async function updateFixtures(divisionId, fixtures) {
     const client = await db.pool.connect();
     try {
         await client.query("BEGIN");
 
         for (const fixture of fixtures) {
-            const sql = "UPDATE fixtures SET team_1 = $1, team_2 = $2 WHERE id = $3";
-            await client.query(sql, [fixture.team_1, fixture.team_2, fixture.id]);
+            const sql = "UPDATE fixtures SET team_1 = $1, team_2 = $2, status = $3 WHERE id = $4";
+            await client.query(sql, [fixture.team_1, fixture.team_2, fixture.status, fixture.id]);
         }
 
         await client.query("COMMIT");

@@ -61,6 +61,20 @@ function nextRoundFixtures(groups, selectedIds, placement = []) {
 // and error states are the ones most likely to be seen on a slow phone.
 const portal = (content) => createPortal(content, document.body);
 
+// A null place is one a cancelled knockout match left empty: both its teams are
+// out, so whoever the place is drawn against gets a walkover. See
+// validateConfirmedTeams in progression.service.js.
+const VACANT_NAME = 'No team';
+
+// A knockout match recorded level stops the proposal. The message is static, so
+// the match it means comes in the error's data.
+function proposalError(err) {
+	const message = err.message || 'Could not load the round results.';
+	const matchNo = err.data?.matchNo;
+
+	return matchNo ? `${message} (Match #${matchNo}, ${err.data.round})` : message;
+}
+
 // Round progression.
 //
 // The ranking is computed by the backend from the rules in docs/tournament-rules.md,
@@ -103,7 +117,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 				setSelectedIds(response.data.qualifiers.map((team) => team.id));
 			} catch (err) {
 				// The server's message is display-ready.
-				if (!cancelled) setError(err.message || 'Could not load the round results.');
+				if (!cancelled) setError(proposalError(err));
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -124,7 +138,8 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 	const isRoundRobinNext = proposal?.nextRound?.type === 'roundRobin';
 
 	const eligible = proposal?.eligibleTeams || [];
-	const nameFor = (teamId) => eligible.find((team) => team.id === teamId)?.name || 'Unknown';
+	const nameFor = (teamId) =>
+		teamId === null ? VACANT_NAME : eligible.find((team) => team.id === teamId)?.name || 'Unknown';
 	const statsFor = (teamId) => eligible.find((team) => team.id === teamId);
 
 	// True when the organiser has changed the backend's proposed order.
@@ -133,8 +148,11 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 		(selectedIds.length !== proposal.qualifiers.length ||
 			selectedIds.some((id, index) => id !== proposal.qualifiers[index]?.id));
 
-	const hasDuplicates = new Set(selectedIds).size !== selectedIds.length;
-	const complete = selectedIds.length > 0 && selectedIds.every(Boolean);
+	// Empty places are not duplicates of each other, and do not make the list
+	// incomplete — but a list with nobody in it is.
+	const chosenIds = selectedIds.filter((id) => id !== null);
+	const hasDuplicates = new Set(chosenIds).size !== chosenIds.length;
+	const complete = chosenIds.length > 0;
 
 	const handleSelect = (index, teamId) => {
 		setSelectedIds((current) => {
@@ -309,7 +327,11 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 											<TeamIdentity
 												name={nameFor(teamId)}
 												note={
-													stats ? `W: ${stats.won} L: ${stats.lost} Sets: ${stats.setsWon}-${stats.setsLost}` : null
+													teamId === null
+														? 'Its opponent gets a walkover'
+														: stats
+															? `W: ${stats.won} L: ${stats.lost} Sets: ${stats.setsWon}-${stats.setsLost}`
+															: null
 												}
 												size="small"
 											/>
@@ -392,6 +414,9 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 														<span className="vs">vs</span>
 														<TeamIdentity name={nameFor(entry.team2Id)} size="small" />
 														{entry.label && <span className="tv-status-pill">{entry.label}</span>}
+														{(entry.team1Id === null || entry.team2Id === null) && (
+															<span className="tv-status-pill tv-status-pill--ongoing">Walkover</span>
+														)}
 													</>
 												)}
 											</div>

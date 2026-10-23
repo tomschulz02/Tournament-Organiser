@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
+import CreateModal from './create/CreateModal';
 import TeamIdentity from './tournament/TeamIdentity';
 import { PRELIMINARY_STAGE } from './tournament/fixtureUtils';
 import { useConfirm } from './ConfirmContext';
 import { useHelpTopic } from '../HelpContext';
 import { formatDateLabel } from '../utils/scheduleUtils';
 import '../App.css';
+// The shell and its buttons are styled here; imported rather than relied on
+// being loaded by the create page.
+import '../styles/create-tournament.css';
 
 // A set counts for whichever team scored more in it; a tie (including an
 // untouched 0-0 row) counts for neither. This is exactly the rule
@@ -52,13 +55,6 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 	const [sets, setSets] = useState(() => savedSets(fixture.result));
 	const confirm = useConfirm();
 
-	// Focus moves into the dialog on open, so Escape works before anything in
-	// it has been clicked.
-	const dialogRef = useRef(null);
-	useEffect(() => {
-		dialogRef.current?.focus();
-	}, []);
-
 	// A match that was already COMPLETED when this modal opened is being
 	// reopened for a correction, not scored live — Cancel/Save/End (which all
 	// assume the match is still in progress) don't fit. Save changes/Discard
@@ -97,8 +93,9 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 	// Score that keeps the modal open clears it once the refetched result lands.
 	const isDirty = !sameSets(sets, savedSets(fixture.result));
 
-	// × and Escape both close. Neither should silently throw away a score
-	// typed courtside, so unsaved edits are confirmed first.
+	// ×, Escape and a click on the backdrop all close (CreateModal routes all
+	// three here). None should silently throw away a score typed courtside, so
+	// unsaved edits are confirmed first.
 	const handleClose = async () => {
 		if (
 			isDirty &&
@@ -111,14 +108,6 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 		)
 			return;
 		onClose();
-	};
-
-	// On the dialog rather than on window: a confirm opened from here takes
-	// focus with it, so Escape there cannot stack a second confirm on the first.
-	const handleKeyDown = (event) => {
-		if (event.key !== 'Escape') return;
-		event.stopPropagation();
-		handleClose();
 	};
 
 	const handleAddSet = () => {
@@ -227,182 +216,157 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 		? [slot.courtName, formatDateLabel(slot.day), slot.startTime].filter(Boolean).join(' · ')
 		: '';
 
-	// Portalled onto document.body, the same as ScheduleMakerModal and
-	// CreateModal. Mounted inline from pages/View.jsx, inside <main id="app">,
-	// this shares a stacking context with the fixed header and the footer. On a
-	// tall desktop viewport the modal happened to land between the two and the
-	// clipping went unnoticed; on a phone or a short window it lost its top and
-	// its bottom. Leaving the tree means no ancestor can create a containing
-	// block for it.
-	return createPortal(
-		<div className="modal-overlay">
-			<div
-				className="score-modal"
-				ref={dialogRef}
+	// One stepper per team per set: − input +. The input stays the real control;
+	// the buttons are shortcuts for a thumb courtside, so they keep out of the
+	// tab order.
+	const renderStepper = (index, team, teamName, won) => (
+		<div className={`score-stepper${won ? ' score-stepper--won' : ''}`}>
+			<button
+				type="button"
 				tabIndex={-1}
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="score-modal-title"
-				onKeyDown={handleKeyDown}>
-				<div className="score-modal-header">
-					<div className="score-modal-heading">
-						<h3 id="score-modal-title">Match #{fixture.match_no}</h3>
-						{matchContext && <p className="score-modal-context">{matchContext}</p>}
-						{slotContext && <p className="score-modal-context">{slotContext}</p>}
-					</div>
-					<button type="button" className="score-modal-close" onClick={handleClose} aria-label="Close">
-						&times;
+				className="score-step-btn"
+				aria-label={`Decrease ${teamName}'s set ${index + 1} score`}
+				onClick={() => handleStep(index, team, -1)}>
+				<Icon name="remove" size={20} fill="currentColor" />
+			</button>
+			<input
+				type="number"
+				inputMode="numeric"
+				min="0"
+				max={MAX_SET_SCORE}
+				value={sets[index][team]}
+				aria-label={`${teamName}, set ${index + 1}`}
+				onChange={(e) => handleScoreChange(index, team, e.target.value)}
+				onFocus={handleFocusSelect}
+			/>
+			<button
+				type="button"
+				tabIndex={-1}
+				className="score-step-btn"
+				aria-label={`Increase ${teamName}'s set ${index + 1} score`}
+				onClick={() => handleStep(index, team, 1)}>
+				<Icon name="add" size={20} fill="currentColor" />
+			</button>
+		</div>
+	);
+
+	// The footer sits outside the body's scroll, so the actions are always in
+	// reach however many sets there are. Its submit button reaches the form
+	// through the form attribute.
+	const footer = (
+		<>
+			{needsWinner && (
+				<p className="score-modal-note">
+					{wasCompleted
+						? "A knockout match needs a winner, so it can't end with the sets level."
+						: "A knockout match needs a winner, so it can't end with the sets level. For a walkover, enter a winning score for the team that goes through. If neither team can play, use Cancel match."}
+				</p>
+			)}
+			<div className="ct-modal-footer-left">
+				{wasCompleted ? (
+					<button type="button" className="ct-button ct-button-quiet" onClick={handleDiscardClick} disabled={busy}>
+						Discard changes
 					</button>
-				</div>
-
-				<div className="scoreboard-header">
-					<TeamIdentity name={fixture.team1} size="medium" className="scoreboard-team scoreboard-team--left" />
-					<div className="scoreboard-tally">
-						<span className="scoreboard-tally-label">Sets</span>
-						<span className="scoreboard-tally-score">
-							{tally.team1}–{tally.team2}
-						</span>
-					</div>
-					<TeamIdentity name={fixture.team2} size="medium" className="scoreboard-team scoreboard-team--right" />
-				</div>
-
-				<form onSubmit={handleSubmit}>
-					<div className="scoreboard-table-wrap">
-						<table className="scoreboard-table">
-							<thead>
-								<tr>
-									<th scope="col" className="scoreboard-table-setcol">
-										Set
-									</th>
-									<th scope="col" className="scoreboard-table-teamcol">
-										{fixture.team1}
-									</th>
-									<th scope="col" className="scoreboard-table-teamcol">
-										{fixture.team2}
-									</th>
-									<th scope="col" className="scoreboard-table-removecol" aria-hidden="true" />
-								</tr>
-							</thead>
-							<tbody>
-								{sets.map((set, index) => (
-									<tr key={index}>
-										<td className="scoreboard-table-setcol">Set {index + 1}</td>
-										<td>
-											<div className="score-inputs">
-												<button
-													type="button"
-													tabIndex={-1}
-													className="score-step-btn"
-													aria-label={`Decrease ${fixture.team1}'s set ${index + 1} score`}
-													onClick={() => handleStep(index, 'team1', -1)}>
-													<Icon name="remove" size={16} fill="currentColor" />
-												</button>
-												<input
-													type="number"
-													min="0"
-													max={MAX_SET_SCORE}
-													value={set.team1}
-													onChange={(e) => handleScoreChange(index, 'team1', e.target.value)}
-													onFocus={handleFocusSelect}
-												/>
-												<button
-													type="button"
-													tabIndex={-1}
-													className="score-step-btn"
-													aria-label={`Increase ${fixture.team1}'s set ${index + 1} score`}
-													onClick={() => handleStep(index, 'team1', 1)}>
-													<Icon name="add" size={16} fill="currentColor" />
-												</button>
-											</div>
-										</td>
-										<td>
-											<div className="score-inputs">
-												<button
-													type="button"
-													tabIndex={-1}
-													className="score-step-btn"
-													aria-label={`Decrease ${fixture.team2}'s set ${index + 1} score`}
-													onClick={() => handleStep(index, 'team2', -1)}>
-													<Icon name="remove" size={16} fill="currentColor" />
-												</button>
-												<input
-													type="number"
-													min="0"
-													max={MAX_SET_SCORE}
-													value={set.team2}
-													onChange={(e) => handleScoreChange(index, 'team2', e.target.value)}
-													onFocus={handleFocusSelect}
-												/>
-												<button
-													type="button"
-													tabIndex={-1}
-													className="score-step-btn"
-													aria-label={`Increase ${fixture.team2}'s set ${index + 1} score`}
-													onClick={() => handleStep(index, 'team2', 1)}>
-													<Icon name="add" size={16} fill="currentColor" />
-												</button>
-											</div>
-										</td>
-										<td className="scoreboard-table-removecol">
-											{sets.length > 1 && (
-												<button
-													type="button"
-													className="scoreboard-remove-set-btn"
-													aria-label={`Remove set ${index + 1}`}
-													onClick={() => handleRemoveSet(index)}>
-													<Icon name="delete" size={16} fill="currentColor" />
-												</button>
-											)}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-					<div className="modal-buttons">
-						<button type="button" className="add-set-btn" onClick={handleAddSet}>
-							+ Add Set
-						</button>
-						<div className="action-buttons">
-							{wasCompleted ? (
-								<>
-									<button type="button" className="cancel-match-btn" onClick={handleDiscardClick} disabled={busy}>
-										<span>Discard changes</span>
-									</button>
-									<button type="submit" className="save-btn" disabled={busy || needsWinner}>
-										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
-										<span>Save changes</span>
-									</button>
-								</>
-							) : (
-								<>
-									<button type="button" className="cancel-match-btn" onClick={handleCancelMatchClick} disabled={busy}>
-										{submitting === 'cancel' ? <LoadingScreen variant="inline" /> : null}
-										<span>Cancel Match</span>
-									</button>
-									<button type="submit" className="save-btn" disabled={busy}>
-										{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
-										<span>Save Score</span>
-									</button>
-									<button type="button" className="end-match-btn" onClick={handleEndMatchClick} disabled={busy || needsWinner}>
-										{submitting === 'end' ? <LoadingScreen variant="inline" /> : null}
-										<span>End Match</span>
-									</button>
-								</>
-							)}
-						</div>
-						{needsWinner && (
-							<p className="score-modal-note">
-								{wasCompleted
-									? "A knockout match needs a winner, so it can't end with the sets level."
-									: "A knockout match needs a winner, so it can't end with the sets level. For a walkover, enter a winning score for the team that goes through. If neither team can play, use Cancel Match."}
-							</p>
-						)}
-					</div>
-				</form>
+				) : (
+					<button
+						type="button"
+						className="ct-button score-cancel-match"
+						onClick={handleCancelMatchClick}
+						disabled={busy}>
+						{submitting === 'cancel' ? <LoadingScreen variant="inline" /> : null}
+						<span>Cancel match</span>
+					</button>
+				)}
 			</div>
-		</div>,
-		document.body
+			<div className="ct-modal-footer-right">
+				{wasCompleted ? (
+					<button
+						type="submit"
+						form="score-form"
+						className="ct-button ct-button-primary"
+						disabled={busy || needsWinner}>
+						{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
+						<span>Save changes</span>
+					</button>
+				) : (
+					<>
+						<button type="submit" form="score-form" className="ct-button ct-button-quiet" disabled={busy}>
+							{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
+							<span>Save score</span>
+						</button>
+						<button
+							type="button"
+							className="ct-button ct-button-primary"
+							onClick={handleEndMatchClick}
+							disabled={busy || needsWinner}>
+							{submitting === 'end' ? <LoadingScreen variant="inline" /> : null}
+							<span>End match</span>
+						</button>
+					</>
+				)}
+			</div>
+		</>
+	);
+
+	// CreateModal portals onto document.body, so the fixed header and footer of
+	// the page behind cannot clip it, and supplies the focus trap, the scroll
+	// lock and Escape. At 768px and below it fills the screen.
+	return (
+		<CreateModal
+			titleId="score-modal-title"
+			title={`Match #${fixture.match_no}`}
+			subtitle={
+				matchContext || slotContext ? (
+					<>
+						{matchContext}
+						{matchContext && slotContext && <br />}
+						{slotContext}
+					</>
+				) : null
+			}
+			size="score"
+			onClose={handleClose}
+			footer={footer}>
+			<div className="score-board">
+				<TeamIdentity name={fixture.team1} size="medium" className="score-board-team" />
+				<div className="score-board-tally">
+					<span className="score-board-tally-label">Sets</span>
+					<span className="score-board-tally-score">
+						{tally.team1}–{tally.team2}
+					</span>
+				</div>
+				<TeamIdentity name={fixture.team2} size="medium" className="score-board-team" />
+			</div>
+
+			<form id="score-form" onSubmit={handleSubmit}>
+				<ol className="score-sets">
+					{sets.map((set, index) => (
+						<li key={index} className="score-set">
+							<div className="score-set-head">
+								<span className="score-set-label">Set {index + 1}</span>
+								{sets.length > 1 && (
+									<button
+										type="button"
+										className="score-set-remove"
+										aria-label={`Remove set ${index + 1}`}
+										onClick={() => handleRemoveSet(index)}>
+										<Icon name="delete" size={18} fill="currentColor" />
+									</button>
+								)}
+							</div>
+							<div className="score-set-teams">
+								{renderStepper(index, 'team1', fixture.team1, set.team1 > set.team2)}
+								{renderStepper(index, 'team2', fixture.team2, set.team2 > set.team1)}
+							</div>
+						</li>
+					))}
+				</ol>
+				<button type="button" className="ct-button ct-button-quiet score-add-set" onClick={handleAddSet}>
+					<Icon name="add" size={18} fill="currentColor" />
+					<span>Add set</span>
+				</button>
+			</form>
+		</CreateModal>
 	);
 };
 

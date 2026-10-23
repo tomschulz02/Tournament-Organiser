@@ -334,14 +334,14 @@ export const HELP_TOPICS = {
 		sections: [
 			{
 				paragraphs: [
-					'Enter each set\'s score for this fixture as it\'s played, or all at once afterwards. Add Set adds another row; a set counts for whichever team scored more in it, and a tie counts for neither.',
+					'Enter each set\'s score for this fixture as it\'s played, or all at once afterwards. Type a score or use the − and + buttons beside it. Add set adds another set; a set counts for whichever team scored more in it, and a tie counts for neither. The bin icon removes a set entered by mistake.',
 				],
 			},
 			{
 				heading: 'Saving, ending and cancelling',
 				paragraphs: [
-					'Save Score records what\'s entered so far without finishing the match — use this to update the score as it happens. End Match marks the match finished from the sets entered. Cancel Match records the match as cancelled rather than played, which counts for neither team in the standings.',
-					'A knockout match needs a winner, so End Match stays unavailable while the sets are level. If one team can\'t play, record the walkover as a winning score for the team that goes through. If neither team can play, use Cancel Match: neither team goes through, and the team due to meet the winner in the next round gets a walkover instead.',
+					'Save score records what\'s entered so far without finishing the match — use this to update the score as it happens. End match marks the match finished from the sets entered. Cancel match records the match as cancelled rather than played, which counts for neither team in the standings.',
+					'A knockout match needs a winner, so End match stays unavailable while the sets are level. If one team can\'t play, record the walkover as a winning score for the team that goes through. If neither team can play, use Cancel match: neither team goes through, and the team due to meet the winner in the next round gets a walkover instead.',
 					'If the match is already finished, this screen instead offers Discard changes and Save changes, for correcting a result after the fact.',
 				],
 			},
@@ -359,14 +359,14 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Reviewing and adjusting the order',
 				paragraphs: [
-					"The list shows who's progressing, in the order the server calculated from the completed round's results. Drag a team by its handle, or use the arrow keys once it's focused, to reorder the list — or use the swap control beside a team to substitute it for a different eligible team entirely. Changing the order is recorded as a deliberate adjustment, not silently blended into the calculated ranking.",
-					'Below the list, a preview shows the matchups (or byes) this order would produce in the next round, updating live as you reorder — for a round-robin leg, every team simply carries forward, so there\'s no bracket to preview there.',
+					"The list shows who's progressing, in the order the server calculated from the completed round's results. Use the up and down arrows beside a team to reorder the list (with a mouse you can also drag a team by its handle) — or use the swap control beside a team to substitute it for a different eligible team entirely. Changing the order is recorded as a deliberate adjustment, not silently blended into the calculated ranking.",
+					'Beside the list (below it on a phone), a preview shows the matchups (or byes) this order would produce in the next round, updating live as you reorder — for a round-robin leg, every team simply carries forward, so there\'s no bracket to preview there.',
 				],
 			},
 			{
 				heading: 'Confirming',
 				paragraphs: [
-					'Reset to calculated appears once you\'ve changed anything, and puts the list back to the server\'s original order. Start Next Round confirms the current order and generates or binds the next round\'s fixtures — this is disabled while a team appears twice.',
+					'Reset to calculated appears once you\'ve changed anything, and puts the list back to the server\'s original order. Start next round confirms the current order and generates or binds the next round\'s fixtures — this is disabled while a team appears twice.',
 					'A place shown as No team was left empty by a cancelled knockout match: neither of its teams goes through, so whoever that place is drawn against gets a walkover, shown in the preview. You can leave it empty, or use the swap control to put a team that played the round into it.',
 				],
 			},

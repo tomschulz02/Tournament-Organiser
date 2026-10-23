@@ -291,6 +291,13 @@ Known drift: "ongoing" is sky on Discover and green in the tournament view, and 
 - **Bottom nav (≤768px):** fixed 64px blue bar, five items with icon over label, the centre Create button a raised Aqua circle.
 - **Tournament tabs:** one row that scrolls sideways, never wraps. Inactive tabs are muted; the active tab is blue at 600 with a 2px blue underline.
 
+### Modals
+- **Shell:** every task modal uses `CreateModal` (`components/create/CreateModal.jsx`): a fixed header with a 44px close button, a body that scrolls, and a footer whose actions stay on screen. It handles Escape, backdrop click, focus trap and scroll lock. At 768px and below it fills the screen. The `size` prop becomes a `ct-modal-<size>` class for per-modal width (score 560px, round 880px).
+- **Footer:** the left slot holds the quiet or destructive action (a red text button, never filled); the right slot holds the routine actions, with the primary blue button last. On a phone the left slot takes its own row above, so the primary sits at the bottom under the thumb. Notes that explain a disabled action go full width above the buttons.
+- **Score entry:** one bordered row per set, two side-by-side steppers (− number +, all 44px), the higher score in bold. The set tally is ink, not blue.
+- **Reordering:** up/down buttons on every row, since touch has no HTML5 drag. The drag handle shows only under `(pointer: fine)`.
+- **Confirm dialog:** floats above any modal; 44px buttons, stacked full width on a phone.
+
 ### Tournament header band (signature)
 The tournament view's subheader sits on a faint wash of the tournament's identity colour with its generated pattern. Three columns (Browse pill, centred title, Save pill) with equal outer columns, so the name stays on the true centre of the page.
 

@@ -653,6 +653,7 @@ describe('normaliseSchedule', () => {
 			dayStartTime: '08:00',
 			dayEndTime: DEFAULT_SCHEDULE_END,
 			slotMinutes: 45,
+			generator: null,
 		});
 	});
 

@@ -47,6 +47,16 @@ async function updateDivisionColour(req, res) {
     res.status(200).json({ success: true, message: "Division colour updated", data: result });
 }
 
+// The Settings page's per-division controls: `rankingBasis` and
+// `placementDepth`, either or both. What each may be, and when, is the service's.
+async function updateDivisionSettings(req, res) {
+    const { divisionId } = req.params;
+
+    const result = await divisionService.updateDivisionSettings(divisionId, req.user.id, req.body ?? {});
+
+    res.status(200).json({ success: true, message: "Division settings updated", data: result });
+}
+
 // Removes the division outright. There is no body: the id and the session are
 // everything the service needs, and what the removal takes with it is not the
 // caller's to choose.
@@ -66,5 +76,6 @@ export const divisionController = {
     commitProgression,
     updateDivision,
     updateDivisionColour,
+    updateDivisionSettings,
     deleteDivision
 };

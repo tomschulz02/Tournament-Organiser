@@ -328,7 +328,7 @@ describe("getDivisionWithOwner", () => {
         await divisionsRepository.getDivisionWithOwner("div-1");
 
         expect(squash(db.query.mock.calls[0][0]))
-            .toContain("d.type, d.state, t.created_by, t.status AS tournament_status");
+            .toContain("d.type, d.state, d.ranking_basis, d.placement_depth, t.created_by, t.status AS tournament_status");
     });
 
     it("returns null when there is no such division", async () => {
@@ -526,5 +526,52 @@ describe("getDivisionsByTournamentId", () => {
             "Failed to fetch divisions",
             underlying
         );
+    });
+});
+
+describe("updateRankingBasis", () => {
+    it("writes the column and leaves the stamp to the trigger", async () => {
+        await divisionsRepository.updateRankingBasis("div-1", "SETS_WON");
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe("UPDATE divisions SET ranking_basis = $1 WHERE id = $2::uuid");
+        expect(params).toEqual(["SETS_WON", "div-1"]);
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await divisionsRepository.updateRankingBasis("div-1", "SETS_WON", client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await divisionsRepository.updateRankingBasis("div-1", "SETS_WON").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to update ranking basis");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+describe("updatePlacementDepth", () => {
+    it("writes the column on the client it is given", async () => {
+        await divisionsRepository.updatePlacementDepth("div-1", 7, client);
+
+        const [sql, params] = client.query.mock.calls[0];
+        expect(squash(sql)).toBe("UPDATE divisions SET placement_depth = $1 WHERE id = $2::uuid");
+        expect(params).toEqual([7, "div-1"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        client.query.mockRejectedValueOnce(underlying);
+
+        const failure = await divisionsRepository.updatePlacementDepth("div-1", null, client).catch((err) => err);
+
+        expect(failure.message).toBe("Failed to update placement depth");
+        expect(failure.cause).toBe(underlying);
     });
 });

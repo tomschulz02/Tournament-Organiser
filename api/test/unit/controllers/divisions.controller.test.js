@@ -8,7 +8,7 @@ vi.mock("../../../src/services/progression.service.js", () => ({
 }));
 
 vi.mock("../../../src/services/divisions.service.js", () => ({
-    divisionService: { updateDivision: vi.fn(), updateDivisionColour: vi.fn() }
+    divisionService: { updateDivision: vi.fn(), updateDivisionColour: vi.fn(), updateDivisionSettings: vi.fn() }
 }));
 
 const { divisionController } = await import("../../../src/controllers/divisions.controller.js");
@@ -21,6 +21,30 @@ beforeEach(() => {
     vi.mocked(progressionService.commit).mockReset();
     vi.mocked(divisionService.updateDivision).mockReset();
     vi.mocked(divisionService.updateDivisionColour).mockReset();
+    vi.mocked(divisionService.updateDivisionSettings).mockReset();
+});
+
+describe("divisionController.updateDivisionSettings", () => {
+    it("passes the body through and answers in the envelope", async () => {
+        const result = { divisionId: "div-1", rankingBasis: "SETS_WON", placementDepth: 5 };
+        divisionService.updateDivisionSettings.mockResolvedValue(result);
+        const res = makeRes();
+
+        await divisionController.updateDivisionSettings(req({ body: { rankingBasis: "SETS_WON", placementDepth: 5 } }), res);
+
+        expect(divisionService.updateDivisionSettings)
+            .toHaveBeenCalledWith("div-1", "user-1", { rankingBasis: "SETS_WON", placementDepth: 5 });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ success: true, message: "Division settings updated", data: result });
+    });
+
+    it("hands the service an empty object when there is no body", async () => {
+        divisionService.updateDivisionSettings.mockResolvedValue({});
+
+        await divisionController.updateDivisionSettings(req({ body: undefined }), makeRes());
+
+        expect(divisionService.updateDivisionSettings).toHaveBeenCalledWith("div-1", "user-1", {});
+    });
 });
 
 function req(overrides = {}) {

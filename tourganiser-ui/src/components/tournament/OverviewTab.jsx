@@ -4,7 +4,7 @@ import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
 import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
-import { useConfirm } from '../ConfirmDialog';
+import { useConfirm } from '../ConfirmContext';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 // Imported across from components/create/ deliberately, rather than moved
@@ -19,7 +19,6 @@ import { createEmptyDivision } from '../create/divisionFormats';
 import {
 	addDivision,
 	deleteDivision,
-	deleteTournament,
 	endTournament,
 	startTournament,
 	updateDivisionColour,
@@ -44,7 +43,6 @@ export default function OverviewTab({
 	onOpenDivision,
 	creator = false,
 	onChanged,
-	onDeleted,
 }) {
 	useHelpTopic('tournament-overview');
 
@@ -57,7 +55,6 @@ export default function OverviewTab({
 				dashboard={dashboard}
 				creator={creator}
 				onChanged={onChanged}
-				onDeleted={onDeleted}
 			/>
 			<DivisionsBand
 				divisions={divisions}
@@ -75,7 +72,7 @@ export default function OverviewTab({
 // The only place the tournament's own metadata appears. The subheader carries
 // the name and nothing else, so this band is where a reader finds out what they
 // are looking at.
-function TournamentInformation({ tournament, dashboard, creator, onChanged, onDeleted }) {
+function TournamentInformation({ tournament, dashboard, creator, onChanged }) {
 	// Both labels are pre-formatted by the backend ('1 August 2026'). Do not
 	// reformat them here — the server owns date presentation.
 	const start = tournament.start_date_label;
@@ -103,10 +100,8 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 					<LifecycleActions
 						tournamentId={tournament.id}
 						status={tournament.status}
-						name={tournament.name}
 						scoresheetTemplate={tournament.scoresheet_template}
 						onChanged={onChanged}
-						onDeleted={onDeleted}
 					/>
 				)}
 			</div>
@@ -120,7 +115,9 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged, onDe
 // Only the transition the tournament is actually in is offered: a finished
 // tournament has neither. The server refuses the others with a 409 regardless —
 // this is presentation, not enforcement.
-function LifecycleActions({ tournamentId, status, name, scoresheetTemplate, onChanged, onDeleted }) {
+//
+// Delete Tournament moved to the Settings tab's Danger Zone — see SettingsTab.jsx.
+function LifecycleActions({ tournamentId, status, scoresheetTemplate, onChanged }) {
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const [busy, setBusy] = useState(false);
@@ -148,7 +145,8 @@ function LifecycleActions({ tournamentId, status, name, scoresheetTemplate, onCh
 	// and the schedule is the tool they most need once things overrun.
 	const handleStart = async () => {
 		const confirmed = await confirm(
-			'Start this tournament? Teams and divisions can no longer be added, removed or reordered. The schedule can still be edited, and results can be entered once it has started.',
+			'Teams and divisions can no longer be added, removed or reordered. The schedule can still be edited, and results can be entered once it has started.',
+			{ title: 'Start this tournament?', confirmLabel: 'Start tournament', cancelLabel: 'Not yet' },
 		);
 		if (!confirmed) return;
 
@@ -156,23 +154,16 @@ function LifecycleActions({ tournamentId, status, name, scoresheetTemplate, onCh
 	};
 
 	const handleEnd = async () => {
-		const confirmed = await confirm('End this tournament? No further results can be recorded.');
+		// Results stay editable after End on purpose — see renderScoreAction in
+		// pages/View.jsx — so this must not promise that they are frozen.
+		const confirmed = await confirm('It will be marked as finished. Results can still be corrected afterwards.', {
+			title: 'End this tournament?',
+			confirmLabel: 'End tournament',
+			cancelLabel: 'Not yet',
+		});
 		if (!confirmed) return;
 
 		await run(() => endTournament(tournamentId), 'Tournament finished.', () => onChanged?.());
-	};
-
-	// Deletion is permitted at every status, including part-way through. The
-	// cascade is named here because that is what makes it a decision rather than
-	// a surprise — the divisions, fixtures and results all go with it.
-	const handleDelete = async () => {
-		const ongoing = current === 'Ongoing' ? ' It is currently in progress.' : '';
-		const confirmed = await confirm(
-			`Delete ${name || 'this tournament'}?${ongoing} Its divisions, fixtures and results are deleted too. This cannot be undone.`,
-		);
-		if (!confirmed) return;
-
-		await run(() => deleteTournament(tournamentId), 'Tournament deleted.', () => onDeleted?.());
 	};
 
 	// The picker hands back the key it wants selected, or null to clear it.
@@ -203,14 +194,6 @@ function LifecycleActions({ tournamentId, status, name, scoresheetTemplate, onCh
 
 			<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => setTemplateModalOpen(true)}>
 				Scoresheet Template
-			</button>
-
-			<button
-				type="button"
-				className="tv-subtle-action tv-subtle-action--danger"
-				disabled={busy}
-				onClick={handleDelete}>
-				<Icon name='delete' fill='var(--error-color)'></Icon>
 			</button>
 
 			{templateModalOpen && (
@@ -336,9 +319,10 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 	// client shows its refusal.
 	const handleRemove = async (division) => {
 		const confirmed = await confirm(
-			`Remove ${division.name}? Its ${division.teamCount ?? 0} teams, ${
+			`Its ${division.teamCount ?? 0} teams, ${
 				division.fixtureCount ?? 0
 			} fixtures and any scheduled slots are removed too. This cannot be undone.`,
+			{ title: `Remove ${division.name}?`, confirmLabel: 'Remove division', cancelLabel: 'Keep it', danger: true },
 		);
 		if (!confirmed) return;
 
@@ -674,7 +658,8 @@ function FixturePreviewList({ title, fixtures, emptyMessage, divisions = [] }) {
 }
 
 function FixturePreview({ fixture, divisions = [] }) {
-	const score = formatResult(fixture.result);
+	// A cancelled match's stored 0-0 is a convention, not a score: show the status.
+	const score = fixture.status === 'CANCELLED' ? null : formatResult(fixture.result);
 
 	return (
 		<li className="tv-fixture-preview">

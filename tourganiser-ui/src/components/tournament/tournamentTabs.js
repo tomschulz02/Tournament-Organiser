@@ -13,6 +13,10 @@ export const TOURNAMENT_TABS = [
 	{ id: 'teams', label: 'Teams' },
 ];
 
+// The organiser's fifth section, listed only for them. Reachable by ?tab= like
+// the others; the page shows Overview instead to anyone else who follows a link.
+export const SETTINGS_TAB = { id: 'settings', label: 'Settings' };
+
 const DEFAULT_TAB = TOURNAMENT_TABS[0].id;
 
 // The shell renders the navigation and the page renders the panel, so both need
@@ -25,7 +29,7 @@ export function useTournamentTab() {
 	const [searchParams, setSearchParams] = useSearchParams();
 
 	const requested = searchParams.get('tab');
-	const activeTab = TOURNAMENT_TABS.some((tab) => tab.id === requested) ? requested : DEFAULT_TAB;
+	const activeTab = [...TOURNAMENT_TABS, SETTINGS_TAB].some((tab) => tab.id === requested) ? requested : DEFAULT_TAB;
 
 	// Replaces the whole query, which is what drops a stale ?division= left over
 	// from a bookmarked link to the old view.

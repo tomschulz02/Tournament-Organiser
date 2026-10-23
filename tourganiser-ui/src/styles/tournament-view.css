@@ -1013,6 +1013,7 @@ body.dark .tv-division-badge {
 
 .tv-round-banner-actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: var(--space-2);
 }
 
@@ -1739,9 +1740,21 @@ body.dark .tv-division-badge {
 	font-style: italic;
 }
 
+/* Side by side where there is room: a division playing down to 16th has a
+   block per placement round, and a single column of them would run long. */
+.tv-bracket-placements {
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: var(--space-5);
+}
+
 .tv-bracket-placement {
 	max-width: 240px;
 	margin-top: var(--space-5);
+}
+
+.tv-bracket-placement .tv-bracket-match + .tv-bracket-match {
+	margin-top: var(--space-2);
 }
 
 /* --- teams -------------------------------------------------------------- */
@@ -2160,6 +2173,135 @@ body.dark .tv-division-badge {
 		grid-template-columns: 1fr 1fr;
 		grid-template-rows: repeat(var(--tv-team-rows-count, 1), min-content);
 		column-gap: var(--space-4);
+	}
+}
+
+/* --- settings ----------------------------------------------------------- */
+
+/* The organiser-only Settings tab. Built from the overview band and card, the
+   filter selects and the inline form; only the list rows and the Danger Zone
+   are its own. */
+.tv-settings-note,
+.tv-settings-empty {
+	margin: 0 0 var(--space-3);
+	font-size: 0.86rem;
+	color: var(--tv-muted);
+}
+
+.tv-settings-empty {
+	margin-bottom: 0;
+}
+
+/* The editor suggestions, directly under the add field. */
+.tv-editor-suggestions {
+	margin: 0;
+	padding: var(--space-1);
+	list-style: none;
+	border: 1px solid var(--tv-border);
+	border-radius: 9px;
+	background: var(--tv-surface);
+}
+
+.tv-editor-suggestion {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: var(--space-2);
+	border-radius: 6px;
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+.tv-editor-suggestion:hover,
+.tv-editor-suggestion.is-active {
+	background: var(--tv-surface-alt);
+}
+
+.tv-editor-suggestion-note {
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+	white-space: nowrap;
+}
+
+.tv-settings-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tv-settings-list--cards {
+	display: grid;
+	gap: var(--space-3);
+}
+
+.tv-settings-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
+}
+
+.tv-settings-list .tv-settings-row + .tv-settings-row {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-settings-row-name {
+	margin: 0;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-settings-division .tv-division-card-header {
+	margin-bottom: var(--space-3);
+}
+
+.tv-settings-division .tv-settings-note {
+	margin: var(--space-3) 0 0;
+}
+
+.tv-settings-danger {
+	border-color: rgb(from var(--error-color) r g b / 0.45);
+}
+
+.tv-settings-danger .tv-settings-row {
+	padding: 0;
+}
+
+.tv-settings-danger .tv-settings-note {
+	margin: var(--space-1) 0 0;
+}
+
+.tv-danger-action {
+	flex: 0 0 auto;
+	padding: var(--space-2) var(--space-4);
+	border: 1px solid var(--error-color);
+	border-radius: 999px;
+	background: none;
+	color: var(--error-color);
+	font-size: 0.88rem;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-danger-action:hover:not(:disabled) {
+	background: var(--error-color);
+	color: var(--text-color);
+}
+
+.tv-danger-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+@media (max-width: 768px) {
+	.tv-settings-danger .tv-settings-row {
+		flex-direction: column;
+		align-items: stretch;
 	}
 }
 

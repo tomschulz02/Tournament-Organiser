@@ -561,11 +561,10 @@ describe('the rest minimum', () => {
 		expect(schedule.entries.map((e) => e.startTime)).toEqual(['09:00', '11:00', '13:00']);
 	});
 
-	// Fixtures are not placed in time order — within a round each takes the
-	// earliest slot left, so one placed later can land before one placed earlier.
-	// Checking rest only backwards would let that pair end up back to back: f3
-	// would take 10:00 and hand Cubs 10:00-11:00 followed by f2 at 11:00.
-	it('keeps the rest when a later placement lands before an earlier one', () => {
+	// Order within a round is free, so the court is not left idle while Aces
+	// rests: Cubs v Ducks fills the gap. Rest still holds — Cubs finishes at
+	// 11:00 and does not play again until 12:00.
+	it('fills a rest gap with another match rather than idling the court', () => {
 		const fixtures = [
 			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
 			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
@@ -575,12 +574,12 @@ describe('the rest minimum', () => {
 		const { schedule } = generate({ fixtures, courtCount: 1 });
 
 		expect(startOf(schedule, 'f1')).toBe('09:00');
-		expect(startOf(schedule, 'f2')).toBe('11:00');
-		expect(startOf(schedule, 'f3')).toBe('13:00');
+		expect(startOf(schedule, 'f3')).toBe('10:00');
+		expect(startOf(schedule, 'f2')).toBe('12:00');
 	});
 
-	// A3: do not quietly relax a hard constraint to fit everything in.
-	it('leaves a fixture unplaced rather than removing the rest between two matches', () => {
+	// With bending switched off, the rest is as hard as any other rule.
+	it('leaves a fixture unplaced rather than shortening the rest when bending is off', () => {
 		const fixtures = [
 			fixture('f1', { team1: 'Aces', team2: 'Bears' }),
 			fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
@@ -591,6 +590,7 @@ describe('the rest minimum', () => {
 			courtCount: 1,
 			dailyStartTime: '09:00',
 			dailyEndTime: '11:00',
+			fitAll: false,
 		});
 
 		expect(schedule.entries).toHaveLength(1);
@@ -1192,5 +1192,397 @@ describe('team rest windows', () => {
 		// Different teams entirely, so nothing stops them running concurrently.
 		expect(schedule.entries[0].startTime).toBe('09:00');
 		expect(schedule.entries[1].startTime).toBe('09:00');
+	});
+});
+
+// docs/schedule.md: the organiser's rules — minimum rest and the daily match
+// limit — may bend to fit every fixture in, and only as far as they have to.
+describe('bending rules to fit every fixture', () => {
+	// Four one-hour slots on one court. Aces has three matches, so one of them
+	// has to follow another directly. Nothing else needs to bend.
+	const fixtures = [
+		fixture('f1', { team1: 'Aces', team2: 'Bears' }),
+		fixture('f2', { team1: 'Aces', team2: 'Cubs' }),
+		fixture('f3', { team1: 'Aces', team2: 'Ducks' }),
+		fixture('f4', { team1: 'Eagles', team2: 'Foxes' }),
+	];
+	const tight = { fixtures, courtCount: 1, dailyStartTime: '09:00', dailyEndTime: '13:00' };
+
+	it('places every fixture and bends the rest for one team only', () => {
+		const { schedule, unscheduledFixtures, report, warnings } = generate(tight);
+
+		expect(schedule.entries).toHaveLength(4);
+		expect(unscheduledFixtures).toEqual([]);
+		expect(report.ruleBreaks).toHaveLength(1);
+		expect(report.ruleBreaks[0]).toMatchObject({ rule: 'rest', teams: ['Aces'] });
+		expect(report.ruleBreaks[0].entryIds).toHaveLength(1);
+		expect(warnings).toEqual(['Minimum rest (60 min) shortened for 1 team in 1 match.']);
+	});
+
+	it('bends nothing when the schedule fits without it', () => {
+		const { report, warnings } = generate({ ...tight, dailyEndTime: '17:00' });
+
+		expect(report.ruleBreaks).toEqual([]);
+		expect(warnings).toEqual([]);
+	});
+
+	it('bends nothing when bending is switched off', () => {
+		const { unscheduledFixtures, report } = generate({ ...tight, fitAll: false });
+
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f3']);
+		expect(report.ruleBreaks).toEqual([]);
+	});
+
+	it('drops the rest rule entirely when it is switched off', () => {
+		const { schedule, report } = generate({ ...tight, restEnabled: false, fitAll: false });
+
+		expect(schedule.entries).toHaveLength(4);
+		expect(report.ruleBreaks).toEqual([]);
+	});
+
+	// Round order never bends. With the pool unable to finish, the final is left
+	// out rather than placed before a pool match that has nowhere to go.
+	it('never places a knockout round while its pool is incomplete', () => {
+		const { unscheduledFixtures } = generate({
+			fixtures: [
+				fixture('p1', { round: 'Pool Play' }),
+				fixture('p2', { round: 'Pool Play' }),
+				fixture('fin', { round: 'Finals' }),
+			],
+			divisions: [division('div-1', ['Pool Play', 'Finals'])],
+			courtCount: 1,
+			dailyStartTime: '09:00',
+			dailyEndTime: '11:00',
+		});
+
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['fin']);
+	});
+
+	it('plays the team with the most matches left first', () => {
+		const { schedule } = generate({
+			fixtures: [
+				fixture('solo', { team1: 'Eagles', team2: 'Foxes' }),
+				fixture('a1', { team1: 'Aces', team2: 'Bears' }),
+				fixture('a2', { team1: 'Aces', team2: 'Cubs' }),
+			],
+			courtCount: 1,
+		});
+
+		expect(startOf(schedule, 'a1')).toBe('09:00');
+		expect(startOf(schedule, 'solo')).toBe('10:00');
+		expect(startOf(schedule, 'a2')).toBe('11:00');
+	});
+});
+
+describe('the daily match limit', () => {
+	const fixtures = [fixture('f1', { team1: 'Aces', team2: 'Bears' }), fixture('f2', { team1: 'Aces', team2: 'Cubs' })];
+
+	it('moves a team’s extra match to the next day', () => {
+		const { schedule } = generate({
+			fixtures,
+			courtCount: 1,
+			endDate: '2026-08-02',
+			maxPerDayEnabled: true,
+			maxMatchesPerDay: 1,
+		});
+
+		expect(entriesFor(schedule, 'f1').day).toBe('2026-08-01');
+		expect(entriesFor(schedule, 'f2').day).toBe('2026-08-02');
+	});
+
+	it('reports the limit when it blocks a fixture and bending is off', () => {
+		const { unscheduledFixtures, warnings } = generate({
+			fixtures,
+			maxPerDayEnabled: true,
+			maxMatchesPerDay: 1,
+			fitAll: false,
+		});
+
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['f2']);
+		expect(warnings[0]).toMatch(/daily match limit/);
+	});
+
+	it('exceeds the limit to fit the fixture in when bending is on', () => {
+		const { unscheduledFixtures, report } = generate({ fixtures, maxPerDayEnabled: true, maxMatchesPerDay: 1 });
+
+		expect(unscheduledFixtures).toEqual([]);
+		expect(report.ruleBreaks.map((group) => group.rule)).toEqual(['daily']);
+	});
+});
+
+describe('running past the end time', () => {
+	const fixtures = [fixture('f1'), fixture('f2')];
+	const oneSlot = { fixtures, courtCount: 1, dailyStartTime: '09:00', dailyEndTime: '10:00' };
+
+	it('leaves a fixture out when overrun is not allowed', () => {
+		expect(generate(oneSlot).unscheduledFixtures.map((f) => f.id)).toEqual(['f2']);
+	});
+
+	it('runs past the end of the last day by as little as it can', () => {
+		const { schedule, report } = generate({ ...oneSlot, allowOverrun: true });
+
+		expect(startOf(schedule, 'f2')).toBe('10:00');
+		expect(report.ruleBreaks).toEqual([
+			expect.objectContaining({ rule: 'overrun', message: '1 match run past the daily end time.' }),
+		]);
+	});
+});
+
+describe('spreading across days', () => {
+	const fixtures = [fixture('f1'), fixture('f2')];
+
+	it('fills the first day first by default', () => {
+		const { schedule } = generate({ fixtures, courtCount: 1, endDate: '2026-08-02' });
+
+		expect(schedule.entries.map((e) => e.day)).toEqual(['2026-08-01', '2026-08-01']);
+	});
+
+	it('shares the matches between the days when asked', () => {
+		const { schedule } = generate({ fixtures, courtCount: 1, endDate: '2026-08-02', spreadDays: true });
+
+		expect(schedule.entries.map((e) => e.day)).toEqual(['2026-08-01', '2026-08-02']);
+	});
+});
+
+describe('the saved generator settings', () => {
+	it('records the rules the run used on the schedule', () => {
+		const { schedule } = generate({ fixtures: [fixture('f1')], restMinutes: '', fitAll: false, spreadDays: true });
+
+		expect(schedule.settings.generator).toMatchObject({
+			fixtureDurationMinutes: 60,
+			restEnabled: true,
+			restMinutes: 60,
+			fitAll: false,
+			spreadDays: true,
+			courtAffinity: true,
+		});
+	});
+
+	it('still places everything with the court preferences switched off', () => {
+		const { unscheduledFixtures } = generate({
+			fixtures: [fixture('f1', { poolKey: 'A' }), fixture('f2', { poolKey: 'A' })],
+			courtAffinity: false,
+			groupDivisions: false,
+		});
+
+		expect(unscheduledFixtures).toEqual([]);
+	});
+});
+
+// Divisions sharing a court are not scheduled one after the other. While one
+// division's teams rest, the other division's match takes the court.
+describe('divisions sharing a court', () => {
+	it('alternates divisions when that finishes sooner', () => {
+		const { schedule } = generate({
+			fixtures: [
+				fixture('a1', { division_id: 'div-1', team1: 'Aces', team2: 'Bears' }),
+				fixture('a2', { division_id: 'div-1', team1: 'Aces', team2: 'Cubs' }),
+				fixture('x1', { division_id: 'div-2', team1: 'Xenon', team2: 'Yaks' }),
+				fixture('x2', { division_id: 'div-2', team1: 'Xenon', team2: 'Zebras' }),
+			],
+			courtCount: 1,
+		});
+
+		expect(schedule.entries.map((e) => e.fixtureId)).toEqual(['a1', 'x1', 'a2', 'x2']);
+		expect(lastEnd(schedule)).toBe('13:00');
+	});
+});
+
+// A court's run of slots restarts the moment a break ends, not at the next
+// multiple of the match length.
+describe('slots after a break', () => {
+	const withBreak = (courtId) => ({
+		version: 1,
+		days: [{ id: 'day-1', date: '2026-08-01', label: 'Day 1' }],
+		courts: [
+			{ id: 'court-1', name: 'Court 1' },
+			{ id: 'court-2', name: 'Court 2' },
+		],
+		entries: [
+			{ id: 'b1', type: 'break', day: '2026-08-01', courtId, startTime: '10:00', endTime: '10:45', fixtureId: null, title: 'Lunch', officials: '', notes: '' },
+		],
+		settings: { dayStartTime: '09:00', dayEndTime: '17:00', slotMinutes: 60 },
+	});
+	const fixtures = Array.from({ length: 6 }, (_, i) => fixture(`f${i + 1}`));
+
+	it('restarts every court when a venue-wide break ends', () => {
+		const { schedule } = generate({ baseSchedule: withBreak(null), fixtures });
+		const starts = schedule.entries.filter((e) => e.type === 'fixture').map((e) => e.startTime);
+
+		expect(starts).toEqual(['09:00', '09:00', '10:45', '10:45', '11:45', '11:45']);
+	});
+
+	it('moves only the court a court break names', () => {
+		const { schedule } = generate({ baseSchedule: withBreak('court-1'), fixtures });
+		const on = (courtId) =>
+			schedule.entries.filter((e) => e.type === 'fixture' && e.courtId === courtId).map((e) => e.startTime);
+
+		expect(on('court-1')).toEqual(['09:00', '10:45', '11:45']);
+		expect(on('court-2')).toEqual(['09:00', '10:00', '11:00']);
+	});
+});
+
+describe('the longest wait', () => {
+	// Aces play at 09:00 and have one match left. Left alone, the X/Y/Z matches
+	// have more to play and go first, and Aces wait until 12:00. One court means
+	// somebody waits; the limit decides that it is not Aces.
+	const fixtures = [
+		fixture('a1', { team1: 'Aces', team2: 'Bears' }),
+		fixture('x1', { team1: 'Xenon', team2: 'Yaks' }),
+		fixture('x2', { team1: 'Xenon', team2: 'Zebras' }),
+		fixture('x3', { team1: 'Yaks', team2: 'Zebras' }),
+		fixture('a2', { team1: 'Aces', team2: 'Cubs' }),
+	];
+	const oneCourt = { fixtures, courtCount: 1, restEnabled: false };
+
+	it('lets a team wait when there is no limit', () => {
+		expect(startOf(generate(oneCourt).schedule, 'a2')).toBe('12:00');
+	});
+
+	it('plays a team before its wait runs over the limit', () => {
+		const { schedule, report } = generate({ ...oneCourt, maxWaitEnabled: true, maxWaitMinutes: 60 });
+
+		expect(startOf(schedule, 'a2')).toBe('11:00');
+		expect(report.ruleBreaks.flatMap((group) => group.teams)).not.toContain('Aces');
+	});
+
+	it('reports a wait it could not avoid', () => {
+		const { schedule, report } = generate({
+			fixtures: [fixture('a1', { team1: 'Aces', team2: 'Bears' }), fixture('a2', { team1: 'Aces', team2: 'Cubs' })],
+			courtCount: 1,
+			maxWaitEnabled: true,
+			maxWaitMinutes: 30,
+		});
+
+		// The 60-minute rest puts the second match at 11:00, an hour after the first.
+		expect(startOf(schedule, 'a2')).toBe('11:00');
+		expect(report.ruleBreaks).toEqual([
+			expect.objectContaining({ rule: 'wait', teams: ['Aces'], message: 'Longest wait (30 min) exceeded for 1 team in 1 match.' }),
+		]);
+	});
+});
+
+describe('the break before knockout rounds', () => {
+	const divisions = [
+		{ id: 'div-1', state: { rounds: [{ name: 'Pool Play', type: 'roundRobin' }, { name: 'Finals', type: 'knockout' }] } },
+	];
+	const fixtures = [fixture('p1', { round: 'Pool Play' }), fixture('fin', { round: 'Finals' })];
+	const base = { fixtures, divisions, courtCount: 1 };
+
+	it('starts a knockout round straight after the pool when it is off', () => {
+		expect(startOf(generate(base).schedule, 'fin')).toBe('10:00');
+	});
+
+	it('holds the knockout round back by the break', () => {
+		const { schedule, report } = generate({ ...base, knockoutGapEnabled: true, knockoutGapMinutes: 30 });
+
+		expect(startOf(schedule, 'fin')).toBe('11:00');
+		expect(report.ruleBreaks).toEqual([]);
+	});
+
+	it('shortens the break when the day has no room for it', () => {
+		const { schedule, report } = generate({
+			...base,
+			dailyEndTime: '11:00',
+			knockoutGapEnabled: true,
+			knockoutGapMinutes: 30,
+		});
+
+		expect(startOf(schedule, 'fin')).toBe('10:00');
+		expect(report.ruleBreaks.map((group) => group.message)).toEqual(['Break before knockout rounds (30 min) shortened in 1 match.']);
+	});
+
+	it('names the break when it blocks a fixture and bending is off', () => {
+		const { unscheduledFixtures, warnings } = generate({
+			...base,
+			dailyEndTime: '11:00',
+			knockoutGapEnabled: true,
+			knockoutGapMinutes: 30,
+			fitAll: false,
+		});
+
+		expect(unscheduledFixtures.map((f) => f.id)).toEqual(['fin']);
+		expect(warnings[0]).toMatch(/break before the knockout round/);
+	});
+
+	it('counts the night as the break when the round ended the day before', () => {
+		const { schedule } = generate({
+			...base,
+			endDate: '2026-08-02',
+			dailyEndTime: '10:00',
+			knockoutGapEnabled: true,
+			knockoutGapMinutes: 30,
+		});
+
+		expect(entriesFor(schedule, 'fin')).toMatchObject({ day: '2026-08-02', startTime: '09:00' });
+	});
+});
+
+describe('match lengths by round', () => {
+	const divisions = [
+		{
+			id: 'div-1',
+			state: {
+				rounds: [
+					{ name: 'Pool Play', type: 'roundRobin' },
+					{ name: 'Semifinals', type: 'knockout' },
+					{ name: 'Finals', type: 'knockout' },
+				],
+			},
+		},
+	];
+	const fixtures = [
+		fixture('p1', { round: 'Pool Play' }),
+		fixture('p2', { round: 'Pool Play' }),
+		fixture('sf1', { round: 'Semifinals' }),
+		fixture('sf2', { round: 'Semifinals · Places 5-8' }),
+		fixture('bronze', { round: '3rd Place Playoff' }),
+		fixture('gold', { round: 'Finals' }),
+	];
+
+	it('gives each round its own length and starts the next match when a court frees', () => {
+		const { schedule } = generate({
+			fixtures,
+			divisions,
+			fixtureDurationMinutes: 30,
+			roundDurations: { Semifinals: 45, Finals: 60 },
+		});
+		const times = (id) => [entriesFor(schedule, id).startTime, entriesFor(schedule, id).endTime];
+
+		expect(times('p1')).toEqual(['09:00', '09:30']);
+		expect(times('sf1')).toEqual(['09:30', '10:15']);
+		// A placement match takes the length of the round it belongs to.
+		expect(times('sf2')).toEqual(['09:30', '10:15']);
+		// The 3rd place playoff takes the Finals length.
+		expect(times('bronze')).toEqual(['10:15', '11:15']);
+		expect(times('gold')).toEqual(['10:15', '11:15']);
+	});
+
+	it('uses the default length for a round with none of its own', () => {
+		const { schedule } = generate({ fixtures, divisions, fixtureDurationMinutes: 30, roundDurations: { Finals: 60 } });
+
+		expect(entriesFor(schedule, 'sf1').endTime).toBe('10:00');
+		expect(entriesFor(schedule, 'gold').endTime).toBe('11:00');
+	});
+
+	it('never overlaps two matches of different lengths on one court', () => {
+		const { schedule } = generate({
+			fixtures,
+			divisions,
+			courtCount: 1,
+			fixtureDurationMinutes: 30,
+			roundDurations: { Semifinals: 45, Finals: 60 },
+		});
+		const ordered = schedule.entries.map((e) => [e.startTime, e.endTime]);
+
+		ordered.slice(1).forEach(([start], index) => expect(start >= ordered[index][1]).toBe(true));
+		// Two 30s, two 45s and two 60s back to back from 09:00.
+		expect(lastEnd(schedule)).toBe('13:30');
+	});
+
+	it('saves only the lengths that read as whole minutes', () => {
+		const { schedule } = generate({ fixtures, divisions, roundDurations: { Finals: '60', Semifinals: '', Pool: 'abc' } });
+
+		expect(schedule.settings.generator.roundDurations).toEqual({ Finals: 60 });
 	});
 });

@@ -4,7 +4,6 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 
 const userRouter = express.Router();
-userRouter.use(express.json());
 
 // Only these two are throttled. Guessing a password and farming accounts are the
 // attacks that repetition buys; the rest of the API gains an attacker nothing.

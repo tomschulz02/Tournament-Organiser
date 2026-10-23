@@ -1,11 +1,14 @@
-import { Fragment, useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect } from 'react';
 import { fetchRoundProgression, confirmRoundProgression } from '../requests';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
+import CreateModal from './create/CreateModal';
 import TeamIdentity from './tournament/TeamIdentity';
 import { useHelpTopic } from '../HelpContext';
 import '../App.css';
+// The shell and its buttons are styled here; imported rather than relied on
+// being loaded by the create page.
+import '../styles/create-tournament.css';
 
 // Prefixed for the same reason TeamsTab.jsx's TEAM_DRAG is: a bare index could
 // have come from anywhere on the page.
@@ -18,35 +21,51 @@ const QUALIFIER_DRAG = 'qualifier:';
 // the server's confirmed list, so the preview updates before anything is saved.
 // Ported rather than shared for the same reason divisionPreview.js is: there is
 // no frontend/backend module boundary to import a server file across.
-function nextRoundFixtures(groups, selectedIds) {
+//
+// A group the round lists under `placement` is a match for places below the
+// title, labelled with its fixture round's own text ("Places 5-8", "5th Place"),
+// and a one-team placement group is a team waiting for its placement final
+// rather than a bye into the next round of the bracket.
+function nextRoundFixtures(groups, selectedIds, placement = []) {
 	if (!Array.isArray(groups)) return [];
 
+	const placementByGroup = new Map((placement ?? []).map((entry) => [entry.group, entry]));
+
 	return groups
-		.filter((group) => Array.isArray(group) && group.length > 0)
-		.map((group) => {
+		.map((group, groupIndex) => {
+			if (!Array.isArray(group) || group.length === 0) return null;
+
+			const entry = placementByGroup.get(groupIndex);
+			const label = entry?.name ? entry.name.split(' · ').pop() : null;
+
 			if (group.length < 2) {
 				const index = group[0];
-				return Number.isInteger(index) ? { type: 'bye', teamId: selectedIds[index] ?? null } : null;
+				if (!Number.isInteger(index)) return null;
+
+				return { type: entry ? 'waiting' : 'bye', teamId: selectedIds[index] ?? null };
 			}
 
 			const [one, two] = group;
 			if (!Number.isInteger(one) || !Number.isInteger(two)) return null;
 
-			return { type: 'match', team1Id: selectedIds[one] ?? null, team2Id: selectedIds[two] ?? null };
+			return { type: 'match', team1Id: selectedIds[one] ?? null, team2Id: selectedIds[two] ?? null, label };
 		})
 		.filter(Boolean);
 }
 
-// Portalled onto document.body, the same as ScheduleMakerModal and CreateModal.
-// Mounted inline from pages/View.jsx, inside <main id="app">, this shares a
-// stacking context with the fixed header and the footer. On a tall desktop
-// viewport the modal happened to land between the two and the clipping went
-// unnoticed; on a phone or a short window it lost its top and its bottom.
-// Leaving the tree means no ancestor can create a containing block for it.
-//
-// All three states below go through this, not just the loaded one — the loading
-// and error states are the ones most likely to be seen on a slow phone.
-const portal = (content) => createPortal(content, document.body);
+// A null place is one a cancelled knockout match left empty: both its teams are
+// out, so whoever the place is drawn against gets a walkover. See
+// validateConfirmedTeams in progression.service.js.
+const VACANT_NAME = 'No team';
+
+// A knockout match recorded level stops the proposal. The message is static, so
+// the match it means comes in the error's data.
+function proposalError(err) {
+	const message = err.message || 'Could not load the round results.';
+	const matchNo = err.data?.matchNo;
+
+	return matchNo ? `${message} (Match #${matchNo}, ${err.data.round})` : message;
+}
 
 // Round progression.
 //
@@ -90,7 +109,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 				setSelectedIds(response.data.qualifiers.map((team) => team.id));
 			} catch (err) {
 				// The server's message is display-ready.
-				if (!cancelled) setError(err.message || 'Could not load the round results.');
+				if (!cancelled) setError(proposalError(err));
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -111,7 +130,8 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 	const isRoundRobinNext = proposal?.nextRound?.type === 'roundRobin';
 
 	const eligible = proposal?.eligibleTeams || [];
-	const nameFor = (teamId) => eligible.find((team) => team.id === teamId)?.name || 'Unknown';
+	const nameFor = (teamId) =>
+		teamId === null ? VACANT_NAME : eligible.find((team) => team.id === teamId)?.name || 'Unknown';
 	const statsFor = (teamId) => eligible.find((team) => team.id === teamId);
 
 	// True when the organiser has changed the backend's proposed order.
@@ -120,8 +140,11 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 		(selectedIds.length !== proposal.qualifiers.length ||
 			selectedIds.some((id, index) => id !== proposal.qualifiers[index]?.id));
 
-	const hasDuplicates = new Set(selectedIds).size !== selectedIds.length;
-	const complete = selectedIds.length > 0 && selectedIds.every(Boolean);
+	// Empty places are not duplicates of each other, and do not make the list
+	// incomplete — but a list with nobody in it is.
+	const chosenIds = selectedIds.filter((id) => id !== null);
+	const hasDuplicates = new Set(chosenIds).size !== chosenIds.length;
+	const complete = chosenIds.length > 0;
 
 	const handleSelect = (index, teamId) => {
 		setSelectedIds((current) => {
@@ -204,217 +227,254 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 		}
 	};
 
+	// All three states share one frame, not just the loaded one — the loading
+	// and error states are the ones most likely to be seen on a slow phone.
+	// Closing is ignored while the confirmed list is being saved.
+	const handleClose = () => {
+		if (!saving) onCancel();
+	};
+	const frame = (children, footer) => (
+		<CreateModal
+			titleId="next-round-title"
+			title="Next round setup"
+			subtitle={
+				proposal ? `${proposal.roundName} is complete. These teams progress to ${proposal.nextRoundName}.` : null
+			}
+			size="round"
+			onClose={handleClose}
+			footer={footer}>
+			{children}
+		</CreateModal>
+	);
+
 	if (loading) {
-		return portal(
-			<div className="modal-backdrop">
-				<div className="next-round-modal">
-					<div className="next-round-modal-header">
-						<h2>Next Round Setup</h2>
-						<button type="button" className="next-round-modal-close" onClick={onCancel} aria-label="Close">
-							&times;
-						</button>
-					</div>
-					<LoadingScreen context="roundProgress" />
-				</div>
-			</div>
-		);
+		return frame(<LoadingScreen context="roundProgress" />);
 	}
 
 	if (!proposal) {
-		return portal(
-			<div className="modal-backdrop">
-				<div className="next-round-modal">
-					<div className="next-round-modal-header">
-						<h2>Next Round Setup</h2>
-						<button type="button" className="next-round-modal-close" onClick={onCancel} aria-label="Close">
-							&times;
-						</button>
-					</div>
-					<p className="error-text">{error || 'No results available for this round.'}</p>
-					<div className="modal-actions">
-						<button className="cancel-btn" onClick={onCancel}>
-							Close
-						</button>
-					</div>
-				</div>
+		return frame(
+			<p className="nr-error" role="alert">
+				{error || 'No results available for this round.'}
+			</p>,
+			<div className="ct-modal-footer-right">
+				<button type="button" className="ct-button ct-button-quiet" onClick={onCancel}>
+					Close
+				</button>
 			</div>
 		);
 	}
 
-	return portal(
-		<div className="modal-backdrop">
-			<div className="next-round-modal">
-				<div className="next-round-modal-header">
-					<h2>Next Round Setup</h2>
-					<button type="button" className="next-round-modal-close" onClick={onCancel} aria-label="Close">
-						&times;
-					</button>
-				</div>
-				<p className="modal-subtitle">
-					{proposal.roundName} is complete. These teams progress to {proposal.nextRoundName}.
+	const footer = (
+		<>
+			{amended && (
+				<p className="nr-footer-note">You have changed the calculated ranking. The original will be kept on record.</p>
+			)}
+			{error && (
+				<p className="nr-footer-note nr-error" role="alert">
+					{error}
 				</p>
-
-				<div className="modal-content">
-					<div className="qualified-teams">
-						<h3>{isRoundRobinNext ? 'Next Leg Order' : 'Qualifying Teams'}</h3>
-						{selectedIds.length > 1 && (
-							<p className="tv-teams-seed-note">Drag a team by its handle to reorder it.</p>
-						)}
-						<div className="teams-list">
-							{selectedIds.map((teamId, index) => {
-								const stats = statsFor(teamId);
-								// The row's current position, not the frozen calculated
-								// rank — it answers "who's progressing and in what order
-								// right now," feeding the fixture preview directly below.
-								const isChanged = proposal.qualifiers[index]?.id !== teamId;
-								const pickerOpen = pickerIndex === index;
-								return (
-									<Fragment key={index}>
-										<div
-											className={`tv-team-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
-												overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
-											}${isChanged ? ' tv-team-row--changed' : ''}`}
-											onDragOver={(event) => handleDragOver(event, index)}
-											onDrop={(event) => handleDrop(event, index)}>
-											<span className="tv-qualifier-rank" aria-hidden="true">
-												{index + 1}
-											</span>
-											<button
-												type="button"
-												className="tv-team-grip"
-												draggable
-												disabled={saving}
-												onDragStart={(event) => handleDragStart(event, index)}
-												onDragEnd={endDrag}
-												onKeyDown={(event) => handleGripKeyDown(event, index)}
-												aria-label={`Move ${nameFor(teamId)} from ${isRoundRobinNext ? 'position' : 'qualifying position'} ${
-													index + 1
-												}. Drag, or use the up and down arrow keys.`}>
-												<Icon name="grip" size={16} fill="currentColor" />
-											</button>
-
-											<TeamIdentity
-												name={nameFor(teamId)}
-												note={
-													stats ? `W: ${stats.won} L: ${stats.lost} Sets: ${stats.setsWon}-${stats.setsLost}` : null
-												}
-												size="small"
-											/>
-
-											<button
-												type="button"
-												className={`tv-swap-btn${pickerOpen ? ' tv-swap-btn--open' : ''}`}
-												disabled={saving}
-												aria-expanded={pickerOpen}
-												aria-label={`${pickerOpen ? 'Close' : 'Substitute'} ${nameFor(teamId)}`}
-												onClick={() => setPickerIndex(pickerOpen ? null : index)}>
-												<Icon name="swap" size={16} fill="currentColor" />
-											</button>
-										</div>
-
-										{/* Opens directly into the list of eligible teams rather than
-										    a native <select> that itself still needs opening — one
-										    click shows the options, the same click on the button again
-										    hides them. */}
-										{pickerOpen && (
-											<div
-												className="tv-substitute-list"
-												role="listbox"
-												aria-label={`Choose a substitute for ${nameFor(teamId)}`}>
-												{eligible.map((team) => {
-													const isTaken = selectedIds.includes(team.id) && team.id !== teamId;
-													const isActive = team.id === teamId;
-													return (
-														<button
-															type="button"
-															key={team.id}
-															role="option"
-															aria-selected={isActive}
-															disabled={saving || isTaken}
-															className={`tv-substitute-option${
-																isActive ? ' tv-substitute-option--active' : ''
-															}`}
-															onClick={() => {
-																handleSelect(index, team.id);
-																setPickerIndex(null);
-															}}>
-															{team.name}
-														</button>
-													);
-												})}
-											</div>
-										)}
-									</Fragment>
-								);
-							})}
-						</div>
-					</div>
-
-					<div className="fixture-preview">
-						{isRoundRobinNext ? (
-							<div className="next-round-final-note">
-								<h3>{proposal.nextRoundName}</h3>
-								<p>
-									Every team carries forward to this leg — nobody is eliminated, so there is no bracket to preview.
-									The order above sets the seeding for the leg.
-								</p>
-							</div>
-						) : proposal.nextRound ? (
-							<>
-								<h3>{proposal.nextRoundName} Matchups</h3>
-								<div className="fixtures-list">
-									{nextRoundFixtures(proposal.nextRound.groups, selectedIds).map((entry, index) => (
-										<div key={index} className="preview-fixture preview-fixture--matchup">
-											{entry.type === 'bye' ? (
-												<>
-													<TeamIdentity name={nameFor(entry.teamId)} size="small" />
-													<span className="tv-status-pill tv-status-pill--ongoing">Bye</span>
-												</>
-											) : (
-												<>
-													<TeamIdentity name={nameFor(entry.team1Id)} size="small" />
-													<span className="vs">vs</span>
-													<TeamIdentity name={nameFor(entry.team2Id)} size="small" />
-												</>
-											)}
-										</div>
-									))}
-								</div>
-							</>
-						) : (
-							<div className="next-round-final-note">
-								<p>There's no further round to preview — this is the last round in the division.</p>
-							</div>
-						)}
-					</div>
-				</div>
-
+			)}
+			<div className="ct-modal-footer-left">
 				{amended && (
-					<p className="modal-note">
-						You have changed the calculated ranking. The original will be kept on record.
+					<button type="button" className="ct-button ct-button-quiet" onClick={handleReset} disabled={saving}>
+						Reset to calculated
+					</button>
+				)}
+			</div>
+			<div className="ct-modal-footer-right">
+				<button type="button" className="ct-button ct-button-quiet" onClick={onCancel} disabled={saving}>
+					Cancel
+				</button>
+				<button
+					type="button"
+					className="ct-button ct-button-primary"
+					onClick={handleConfirm}
+					disabled={saving || hasDuplicates || !complete || proposal.isFinalRound}>
+					{saving && <LoadingScreen variant="inline" />}
+					<span>{saving ? 'Starting...' : 'Start next round'}</span>
+				</button>
+			</div>
+		</>
+	);
+
+	return frame(
+		<div className="nr-layout">
+			<section className="nr-section" aria-labelledby="nr-teams-heading">
+				<h3 id="nr-teams-heading" className="nr-heading">
+					{isRoundRobinNext ? 'Next leg order' : 'Qualifying teams'}
+				</h3>
+				{selectedIds.length > 1 && (
+					<p className="nr-hint">
+						Reorder with the arrows<span className="nr-hint-drag">, or drag a team by its handle</span>.
 					</p>
 				)}
-				{error && <p className="error-text">{error}</p>}
+				<ol className="nr-rows">
+					{selectedIds.map((teamId, index) => {
+						const stats = statsFor(teamId);
+						// The row's current position, not the frozen calculated
+						// rank — it answers "who's progressing and in what order
+						// right now," feeding the fixture preview alongside.
+						const isChanged = proposal.qualifiers[index]?.id !== teamId;
+						const pickerOpen = pickerIndex === index;
+						const name = nameFor(teamId);
+						const place = isRoundRobinNext ? 'position' : 'qualifying position';
+						return (
+							<li key={index} className="nr-row-item">
+								<div
+									className={`tv-team-row nr-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
+										overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
+									}${isChanged ? ' tv-team-row--changed' : ''}`}
+									onDragOver={(event) => handleDragOver(event, index)}
+									onDrop={(event) => handleDrop(event, index)}>
+									<span className="tv-qualifier-rank" aria-hidden="true">
+										{index + 1}
+									</span>
+									<button
+										type="button"
+										className="tv-team-grip nr-grip"
+										draggable
+										disabled={saving}
+										onDragStart={(event) => handleDragStart(event, index)}
+										onDragEnd={endDrag}
+										onKeyDown={(event) => handleGripKeyDown(event, index)}
+										aria-label={`Move ${name} from ${place} ${index + 1}. Drag, or use the up and down arrow keys.`}>
+										<Icon name="grip" size={16} fill="currentColor" />
+									</button>
 
-				<div className="modal-actions">
-					<button className="cancel-btn" onClick={onCancel} disabled={saving}>
-						Cancel
-					</button>
-					{amended && (
-						<button className="cancel-btn" onClick={handleReset} disabled={saving}>
-							Reset to calculated
-						</button>
-					)}
-					<button
-						className="confirm-btn"
-						onClick={handleConfirm}
-						disabled={saving || hasDuplicates || !complete || proposal.isFinalRound}>
-						{saving && <LoadingScreen variant="inline" />}
-						<span>{saving ? 'Starting...' : 'Start Next Round'}</span>
-					</button>
-				</div>
-			</div>
-		</div>
+									<TeamIdentity
+										name={name}
+										note={
+											teamId === null
+												? 'Its opponent gets a walkover'
+												: stats
+													? `W ${stats.won} · L ${stats.lost} · Sets ${stats.setsWon}-${stats.setsLost}`
+													: null
+										}
+										size="small"
+									/>
+
+									{/* Buttons rather than drag alone: a phone has no HTML5 drag,
+									    so these are the only way to reorder on touch. */}
+									<div className="nr-row-actions">
+										<button
+											type="button"
+											className="nr-icon-btn"
+											disabled={saving || index === 0}
+											aria-label={`Move ${name} up`}
+											onClick={() => moveTeam(index, index - 1)}>
+											<Icon name="leftChevron" size={20} fill="currentColor" className="nr-chevron-up" />
+										</button>
+										<button
+											type="button"
+											className="nr-icon-btn"
+											disabled={saving || index === selectedIds.length - 1}
+											aria-label={`Move ${name} down`}
+											onClick={() => moveTeam(index, index + 1)}>
+											<Icon name="leftChevron" size={20} fill="currentColor" className="nr-chevron-down" />
+										</button>
+										<button
+											type="button"
+											className={`nr-icon-btn${pickerOpen ? ' nr-icon-btn--open' : ''}`}
+											disabled={saving}
+											aria-expanded={pickerOpen}
+											aria-label={`${pickerOpen ? 'Close' : 'Substitute'} ${name}`}
+											onClick={() => setPickerIndex(pickerOpen ? null : index)}>
+											<Icon name="swap" size={18} fill="currentColor" />
+										</button>
+									</div>
+								</div>
+
+								{/* Opens directly into the list of eligible teams rather than
+								    a native <select> that itself still needs opening — one
+								    click shows the options, the same click on the button again
+								    hides them. */}
+								{pickerOpen && (
+									<div className="tv-substitute-list" role="listbox" aria-label={`Choose a substitute for ${name}`}>
+										{eligible.map((team) => {
+											const isTaken = selectedIds.includes(team.id) && team.id !== teamId;
+											const isActive = team.id === teamId;
+											return (
+												<button
+													type="button"
+													key={team.id}
+													role="option"
+													aria-selected={isActive}
+													disabled={saving || isTaken}
+													className={`tv-substitute-option${isActive ? ' tv-substitute-option--active' : ''}`}
+													onClick={() => {
+														handleSelect(index, team.id);
+														setPickerIndex(null);
+													}}>
+													{team.name}
+												</button>
+											);
+										})}
+									</div>
+								)}
+							</li>
+						);
+					})}
+				</ol>
+			</section>
+
+			<section className="nr-section" aria-labelledby="nr-preview-heading">
+				{isRoundRobinNext ? (
+					<>
+						<h3 id="nr-preview-heading" className="nr-heading">
+							{proposal.nextRoundName}
+						</h3>
+						<p className="nr-empty">
+							Every team carries forward to this leg — nobody is eliminated, so there is no bracket to preview. The
+							order sets the seeding for the leg.
+						</p>
+					</>
+				) : proposal.nextRound ? (
+					<>
+						<h3 id="nr-preview-heading" className="nr-heading">
+							{proposal.nextRoundName} matchups
+						</h3>
+						<ul className="nr-matchups">
+							{nextRoundFixtures(proposal.nextRound.groups, selectedIds, proposal.nextRound.placement).map(
+								(entry, index) => (
+									<li key={index} className="nr-matchup">
+										{entry.type === 'bye' || entry.type === 'waiting' ? (
+											<>
+												<TeamIdentity name={nameFor(entry.teamId)} size="small" />
+												<span className="nr-tag">{entry.type === 'bye' ? 'Bye' : 'Awaiting placement match'}</span>
+											</>
+										) : (
+											<>
+												<div className="nr-matchup-teams">
+													<TeamIdentity name={nameFor(entry.team1Id)} size="small" />
+													<span className="nr-matchup-vs">vs</span>
+													<TeamIdentity name={nameFor(entry.team2Id)} size="small" />
+												</div>
+												{(entry.label || entry.team1Id === null || entry.team2Id === null) && (
+													<div className="nr-matchup-tags">
+														{entry.label && <span className="nr-tag">{entry.label}</span>}
+														{(entry.team1Id === null || entry.team2Id === null) && (
+															<span className="nr-tag">Walkover</span>
+														)}
+													</div>
+												)}
+											</>
+										)}
+									</li>
+								)
+							)}
+						</ul>
+					</>
+				) : (
+					<>
+						<h3 id="nr-preview-heading" className="nr-heading">
+							Matchups
+						</h3>
+						<p className="nr-empty">There's no further round to preview — this is the last round in the division.</p>
+					</>
+				)}
+			</section>
+		</div>,
+		footer
 	);
 }
 

@@ -60,6 +60,11 @@ const { divisionsRepository } = await import("../../../src/repositories/division
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { tournamentRepository } = await import("../../../src/repositories/tournament.repository.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
+const { MAX_TEAMS_PER_DIVISION, MAX_ROUND_ROBIN_LEGS, MAX_FIXTURES_PER_DIVISION } =
+    await import("../../../src/config/limits.js");
+
+// n distinct team entries, for the caps.
+const teamList = (n) => Array.from({ length: n }, (_, index) => ({ name: `Team ${index + 1}` }));
 
 beforeEach(() => {
     uuidState.next = 0;
@@ -237,6 +242,18 @@ describe("leagueConfigFromPayload", () => {
 
     it("defaults legs to 1 when absent from a legs-mode payload", () => {
         expect(leagueConfigFromPayload({ round_robin_mode: "legs" })).toEqual({ mode: "legs", legs: 1 });
+    });
+
+    // The client caps at the same number (divisionFormats.js); the server used to
+    // take any count it was sent.
+    it("accepts the leg cap and refuses one more, rather than clamping", () => {
+        expect(leagueConfigFromPayload({ round_robin_mode: "legs", round_robin_legs: MAX_ROUND_ROBIN_LEGS }))
+            .toEqual({ mode: "legs", legs: MAX_ROUND_ROBIN_LEGS });
+
+        expect(() => leagueConfigFromPayload({ round_robin_mode: "legs", round_robin_legs: MAX_ROUND_ROBIN_LEGS + 1 }))
+            .toThrow(expect.objectContaining({ code: "TOO_MANY_LEGS", status: 400 }));
+        expect(() => leagueConfigFromPayload({ round_robin_mode: "legs", round_robin_legs: "1000" }))
+            .toThrow(`A league can have at most ${MAX_ROUND_ROBIN_LEGS} legs`);
     });
 
     it("returns undefined for a payload naming neither mode, so createLeagueState defaults to one cycle", () => {
@@ -488,6 +505,54 @@ describe("divisionService.createDivision", () => {
         expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
     });
 
+    it("refuses more teams than the cap before writing anything", async () => {
+        const teams = teamList(MAX_TEAMS_PER_DIVISION + 1);
+
+        await expect(divisionService.createDivision(
+            { ...details(), teams, num_teams: teams.length },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "TOO_MANY_TEAMS", status: 400 });
+
+        expect(divisionsRepository.createDivision).not.toHaveBeenCalled();
+        expect(divisionsRepository.createTeam).not.toHaveBeenCalled();
+    });
+
+    // No single input bounds the fixture count. A single round robin on 64 teams
+    // is within the team and leg caps and is 2016 matches.
+    it("refuses a structure that would generate more fixtures than the cap, before writing anything", async () => {
+        const teams = teamList(64);
+
+        await expect(divisionService.createDivision(
+            { ...details(), type: "league", teams, num_teams: teams.length, round_robin_mode: "legs", round_robin_legs: 1 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({
+            code: "TOO_MANY_FIXTURES",
+            status: 400,
+            message: `This would create more than ${MAX_FIXTURES_PER_DIVISION} matches in one division`
+        });
+
+        expect(divisionsRepository.createDivision).not.toHaveBeenCalled();
+        expect(fixturesRepository.createFixture).not.toHaveBeenCalled();
+    });
+
+    it("accepts a structure just under the fixture cap", async () => {
+        // 63 teams, one leg: 63 * 62 / 2 = 1953 matches.
+        const teams = teamList(63);
+
+        await divisionService.createDivision(
+            { ...details(), type: "league", teams, num_teams: teams.length, round_robin_mode: "legs", round_robin_legs: 1 },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        );
+
+        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(1953);
+    });
+
     it("rejects an entry carrying no name", async () => {
         // teams.name is NOT NULL, so this would otherwise surface as a 500.
         await expect(divisionService.createDivision(
@@ -660,6 +725,13 @@ describe("validateTeamNames", () => {
     it("accepts an empty list, which is a division with no teams yet", () => {
         expect(validateTeamNames([])).toEqual([]);
     });
+
+    it("accepts the team cap and refuses one more", () => {
+        expect(validateTeamNames(teamList(MAX_TEAMS_PER_DIVISION))).toHaveLength(MAX_TEAMS_PER_DIVISION);
+
+        expect(() => validateTeamNames(teamList(MAX_TEAMS_PER_DIVISION + 1)))
+            .toThrow(`A division can have at most ${MAX_TEAMS_PER_DIVISION} teams`);
+    });
 });
 
 describe("readTeamEntries", () => {
@@ -677,6 +749,13 @@ describe("readTeamEntries", () => {
     it("refuses the same id twice", () => {
         expect(() => readTeamEntries([{ id: "t1", name: "Aces" }, { id: "t1", name: "Bears" }], ["t1"]))
             .toThrow("A team appears more than once");
+    });
+
+    // The edit path's entry point, so the cap holds for every team edit and not
+    // only for creation.
+    it("applies the team cap", () => {
+        expect(() => readTeamEntries(teamList(MAX_TEAMS_PER_DIVISION + 1), []))
+            .toThrow(expect.objectContaining({ code: "TOO_MANY_TEAMS" }));
     });
 });
 

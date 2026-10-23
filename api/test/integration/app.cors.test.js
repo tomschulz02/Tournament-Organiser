@@ -67,4 +67,16 @@ describe("CORS and conditional requests", () => {
         // Unlisted, the browser blocks the request outright.
         expect(response.headers["access-control-allow-headers"]).toContain("If-None-Match");
     });
+
+    it("lets the browser reuse a preflight answer for two hours", async () => {
+        const response = await request(app)
+            .options("/api/fixtures/45bb764e-c07d-474e-8d01-9d9711d39a3a/result")
+            .set("Origin", "https://tourganiser.example")
+            .set("Access-Control-Request-Method", "PUT")
+            .set("Access-Control-Request-Headers", "content-type");
+
+        // Without it every write and every conditional GET is preceded by a
+        // fresh preflight, a whole extra round trip.
+        expect(response.headers["access-control-max-age"]).toBe("7200");
+    });
 });

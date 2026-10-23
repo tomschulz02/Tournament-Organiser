@@ -80,6 +80,12 @@ The server derives the status from the recorded sets and stores it. The client n
 asserts one — it submits scores and, when the match is over, says so. `CANCELLED` is the
 only status set directly, because nothing about it can be inferred from scores.
 
+A knockout match must have a winner. The server refuses to end one — including the 3rd
+place playoff and placement matches, which sit inside a knockout round — with the sets
+level (`KNOCKOUT_NEEDS_WINNER`), and the score dialog does not offer it. Cancelling a
+knockout match stays allowed: see "A cancelled knockout match" below. Pool and League
+matches may still end level.
+
 The organiser's explicit end-of-match signal is a stopgap. Once rounds can express a
 match format, `COMPLETED` follows from a team reaching `ceil(N/2)` sets and the signal
 becomes a confirmation.
@@ -116,7 +122,17 @@ so a team's counts sum to its played total minus any level matches.
 
 Applied in sequence. Move to the next criterion only when the current one ties.
 
-1. **Matches won**, descending.
+1. **The division's ranking basis**, descending — `divisions.ranking_basis`, one of:
+   - **Matches won** (`MATCHES_WON`, the default).
+   - **FIVB match points** (`FIVB_POINTS`) — 3 for a win outright, 2 for a win in the
+     deciding set, 1 for a loss in the deciding set, 0 otherwise. A deciding set is one
+     where the loser took at least one set and the margin is one (3-2, 2-1); a single-set
+     match is won outright.
+   - **Simplified match points** (`SIMPLIFIED_POINTS`) — 2 for any win, 1 for a loss in
+     the deciding set, 0 otherwise.
+   - **Sets won** (`SETS_WON`), in total.
+
+   Only this first criterion is configurable. Everything below it is fixed.
 2. **Set ratio**, descending.
 3. **Point ratio**, descending.
 4. **Head-to-head**, if the tied teams have played each other.
@@ -149,6 +165,10 @@ completed match with a scoreline reflecting the forfeit. Getting this right is l
 the organiser's discretion.
 
 `CANCELLED` is not a forfeit. It means the match was not played and does not count.
+
+In a knockout round a walkover — one team cannot play — is entered the same way, as a
+winning score for the team that goes through. When neither team can play, the match is
+cancelled: a double forfeit. See "A cancelled knockout match" below.
 
 ## Progression Between Rounds
 
@@ -205,6 +225,32 @@ the winner of quarterfinal 4.
 For a semifinal round this gives `[winner1, winner2, loser1, loser2]`, so the following
 round expresses the bronze match as `[2, 3]` and the final as `[0, 1]`.
 
+Every place is fixed: each group takes one winner place and each match one loser place.
+A place nobody fills holds `null` instead of closing up, because closing up moves every
+later team a place along — which once sent a beaten quarterfinalist into the semifinals
+against the team that had beaten it. A knockout match recorded as finished with the sets
+level (possible only in data from before the score endpoint refused it) stops
+progression with `KNOCKOUT_MATCH_UNDECIDED`, a 409 naming the match, rather than being
+skipped.
+
+### A cancelled knockout match
+
+A cancelled knockout match is a double forfeit: neither team goes through.
+
+- Its winner place and its loser place are both `null`. Its two teams follow the losers
+  in `results`, past every place the next round reads, so they are ranked as eliminated
+  in that round — below every team that played its match in that round and lost.
+- The next round's match that place feeds is bound short of a team, and a match short of
+  a team is a **walkover**: there is nothing to play, so progression stores it as
+  `CANCELLED` as it binds it. A cancelled knockout match with one team in it sends that
+  team through, with an empty loser place; one with no team sends nobody.
+- Nobody is pulled in from another match. With quarterfinal 1 cancelled, the semifinal
+  its winner would have played is a walkover for the winner of quarterfinal 2.
+- The gaps carry on as far as they reach: a walkover semifinal has no loser, so the 3rd
+  place playoff it feeds is a walkover too.
+- The organiser may fill an empty place before confirming, with any team that played the
+  round, as with any other substitution. A walkover counts as neither a win nor a loss.
+
 The Finals round is walked with the playoff included: the 3rd place playoff's own round
 name is `"3rd Place Playoff"`, but it is one of the Finals round's two groups, so
 anything matching fixtures to that round must accept it.
@@ -222,6 +268,35 @@ It is never read from a stored key and never inferred from the round's name or f
 configured knockout size. There is no `qualifyingTeams` key on a round: none has ever
 been written, and `state` is JSONB that no migration reaches, so deriving is the only
 approach that works on divisions that already exist.
+
+### Placement matches
+
+By default a knockout decides 1st to 4th by play — the final and the 3rd-place playoff —
+and every other knockout team is ranked by the tiebreak for the round it went out in. A
+Classic division's `placement_depth` extends play down to that place: an odd rank `N`
+means the match for `N` and `N + 1` is played, and so is everything needed to reach it.
+
+- The teams knocked out of one round form a **tier** with the places between them: the
+  Quarterfinals' losers play for 5th to 8th. A tier plays its own bracket, drawn with the
+  same fold as the winners' — the loser of match 1 meets the loser of the last match —
+  and, if uneven, byes its strongest teams exactly as a Round of 6 does.
+- A tier's teams are ordered strongest first. Losers in match order are the reverse —
+  the fold pairs best with worst, so the loser of match 1 lost to the top seed — so the
+  list is reversed before drawing. No pairing changes; only which end receives the byes.
+- Each round of a tier's bracket splits it: winners play on for its upper places, losers
+  for its lower ones. A part entirely below the depth is not played, and its teams are
+  ranked by the tiebreak as before.
+- A tier's matches start in the round after it forms. Every placement **final** is played
+  in the last round, alongside the 3rd-place playoff; a pair ready earlier waits in
+  one-team groups, the way a bye already carries a team on. A tier of one needs no final
+  and is placed when it reaches the last round.
+- Placement groups are ordinary knockout groups after the round's own, holding indices
+  into the previous round's results, so progression confirms and binds them like any
+  other. They are ordered by the places they play for, best first, which keeps every
+  unplayed team at the tail of the results, so what progression confirms is exactly what
+  later rounds reference.
+
+Nothing about places 1 to 4 changes. With no depth set the draw is exactly what it was.
 
 ### Qualification
 
@@ -275,16 +350,23 @@ applies it at generation time, as a hard constraint rather than a score, so a ge
 schedule never breaks it. `api/src/utils/scheduleValidator.js` applies it again on write,
 because a schedule can also be built and edited by hand. See `docs/schedule.md`.
 
-A partial schedule is legal, so an earlier round may be entirely unplaced. The constraint
-is measured against every earlier round that *has* been placed, not only the immediately
-preceding one.
+A partial schedule is legal, so an earlier round may be entirely unplaced. The server
+measures the constraint against every earlier round that *has* been placed, not only the
+immediately preceding one. The generator is stricter. Since 2026-09-24 it places no
+fixture of a round until every fixture of the earlier rounds has been placed, so a
+knockout round is left out rather than scheduled ahead of a pool match that could not
+be placed.
 
-### A team never plays two matches back to back
+### A team gets its minimum rest between matches
 
-At least one slot of rest between a team's two matches on the same day. Settled
-2026-08-11 and enforced from 2026-08-13 as a hard constraint in the generator, not a
-preference it can trade away: a tight tournament now reports a fixture it cannot place
-rather than placing it against a team that has just come off court.
+A minimum gap between a team's two matches on the same day, set by the organiser and
+one match length by default. Settled 2026-08-11 as a hard constraint. Revised
+2026-09-24: it is now the organiser's rule. It can be switched off, and when the
+organiser allows it the generator bends it to fit a fixture that has nowhere else to go.
+It bends as few times as possible and never twice for one team where once for another
+would do. Every bend is reported after generating. With bending off, a tight tournament
+reports the fixture it cannot place rather than placing it against a team that has just
+come off court.
 
 Only the generator enforces it. The server accepts a hand-placed back-to-back match,
 because the organiser may have a reason — a walkover, a team that asked for it — and
@@ -294,8 +376,10 @@ whether a schedule is good.
 **It cannot apply across the pool-to-knockout boundary.** A semifinal's teams are not
 known until pool play has finished, so the generator has nobody to give rest to and will
 place a semifinal in the slot immediately after the last pool match. The round-order rule
-above still holds, so the match is playable; it may not be kind. An organiser who wants a
-gap there adds a break. Recorded in `docs/known-limitations.md`.
+above still holds, so the match is playable, though it may not be kind. The organiser
+can switch on "Break before knockout rounds" in the generator settings. The generator
+then holds each knockout round back that long after the round before it ends. Recorded
+in `docs/known-limitations.md`.
 
 The full priority order the generator works to is in `docs/schedule.md` under Generation
 objectives.

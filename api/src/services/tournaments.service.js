@@ -3,6 +3,7 @@ import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { userRepository } from "../repositories/users.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
+import { editorsRepository } from "../repositories/editors.repository.js";
 import { divisionService } from "./divisions.service.js";
 import { getISODate, getLongDate } from "../utils/DateHandler.js";
 import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
@@ -10,6 +11,7 @@ import { validateSchedule } from "../utils/scheduleValidator.js";
 import { AppError } from "../errors.js";
 import { assertText } from "../utils/validation.js";
 import { buildChangeKey } from "../utils/etag.js";
+import { MAX_DIVISIONS_PER_TOURNAMENT } from "../config/limits.js";
 
 const db = DatabaseConnection();
 
@@ -32,6 +34,10 @@ async function createTournament(tournamentData, userId) {
     assertText(details.location, "location", { max: TOURNAMENT_LOCATION_MAX });
     // description is the one nullable free-text column of the three.
     assertText(details.description, "description", { max: TOURNAMENT_DESCRIPTION_MAX, required: false });
+
+    if (tournamentData.divisions.length > MAX_DIVISIONS_PER_TOURNAMENT) {
+        throw new AppError("TOO_MANY_DIVISIONS");
+    }
 
     // One transaction for the whole creation: the tournament, its divisions,
     // their teams and their fixtures commit together or not at all.
@@ -124,21 +130,51 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
         fixturesRepository.getFixturesByDivisionIds(divisionIds)
     ]);
 
+    const creator = viewerUserId !== null && viewerUserId === tournament.created_by;
+    // Only asked for a signed-in viewer who is not the organiser: anyone else
+    // cannot be an editor, and a public view costs no extra query.
+    const editor = !creator && viewerUserId !== null && (await editorsRepository.isEditor(tournamentId, viewerUserId));
+
     const fixturesByDivisionId = groupByDivisionId(fixtures);
     const view = formatTournamentViewPayload({
         tournament,
         divisions,
         teamsByDivisionId,
-        fixturesByDivisionId
+        fixturesByDivisionId,
+        // Who entered each result is for the people entering them. Everyone
+        // else is handed no attribution at all, not an empty one.
+        attribution: creator || editor ? await buildAttribution(tournament, fixtures, viewerUserId) : null
     });
 
     return {
-        creator: viewerUserId !== null && viewerUserId === tournament.created_by,
+        creator,
+        editor,
         // Derived from rows already loaded, so this costs no extra query. The
         // controller turns it into an ETag; it is not part of the payload.
         changeKey: buildChangeKey({ tournament, divisions }),
         view
     };
+}
+
+// The same change key fetchTournamentDetails returns, from one light query
+// instead of the whole view, so the controller can answer a matching
+// If-None-Match before building anything.
+//
+// It goes through buildChangeKey itself, with the divisions' latest stamp
+// standing in for all of them: the greatest of (tournament, max of divisions)
+// is the greatest of (tournament, every division), so the two keys cannot
+// differ. One definition of the key, not two. Null when the tournament does not
+// exist — the full path then answers its 404.
+async function getTournamentChangeKey(tournamentId) {
+    const stamps = await tournamentRepository.getChangeStamps(tournamentId);
+    if (!stamps) {
+        return null;
+    }
+
+    return buildChangeKey({
+        tournament: { last_update: stamps.tournament_update },
+        divisions: [{ last_update: stamps.division_update }]
+    });
 }
 
 // --- lifecycle --------------------------------------------------------------
@@ -209,6 +245,14 @@ async function addDivision(tournamentId, userId, division) {
 
     if (statusOf(tournament) !== "Not Started") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    // Read outside the transaction, so two adds racing at the cap can both pass.
+    // Accepted: the cap bounds the cost of a request, and one division over it
+    // is not the cost it exists to stop.
+    const existing = await divisionsRepository.getDivisionsByTournamentId(tournamentId);
+    if (existing.length >= MAX_DIVISIONS_PER_TOURNAMENT) {
+        throw new AppError("TOO_MANY_DIVISIONS");
     }
 
     return await db.withTransaction(async (client) =>
@@ -285,6 +329,33 @@ async function updateScoresheetTemplate(tournamentId, userId, templateKey) {
     return { id: tournamentId, scoresheet_template: templateKey ?? null };
 }
 
+// Names and roles for everyone who has entered a result in this tournament, keyed
+// by user id. The role is the one they hold now: someone removed as an editor is
+// still named on the results they entered, but no longer as an editor.
+async function buildAttribution(tournament, fixtures, viewerUserId) {
+    const ids = [...new Set(fixtures.map((fixture) => fixture.entered_by).filter(Boolean))];
+    if (ids.length === 0) {
+        return new Map();
+    }
+
+    const [users, editors] = await Promise.all([
+        userRepository.getUsernamesByIds(ids),
+        editorsRepository.getEditors(tournament.id)
+    ]);
+    const editorIds = new Set(editors.map((editor) => editor.id));
+
+    return new Map(
+        users.map((user) => [
+            user.id,
+            {
+                name: user.username,
+                role: user.id === tournament.created_by ? "organiser" : editorIds.has(user.id) ? "editor" : null,
+                self: user.id === viewerUserId
+            }
+        ])
+    );
+}
+
 // requireAuth proves the caller is logged in. This proves the tournament is
 // theirs, and is the tournament-level counterpart of progression's loadDivision.
 async function loadOwnedTournament(tournamentId, userId) {
@@ -310,6 +381,7 @@ export const tournamentService = {
     createTournament,
     fetchTournaments,
     fetchTournamentDetails,
+    getTournamentChangeKey,
     getMyTournaments,
     getSavedTournaments,
     saveTournament,

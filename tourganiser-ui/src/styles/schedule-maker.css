@@ -1415,3 +1415,109 @@ button.schedule-grid-header-court:hover {
 		display: grid;
 	}
 }
+
+/* The generator's rules and preferences: a checkbox, an optional value and a
+   tooltip on one line. */
+.schedule-generator-option {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 32px;
+}
+
+.schedule-generator-option .schedule-generator-toggle {
+	flex: 1 1 auto;
+	align-items: center;
+	margin: 0;
+}
+
+.schedule-generator-option .schedule-generator-toggle input {
+	margin-top: 0;
+}
+
+.schedule-generator-option .tooltip-container {
+	flex: none;
+	color: var(--schedule-muted);
+}
+
+.schedule-generator-value {
+	width: 4.5rem;
+	flex: none;
+	border: 1px solid var(--schedule-border);
+	border-radius: 10px;
+	padding: var(--space-1) var(--space-2);
+	background: var(--schedule-surface);
+	color: var(--schedule-text);
+}
+
+.schedule-generator-value:disabled {
+	opacity: 0.45;
+}
+
+.schedule-generator-unit,
+.schedule-generator-note {
+	font-size: 0.78rem;
+	color: var(--schedule-muted);
+}
+
+/* What the last generation bent or left out. Amber while there is something to
+   read, quiet once there is not. */
+.schedule-generation-report {
+	display: grid;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	border-radius: 10px;
+	border: 1px solid rgb(from var(--warning-color) r g b / 0.45);
+	background: rgb(from var(--warning-color) r g b / 0.08);
+}
+
+.schedule-generation-report.is-clean {
+	border-color: var(--schedule-border);
+	background: transparent;
+}
+
+.schedule-generation-report ul {
+	display: grid;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.schedule-generation-report li {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-2);
+	font-size: 0.85rem;
+	line-height: 1.4;
+}
+
+.schedule-generation-report li small {
+	display: block;
+	color: var(--schedule-muted);
+}
+
+/* Per-round match lengths, folded away until wanted: most tournaments play one
+   length throughout. */
+.schedule-generator-rounds {
+	display: grid;
+	gap: var(--space-2);
+	font-size: 0.85rem;
+}
+
+.schedule-generator-rounds summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--schedule-muted);
+}
+
+.schedule-generator-rounds[open] summary {
+	margin-bottom: var(--space-2);
+}
+
+.schedule-generator-round-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}

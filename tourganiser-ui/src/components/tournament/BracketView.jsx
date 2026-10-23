@@ -94,13 +94,20 @@ export default function BracketView({ rounds = [] }) {
 
 			{/* Distinct from the bracket, not another node in it. The playoff decides
 			    third and fourth; it feeds nothing and nothing feeds out of it, so
-			    drawing it in the flow would imply a progression that does not exist. */}
-			{placements.map((match) => (
-				<div key={match.id} className="tv-bracket-placement">
-					<h4 className="tv-bracket-round-name">{PLACEMENT_ROUND}</h4>
-					<MatchCard match={match} />
-				</div>
-			))}
+			    drawing it in the flow would imply a progression that does not exist.
+			    Placement matches below 4th sit with it for the same reason, one block
+			    per fixture round — "Semifinals · Places 5-8" holds both of its
+			    matches. */}
+			<div className="tv-bracket-placements">
+				{groupPlacements(placements).map((block) => (
+					<div key={block.label} className="tv-bracket-placement">
+						<h4 className="tv-bracket-round-name">{block.label}</h4>
+						{block.matches.map((match) => (
+							<MatchCard key={match.id} match={match} />
+						))}
+					</div>
+				))}
+			</div>
 		</div>
 	);
 }
@@ -114,6 +121,22 @@ export default function BracketView({ rounds = [] }) {
 // the other side.
 function isPlacement(match) {
 	return Boolean(match.isPlacementMatch) || match.round === PLACEMENT_ROUND;
+}
+
+// The 3rd-place playoff first, as it always was, then every other placement
+// round in the order the bracket reaches it.
+function groupPlacements(placements) {
+	const blocks = new Map();
+
+	placements.forEach((match) => {
+		const label = match.round || PLACEMENT_ROUND;
+		if (!blocks.has(label)) blocks.set(label, { label, matches: [] });
+		blocks.get(label).matches.push(match);
+	});
+
+	return [...blocks.values()].sort(
+		(a, b) => Number(b.label === PLACEMENT_ROUND) - Number(a.label === PLACEMENT_ROUND),
+	);
 }
 
 function splitPlacements(rounds) {
@@ -224,6 +247,7 @@ function MatchCard({ match }) {
 					participant={participant}
 					winner={match.winner}
 					source={match.sources?.[index] ?? null}
+					walkover={Boolean(match.walkover)}
 				/>
 			))}
 		</article>
@@ -233,12 +257,14 @@ function MatchCard({ match }) {
 // A participant is a team or a placeholder such as "Rank 3", and both render.
 // That is how a knockout fixture exists before the pool it draws from has
 // finished — see docs/division-state.md.
-function Participant({ participant, winner, source }) {
+function Participant({ participant, winner, source, walkover }) {
 	const placeholder = Boolean(participant?.placeholder);
 	const isWinner = !placeholder && Boolean(winner) && keyOf(winner) === keyOf(participant);
 	// An unbound slot says where its team comes from where the server named a
-	// feeding match, and keeps the rank placeholder where it did not.
-	const label = (placeholder && sourceLabel(source)) || participant?.name || 'TBD';
+	// feeding match, and keeps the rank placeholder where it did not. A walkover's
+	// unbound slot is nobody: the match that fed it sent no one.
+	const label =
+		(placeholder && walkover && 'No team') || (placeholder && sourceLabel(source)) || participant?.name || 'TBD';
 
 	return (
 		<div
@@ -264,7 +290,14 @@ function keyOf(participant) {
 // The result where there is one, and the status only where it says something a
 // reader cannot already see. An upcoming match with no score is self-evidently
 // upcoming; a cancelled one is not.
+//
+// A cancelled match says so even when it carries a score: cancelling stores a
+// single 0-0 set, which is a convention, not a result. A walkover is a cancelled
+// match the server marks as one — its team went through unplayed.
 function getOutcome(match) {
+	if (match.walkover) return 'Walkover';
+	if (match.status === 'CANCELLED') return STATUS_LABELS.CANCELLED;
+
 	const score = formatResult(match.result);
 	if (score) return score;
 

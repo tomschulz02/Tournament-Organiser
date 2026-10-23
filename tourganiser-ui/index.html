@@ -11,6 +11,21 @@
 		<title>Tourganiser - Tournament Organisation and Management</title>
 	</head>
 	<body>
+		<!-- Sets the theme before the first paint, so a dark-mode reader never sees
+		     the light page while the bundle loads. ThemeProvider reads the class
+		     this leaves on <body>; keep the two in step (see src/ThemeProvider.jsx). -->
+		<script>
+			(function () {
+				var theme = null;
+				try {
+					theme = localStorage.getItem('theme');
+				} catch (e) {}
+				if (theme !== 'light' && theme !== 'dark') {
+					theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
+				document.body.classList.add(theme);
+			})();
+		</script>
 		<noscript>You need to enable JavaScript to run this app.</noscript>
 		<div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>

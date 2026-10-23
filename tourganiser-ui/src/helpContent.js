@@ -89,8 +89,8 @@ export const HELP_TOPICS = {
 			{
 				heading: "If you're the organiser",
 				paragraphs: [
-					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament stops any further results being recorded, once the tournament is Ongoing.',
-					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Delete (the trash icon) removes the whole tournament, including every division, fixture and result — this cannot be undone, and is available at every status.",
+					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament marks an Ongoing tournament as finished. Results can still be corrected afterwards.',
+					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Deleting the tournament, adding editors and each division's ranking and placement options are on the Settings tab.",
 					"While the tournament hasn't started, each division's card also offers a way to add or remove divisions — Add Division opens the same screen the creation page uses, and a division's own card can be removed (which takes its teams, fixtures and any scheduled slots with it). Both close once the tournament starts, since the schedule and standings would otherwise be describing a division that no longer matches them.",
 				],
 			},
@@ -98,6 +98,42 @@ export const HELP_TOPICS = {
 				heading: 'Division cards',
 				paragraphs: [
 					'Each card summarises one division — its team count, fixture count and how far through it is — and links into that division\'s Standings or Teams tab. A viewer sees the same cards without the edit controls.',
+				],
+			},
+		],
+	},
+	'tournament-settings': {
+		title: 'Tournament settings',
+		icon: 'structure',
+		sections: [
+			{
+				paragraphs: [
+					'Only the organiser sees this tab. It holds who else can enter results, how each division ranks its teams and plays out its knockout, and deleting the tournament.',
+				],
+			},
+			{
+				heading: 'Editors',
+				paragraphs: [
+					"Add someone by their email or username and they can enter results straight away — there's no invitation for them to accept. An editor can score the fixtures in each division's current round and nothing else: they can't change teams, the schedule, divisions or settings. Removing an editor takes effect immediately; results they already entered stay as they are.",
+					'You and your editors see who entered each result on its fixture. Nobody else does.',
+				],
+			},
+			{
+				heading: 'Ranking',
+				paragraphs: [
+					"Rank teams by chooses what decides pool positions first: matches won, FIVB match points (3 for a clear win, 2 for a win in the deciding set, 1 for a loss in it), simpler match points (2 for any win, 1 for a deciding-set loss) or total sets won. The tiebreakers after it never change. It can be changed at any time, and standings re-sort straight away.",
+				],
+			},
+			{
+				heading: 'Placement matches',
+				paragraphs: [
+					"For a division with a knockout stage, Play for places down to adds real matches for the places below 4th — a 5th place match, a 7th, and so on — instead of settling them by tiebreak. The teams knocked out in each round play for the places between them, the same way the main bracket is drawn. It can only be changed before the knockout stage starts, because it adds and removes fixtures.",
+				],
+			},
+			{
+				heading: 'Danger Zone',
+				paragraphs: [
+					'Delete Tournament removes the whole tournament, including every division, fixture and result. It cannot be undone, and is available at every status.',
 				],
 			},
 		],
@@ -114,13 +150,13 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Filtering the list',
 				paragraphs: [
-					'Filter by division (only shown when there is more than one), by stage/round, by status, or search by team name — each control only appears when it would actually narrow something down, so a tournament with one division shows no division filter.',
+					'Filter by division (only shown when there is more than one), by stage (Preliminary Round for all pool and round-robin matches, then each knockout round in order, then Playoffs for the 3rd, 5th, 7th… place matches), by status, or search by team name — each control only appears when it would actually narrow something down, so a tournament with one division shows no division filter.',
 				],
 			},
 			{
 				heading: 'Entering results and scheduling',
 				paragraphs: [
-					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match.",
+					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match. An editor the organiser has added can do the same for the current round's fixtures.",
 					"If you organise this tournament, Create Schedule opens the schedule builder, where you assign fixtures to courts and times — see its own help entry once it's open.",
 				],
 			},
@@ -298,13 +334,14 @@ export const HELP_TOPICS = {
 		sections: [
 			{
 				paragraphs: [
-					'Enter each set\'s score for this fixture as it\'s played, or all at once afterwards. Add Set adds another row; a set counts for whichever team scored more in it, and a tie counts for neither.',
+					'Enter each set\'s score for this fixture as it\'s played, or all at once afterwards. Type a score or use the − and + buttons beside it. Add set adds another set; a set counts for whichever team scored more in it, and a tie counts for neither. The bin icon removes a set entered by mistake.',
 				],
 			},
 			{
 				heading: 'Saving, ending and cancelling',
 				paragraphs: [
-					'Save Score records what\'s entered so far without finishing the match — use this to update the score as it happens. End Match marks the match finished from the sets entered. Cancel Match records the match as cancelled rather than played, which counts for neither team in the standings.',
+					'Save score records what\'s entered so far without finishing the match — use this to update the score as it happens. End match marks the match finished from the sets entered. Cancel match records the match as cancelled rather than played, which counts for neither team in the standings.',
+					'A knockout match needs a winner, so End match stays unavailable while the sets are level. If one team can\'t play, record the walkover as a winning score for the team that goes through. If neither team can play, use Cancel match: neither team goes through, and the team due to meet the winner in the next round gets a walkover instead.',
 					'If the match is already finished, this screen instead offers Discard changes and Save changes, for correcting a result after the fact.',
 				],
 			},
@@ -322,14 +359,15 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Reviewing and adjusting the order',
 				paragraphs: [
-					"The list shows who's progressing, in the order the server calculated from the completed round's results. Drag a team by its handle, or use the arrow keys once it's focused, to reorder the list — or use the swap control beside a team to substitute it for a different eligible team entirely. Changing the order is recorded as a deliberate adjustment, not silently blended into the calculated ranking.",
-					'Below the list, a preview shows the matchups (or byes) this order would produce in the next round, updating live as you reorder — for a round-robin leg, every team simply carries forward, so there\'s no bracket to preview there.',
+					"The list shows who's progressing, in the order the server calculated from the completed round's results. Use the up and down arrows beside a team to reorder the list (with a mouse you can also drag a team by its handle) — or use the swap control beside a team to substitute it for a different eligible team entirely. Changing the order is recorded as a deliberate adjustment, not silently blended into the calculated ranking.",
+					'Beside the list (below it on a phone), a preview shows the matchups (or byes) this order would produce in the next round, updating live as you reorder — for a round-robin leg, every team simply carries forward, so there\'s no bracket to preview there.',
 				],
 			},
 			{
 				heading: 'Confirming',
 				paragraphs: [
-					'Reset to calculated appears once you\'ve changed anything, and puts the list back to the server\'s original order. Start Next Round confirms the current order and generates or binds the next round\'s fixtures — this is disabled until every slot is filled with no duplicates.',
+					'Reset to calculated appears once you\'ve changed anything, and puts the list back to the server\'s original order. Start next round confirms the current order and generates or binds the next round\'s fixtures — this is disabled while a team appears twice.',
+					'A place shown as No team was left empty by a cancelled knockout match: neither of its teams goes through, so whoever that place is drawn against gets a walkover, shown in the preview. You can leave it empty, or use the swap control to put a team that played the round into it.',
 				],
 			},
 		],
@@ -391,7 +429,10 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Generating automatically',
 				paragraphs: [
-					'The generator (opened from the toolbar) fills the whole board at once from a few settings — daily start and end time, and how long each match takes — respecting every hard rule (no team or court double-booked, no round starting before the one before it in the same division has finished, a minimum rest between two matches for the same team) and preferring to keep a division on the same court and to spread rest evenly. It can also assign officiating teams automatically, kept off by default. Anything it can\'t place is left unscheduled with a warning naming which rule stopped it — add a court, extend the day, or add another day, whichever the warning points at.',
+					'The generator (opened from the toolbar) fills the whole board at once from your courts, day start and end, and match length. Open "Match length by round" to give a round its own length, for example longer finals; blank rounds use the main match length. It works through the day like you would on a whiteboard. At each time it plays the matches whose teams have the most still to play, in any order within a round. Divisions sharing a court take turns whenever that finishes sooner. Your settings are saved with the schedule.',
+					'Some rules always apply: rounds are played in order (no knockout match starts until every pool match of its division has finished), no team or court is double-booked, and courts limited to certain divisions are respected. Four rules are yours to switch: a minimum rest between a team\'s matches (off allows back-to-back matches), a maximum number of matches per team per day, the longest a team should wait between two matches on the same day (teams near it play first; a longer wait is reported), and a break before each knockout round (minimum rest can\'t cover knockout teams, because they aren\'t known in advance). After a break in play, courts restart the moment the break ends.',
+					'With "Bend rules to fit every fixture" on, a fixture that has nowhere else to go may shorten a rest or a knockout break, or exceed the daily limit. The generator bends as few times as it can and spreads the bends across teams instead of repeating them for one. "Run past the day\'s end time" is the last resort. It adds time after the final day only when bending isn\'t enough. The Generation Report in the overview lists every bend with the teams affected. Show highlights those matches on the board. Anything still left out is listed with the rule that stopped it.',
+					'Preferences decide the court, never whether a match plays: keeping a pool on one court, and keeping a court on one division. "Spread matches evenly across days" shares the matches between days instead of finishing as early as possible. Officials can also be assigned automatically, kept off by default.',
 					'Generating replaces whatever is currently on the board — any hand-placed entries are discarded and regenerated with everything else.',
 				],
 			},

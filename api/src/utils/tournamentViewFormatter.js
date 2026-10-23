@@ -12,6 +12,7 @@ import {
 } from "./standings.js";
 import { qualifierCount } from "../services/progression.service.js";
 import { roundHolding } from "../services/fixtures.service.js";
+import { ordinal } from "../services/divisions.service.js";
 import { AppError } from "../errors.js";
 
 const FIXTURE_STATUS_LABELS = {
@@ -21,12 +22,16 @@ const FIXTURE_STATUS_LABELS = {
     CANCELLED: "Cancelled"
 };
 
-export function formatTournamentViewPayload({ tournament, divisions, teamsByDivisionId, fixturesByDivisionId }) {
+// `attribution` maps a user id to who entered a result, and is only passed for
+// the organiser and the tournament's editors. Null for everyone else, and then no
+// fixture carries an enteredBy at all.
+export function formatTournamentViewPayload({ tournament, divisions, teamsByDivisionId, fixturesByDivisionId, attribution = null }) {
     const formattedDivisions = divisions.map((division) =>
         formatDivisionPayload({
             division,
             teams: teamsByDivisionId.get(division.id) || [],
-            fixtures: fixturesByDivisionId.get(division.id) || []
+            fixtures: fixturesByDivisionId.get(division.id) || [],
+            attribution
         })
     );
 
@@ -66,7 +71,7 @@ function formatTournamentDetails(tournament, divisions) {
     };
 }
 
-function formatDivisionPayload({ division, teams, fixtures }) {
+function formatDivisionPayload({ division, teams, fixtures, attribution = null }) {
     const state = normalizeDivisionState(division.state);
     const orderedTeams = orderTeamsByState(teams, state.teams);
     const teamLookup = new Map(orderedTeams.map((team) => [team.id, team]));
@@ -74,11 +79,12 @@ function formatDivisionPayload({ division, teams, fixtures }) {
     const normalizedFixtures = fixtures
         .slice()
         .sort((a, b) => (a.match_no || 0) - (b.match_no || 0))
-        .map((fixture) => normalizeFixture(fixture, teamLookup, lockedRoundNames));
+        .map((fixture) => normalizeFixture(fixture, teamLookup, lockedRoundNames, attribution));
 
     const results = normalizedFixtures.filter((fixture) => isResultFixture(fixture));
-    const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup);
+    const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup, division.ranking_basis);
     const bracket = buildDivisionBracket(state, normalizedFixtures, teamLookup);
+    labelFedSlots(normalizedFixtures, bracket);
     const finalStandings = buildFinalStandings({
         division,
         state,
@@ -94,6 +100,8 @@ function formatDivisionPayload({ division, teams, fixtures }) {
         results,
         state
     });
+    // Last, because everything above matches fixtures to state.rounds by name.
+    labelPools(normalizedFixtures, state);
 
     return {
         id: division.id,
@@ -105,6 +113,11 @@ function formatDivisionPayload({ division, teams, fixtures }) {
         // dashboard's summaries carry no state at all — one shape for both is
         // what lets divisionColors.js resolve a colour the same way everywhere.
         color: state.color ?? null,
+        // The two organiser settings from the Settings page. Columns rather than
+        // state keys, so they are read off the row. A row the default never
+        // reached is matches won, the same as everywhere else that reads it.
+        ranking_basis: division.ranking_basis ?? "MATCHES_WON",
+        placement_depth: division.placement_depth ?? null,
         state,
         teams: orderedTeams.map((team) => ({
             id: team.id,
@@ -204,7 +217,7 @@ function buildDivisionOverview({ division, teams, fixtures, results, state }) {
 // against itself, so this produces the same single-table output as before this
 // change — the combination is additive, not a special case that could regress
 // Classic.
-function buildDivisionStandings(state, fixtures, teamLookup) {
+function buildDivisionStandings(state, fixtures, teamLookup, basis) {
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
     const seedIndex = buildSeedIndex(state.teams);
     const headToHead = buildHeadToHeadMap(fixtures);
@@ -222,7 +235,7 @@ function buildDivisionStandings(state, fixtures, teamLookup) {
 
     if (!isRepeatedCycle) {
         return roundRobinRounds.map((entry) =>
-            buildRoundRobinStandingsEntry(entry.round, entry.roundIndex, [entry.round], fixtures, teamLookup, seedIndex, headToHead)
+            buildRoundRobinStandingsEntry(entry.round, entry.roundIndex, [entry.round], fixtures, teamLookup, seedIndex, headToHead, basis)
         );
     }
 
@@ -235,7 +248,8 @@ function buildDivisionStandings(state, fixtures, teamLookup) {
             fixtures,
             teamLookup,
             seedIndex,
-            headToHead
+            headToHead,
+            basis
         )
     ];
 }
@@ -264,7 +278,7 @@ function sameGroupsShape(groupsA, groupsB) {
 // entry — more than one only for a combined multi-leg table, where every round
 // shares `primaryRound.groups`, so grouping by `primaryRound`'s groups is valid
 // for all of them.
-function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, fixtures, teamLookup, seedIndex, headToHead) {
+function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, fixtures, teamLookup, seedIndex, headToHead, basis) {
     const roundStandings = {
         round: primaryRound.name || `Round ${roundIndex + 1}`,
         roundIndex,
@@ -298,7 +312,7 @@ function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, f
         roundStandings.groups.push({
             name: getGroupLabel(groupIndex),
             groupIndex,
-            standings: rankGroup(rows, { headToHead, seedIndex })
+            standings: rankGroup(rows, { headToHead, seedIndex, basis })
         });
     });
 
@@ -339,6 +353,11 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
         let fixtureIndex = 0;
         const matches = [];
         const groups = round.groups || [];
+        // Which groups are placement matches, and the ranks a final among them
+        // decides. Absent on a division without placement matches.
+        const placement = new Map(
+            (Array.isArray(round.placement) ? round.placement : []).map((entry) => [entry.group, entry])
+        );
         // Only the round immediately after pool play has slots that are still
         // pool positions rather than "Winner of #N" — same signal the
         // sources/previousRound mechanism already uses for that distinction.
@@ -393,7 +412,13 @@ function buildDivisionBracket(state, fixtures, teamLookup) {
                 ],
                 result: fixture?.result || [],
                 winner: determineFixtureWinner(fixture),
-                isPlacementMatch: fixture?.round === "3rd Place Playoff"
+                isPlacementMatch: fixture?.round === "3rd Place Playoff" || placement.has(groupIndex),
+                // Spread like placementRanks below, so an ordinary match keeps its
+                // shape. The client labels the match and its empty side from this.
+                ...(isWalkover(fixture) ? { walkover: true } : {}),
+                // Spread conditionally so a match that decides no placement —
+                // every match of a division without them — keeps its shape.
+                ...(placement.get(groupIndex)?.ranks ? { placementRanks: placement.get(groupIndex).ranks } : {})
             });
         });
 
@@ -440,7 +465,13 @@ function resolveMatchSource(index, previousRound) {
 
     const group = groups[index];
     if (!Array.isArray(group) || group.length < 2) {
-        return null;
+        // A one-team group only carries a team on. A placement pair waiting for
+        // its final does this, so the match that actually fed it is found by
+        // asking the round before about the index the group holds. A first-round
+        // bye has no knockout round before it and stays null.
+        return Array.isArray(group) && group.length === 1
+            ? resolveMatchSource(group[0], previousRound.earlierRound)
+            : null;
     }
 
     // The matches array skips one-team groups, so the match for group `index` sits
@@ -494,12 +525,91 @@ function resolveByeTeam(index, previousRound, teamLookup) {
     }
 
     const teamId = previousRound.previousResults?.[entry];
+    // Null, unlike a missing entry, is a place a cancelled match left empty.
+    // Nobody is there, and walking further back would name someone who is not.
+    if (teamId === null) {
+        return null;
+    }
+
     if (teamId) {
         const team = teamLookup.get(teamId);
         return team ? { id: team.id, name: team.name, placeholder: null } : null;
     }
 
     return resolveByeTeam(entry, previousRound.earlierRound, teamLookup);
+}
+
+// An unbound knockout slot is named the way the bracket names it, so the fixture
+// list and the schedule show the crossovers too. A slot fed by a known match
+// reads "Winner of #12" or "Loser of #9". A first-round slot the bracket can pin
+// to a pool position reads "A1 (Rank 1)". Any other slot keeps its "Rank N"
+// label, and a bound team always wins. Only team1/team2, the display names,
+// change: team_N_placeholder keeps the stored "Rank N" and teams keeps its shape.
+//
+// The empty side of a walkover is nobody, so it says so rather than naming the
+// match that would have fed it.
+const WALKOVER_SIDE = "No team (walkover)";
+
+function labelFedSlots(fixtures, bracket) {
+    const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+
+    bracket.rounds.forEach((round) => {
+        round.matches.forEach((match) => {
+            const fixture = byId.get(match.id);
+            if (!fixture) {
+                return;
+            }
+
+            [1, 2].forEach((side) => {
+                const source = match.sources?.[side - 1];
+                const participant = match.participants?.[side - 1];
+                if (fixture[`team_${side}_id`] || !participant?.placeholder) {
+                    return;
+                }
+
+                if (match.walkover) {
+                    fixture[`team${side}`] = WALKOVER_SIDE;
+                } else if (source?.matchNo != null) {
+                    fixture[`team${side}`] = `${source.outcome === "LOSER" ? "Loser" : "Winner"} of #${source.matchNo}`;
+                } else if (!source && participant.name) {
+                    fixture[`team${side}`] = participant.name;
+                }
+            });
+        });
+    });
+}
+
+// A pool round played in more than one pool names each fixture's pool, in the
+// same "<round> · <label>" form a placement match already uses — "Pool Play ·
+// Pool A" — so the fixture list, its stage filter and the schedule say which
+// pool a match belongs to. The pool is also set on its own, as pool, which the
+// schedule generator keeps a pool on one court by. Every reader that asks which
+// round a fixture belongs to strips the label first (roundHolding), so nothing
+// that counts or orders rounds sees a difference. A single-pool round is left as
+// it is: "Pool A" of one pool says nothing.
+function labelPools(fixtures, state) {
+    const rounds = Array.isArray(state.rounds) ? state.rounds : [];
+
+    rounds.forEach((round) => {
+        if (round.type === "knockout" || !Array.isArray(round.groups) || round.groups.length < 2) {
+            return;
+        }
+
+        const poolOf = new Map();
+        round.groups.forEach((group, groupIndex) => {
+            (Array.isArray(group) ? group : []).forEach((teamId) => poolOf.set(teamId, groupIndex));
+        });
+
+        fixtures.forEach((fixture) => {
+            const groupIndex = poolOf.get(fixture.team_1_id);
+            if (fixture.round !== round.name || groupIndex === undefined) {
+                return;
+            }
+
+            fixture.pool = `Pool ${String.fromCharCode(65 + groupIndex)}`;
+            fixture.round = `${round.name} · ${fixture.pool}`;
+        });
+    });
 }
 
 function describeMatchSource(match, outcome) {
@@ -542,7 +652,11 @@ function buildFinalStandings({ division, state, fixtures, standings, bracket, te
                 (match) => Array.isArray(match.participants) && match.participants.length >= 2
             );
             const playoffs = decidable.filter((match) => match.round === "3rd Place Playoff");
-            const deciders = decidable.filter((match) => match.round !== "3rd Place Playoff");
+            // A placement match never decides the title, even though the round
+            // that concludes the bracket is where every placement final is played.
+            const deciders = decidable.filter(
+                (match) => match.round !== "3rd Place Playoff" && !match.isPlacementMatch
+            );
 
             // Exactly one. A concluding round holding several undecided matches —
             // a semifinal pair, say — settles no title, and crowning both winners
@@ -557,6 +671,19 @@ function buildFinalStandings({ division, state, fixtures, standings, bracket, te
                 pushFinalStanding(rankedTeams, seenTeams, match.winner, 3, "Third Place");
                 pushFinalStanding(rankedTeams, seenTeams, getFixtureLoser(match), 4, "Fourth Place");
             });
+
+            // The placement finals, ranked from their result exactly like the
+            // playoff above. Pushed before the eliminated blocks below, which
+            // never contain these teams: progression confirmed them onward.
+            decidable
+                .filter((match) => match.placementRanks)
+                .forEach((match) => {
+                    const [higher, lower] = match.placementRanks;
+                    pushFinalStanding(rankedTeams, seenTeams, match.winner, higher, `${ordinal(higher)} Place`);
+                    pushFinalStanding(rankedTeams, seenTeams, getFixtureLoser(match), lower, `${ordinal(lower)} Place`);
+                });
+
+            rankPlacementByes(rankedTeams, seenTeams, state, finalRound.roundIndex, teams);
 
             rankEliminatedTeams({
                 rankedTeams,
@@ -611,6 +738,28 @@ function buildFinalStandings({ division, state, fixtures, standings, bracket, te
     }
 
     return rankedTeams.sort((a, b) => a.rank - b.rank);
+}
+
+// A placement tier of one team plays no final: reaching the last round decides
+// its rank, and its group there is a bye. Named once the round before is
+// committed, which is when the index it holds points at somebody.
+function rankPlacementByes(rankedTeams, seenTeams, state, finalRoundIndex, teams) {
+    const rounds = Array.isArray(state?.rounds) ? state.rounds : [];
+    const finalRound = rounds[finalRoundIndex];
+    const previousResults = rounds[finalRoundIndex - 1]?.results;
+    const teamLookup = new Map(teams.map((team) => [team.id, team]));
+
+    (Array.isArray(finalRound?.placement) ? finalRound.placement : [])
+        .filter((entry) => entry.ranks?.length === 1)
+        .forEach((entry) => {
+            const teamId = previousResults?.[finalRound.groups?.[entry.group]?.[0]];
+            const team = teamLookup.get(teamId);
+            const [rank] = entry.ranks;
+
+            if (team) {
+                pushFinalStanding(rankedTeams, seenTeams, { id: team.id, name: team.name }, rank, `${ordinal(rank)} Place`);
+            }
+        });
 }
 
 // Places are filled from the bottom as rounds complete: the pool round's
@@ -699,7 +848,25 @@ function teamsEliminatedIn(round, stateRound, fixtures, seedIndex, teamLookup) {
         .map((teamId) => teamLookup.get(teamId))
         .filter(Boolean);
 
-    return { note: round.name, participants: orderEliminatedTeams(losers, fixtures, seedIndex) };
+    // A team whose match here was cancelled — a double forfeit — went out
+    // without playing, so it ranks below every team that played and lost.
+    // Ordered among themselves by their earlier matches, it would otherwise
+    // climb above them on the strength of a pool win.
+    const forfeited = new Set(
+        round.matches
+            .filter((match) => match.status === "CANCELLED")
+            .flatMap((match) => match.participants)
+            .map((participant) => participant.id)
+            .filter(Boolean)
+    );
+
+    return {
+        note: round.name,
+        participants: [
+            ...orderEliminatedTeams(losers.filter((team) => !forfeited.has(team.id)), fixtures, seedIndex),
+            ...orderEliminatedTeams(losers.filter((team) => forfeited.has(team.id)), fixtures, seedIndex)
+        ]
+    };
 }
 
 // Teams eliminated in the same round are tied on elimination and are separated by
@@ -819,10 +986,15 @@ function orderTeamsByState(teams, teamOrder = []) {
     return orderedTeams.concat(remainingTeams);
 }
 
-function normalizeFixture(fixture, teamLookup, lockedRoundNames = new Set()) {
+function normalizeFixture(fixture, teamLookup, lockedRoundNames = new Set(), attribution = null) {
     const teamOne = teamLookup.get(fixture.team_1);
     const teamTwo = teamLookup.get(fixture.team_2);
     const result = normalizeFixtureResult(fixture);
+    // Only for a fixture that has a result to attribute. A result entered before
+    // attribution existed has no entered_by, and carries nothing rather than a
+    // blank — see docs/decisions.md.
+    const enteredBy =
+        attribution && fixture.status && fixture.status !== "UPCOMING" ? attribution.get(fixture.entered_by) : null;
 
     return {
         id: fixture.id,
@@ -847,7 +1019,8 @@ function normalizeFixture(fixture, teamLookup, lockedRoundNames = new Set()) {
         // Mirrors fixtures.service.js's assertRoundNotLocked: a round is locked
         // for editing from the moment progression commits its results, which is
         // also the moment state.currentRound moves past it.
-        locked: lockedRoundNames.has(roundHolding(fixture.round))
+        locked: lockedRoundNames.has(roundHolding(fixture.round)),
+        ...(enteredBy ? { enteredBy } : {})
     };
 }
 
@@ -966,7 +1139,23 @@ function resolveParticipant(value, teamLookup, fallbackPlaceholder = null, poolC
 }
 
 function determineFixtureWinner(fixture) {
-    if (!fixture || fixture.status !== "COMPLETED" || !Array.isArray(fixture.result) || fixture.result.length === 0) {
+    if (!fixture) {
+        return null;
+    }
+
+    // A walkover's one team went through; a cancelled match between two teams
+    // sent neither on. The same reading as matchOutcome in progression.service.js.
+    if (fixture.status === "CANCELLED") {
+        if (!isWalkover(fixture)) {
+            return null;
+        }
+
+        return fixture.team_1_id
+            ? { id: fixture.team_1_id, name: fixture.team1 }
+            : { id: fixture.team_2_id, name: fixture.team2 };
+    }
+
+    if (fixture.status !== "COMPLETED" || !Array.isArray(fixture.result) || fixture.result.length === 0) {
         return null;
     }
 
@@ -990,8 +1179,17 @@ function determineFixtureWinner(fixture) {
         : { id: fixture.team_2_id, name: fixture.team2 };
 }
 
+// A knockout match bound one team short — a cancelled match before it sent
+// nobody to the other side — and so settled as cancelled when it was bound. See
+// bindFixturesToResults in progression.service.js.
+function isWalkover(fixture) {
+    return fixture?.status === "CANCELLED" && Boolean(fixture.team_1_id) !== Boolean(fixture.team_2_id);
+}
+
+// A walkover has a winner and nobody beaten: its other side is a placeholder,
+// which must never be ranked as the runner-up.
 function getFixtureLoser(match) {
-    if (!match || !match.winner || !Array.isArray(match.participants)) {
+    if (!match || !match.winner || match.status === "CANCELLED" || !Array.isArray(match.participants)) {
         return null;
     }
 
@@ -1025,10 +1223,10 @@ function fixtureBelongsToRoundRobinGroup(fixture, round, participantIds) {
     return participantIds.includes(fixture.team_1_id) && participantIds.includes(fixture.team_2_id);
 }
 
+// roundHolding covers the 3rd-place playoff and any placement matches the round
+// holds, which follow its own fixtures in match order.
 function getFixturesForKnockoutRound(fixtures, roundName) {
-    return fixtures.filter((fixture) =>
-        fixture.round === roundName || (roundName === "Finals" && fixture.round === "3rd Place Playoff")
-    );
+    return fixtures.filter((fixture) => roundHolding(fixture.round) === roundName);
 }
 
 function getCurrentRoundName(state) {
@@ -1041,7 +1239,7 @@ function getCurrentRoundName(state) {
 }
 
 function getGroupLabel(groupIndex) {
-    return `Group ${String.fromCharCode(65 + groupIndex)}`;
+    return `Pool ${String.fromCharCode(65 + groupIndex)}`;
 }
 
 function isResultFixture(fixture) {

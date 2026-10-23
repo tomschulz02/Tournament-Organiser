@@ -10,6 +10,7 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
         createTournament: vi.fn(),
         getAllTournaments: vi.fn(),
         getTournamentById: vi.fn(),
+        getChangeStamps: vi.fn(),
         getTournamentsByCreator: vi.fn(),
         getTournamentsByIds: vi.fn(),
         startTournament: vi.fn(),
@@ -25,12 +26,17 @@ vi.mock("../../../src/repositories/users.repository.js", () => ({
     userRepository: {
         getSavedTournaments: vi.fn(),
         joinTournament: vi.fn(),
-        unfollowTournament: vi.fn()
+        unfollowTournament: vi.fn(),
+        getUsernamesByIds: vi.fn()
     }
 }));
 
 // The validator has its own suite, which owns every rejection rule. Here we only
 // care that it is handed the right context and that a rejection stops the write.
+vi.mock("../../../src/repositories/editors.repository.js", () => ({
+    editorsRepository: { isEditor: vi.fn(async () => false), getEditors: vi.fn(async () => []) }
+}));
+
 vi.mock("../../../src/utils/scheduleValidator.js", () => ({
     validateSchedule: vi.fn()
 }));
@@ -65,6 +71,7 @@ const { divisionService } = await import("../../../src/services/divisions.servic
 const { formatTournamentViewPayload } = await import("../../../src/utils/tournamentViewFormatter.js");
 const { validateSchedule } = await import("../../../src/utils/scheduleValidator.js");
 const { AppError } = await import("../../../src/errors.js");
+const { MAX_DIVISIONS_PER_TOURNAMENT } = await import("../../../src/config/limits.js");
 const { makeDivision, makeState, makeTournament } = await import("../../helpers/fixtures.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
 
@@ -166,6 +173,30 @@ describe("tournamentService.createTournament", () => {
         it("refuses a payload with no details, rather than throwing a TypeError", async () => {
             await expect(tournamentService.createTournament({ divisions: [] }, "user-1"))
                 .rejects.toMatchObject({ code: "MISSING_FIELDS", details: { field: "details" } });
+        });
+
+        // Each division is a run of sequential inserts on one client, so the
+        // count is a bound on how long one request can hold a connection.
+        it("refuses more than the division cap, before the transaction opens", async () => {
+            const divisions = Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT + 1 }, (_, index) => ({ name: `D${index}` }));
+
+            await expect(tournamentService.createTournament({ ...payload, divisions }, "user-1"))
+                .rejects.toMatchObject({
+                    code: "TOO_MANY_DIVISIONS",
+                    status: 400,
+                    message: `A tournament can have at most ${MAX_DIVISIONS_PER_TOURNAMENT} divisions`
+                });
+
+            expect(clientSql()).toEqual([]);
+            expect(divisionService.createDivision).not.toHaveBeenCalled();
+        });
+
+        it("accepts exactly the division cap", async () => {
+            tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
+            const divisions = Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT }, (_, index) => ({ name: `D${index}` }));
+
+            await expect(tournamentService.createTournament({ ...payload, divisions }, "user-1")).resolves.toBe("tour-1");
+            expect(divisionService.createDivision).toHaveBeenCalledTimes(MAX_DIVISIONS_PER_TOURNAMENT);
         });
     });
 
@@ -398,6 +429,80 @@ describe("tournamentService.unsaveTournament", () => {
     });
 });
 
+// The early 304 is only safe if this key is the one fetchTournamentDetails
+// would have produced. Each case loads the same rows both ways and compares,
+// with the division stamp collapsed the way Postgres's max() collapses it.
+describe("tournamentService.getTournamentChangeKey", () => {
+    const at = (iso) => new Date(iso);
+
+    function latest(stamps) {
+        const present = stamps.filter(Boolean);
+        return present.length === 0 ? null : present.reduce((a, b) => (a > b ? a : b));
+    }
+
+    async function bothKeys(tournamentStamp, divisionStamps) {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ last_update: tournamentStamp }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(
+            divisionStamps.map((stamp, index) =>
+                makeDivision({ id: `div-${index}`, state: makeState({ teams: [] }), last_update: stamp })
+            )
+        );
+        divisionsRepository.getTeamsByIds.mockResolvedValue([]);
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([]);
+        tournamentRepository.getChangeStamps.mockResolvedValue({
+            tournament_update: tournamentStamp,
+            division_update: latest(divisionStamps)
+        });
+
+        const full = (await tournamentService.fetchTournamentDetails("tour-1", null)).changeKey;
+        const early = await tournamentService.getTournamentChangeKey("tour-1");
+
+        return { full, early };
+    }
+
+    it("matches the full build when the tournament row moved last", async () => {
+        const { full, early } = await bothKeys(at("2026-10-23T10:00:00Z"), [
+            at("2026-10-23T09:00:00Z"),
+            at("2026-10-23T08:00:00Z")
+        ]);
+
+        expect(early).toBe(full);
+        expect(early).toBe(String(at("2026-10-23T10:00:00Z").getTime()));
+    });
+
+    it("matches the full build when a division moved last", async () => {
+        const { full, early } = await bothKeys(at("2026-10-23T08:00:00Z"), [
+            at("2026-10-23T09:00:00Z"),
+            at("2026-10-23T11:30:00.123Z")
+        ]);
+
+        expect(early).toBe(full);
+        expect(early).toBe(String(at("2026-10-23T11:30:00.123Z").getTime()));
+    });
+
+    it("matches the full build for a tournament with no divisions", async () => {
+        const { full, early } = await bothKeys(at("2026-10-23T08:00:00Z"), []);
+
+        expect(early).toBe(full);
+        expect(early).toBe(String(at("2026-10-23T08:00:00Z").getTime()));
+    });
+
+    it("asks for the stamps of the tournament it was given", async () => {
+        tournamentRepository.getChangeStamps.mockResolvedValue({ tournament_update: null, division_update: null });
+
+        await tournamentService.getTournamentChangeKey("tour-9");
+
+        expect(tournamentRepository.getChangeStamps).toHaveBeenCalledWith("tour-9");
+    });
+
+    // No key at all, so the controller falls through and the full path 404s.
+    it("is null for a tournament that does not exist", async () => {
+        tournamentRepository.getChangeStamps.mockResolvedValue(null);
+
+        expect(await tournamentService.getTournamentChangeKey("tour-1")).toBeNull();
+    });
+});
+
 describe("tournamentService.fetchTournamentDetails", () => {
     function loadable() {
         tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ created_by: "user-1" }));
@@ -429,7 +534,7 @@ describe("tournamentService.fetchTournamentDetails", () => {
         // changeKey is the ETag's data half, derived from rows already loaded.
         // The fixtures carry no last_update, so it is null here; buildChangeKey
         // is tested directly in test/unit/utils/etag.test.js.
-        expect(result).toEqual({ creator: true, changeKey: null, view: { formatted: true } });
+        expect(result).toEqual({ creator: true, editor: false, changeKey: null, view: { formatted: true } });
         expect(divisionsRepository.getTeamsByIds).toHaveBeenCalledTimes(2);
         expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(1, ["t1", "t2"]);
         expect(divisionsRepository.getTeamsByIds).toHaveBeenNthCalledWith(2, ["t3"]);
@@ -464,6 +569,79 @@ describe("tournamentService.fetchTournamentDetails", () => {
         loadable();
 
         expect((await tournamentService.fetchTournamentDetails("tour-1", "user-2")).creator).toBe(false);
+    });
+
+    describe("editors and attribution", () => {
+        let editorsRepository;
+        let userRepository;
+
+        beforeEach(async () => {
+            ({ editorsRepository } = await import("../../../src/repositories/editors.repository.js"));
+            ({ userRepository } = await import("../../../src/repositories/users.repository.js"));
+            loadable();
+            fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([
+                { id: "f1", division_id: "div-2", entered_by: "user-1" },
+                { id: "f2", division_id: "div-2", entered_by: "user-3" },
+                { id: "f3", division_id: "div-2", entered_by: "user-4" },
+                { id: "f4", division_id: "div-2", entered_by: "user-3" },
+                { id: "f5", division_id: "div-2", entered_by: null }
+            ]);
+            editorsRepository.isEditor.mockReset().mockResolvedValue(false);
+            editorsRepository.getEditors.mockReset().mockResolvedValue([{ id: "user-3", username: "priya" }]);
+            userRepository.getUsernamesByIds.mockReset().mockResolvedValue([
+                { id: "user-1", username: "tom" },
+                { id: "user-3", username: "priya" },
+                { id: "user-4", username: "sam" }
+            ]);
+        });
+
+        it("marks a signed-in editor, and names every result's author by current role", async () => {
+            editorsRepository.isEditor.mockResolvedValue(true);
+
+            const result = await tournamentService.fetchTournamentDetails("tour-1", "user-3");
+
+            expect(result.editor).toBe(true);
+            expect(result.creator).toBe(false);
+            expect(editorsRepository.isEditor).toHaveBeenCalledWith("tour-1", "user-3");
+            expect(userRepository.getUsernamesByIds).toHaveBeenCalledWith(["user-1", "user-3", "user-4"]);
+
+            const [args] = vi.mocked(formatTournamentViewPayload).mock.calls.at(-1);
+            expect([...args.attribution.entries()]).toEqual([
+                ["user-1", { name: "tom", role: "organiser", self: false }],
+                ["user-3", { name: "priya", role: "editor", self: true }],
+                // Removed as an editor since: still named, no longer as one.
+                ["user-4", { name: "sam", role: null, self: false }]
+            ]);
+        });
+
+        it("gives the organiser attribution without asking whether they are an editor", async () => {
+            const result = await tournamentService.fetchTournamentDetails("tour-1", "user-1");
+
+            expect(result.editor).toBe(false);
+            expect(editorsRepository.isEditor).not.toHaveBeenCalled();
+            expect(vi.mocked(formatTournamentViewPayload).mock.calls.at(-1)[0].attribution.get("user-1").self).toBe(true);
+        });
+
+        it("hands the formatter no attribution for anyone else", async () => {
+            await tournamentService.fetchTournamentDetails("tour-1", "user-9");
+            await tournamentService.fetchTournamentDetails("tour-1");
+
+            vi.mocked(formatTournamentViewPayload).mock.calls.slice(-2).forEach(([args]) => {
+                expect(args.attribution).toBeNull();
+            });
+            expect(userRepository.getUsernamesByIds).not.toHaveBeenCalled();
+            // An anonymous viewer cannot be an editor, so is not looked up either.
+            expect(editorsRepository.isEditor).toHaveBeenCalledTimes(1);
+        });
+
+        it("looks nobody up when no result has an author yet", async () => {
+            fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([{ id: "f1", division_id: "div-2" }]);
+
+            await tournamentService.fetchTournamentDetails("tour-1", "user-1");
+
+            expect(userRepository.getUsernamesByIds).not.toHaveBeenCalled();
+            expect(vi.mocked(formatTournamentViewPayload).mock.calls.at(-1)[0].attribution).toEqual(new Map());
+        });
     });
 
     it("lets a repository failure propagate untouched", async () => {
@@ -823,6 +1001,11 @@ describe("tournamentService.addDivision", () => {
         teams: [{ name: "Aces" }, { name: "Bears" }]
     };
 
+    // The count read for the division cap. Empty unless a test is about the cap.
+    beforeEach(() => {
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue([]);
+    });
+
     // The whole point of the function: it delegates to the same createDivision
     // createTournament calls, so a division added afterwards is indistinguishable
     // from one created with the tournament.
@@ -887,5 +1070,30 @@ describe("tournamentService.addDivision", () => {
             .rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
         expect(clientSql()).toEqual([]);
         expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("refuses a tournament that already holds the division cap", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(
+            Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT }, (_, index) => makeDivision({ id: `div-${index}` }))
+        );
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "TOO_MANY_DIVISIONS", status: 400 });
+        expect(divisionsRepository.getDivisionsByTournamentId).toHaveBeenCalledWith("tour-1");
+        expect(clientSql()).toEqual([]);
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("adds the division that reaches the cap", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(
+            Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT - 1 }, (_, index) => makeDivision({ id: `div-${index}` }))
+        );
+        divisionService.createDivision.mockResolvedValue("div-9");
+
+        expect(await tournamentService.addDivision("tour-1", "user-1", division)).toBe("div-9");
     });
 });

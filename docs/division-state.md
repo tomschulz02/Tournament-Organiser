@@ -63,6 +63,8 @@ nothing. Nothing enforces agreement. Write both together, inside the same transa
 | `totalGames` | integer | Fixture count for the round. |
 | `completedGames` | integer | Fixtures with status `COMPLETED`. Round is over when this equals `totalGames`. |
 
+| `placement` | array | Knockout rounds of a division with a placement depth only. Absent otherwise. See below. |
+
 Not yet present, but required by `docs/tournament-rules.md`: match format is defined
 **per round**, so a round needs a key recording its best-of. Pool play at best-of-3 and
 knockout at best-of-5 in the same division cannot currently be expressed. Add it when
@@ -78,7 +80,22 @@ The meaning of `groups` depends on `type`:
 
 This is why knockout fixtures can be generated before the pool stage finishes: the
 matchups are expressed positionally and only resolve to teams once `results` is filled.
-Those pre-generated fixtures use `team_1_placeholder` / `team_2_placeholder` for display.
+Those pre-generated fixtures store `team_1_placeholder` / `team_2_placeholder` (`Rank N`).
+Since 2026-09-24 the view payload's display names `team1` / `team2` go one step further
+for a slot that a known match feeds. They read `Winner of #N` or `Loser of #N`, the same
+label the bracket draws, so the fixture list and the schedule show the crossovers.
+`labelFedSlots` in `tournamentViewFormatter.js` does it from the bracket's `sources`. A
+first-round slot that the bracket can pin to a pool position takes the bracket's name
+for it, `A1 (Rank 1)`. Any other slot whose feeder cannot be stated keeps the rank
+placeholder. The stored placeholder columns and `teams.team_N` are unchanged.
+
+A `roundRobin` round with more than one pool also names each fixture's pool in the view
+payload. `round` reads `Pool Play · Pool A`, the same `<round> · <label>` form placement
+matches use, and a new `pool` key holds `Pool A`. The pool is found from the pool array
+that holds `team_1`. `labelPools` applies it after standings, bracket and overview are
+built, because those match fixtures to `state.rounds` by name. Every client reader that
+needs a fixture's round strips the label with `roundHolding`. The stored `round` column
+is unchanged. A single-pool round is left as `Pool Play`.
 
 **A League division can have more than one `roundRobin` round.** Classic's Pool Play is
 always exactly one; League offers a "multiple legs" mode where each leg is its own round
@@ -98,6 +115,21 @@ truncating the circle-method rotation gives an uneven schedule whenever `n` is o
 round object itself is indistinguishable from any other `roundRobin` round once
 generated — `totalGames` is just smaller than `n * (n - 1) / 2`.
 
+### placement
+
+Present on a knockout round only when the division has a `placement_depth` and the round
+holds placement groups — see `docs/tournament-rules.md`, "Placement matches". One entry
+per placement group, in group order; placement groups always follow the round's own:
+
+| Key | Description |
+|---|---|
+| `group` | Index into this round's `groups`. |
+| `name` | The fixture round name its match is stored under, e.g. `"Semifinals · Places 5-8"` or `"Finals · 5th Place"`. Absent for a one-team group, which has no fixture. |
+| `ranks` | The places the group decides, winner first: `[5, 6]` for a placement final, `[7]` for a tier of one that reaches the last round. Absent for a match or a waiting group that decides nothing yet. |
+
+The part of `name` before `" · "` is the round that holds the fixture, so any code
+mapping a fixture to its round (`roundHolding`) reads it from the name alone.
+
 ### results
 
 Empty while a round is in progress. When the round completes, teams are ranked by their
@@ -110,6 +142,13 @@ contents belong in `results`.
 
 The ordering differs by round type — a flat cross-pool seeding for round-robin rounds,
 winners before losers for knockout rounds. `docs/tournament-rules.md` defines both.
+
+An entry may be `null` when the next round is a knockout round: a place left empty,
+usually by a cancelled knockout match, so whoever it is drawn against gets a walkover.
+The entry keeps its position so every later index still resolves to the right team.
+`computedResults` may hold `null` for the same reason. See "A cancelled knockout match"
+in `docs/tournament-rules.md`. Going into a round-robin leg, which plays every team it
+is given, `results` never holds `null`.
 
 ## Standings
 

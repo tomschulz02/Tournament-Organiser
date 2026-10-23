@@ -9,6 +9,14 @@
 // error middleware is the only place that turns a code into a response.
 // See docs/decisions.md, "Typed Errors With A Central Handler".
 
+import {
+	MAX_TEAMS_PER_DIVISION,
+	MAX_DIVISIONS_PER_TOURNAMENT,
+	MAX_ROUND_ROBIN_LEGS,
+	MAX_FIXTURES_PER_DIVISION,
+	MAX_SCHEDULE_ENTRIES
+} from "./config/limits.js";
+
 export class AppError extends Error {
 	// `cause` carries the underlying failure — a pg error, for instance — so the
 	// Postgres code and constraint name survive as far as the log. `details`
@@ -45,6 +53,11 @@ export const ERRORS = {
 	WRONG_QUALIFIER_COUNT: [400, "Wrong number of qualifying teams"],
 	DUPLICATE_TEAM: [400, "A team appears more than once"],
 	TEAM_NOT_IN_ROUND: [400, "A team did not play in this round"],
+	// A knockout match recorded as finished with the sets level, from before the
+	// score endpoint refused one. Progressing past it would shift every team after
+	// it a place — see matchOutcome in progression.service.js. `details` names the
+	// match: fixtureId, matchNo and round.
+	KNOCKOUT_MATCH_UNDECIDED: [409, "A knockout match in this round ended without a winner. Open it and enter the winning score"],
 	// Editing a division's teams. A team id the caller sends has to be one this
 	// division already holds — otherwise the request either names a team from
 	// somewhere else or is simply confused, and both are refusals rather than a
@@ -56,9 +69,25 @@ export const ERRORS = {
 	// Removing a division. CreateTournament refuses to build a tournament with no
 	// divisions, so one should not be reducible to zero afterwards either.
 	LAST_DIVISION: [409, "A tournament needs at least one division"],
+	// The size caps in config/limits.js. The numbers are interpolated once, at
+	// load, so the messages are as static as every other one here and cannot
+	// disagree with what the services enforce.
+	TOO_MANY_DIVISIONS: [400, `A tournament can have at most ${MAX_DIVISIONS_PER_TOURNAMENT} divisions`],
+	TOO_MANY_TEAMS: [400, `A division can have at most ${MAX_TEAMS_PER_DIVISION} teams`],
+	TOO_MANY_LEGS: [400, `A league can have at most ${MAX_ROUND_ROBIN_LEGS} legs`],
+	TOO_MANY_FIXTURES: [400, `This would create more than ${MAX_FIXTURES_PER_DIVISION} matches in one division`],
 	// A group or qualifier count the new team count cannot support. Refused
 	// rather than corrected — the organiser chose these numbers.
 	INVALID_STRUCTURE: [400, "The group and qualifier counts do not fit the number of teams"],
+	// The Settings page's per-division controls. The basis is one of the four in
+	// utils/standings.js's RANKING_BASES.
+	INVALID_RANKING_BASIS: [400, "That is not one of the available ranking options"],
+	// Placement depth: Classic only, an odd rank from 5 to the knockout's team
+	// count, and fixed once the knockout stage is under way, because changing it
+	// adds and removes fixtures.
+	PLACEMENT_NOT_AVAILABLE: [400, "Placement matches need a division with a knockout stage"],
+	INVALID_PLACEMENT_DEPTH: [400, "Placement matches must go down to an odd place from 5th to the number of knockout teams"],
+	KNOCKOUT_ALREADY_STARTED: [409, "The knockout stage has already started"],
 	FORMAT_NOT_IMPLEMENTED: [400, "This format is not available yet"],
 	UNSUPPORTED_FORMAT: [400, "This format is not supported"],
 	// A round whose type no fixture generator handles. Distinct from
@@ -103,6 +132,16 @@ export const ERRORS = {
 	// profile as a created tournament, so saving it too would just double it up.
 	CANNOT_SAVE_OWN_TOURNAMENT: [409, "You cannot save a tournament you created"],
 
+	// Editors. Adding is immediate — there is no invite to accept — so every
+	// refusal is decided here, at the moment the organiser asks. A user who does
+	// not exist is USER_NOT_FOUND, from the accounts section above.
+	EDITOR_IS_ORGANISER: [409, "You are the organiser of this tournament already"],
+	EDITOR_ALREADY_ADDED: [409, "That user is already an editor of this tournament"],
+	EDITOR_NOT_FOUND: [404, "That user is not an editor of this tournament"],
+	// An editor enters results for the round being played and nothing else. The
+	// organiser is not held to it — see resolveResultRole in fixtures.service.js.
+	EDITOR_ROUND_NOT_CURRENT: [403, "Editors can only enter results for the current round"],
+
 	// Saving a schedule. One code per rule rather than one INVALID_SCHEDULE: the
 	// message is display-ready by contract, and "that schedule is invalid" tells
 	// the organiser nothing about which rule they broke. `details` carries the
@@ -111,6 +150,7 @@ export const ERRORS = {
 	// The server rejects the impossible and nothing else — court balance and rest
 	// between matches are the organiser's judgement. See docs/schedule.md.
 	SCHEDULE_MALFORMED: [400, "The schedule is not in a recognised format"],
+	SCHEDULE_TOO_LARGE: [400, `A schedule can have at most ${MAX_SCHEDULE_ENTRIES} matches and breaks`],
 	SCHEDULE_TIME_INVALID: [400, "An entry ends before it starts"],
 	SCHEDULE_DAY_OUT_OF_RANGE: [400, "An entry falls outside the tournament dates"],
 	SCHEDULE_FIXTURE_UNKNOWN: [400, "A scheduled match does not belong to this tournament"],
@@ -129,6 +169,10 @@ export const ERRORS = {
 	// The round this fixture belongs to has already been progressed past —
 	// see roundHolding in fixtures.service.js and commit in progression.service.js.
 	ROUND_LOCKED: [409, "This round has already been progressed and can no longer be edited"],
+	// A knockout match decides who goes through, so it cannot end level.
+	// Cancelling it, when neither team can play, is a different result and is
+	// allowed — see assertKnockoutHasWinner in fixtures.service.js.
+	KNOCKOUT_NEEDS_WINNER: [400, "A knockout match needs a winner, so it cannot end with the sets level. For a walkover, enter a winning score for the team that goes through, or use Cancel Match if neither team can play"],
 
 	// Field-level input failures, raised by assertText in utils/validation.js
 	// before a value reaches Postgres, where an over-length varchar would
@@ -148,8 +192,19 @@ export const ERRORS = {
 	// condition rather than a fault: reporting it is the endpoint's whole job.
 	SERVICE_UNAVAILABLE: [503, "The service is not ready"],
 
+	// Raised by middleware/csrf.js, before any route runs. The API is JSON-only
+	// and its writes are accepted only from the frontend's own origin; see
+	// docs/api.md, "Security".
+	CROSS_ORIGIN_REQUEST: [403, "This request did not come from the Tourganiser site"],
+	UNSUPPORTED_MEDIA_TYPE: [415, "Requests must be sent as JSON"],
+
 	// Generic.
 	MALFORMED_JSON: [400, "Request body is not valid JSON"],
+	// body-parser's own rejections of a body over MAX_JSON_BODY and of a
+	// Content-Encoding it cannot decompress (anything but gzip, deflate and br),
+	// mapped in middleware/errorHandler.js the same way MALFORMED_JSON is.
+	PAYLOAD_TOO_LARGE: [413, "The request is too large"],
+	UNSUPPORTED_CONTENT_ENCODING: [415, "The request is compressed in a format the server does not support"],
 	ROUTE_NOT_FOUND: [404, "Not found"],
 	NOT_IMPLEMENTED: [501, "This feature is not available yet"]
 };

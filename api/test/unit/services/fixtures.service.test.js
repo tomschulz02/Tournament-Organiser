@@ -13,6 +13,7 @@ vi.mock("../../../src/repositories/fixtures.repository.js", () => ({
     fixturesRepository: {
         createFixture: vi.fn(),
         getFixtureWithOwner: vi.fn(),
+        getFixtures: vi.fn(),
         updateResult: vi.fn(),
         countCompletedInRounds: vi.fn()
     }
@@ -26,6 +27,12 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     }
 }));
 
+vi.mock("../../../src/repositories/editors.repository.js", () => ({
+    editorsRepository: {
+        isEditor: vi.fn()
+    }
+}));
+
 const {
     fixtureService,
     generateFixtures,
@@ -36,9 +43,13 @@ const {
     getFixturesForRound,
     validateSets,
     deriveStatus,
+    setsWon,
     roundHolding,
-    fixtureRoundsOf
+    fixtureRoundsOf,
+    resolveResultRole,
+    currentRoundIndex
 } = await import("../../../src/services/fixtures.service.js");
+const { editorsRepository } = await import("../../../src/repositories/editors.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
@@ -50,6 +61,8 @@ beforeEach(() => {
     fixturesRepository.createFixture.mockReset();
     fixturesRepository.getFixtureWithOwner.mockReset();
     fixturesRepository.updateResult.mockReset();
+    fixturesRepository.getFixtures.mockReset().mockResolvedValue([]);
+    editorsRepository.isEditor.mockReset().mockResolvedValue(false);
     fixturesRepository.countCompletedInRounds.mockReset().mockResolvedValue(0);
     divisionsRepository.getStateForUpdate.mockReset().mockResolvedValue(makeState());
     divisionsRepository.updateStateRounds.mockReset();
@@ -504,6 +517,17 @@ describe("deriveStatus", () => {
     });
 });
 
+describe("setsWon", () => {
+    it("counts each set for whichever team scored more in it", () => {
+        expect(setsWon([[25, 20], [18, 25], [15, 10]])).toEqual([2, 1]);
+    });
+
+    it("counts a level set for neither team, and no sets as none each", () => {
+        expect(setsWon([[20, 20], [0, 0]])).toEqual([0, 0]);
+        expect(setsWon([])).toEqual([0, 0]);
+    });
+});
+
 describe("the third-place playoff exception", () => {
     // Its fixtures carry their own round name while living inside Finals.
     it("maps a third-place fixture onto the Finals round", () => {
@@ -575,7 +599,7 @@ describe("fixtureService.updateResult", () => {
         await fixtureService.updateResult("f1", "user-1", [[21, 15], [18, 21]], false);
 
         expect(fixturesRepository.updateResult).toHaveBeenCalledWith(
-            "f1", [[21, 18], [15, 21]], "LIVE", dbMock.client
+            "f1", [[21, 18], [15, 21]], "LIVE", dbMock.client, "user-1"
         );
     });
 
@@ -836,5 +860,249 @@ describe("fixtureService.updateResult, round locking", () => {
         await fixtureService.updateResult("f1", "user-1", [[21, 15]], true);
 
         expect(fixturesRepository.updateResult).toHaveBeenCalled();
+    });
+});
+
+// Review 4.1. A knockout match decides who goes through, so it cannot end with
+// the sets level — progression would have nobody to send on. Cancelling one, when
+// neither team can play, is a different result and stays allowed.
+describe("fixtureService.updateResult, knockout matches", () => {
+    function knockout(overrides = {}) {
+        return makeFixture({
+            id: "f-qf1",
+            division_id: "div-1",
+            round: "Quarterfinals",
+            team_1: "t1",
+            team_2: "t8",
+            created_by: "user-1",
+            tournament_id: "tour-1",
+            ...overrides
+        });
+    }
+
+    beforeEach(() => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout());
+        divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({
+            rounds: [
+                makeRound({ name: "Pool Play" }),
+                makeRound({ name: "Quarterfinals", type: "knockout" }),
+                makeRound({ name: "Semifinals", type: "knockout" }),
+                makeRound({ name: "Finals", type: "knockout" })
+            ]
+        }));
+    });
+
+    it("refuses to end a knockout match with the sets level, writing nothing", async () => {
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER", status: 400 });
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+    });
+
+    // A level set counts for neither team, so two of them are still no winner.
+    it("refuses to end a knockout match whose every set was level", async () => {
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[0, 0], [0, 0]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER" });
+    });
+
+    it.each([
+        ["the 3rd place playoff", "3rd Place Playoff"],
+        ["a placement match", "Semifinals · Places 5-8"]
+    ])("holds %s to the same rule as the knockout round it sits in", async (_label, round) => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout({ round }));
+
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER" });
+    });
+
+    // Both teams forfeited: nobody goes through, and the next round's opponent
+    // gets a walkover. See buildKnockoutOutcomes in progression.service.js.
+    it("still lets a knockout match be cancelled", async () => {
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[0, 0]], true);
+
+        expect(result.status).toBe("CANCELLED");
+        expect(fixturesRepository.updateResult).toHaveBeenCalled();
+    });
+
+    it("records a knockout match in progress with the sets level", async () => {
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], false);
+
+        expect(result.status).toBe("LIVE");
+    });
+
+    it("ends a knockout match that has a winner without reading the state again", async () => {
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25], [15, 10]], true);
+
+        expect(result.status).toBe("COMPLETED");
+        // Once for the lock check and once for the count: the winner check reads
+        // nothing when the sets are not level.
+        expect(divisionsRepository.getStateForUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it("leaves a pool match free to end level, as before", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout({ round: "Pool Play" }));
+
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true);
+
+        expect(result.status).toBe("COMPLETED");
+    });
+
+    it("leaves a fixture whose round is not in state free to end level", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(knockout({ round: "Some Other Round" }));
+
+        const result = await fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true);
+
+        expect(result.status).toBe("COMPLETED");
+    });
+
+    it("reads a state that arrives as a JSON string, or with no rounds", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(JSON.stringify(makeState({
+            rounds: [makeRound({ name: "Quarterfinals", type: "knockout" })]
+        })));
+
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .rejects.toMatchObject({ code: "KNOCKOUT_NEEDS_WINNER" });
+
+        divisionsRepository.getStateForUpdate.mockResolvedValue({ teams: [] });
+
+        await expect(fixtureService.updateResult("f-qf1", "user-1", [[25, 20], [20, 25]], true))
+            .resolves.toMatchObject({ status: "COMPLETED" });
+    });
+});
+
+describe("editor access to fixtureService.updateResult", () => {
+    const rounds = [
+        makeRound({ name: "Pool Play" }),
+        makeRound({ name: "Semifinals", type: "knockout" }),
+        makeRound({ name: "Finals", type: "knockout" })
+    ];
+
+    function fixtureIn(round, overrides = {}) {
+        return makeFixture({
+            id: "f1",
+            division_id: "div-1",
+            round,
+            team_1: "t1",
+            team_2: "t2",
+            created_by: "owner-1",
+            tournament_id: "tour-1",
+            ...overrides
+        });
+    }
+
+    beforeEach(() => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({ rounds }));
+        editorsRepository.isEditor.mockResolvedValue(true);
+        // Pool Play and Semifinals are bound; the final still reads "Rank 1".
+        fixturesRepository.getFixtures.mockResolvedValue([
+            fixtureIn("Pool Play", { id: "p1" }),
+            fixtureIn("Semifinals", { id: "s1" }),
+            fixtureIn("Finals", { id: "f9", team_1: null, team_2: null })
+        ]);
+    });
+
+    it("lets an editor write a result in the current round, and stamps them", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Semifinals"));
+
+        await fixtureService.updateResult("f1", "editor-1", [[21, 15]], true);
+
+        expect(editorsRepository.isEditor).toHaveBeenCalledWith("tour-1", "editor-1");
+        expect(fixturesRepository.getFixtures).toHaveBeenCalledWith("div-1");
+        expect(fixturesRepository.updateResult).toHaveBeenCalledWith(
+            "f1", [[21], [15]], "COMPLETED", dbMock.client, "editor-1"
+        );
+    });
+
+    it("refuses an editor outside the current round, before anything is written", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Pool Play"));
+
+        await expect(fixtureService.updateResult("f1", "editor-1", [[21, 15]], true))
+            .rejects.toMatchObject({ code: "EDITOR_ROUND_NOT_CURRENT", status: 403 });
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
+        expect(clientSql()).toEqual(["BEGIN", "ROLLBACK"]);
+    });
+
+    it("lets the organiser write outside the current round without consulting editors", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Pool Play"));
+
+        await fixtureService.updateResult("f1", "owner-1", [[21, 15]], true);
+
+        expect(editorsRepository.isEditor).not.toHaveBeenCalled();
+        expect(fixturesRepository.getFixtures).not.toHaveBeenCalled();
+        expect(fixturesRepository.updateResult.mock.calls[0][4]).toBe("owner-1");
+    });
+
+    it("reads a division with no rounds as having no current round to hold an editor to", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue({ teams: [] });
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Semifinals"));
+
+        await fixtureService.updateResult("f1", "editor-1", [[21, 15]], true);
+
+        expect(fixturesRepository.updateResult).toHaveBeenCalled();
+    });
+
+    it("refuses someone who is neither organiser nor editor, in any round", async () => {
+        editorsRepository.isEditor.mockResolvedValue(false);
+
+        for (const round of ["Pool Play", "Semifinals"]) {
+            fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn(round));
+
+            await expect(fixtureService.updateResult("f1", "stranger", [[21, 15]], true))
+                .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
+        }
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
+    });
+});
+
+describe("resolveResultRole", () => {
+    it("is OWNER for the organiser, without a lookup", async () => {
+        expect(await resolveResultRole({ created_by: "u1", tournament_id: "t" }, "u1")).toBe("OWNER");
+        expect(editorsRepository.isEditor).not.toHaveBeenCalled();
+    });
+
+    it("is EDITOR for a member and NONE otherwise", async () => {
+        editorsRepository.isEditor.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+        expect(await resolveResultRole({ created_by: "u1", tournament_id: "t" }, "u2")).toBe("EDITOR");
+        expect(await resolveResultRole({ created_by: "u1", tournament_id: "t" }, "u3")).toBe("NONE");
+    });
+});
+
+describe("fixtureRoundsOf with placement matches", () => {
+    it("adds each placement fixture round the round holds, once", () => {
+        const placement = [
+            { group: 2, name: "Semifinals · Places 5-8" },
+            { group: 3, name: "Semifinals · Places 5-8" },
+            { group: 4 }
+        ];
+
+        expect(fixtureRoundsOf("Semifinals", placement)).toEqual(["Semifinals", "Semifinals · Places 5-8"]);
+        expect(fixtureRoundsOf("Finals", [{ group: 2, name: "Finals · 5th Place", ranks: [5, 6] }]))
+            .toEqual(["Finals", "3rd Place Playoff", "Finals · 5th Place"]);
+        expect(fixtureRoundsOf("Finals", null)).toEqual(["Finals", "3rd Place Playoff"]);
+    });
+
+    it("maps a placement fixture back to the round holding it", () => {
+        expect(roundHolding("Semifinals · Places 5-8")).toBe("Semifinals");
+        expect(roundHolding("Finals · 11th Place")).toBe("Finals");
+    });
+});
+
+describe("currentRoundIndex", () => {
+    const rounds = [makeRound({ name: "Pool Play" }), makeRound({ name: "Finals", type: "knockout" })];
+
+    it("is the highest round holding a fixture with both teams bound", () => {
+        expect(currentRoundIndex([
+            makeFixture({ round: "Pool Play", team_1: "a", team_2: "b" }),
+            makeFixture({ round: "3rd Place Playoff", team_1: "c", team_2: "d" }),
+            makeFixture({ round: "Finals", team_1: null, team_2: null })
+        ], rounds)).toBe(1);
+    });
+
+    it("ignores half-bound fixtures, and is -1 when nothing is bound", () => {
+        expect(currentRoundIndex([makeFixture({ round: "Finals", team_1: "a", team_2: null })], rounds)).toBe(-1);
     });
 });

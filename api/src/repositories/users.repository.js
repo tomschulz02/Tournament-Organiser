@@ -53,6 +53,22 @@ async function getUserById(id) {
 	}
 }
 
+// Usernames for a set of ids, for naming who entered a result. Only id and
+// username are selected: nothing downstream needs more, and the rows end up in
+// a payload. An empty list needs no query at all.
+async function getUsernamesByIds(ids) {
+	if (!Array.isArray(ids) || ids.length === 0) {
+		return [];
+	}
+
+	try {
+		const sql = "SELECT id, username FROM users WHERE id = ANY($1::uuid[])";
+		return await db.query(sql, [ids]);
+	} catch (err) {
+		throw new Error("Failed to look up usernames", { cause: err });
+	}
+}
+
 // Overwrites the stored password hash. No RETURNING — nothing downstream
 // needs the row back.
 async function updatePassword(id, passwordHash) {
@@ -124,6 +140,7 @@ export const userRepository = {
 	createUser,
 	findUserByEmailOrUsername,
 	getUserById,
+	getUsernamesByIds,
 	updatePassword,
 	addFriend,
 	getFriends,

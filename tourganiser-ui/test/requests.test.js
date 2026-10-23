@@ -142,6 +142,23 @@ describe('failure handling', () => {
 		expect(globalThis.fetch).toHaveBeenCalledTimes(6);
 	});
 
+	// A write whose response was lost may already have happened, and repeating
+	// it — a second tournament, a second division — is worse than reporting it.
+	it.each([
+		['POST', () => api.createTournament({})],
+		['PUT', () => api.updateFixtureResult('f1', [[21, 15]], true)],
+		['DELETE', () => api.deleteTournament('t1')],
+	])('does not retry a %s that never completed', async (_method, call) => {
+		globalThis.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+
+		await expect(call()).rejects.toMatchObject({
+			name: 'ApiError',
+			message: 'Unable to reach the server. Please try again.',
+			isConnectionError: true,
+		});
+		expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+	});
+
 	it('does not retry an HTTP error', async () => {
 		globalThis.fetch.mockResolvedValue(jsonResponse({ success: false, message: 'Nope' }, { status: 500 }));
 

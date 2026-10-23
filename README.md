@@ -36,7 +36,12 @@ Tests, from `api/`:
     npm run test:bugs   # the known-bug suite, which is expected to fail
 
 `api/test/known-bugs/` documents outstanding defects as failing tests and is excluded
-from the default run. There is no test suite for `tourganiser-ui/`.
+from the default run.
+
+Tests, from `tourganiser-ui/`:
+
+    npm test            # pure modules only — no React or DOM, no coverage threshold
+    npm run test:watch
 
 ## Environment
 
@@ -75,6 +80,9 @@ same as what is designed.
 - `docs/tournament-rules.md` — domain terminology and rules
 - `docs/known-limitations.md` — what is broken or missing
 - `docs/gap-analysis.md` — dated survey of gaps across the whole repository
+- `docs/review-2026-10-22.md` — dated UX, correctness, performance and security review,
+  with a live walkthrough; its findings are folded into `known-limitations.md` and
+  `future-features.md`
 - `docs/decisions.md` — architectural decisions and why
 - `docs/project-philosophy.md` — how changes should be made
 - `docs/roadmap.md` and `docs/future-features.md` — planned work

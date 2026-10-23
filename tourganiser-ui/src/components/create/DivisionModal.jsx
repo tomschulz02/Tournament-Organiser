@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import CreateModal from './CreateModal';
 import Icon from '../Icons';
-import { useConfirm } from '../ConfirmDialog';
+import { useConfirm } from '../ConfirmContext';
 import { useHelpTopic } from '../../HelpContext';
 import {
 	DIVISION_NAME_MAX,
@@ -176,7 +176,13 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 
 		if (worthKeeping) {
 			const confirmed = await confirm(
-				isEditing ? 'Discard the changes to this division?' : 'Discard this division?'
+				isEditing ? 'The division goes back to how it was.' : 'The name and teams entered so far will be lost.',
+				{
+					title: isEditing ? 'Discard the changes to this division?' : 'Discard this division?',
+					confirmLabel: isEditing ? 'Discard changes' : 'Discard division',
+					cancelLabel: 'Keep editing',
+					danger: true,
+				}
 			);
 			if (!confirmed) return;
 		}

@@ -9,6 +9,8 @@ import fixtureRouter from "./routes/fixtures.route.js";
 import tournamentRouter from "./routes/tournaments.route.js";
 import { notFound } from "./middleware/notFound.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { rejectCrossOriginWrites } from "./middleware/csrf.js";
+import { MAX_JSON_BODY } from "./config/limits.js";
 import DatabaseConnection from "./config/db.js";
 import { AppError } from "./errors.js";
 
@@ -32,14 +34,17 @@ app.set("trust proxy", 1);
 // computes on purpose — see src/utils/etag.js.
 app.set("etag", false);
 
+// The origins allowed to read responses (CORS) and to send writes (csrf.js).
+// One list, so the two can never disagree about who the frontend is.
+const ALLOWED_ORIGINS =
+	process.env.NODE_ENV === 'development'
+		? [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:5174']
+		: [process.env.FRONTEND_URL];
+
 // First, so the headers are set on every response including errors and 404s.
 app.use(helmet());
-app.use(express.json());
 app.use(cors({
-    origin:
-		process.env.NODE_ENV === 'development'
-			? [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:5174']
-			: process.env.FRONTEND_URL,
+    origin: ALLOWED_ORIGINS,
 	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 	// If-None-Match is not a CORS-safelisted request header, so sending it makes
 	// the request non-simple: the browser preflights, and rejects the real
@@ -54,11 +59,26 @@ app.use(cors({
 	// layer, and the frontend tests stub fetch. They were found by loading the
 	// real page against the real API.
 	exposedHeaders: ['ETag'],
+	// How long a browser may reuse a preflight answer. Without it browsers keep
+	// one for about 5 seconds, so nearly every write and every conditional GET
+	// paid a second round trip first — ~220 ms each from South Africa, measured
+	// 2026-10-23. Two hours is Chrome's ceiling. The cost: a change to the
+	// allowed origins takes up to that long to reach a browser that already
+	// asked.
+	maxAge: 7200,
 	credentials: true,
 	optionsSuccessStatus: 200,
 }));
+// After cors(), so the preflight is answered first and a rejection sent to the
+// frontend carries the CORS headers it needs to read the message. The same
+// holds for express.json below: a malformed or over-size body fails inside it,
+// and before this ordering those 4xx responses could not be read cross-origin.
+//
+// JSON only. There is deliberately no urlencoded parser: it is how a cross-site
+// form would have delivered a body. See middleware/csrf.js.
+app.use(rejectCrossOriginWrites(ALLOWED_ORIGINS));
+app.use(express.json({ limit: MAX_JSON_BODY }));
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
 
 // Above the session middleware, so a health check neither needs a cookie nor
 // pays for a JWT verification. `SELECT 1` is the cheapest question that still

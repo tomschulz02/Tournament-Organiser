@@ -1,4 +1,5 @@
 import { AppError } from "../errors.js";
+import { MAX_SCHEDULE_ENTRIES } from "../config/limits.js";
 
 // Validates a whole schedule against the tournament it belongs to, for
 // PUT /api/tournaments/:tournamentId/schedule.
@@ -38,6 +39,11 @@ export function validateSchedule(schedule, { startDate, endDate, divisions = [],
     const entries = schedule.entries ?? [];
     if (!Array.isArray(entries)) {
         throw new AppError("SCHEDULE_MALFORMED");
+    }
+
+    // Before any check runs: the overlap checks below are quadratic in this.
+    if (entries.length > MAX_SCHEDULE_ENTRIES) {
+        throw new AppError("SCHEDULE_TOO_LARGE");
     }
 
     checkEntryShapes(entries);
@@ -347,10 +353,15 @@ function checkRoundOrder(placements, fixturesById, roundOrderByDivision) {
 // rather than imported because a util reaching into a service inverts the
 // dependency. See docs/tournament-rules.md.
 const THIRD_PLACE = "3rd Place Playoff";
+const PLACEMENT_SEPARATOR = " · ";
 const FINALS = "Finals";
 
 function roundHolding(fixtureRound) {
-    return fixtureRound === THIRD_PLACE ? FINALS : fixtureRound;
+    if (fixtureRound === THIRD_PLACE) return FINALS;
+    // A placement match names its holding round before the separator — see
+    // isPlacementRound in fixtures.service.js.
+    const separator = String(fixtureRound).indexOf(PLACEMENT_SEPARATOR);
+    return separator === -1 ? fixtureRound : fixtureRound.slice(0, separator);
 }
 
 // Round names are unique within a division's state.rounds, and their position in

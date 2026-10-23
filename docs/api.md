@@ -53,9 +53,14 @@ Status codes in use:
   `GET /api/tournaments/:tournamentId` returns it
 - 400 Bad Request — validation failure
 - 401 Unauthorized — missing or invalid token
-- 403 Forbidden — authenticated but not permitted
+- 403 Forbidden — authenticated but not permitted, or a write from an origin other than
+  the frontend's (`CROSS_ORIGIN_REQUEST`)
 - 404 Not Found — resource does not exist, or invalid UUID in path
 - 409 Conflict — the request is valid but the resource is in a state that forbids it
+- 413 Payload Too Large — the JSON body is over 1mb (`MAX_JSON_BODY`)
+- 415 Unsupported Media Type — a write whose body is not `application/json`, is JSON
+  declaring a charset other than UTF-8, or is compressed with anything but gzip, deflate
+  or br
 - 429 Too Many Requests — the auth rate limit was exceeded; only `POST /api/users/login`
   and `POST /api/users/signup` can return it
 - 500 Internal Server Error — unexpected failure
@@ -140,7 +145,8 @@ that they own the resource. See Security Recommendations.
 
 The frontend sends `credentials: 'include'` on every request. CORS is configured with
 `credentials: true` and an origin of `FRONTEND_URL` (plus `http://localhost:5173` when
-`NODE_ENV === 'development'`).
+`NODE_ENV === 'development'`). The same list decides which origins may send a write —
+see Security, "Cross-site request forgery".
 
 ## Endpoint Reference
 
@@ -163,8 +169,14 @@ Implemented:
 | DELETE | `/api/divisions/:divisionId` | required + owner | Remove a division. Cascades to its teams and fixtures; repairs the schedule. |
 | POST | `/api/tournaments/:tournamentId/divisions` | required + owner | Add a division to a Not Started tournament |
 | PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
-| GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
-| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn` so the UI can adapt. Cached — see below. |
+| PUT | `/api/divisions/:divisionId/settings` | required + owner | Ranking basis and placement depth. See below. |
+| GET | `/api/tournaments/:tournamentId/editors` | required + owner | The tournament's editors: `[{ id, username, addedAt }]` |
+| GET | `/api/tournaments/:tournamentId/editors/search?q=` | required + owner, rate-limited | Suggestions for the add field. See "Editors" below. |
+| POST | `/api/tournaments/:tournamentId/editors` | required + owner | Add an editor. Body `{ identifier }` — an email or a username. |
+| DELETE | `/api/tournaments/:tournamentId/editors/:userId` | required + owner | Remove an editor |
+| PUT | `/api/fixtures/:fixtureId/result` | required + owner or editor | Record a result. See "Editors" below. |
+| GET | `/api/tournaments/` | any | List tournaments for Discover: `{ upcoming, ongoing, completed }`, each newest first, each item `{ id, name, start_date, end_date, location, status }`. Nothing else — no schedule, no creator. |
+| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn`, `creator` and `editor` so the UI can adapt. Cached — see below. |
 | POST | `/api/tournaments/:tournamentId/save` | required | Save a tournament to the caller's profile. Idempotent — saving twice is not an error. Refuses the caller's own tournament with `CANNOT_SAVE_OWN_TOURNAMENT` (409). |
 | DELETE | `/api/tournaments/:tournamentId/save` | required | Unsave. A tournament that was never saved is also not an error. |
 
@@ -201,12 +213,13 @@ The server sends an `ETag`, plus `Vary: Cookie` and `Cache-Control: no-cache`. A
 client may store the body but must revalidate before reusing it. Send the stored
 value back as `If-None-Match`; an unchanged tournament answers **304** with no body.
 
-The validator is built from two things, and both matter:
+The validator is built from three things, and all of them matter:
 
-| Half | What it is |
+| Part | What it is |
 |---|---|
 | Data | The greatest `last_update` across the tournament row and its divisions |
 | Viewer | The requesting user's id, or anonymous |
+| Payload version | `PAYLOAD_VERSION` in `api/src/utils/etag.js`. Bump it whenever the formatter changes what it emits for unchanged data, or clients holding a body from before the deploy keep being told it's current. Added 2026-09-24 at version 2. |
 
 **The viewer half is not optional.** The payload carries `creator` and `loggedIn`,
 which depend on who is asking rather than on when anything changed. An ETag built
@@ -221,6 +234,15 @@ and there is no reason to put an identifier in either.
 
 A tournament whose change key cannot be determined is sent with no `ETag` at all and
 is never answered with a 304. Unknown means refetch.
+
+**A conditional request is answered before the view is built** (added 2026-10-23).
+When `If-None-Match` is present, the controller first reads just the two stamps in
+one query (`tournamentRepository.getChangeStamps`), builds the change key from them
+with the same `buildChangeKey`, and answers 304 if the validator matches. Only a
+miss — moved data, another viewer, an unknown key, a missing tournament — builds the
+full view, which then behaves exactly as it always did. Locally against Neon this took
+a 304 from ~750 ms to ~190 ms; in production the saving is smaller in time but cuts
+each "has anything changed?" check from about six queries to one.
 
 Express's own automatic ETag is **disabled** (`app.set("etag", false)`). It content-
 hashes every JSON response, which would both override the decision above and make the
@@ -288,7 +310,7 @@ Rejections:
 
 | Status | Meaning |
 |---|---|
-| 400 | Missing or nameless team list, a duplicate name or id, an id the division does not hold, or a group/qualifier count the team count cannot support |
+| 400 | Missing or nameless team list, a duplicate name or id, an id the division does not hold, or a group/qualifier count the team count cannot support. `TOO_MANY_TEAMS` over 128 teams; `TOO_MANY_FIXTURES` when the result would have more than 2000 matches |
 | 403 | Caller does not own the tournament |
 | 404 | No such division |
 | 409 | `TOURNAMENT_ALREADY_STARTED` — a rebuild or a reorder after the tournament has started, or `DIVISION_HAS_RESULTS` — a rebuild's or a reorder's division already holds a completed fixture |
@@ -334,6 +356,67 @@ bear on its colour.
 
 Success returns `{ divisionId, color }`, with `color` null when the choice was cleared.
 
+### Division settings
+
+`PUT /api/divisions/:divisionId/settings`. Body: either or both of
+`{ "rankingBasis": "FIVB_POINTS", "placementDepth": 7 }`. Both are validated before
+either is written. PUT rather than PATCH because the CORS configuration allows no PATCH,
+and the colour endpoint above set the precedent for a one-concern PUT.
+
+- `rankingBasis` — `MATCHES_WON`, `FIVB_POINTS`, `SIMPLIFIED_POINTS` or `SETS_WON`.
+  Changeable at any time: it changes how standings are read and nothing else, so there is
+  no rebuild. See `docs/tournament-rules.md`, "Ranking order".
+- `placementDepth` — null, or an odd place from 5 up to the knockout stage's team count.
+  Classic only. Refused once the knockout stage has started, because it adds and removes
+  fixtures: the knockout rounds are redrawn and their fixtures reconciled by round name,
+  so every existing knockout fixture keeps its id and its schedule slot and only the
+  placement fixtures are created or deleted (their schedule entries go with them). See
+  `docs/tournament-rules.md`, "Placement matches".
+
+Rejections:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `INVALID_RANKING_BASIS` | Not one of the four |
+| 400 | `PLACEMENT_NOT_AVAILABLE` | Not a Classic division with a knockout stage |
+| 400 | `INVALID_PLACEMENT_DEPTH` | Not null or an odd place from 5 to the knockout's size |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 404 | `DIVISION_NOT_FOUND` | No such division |
+| 409 | `KNOCKOUT_ALREADY_STARTED` | Placement depth sent after the knockout stage began |
+
+Success returns `{ divisionId, rankingBasis, placementDepth }`. The division payload
+carries both as `ranking_basis` and `placement_depth`.
+
+### Editors
+
+An editor is a user the organiser has allowed to enter results. Adding is immediate —
+there is no invite to accept — and so is removing. Both move `tournaments.last_update`,
+because the editor's view of the tournament changes and the ETag has to say so.
+
+`POST /editors` resolves `identifier` with the same lookup sign-in uses and refuses
+with `USER_NOT_FOUND` (404), `EDITOR_IS_ORGANISER` (409) or `EDITOR_ALREADY_ADDED`
+(409). `DELETE /editors/:userId` refuses someone who is not an editor with
+`EDITOR_NOT_FOUND` (404) rather than succeeding silently.
+
+`GET /editors/search?q=` returns up to five `{ username, workedWith }`: people the
+organiser has worked with first (their editors elsewhere, and organisers whose
+tournaments they edit), then anyone whose username starts with `q`. Collaborators match
+from the first character and are returned for an empty `q`; everyone else needs three.
+Usernames only — never an email, never an id — and `%` and `_` match literally. The
+organiser and this tournament's editors are left out. Limited to 30 requests a minute
+per user; over that is `TOO_MANY_REQUESTS` (429).
+
+The only thing an editor can do is `PUT /api/fixtures/:fixtureId/result`, and only for a
+fixture in the division's current round — the highest round in `state.rounds` holding a
+fixture with both teams bound. Outside it they get `EDITOR_ROUND_NOT_CURRENT` (403). The
+organiser may write to any round. Every other endpoint stays organiser-only.
+
+Every successful result write stamps `fixtures.entered_by` with the caller. The tournament
+view sends the organiser and the tournament's current editors an `enteredBy` on each
+fixture that has a result and an author — `{ name, role, self }`, where `role` is
+`"organiser"`, `"editor"` or null for someone no longer an editor. Nobody else receives
+the key at all.
+
 ### Saving a schedule
 
 `PUT /api/tournaments/:tournamentId/schedule`. Body: `{ "schedule": { … } }`, the whole
@@ -354,6 +437,7 @@ which rule they broke. Each carries the offending entry ids in `data`.
 | Status | Code | Meaning |
 |---|---|---|
 | 400 | `SCHEDULE_MALFORMED` | Not the documented shape — a missing id, day or time, a duplicate entry id, an unrecognised `type`, a fixture entry with no `fixtureId` |
+| 400 | `SCHEDULE_TOO_LARGE` | More than 2000 entries, matches and breaks together |
 | 400 | `SCHEDULE_TIME_INVALID` | `endTime` is not after `startTime` |
 | 400 | `SCHEDULE_DAY_OUT_OF_RANGE` | An entry's `day` falls outside the tournament's dates |
 | 400 | `SCHEDULE_FIXTURE_UNKNOWN` | An entry names a fixture that is not this tournament's |
@@ -392,6 +476,14 @@ issued. Rejections:
 | 400 | Empty list, duplicate team, wrong qualifier count, or a team that did not play the round |
 | 403 | Caller does not own the tournament |
 | 409 | Round still has unplayed fixtures, is the final round, or the next round has already started |
+| 409 | `KNOCKOUT_MATCH_UNDECIDED`: a knockout match in the round is recorded as finished with the sets level. Both endpoints. `data` names it: `{ fixtureId, matchNo, round }` |
+
+Going into a knockout round, an entry in `teams` may be `null`: a place left empty, so
+whoever it is drawn against gets a walkover. A cancelled knockout match proposes exactly
+that — its places come back with `id: null` and `name: null`, and they are not in
+`eligibleTeams`. At least one entry must be a team. Binding stores a next-round match
+left short of a team as `CANCELLED`. See "A cancelled knockout match" in
+`docs/tournament-rules.md`.
 
 Both the confirmed list and the computed default are stored on the round, along with a
 `resultsAmended` flag, so an unexpected bracket can be traced to either the rules or a
@@ -530,6 +622,37 @@ Implemented:
   is Render's proxy and every visitor would share one rate-limit bucket. One hop rather
   than `true`, so the value cannot be forged: the trusted proxy appends the real peer to
   `X-Forwarded-For` after anything the client sent.
+- **Cross-site request forgery.** In production the session cookie is `SameSite=None`,
+  so the browser attaches it to requests other sites make. `api/src/middleware/csrf.js`
+  runs after `cors()` on every method except GET, HEAD and OPTIONS:
+  - an `Origin` that is present and not in the CORS list, including `null`, is a 403
+    `CROSS_ORIGIN_REQUEST`. A request with no `Origin` is allowed: browsers always send
+    one on a cross-origin write, so its absence means a non-browser client with no
+    victim's cookie;
+  - a `Content-Type` other than `application/json`, or a body with no `Content-Type`, is
+    a 415 `UNSUPPORTED_MEDIA_TYPE`. A write with no body and no `Content-Type` is fine —
+    that is how the frontend sends start, end, save, delete and logout.
+
+  The API is JSON-only. The urlencoded parser was removed, since that is how a form
+  delivers a body.
+- **Size caps**, in `api/src/config/limits.js`, which `errors.js` builds its messages
+  from:
+
+  | Cap | Value | Error |
+  |---|---|---|
+  | Teams per division | 128 | `TOO_MANY_TEAMS` |
+  | Divisions per tournament | 20 | `TOO_MANY_DIVISIONS` |
+  | Round-robin legs | 10, the UI's `MAX_ROUND_ROBIN_LEGS` | `TOO_MANY_LEGS` |
+  | Matches generated per division | 2000 | `TOO_MANY_FIXTURES` |
+  | Schedule entries | 2000 | `SCHEDULE_TOO_LARGE` |
+  | JSON body | 1mb | `PAYLOAD_TOO_LARGE` (413) |
+
+  All are 400 except the last. The match cap is the one that bounds the write: the
+  team and leg caps alone still allow 128 teams in one pool. Legs are checked only on
+  creation; a rebuild reads them back from the stored state.
+
+  `express.json` is mounted after `cors()`, so a 400 for a malformed body and a 413 for
+  an over-size one carry CORS headers the frontend can read.
 - bcrypt `saltRounds` raised from 10 to 12. No migration: bcrypt stores the cost inside
   the hash, so existing passwords keep verifying at 10 and only new ones are written at
   12. The dead duplicate of the constant in `users.repository.js` is gone — hashing has

@@ -18,7 +18,7 @@ import { poolMembership, previewBracket } from './divisionPreview';
 // getGroupLabel in api/src/utils/tournamentViewFormatter.js, which is what the
 // standings will call these once the tournament exists.
 function groupLabel(index) {
-	return `Group ${String.fromCharCode(65 + index)}`;
+	return `Pool ${String.fromCharCode(65 + index)}`;
 }
 
 export default function FormatSchematic({ division }) {

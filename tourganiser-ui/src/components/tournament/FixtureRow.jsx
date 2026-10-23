@@ -1,5 +1,5 @@
 import DivisionBadge from './DivisionBadge';
-import { setScores, setsWon } from './fixtureUtils';
+import { enteredByLabel, setScores, setsWon } from './fixtureUtils';
 import { divisionColorStyle } from '../../utils/divisionColors';
 
 // One fixture, shared by both states of the Fixtures & Schedule tab. The
@@ -24,8 +24,15 @@ export default function FixtureRow({
 	divisions = [],
 }) {
 	const status = (fixture.status || 'upcoming').toLowerCase();
-	const sets = setsWon(fixture.result);
-	const scores = setScores(fixture.result);
+	// Present only for the organiser and the tournament's editors, and only on a
+	// fixture someone is recorded as scoring — the server sends nothing otherwise,
+	// so there is no empty line to suppress here.
+	const enteredBy = enteredByLabel(fixture.enteredBy);
+	// A cancelled match was never played. Cancelling stores a single 0-0 set, a
+	// convention rather than a score, so it shows no score at all.
+	const result = fixture.status === 'CANCELLED' ? null : fixture.result;
+	const sets = setsWon(result);
+	const scores = setScores(result);
 
 	// The unscheduled state has no court and no officials, so the left column
 	// holds two lines rather than three. That is not missing data and gets no
@@ -73,6 +80,7 @@ export default function FixtureRow({
 				)}
 
 				{officials && <span className="tv-fixture-row-officials">Officials: {officials}</span>}
+				{enteredBy && <span className="tv-fixture-row-officials">Entered by {enteredBy}</span>}
 			</div>
 
 			<div className="tv-fixture-row-teams">

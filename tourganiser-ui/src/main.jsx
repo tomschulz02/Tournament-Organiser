@@ -19,7 +19,7 @@ import ScrollToTop from './components/ScrollToTop';
 import { AuthProvider } from './AuthProvider';
 import { MessageProvider } from './MessageProvider';
 import { ConfirmProvider } from './components/ConfirmDialog';
-import { ThemeProvider } from './ThemeContext';
+import { ThemeProvider } from './ThemeProvider';
 import { HelpProvider } from './HelpProvider';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 

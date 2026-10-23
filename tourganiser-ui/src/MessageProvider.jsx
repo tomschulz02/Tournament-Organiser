@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {MessageContext, useMessage} from './MessageContext';
 
 export function MessageProvider({ children }) {
     const [message, setMessage] = useState(null);
+    const timer = useRef(null);
 
-    const showMessage = (msg, type = "info", timeout = 3000) => {
+    // A new message replaces the old one and gets its own full timeout. The
+    // previous timer is cleared, or it would cut the new message short.
+    //
+    // Stable across renders, because effects list it as a dependency: a new
+    // function on every render re-ran them after every message — Browse
+    // refetched its list each time one was shown.
+    const showMessage = useCallback((msg, type = "info", timeout = 3000) => {
+        clearTimeout(timer.current);
         setMessage({ msg, type });
-        setTimeout(() => setMessage(null), timeout);
-    };
+        timer.current = setTimeout(() => setMessage(null), timeout);
+    }, []);
 
     return <MessageContext.Provider value={{ message, showMessage }}>{children}</MessageContext.Provider>;
 }

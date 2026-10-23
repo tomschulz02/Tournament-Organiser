@@ -5,7 +5,7 @@ import LoadingScreen from '../LoadingScreen';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
 import { isNotStarted } from './tournamentStatus';
-import { useConfirm } from '../ConfirmDialog';
+import { useConfirm } from '../ConfirmContext';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 import { updateDivisionTeams } from '../../requests';
@@ -158,7 +158,12 @@ export default function TeamsTab({
 	};
 
 	const handleRemove = async (row) => {
-		const confirmed = await confirm(`Remove ${row.name} from ${division.name}?`);
+		const confirmed = await confirm('Nothing is changed until you save the division.', {
+			title: `Remove ${row.name} from ${division.name}?`,
+			confirmLabel: 'Remove team',
+			cancelLabel: 'Keep',
+			danger: true,
+		});
 		if (!confirmed) return;
 
 		setTeams(teams.filter((entry) => entry.key !== row.key));
@@ -269,7 +274,12 @@ export default function TeamsTab({
 		if (divisionId === division.id) return;
 
 		if (dirty) {
-			const confirmed = await confirm(`Discard the unsaved changes to ${division.name}?`);
+			const confirmed = await confirm(`The changes you made to ${division.name} have not been saved.`, {
+				title: 'Discard unsaved changes?',
+				confirmLabel: 'Discard changes',
+				cancelLabel: 'Keep editing',
+				danger: true,
+			});
 			if (!confirmed) return;
 		}
 

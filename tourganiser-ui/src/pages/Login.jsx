@@ -40,11 +40,12 @@ export default function Login() {
 			}
 		};
 		checkLogin();
-		// from is intentionally left out: it is read once, at the moment this
-		// effect decides whether an already-logged-in session should bounce
-		// straight back to where the reader came from.
+		// Once, on arrival. showMessage and setIsLoggedIn are recreated on every
+		// render of their providers, so listing them re-ran this after each
+		// toast — and a signup or login that had just succeeded saw its own
+		// message replaced by this one. from is read once for the same reason.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [navigate, setIsLoggedIn, setUsername, showMessage]);
+	}, []);
 
 	const toggleForm = (formName) => {
 		setCurrentForm(formName);

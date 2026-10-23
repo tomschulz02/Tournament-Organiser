@@ -59,6 +59,13 @@ app.use(cors({
 	// layer, and the frontend tests stub fetch. They were found by loading the
 	// real page against the real API.
 	exposedHeaders: ['ETag'],
+	// How long a browser may reuse a preflight answer. Without it browsers keep
+	// one for about 5 seconds, so nearly every write and every conditional GET
+	// paid a second round trip first — ~220 ms each from South Africa, measured
+	// 2026-10-23. Two hours is Chrome's ceiling. The cost: a change to the
+	// allowed origins takes up to that long to reach a browser that already
+	// asked.
+	maxAge: 7200,
 	credentials: true,
 	optionsSuccessStatus: 200,
 }));

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import { useHelpTopic } from '../HelpContext';
-import { useConfirm } from '../components/ConfirmDialog';
+import { useConfirm } from '../components/ConfirmContext';
 import { createTournament } from '../requests';
 import DivisionCard from '../components/create/DivisionCard';
 import DivisionModal from '../components/create/DivisionModal';
@@ -319,9 +319,12 @@ function CreateTournamentForm() {
 	};
 
 	const handleRemoveDivision = async (division) => {
-		const confirmed = await confirm(
-			`Remove ${division.name || 'this division'} and its ${division.teams.length} teams?`
-		);
+		const confirmed = await confirm(`Its ${division.teams.length} teams are removed with it.`, {
+			title: `Remove ${division.name || 'this division'}?`,
+			confirmLabel: 'Remove division',
+			cancelLabel: 'Keep it',
+			danger: true,
+		});
 		if (!confirmed) return;
 
 		setDivisions((previous) => previous.filter((candidate) => candidate.id !== division.id));

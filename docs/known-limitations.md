@@ -124,12 +124,13 @@ branches, and missing environment variables failing at request time instead of b
 
 ## Request Size Limits
 
-From the 2026-10-22 review (6.3). Nothing on the server caps teams per division,
-divisions per tournament, round-robin legs (the UI stops at 10, `leagueConfigFromPayload`
-does not) or schedule entries (also listed under Scheduling). Combined with row-by-row
-inserts, one signed-in account can ask for a league with millions of fixtures and hold a
-pool connection for hours. `createTournament` also trusts its input more than the
-column-length checks suggest:
+From the 2026-10-22 review (6.3). ~~Nothing on the server caps teams per division,
+divisions per tournament, round-robin legs or schedule entries~~ — **fixed 2026-10-23.**
+The caps live in `api/src/config/limits.js`, along with a per-division fixture cap and the
+JSON body size limit.
+
+Still outstanding: `createTournament` trusts its input more than the column-length checks
+suggest:
 
 - start and end dates are not validated server-side (end before start, or a malformed
   value, reaches Postgres);
@@ -137,8 +138,6 @@ column-length checks suggest:
   tournament with no divisions;
 - division and team name lengths are not checked (also in the roadmap's Phase 5 list);
 - `num_teams` is taken from the client rather than from `teams.length`.
-
-Being worked on together with the CSRF item as of 2026-10-22.
 
 ## Tournament Logic
 
@@ -197,14 +196,12 @@ Outstanding:
 
 From the 2026-10-22 review (`docs/review-2026-10-22.md`, section 4):
 
-- **A cancelled or drawn knockout match corrupts progression.** `buildKnockoutOutcomes`
-  pushes no outcome for a knockout group whose fixture is `CANCELLED`, or `COMPLETED`
-  with level sets, so every later index in the round's results shifts by one. Reproduced:
-  with one quarterfinal cancelled, the proposal sent a quarterfinal *loser* into the
-  semifinal against the team that had just beaten it, and the two teams from the
-  cancelled match were missing from `eligibleTeams`, so the organiser could not repair
-  it. The UI offers both triggers (Cancel Match, and End Match with level sets). Being
-  fixed in its own session as of 2026-10-22.
+- ~~**A cancelled or drawn knockout match corrupts progression.**~~ — **fixed
+  2026-10-23.** A cancelled knockout match is now a double forfeit: neither team goes
+  through and the next-round opponent gets a walkover. A knockout match can no longer end
+  with the sets level (`KNOCKOUT_NEEDS_WINNER`). Before the fix, `buildKnockoutOutcomes`
+  skipped such a group, which shifted every later index in the round's results, so a
+  quarterfinal loser could advance.
 - **Organisers fake forfeits.** The live data has a team named "BYE" that wins 15-0
   15-0, and forfeits typed in as 15-0/15-0, 0-0/15-15 or a single 0-15 set. These skew
   point ratios, which decide tiebreaks. A forfeit status is in `future-features.md`; it
@@ -220,10 +217,10 @@ From the 2026-10-22 review (`docs/review-2026-10-22.md`, section 4):
   the ordering gap above: this is about the comparison itself being unfair. Per-match
   averages, or ratios only, would fix it.
 - **Results are accepted whatever the tournament status.** `updateResult` never checks
-  it, so the API takes a result before Start, and after End — which contradicts the End
-  Tournament confirmation ("No further results can be recorded") and the help text.
-  Verified on 2026-10-22. `View.jsx` keeps score entry open after End on purpose, so the
-  wording is what is wrong, unless the behaviour is changed instead.
+  it, so the API takes a result before Start, and after End. After End this is on
+  purpose (`View.jsx` keeps score entry open so mistakes can be corrected); the End
+  Tournament confirmation and the help text were reworded to say so on 2026-10-23.
+  Before Start, it is still unchecked server-side.
 - **The ranking basis can change after progression.** The pool table re-sorts on the new
   basis while the bracket keeps the qualifiers committed under the old one, so a viewer
   can see a table that contradicts who advanced.
@@ -338,17 +335,19 @@ From the redesign of 2026-08-08.
 From the 2026-10-22 review (`docs/review-2026-10-22.md`, sections 2–3, where each item has
 its file references and a suggested direction). Spectator side first:
 
-- **Nothing refreshes on its own.** No polling, so a spectator sees new scores only on a
-  manual reload. The ETag already makes polling cheap once the 304 path is cheap too
-  (see Performance).
+- ~~**Nothing refreshes on its own.**~~ — **fixed 2026-10-23.** An Ongoing tournament
+  checks for changes every 20 seconds while the tab is visible, and once on returning to
+  it; an unchanged check is a 304 from one query. Paused while a dialog is open and on
+  Settings. Still missing: any sign on the page that it is live or when it last
+  updated.
 - **Match numbers repeat across divisions.** A combined schedule shows several "#1"s at
   the same time, and spectators, scorers and scoresheets all refer to matches by number.
 - **The status dot reads backwards.** Completed is red, live is green, upcoming is blue.
   Red usually means live in sports apps, and error elsewhere.
-- **The Save button never shows saved state.** The view never reads `saved_tournaments`,
-  so after a reload a saved tournament shows "Save" again and cannot be unsaved from its
-  page. A signed-out click gives an error toast rather than a sign-in prompt. The comment
-  in `TournamentShell.jsx` still says the endpoints answer 501.
+- ~~**The Save button never shows saved state.**~~ — **fixed 2026-10-23.** It reads the
+  saved list on load, so a saved tournament shows Saved and can be unsaved from its page,
+  and a signed-out click goes to sign-in and back. It still fetches the whole saved list
+  (full tournament rows) to answer one yes/no.
 - **Hard to share.** The chosen division and the fixture filters are not in the URL,
   every page shares one `<title>`, and there are no Open Graph tags for link previews.
   Discover cards are `<button>`s rather than links, so they cannot be opened in a new tab,
@@ -368,63 +367,82 @@ Organiser side:
 
 - **No setup guidance.** On a new tournament, Start Tournament — which permanently locks
   teams and divisions — is the most prominent control.
-- **The score dialog has no context.** It shows "Match #N" with no division, pool, court
-  or time. Each save refetches the whole tournament payload (about 4s per save measured
-  locally). There is no match-format awareness: sets are added one at a time, no score
-  sanity check, and End Match is allowed with level sets. "Cancel Match" sits beside Save
-  and reads like "close". × discards edits without a warning, and Escape does nothing.
-- **The round-complete banner does not name the division**, and Go to Standings opens the
-  first division alphabetically rather than the one that is ready. The Next Round dialog
-  lists qualifiers without their pool positions.
-- **Confirmations are bare.** `ConfirmDialog` is the same untitled Yes/No for every action:
-  no danger styling, no action-named buttons, no Escape, no focus trap. Deleting a whole
-  tournament is a single Yes.
+- **The score dialog.** Each save refetches the whole tournament payload (about 4s per
+  save measured locally). There is no match-format awareness: sets are added one at a
+  time and there is no score sanity check. "Cancel Match" sits beside Save and reads like
+  "close". Fixed 2026-10-23: the header now shows division, round, court and time; × and
+  Escape both close, and ask first when there are unsaved edits. End Match with level
+  sets is refused in knockout rounds only.
+- ~~**The round-complete banner does not name the division**~~ — **fixed 2026-10-23.** It
+  names each ready division and opens Standings on it. The Next Round dialog still lists
+  qualifiers without their pool positions.
+- ~~**Confirmations are bare.**~~ — **fixed 2026-10-23.** `ConfirmDialog` takes a title,
+  action-named buttons and a `danger` flag (red button, focus starts on the safe choice).
+  It is an `alertdialog`, Escape answers no, Tab stays inside it, and focus returns to
+  whatever opened it. Deleting a tournament also requires typing its name
+  (`requireText`). Still open: there is no restore window once it is deleted.
 - **Divisions are ordered alphabetically** (`ORDER BY name`), with no manual order.
 
 Site-wide:
 
-- **Toasts** (`MessageProvider`) last a fixed 3 seconds. A new message does not clear the
-  previous timer, so it can vanish early. They have no `aria-live` and no close button.
+- **Toasts** (`MessageProvider`) last a fixed 3 seconds, which is short for errors. They
+  have no `aria-live` and no close button. Fixed 2026-10-23: a new message now clears the
+  previous timer instead of vanishing early, and signing in or up no longer has its
+  message replaced by Login's "Successfully logged in!" check.
 - **Inaccessible controls.** The floating help button is a `<div onClick>` — not keyboard
   reachable, no label — and it covers the footer's Terms of Service link. On the login
   page the Login/Create toggle is a `<span onClick>`, the theme toggle an `<i onClick>`,
   and the password field has `autoComplete="password"` rather than `current-password`.
-- **Copy that contradicts behaviour or oversells.** The help text says End Tournament
-  stops results; the home page advertises an Analytics feature that does not exist, with
+- **Copy that oversells.** The home page advertises an Analytics feature that does not exist, with
   out-of-date feature screenshots.
-- **Theme.** It starts as `light` and switches in an effect, so dark-mode users see a
-  flash on every load.
+- ~~**Theme.** It starts as `light` and switches in an effect, so dark-mode users see a
+  flash on every load.~~ — **fixed 2026-10-23.** An inline script in `index.html` sets the
+  theme class before the first paint, and `ThemeProvider` starts from it.
 - **Footer.** `rel="noreferror"` is a typo, the copyright says © 2025, and both legal links
   go to the top of `/terms`.
 
 ## Performance
 
-From the 2026-10-22 review (section 5). None of it is wrong today at this data volume;
-all of it grows with use.
+From the 2026-10-22 review (section 5), worked through on 2026-10-23 after measuring
+production (see `docs/api.md`, caching, and the measurements below).
 
-- **`getAllTournaments` is `SELECT * FROM tournaments`**, unpaginated. Every Discover
-  visit downloads every tournament's full `schedule` JSON (31.7 KB of a 38 KB response
-  with three tournaments), plus `created_by`, `scoresheet_template` and `last_update`.
-- **The tournament payload is about 342 KB uncompressed** for a 64-team tournament.
+Measured in production from South Africa on 2026-10-23: a trivial request takes
+~220 ms, almost all of it the trip to Europe, which no code change can remove. A full
+tournament load was 270–770 ms.
+
+Fixed or closed 2026-10-23:
+
+- ~~**`getAllTournaments` is `SELECT * FROM tournaments`**~~ — now six columns, newest
+  first. Still unpaginated, which is fine until there are many tournaments; paging needs
+  server-side search first.
+- ~~**A 304 costs as much as a 200.**~~ — a conditional request is answered from one
+  query before the view is built.
+- ~~**The client retries writes.**~~ — only GET is retried on a network failure.
+- ~~**Region match is unverified.**~~ — closed. The full build costs only ~25–40 ms in
+  production, which rules out a cross-continent hop per query, so Render is near Neon
+  (eu-central-1).
+- ~~**No compression.**~~ — closed. Cloudflare in front of Render already brotli-
+  compresses JSON: the 328 KB tournament payload travels as 26 KB.
+- Each save and conditional GET used to be preceded by a CORS preflight, because the
+  preflight answer was not cacheable; `maxAge: 7200` fixes that. Still to confirm in a
+  normal browser after deploy.
+- Saving a score blanked the tab while it reloaded, resetting the Fixtures filters; the
+  page now stays on screen.
+
+Still open:
+
+- **The tournament payload is about 330 KB uncompressed** for a 64-team tournament.
   `results` duplicates `fixtures`, dates appear twice, raw `state` is included, and the
-  dashboard repeats each division's lists. The API has no compression middleware; whether
-  Render compresses at its edge is unverified.
-- **A 304 costs as much as a 200.** `fetchTournamentDetails` loads every fixture and team
-  and runs the formatter before the controller compares ETags. The change key needs only
-  the tournament and division rows.
+  dashboard repeats each division's lists. Compressed it is 26 KB, so this matters for
+  parse time on slow phones rather than for transfer.
 - **Writes go one row at a time.** Teams and fixtures are inserted one query each (10.5s
-  locally for 17 teams and 30 fixtures); rebuild, reorder and progression binding do the
-  same. `getTeamsByDivision` makes one sequential query per division, and `updateResult`
-  reads the division state `FOR UPDATE` up to three times.
+  locally for 17 teams and 30 fixtures; production is much faster, unmeasured); rebuild,
+  reorder and progression binding do the same. `getTeamsByDivision` makes one sequential
+  query per division, and `updateResult` reads the division state `FOR UPDATE` up to
+  three times.
 - **No foreign-key indexes.** `fixtures.division_id`, `divisions.tournament_id`,
   `teams.division_id`, `saved_tournaments.user_id`, `tournaments.created_by` and
   `tournament_editors.user_id` have none. Adding them is a schema change.
-- **The client retries writes.** `requests.js` retries any network-level failure five
-  times whatever the method, so a create, add-division or progression request whose
-  response is lost can run twice.
-- **Region match is unverified.** Neon is in eu-central-1. If the Render service is not
-  in Frankfurt too, every query pays a long round-trip, multiplied by the row-by-row
-  patterns above.
 
 ## Scheduling
 

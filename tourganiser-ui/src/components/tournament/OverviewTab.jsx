@@ -4,7 +4,7 @@ import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
 import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
-import { useConfirm } from '../ConfirmDialog';
+import { useConfirm } from '../ConfirmContext';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 // Imported across from components/create/ deliberately, rather than moved
@@ -145,7 +145,8 @@ function LifecycleActions({ tournamentId, status, scoresheetTemplate, onChanged 
 	// and the schedule is the tool they most need once things overrun.
 	const handleStart = async () => {
 		const confirmed = await confirm(
-			'Start this tournament? Teams and divisions can no longer be added, removed or reordered. The schedule can still be edited, and results can be entered once it has started.',
+			'Teams and divisions can no longer be added, removed or reordered. The schedule can still be edited, and results can be entered once it has started.',
+			{ title: 'Start this tournament?', confirmLabel: 'Start tournament', cancelLabel: 'Not yet' },
 		);
 		if (!confirmed) return;
 
@@ -153,7 +154,13 @@ function LifecycleActions({ tournamentId, status, scoresheetTemplate, onChanged 
 	};
 
 	const handleEnd = async () => {
-		const confirmed = await confirm('End this tournament? No further results can be recorded.');
+		// Results stay editable after End on purpose — see renderScoreAction in
+		// pages/View.jsx — so this must not promise that they are frozen.
+		const confirmed = await confirm('It will be marked as finished. Results can still be corrected afterwards.', {
+			title: 'End this tournament?',
+			confirmLabel: 'End tournament',
+			cancelLabel: 'Not yet',
+		});
 		if (!confirmed) return;
 
 		await run(() => endTournament(tournamentId), 'Tournament finished.', () => onChanged?.());
@@ -312,9 +319,10 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 	// client shows its refusal.
 	const handleRemove = async (division) => {
 		const confirmed = await confirm(
-			`Remove ${division.name}? Its ${division.teamCount ?? 0} teams, ${
+			`Its ${division.teamCount ?? 0} teams, ${
 				division.fixtureCount ?? 0
 			} fixtures and any scheduled slots are removed too. This cannot be undone.`,
+			{ title: `Remove ${division.name}?`, confirmLabel: 'Remove division', cancelLabel: 'Keep it', danger: true },
 		);
 		if (!confirmed) return;
 

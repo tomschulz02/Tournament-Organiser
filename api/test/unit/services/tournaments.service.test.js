@@ -10,6 +10,7 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
         createTournament: vi.fn(),
         getAllTournaments: vi.fn(),
         getTournamentById: vi.fn(),
+        getChangeStamps: vi.fn(),
         getTournamentsByCreator: vi.fn(),
         getTournamentsByIds: vi.fn(),
         startTournament: vi.fn(),
@@ -425,6 +426,80 @@ describe("tournamentService.unsaveTournament", () => {
         userRepository.unfollowTournament.mockRejectedValue(failure);
 
         await expect(tournamentService.unsaveTournament("tour-1", "user-1")).rejects.toBe(failure);
+    });
+});
+
+// The early 304 is only safe if this key is the one fetchTournamentDetails
+// would have produced. Each case loads the same rows both ways and compares,
+// with the division stamp collapsed the way Postgres's max() collapses it.
+describe("tournamentService.getTournamentChangeKey", () => {
+    const at = (iso) => new Date(iso);
+
+    function latest(stamps) {
+        const present = stamps.filter(Boolean);
+        return present.length === 0 ? null : present.reduce((a, b) => (a > b ? a : b));
+    }
+
+    async function bothKeys(tournamentStamp, divisionStamps) {
+        tournamentRepository.getTournamentById.mockResolvedValue(makeTournament({ last_update: tournamentStamp }));
+        divisionsRepository.getDivisionsByTournamentId.mockResolvedValue(
+            divisionStamps.map((stamp, index) =>
+                makeDivision({ id: `div-${index}`, state: makeState({ teams: [] }), last_update: stamp })
+            )
+        );
+        divisionsRepository.getTeamsByIds.mockResolvedValue([]);
+        fixturesRepository.getFixturesByDivisionIds.mockResolvedValue([]);
+        tournamentRepository.getChangeStamps.mockResolvedValue({
+            tournament_update: tournamentStamp,
+            division_update: latest(divisionStamps)
+        });
+
+        const full = (await tournamentService.fetchTournamentDetails("tour-1", null)).changeKey;
+        const early = await tournamentService.getTournamentChangeKey("tour-1");
+
+        return { full, early };
+    }
+
+    it("matches the full build when the tournament row moved last", async () => {
+        const { full, early } = await bothKeys(at("2026-10-23T10:00:00Z"), [
+            at("2026-10-23T09:00:00Z"),
+            at("2026-10-23T08:00:00Z")
+        ]);
+
+        expect(early).toBe(full);
+        expect(early).toBe(String(at("2026-10-23T10:00:00Z").getTime()));
+    });
+
+    it("matches the full build when a division moved last", async () => {
+        const { full, early } = await bothKeys(at("2026-10-23T08:00:00Z"), [
+            at("2026-10-23T09:00:00Z"),
+            at("2026-10-23T11:30:00.123Z")
+        ]);
+
+        expect(early).toBe(full);
+        expect(early).toBe(String(at("2026-10-23T11:30:00.123Z").getTime()));
+    });
+
+    it("matches the full build for a tournament with no divisions", async () => {
+        const { full, early } = await bothKeys(at("2026-10-23T08:00:00Z"), []);
+
+        expect(early).toBe(full);
+        expect(early).toBe(String(at("2026-10-23T08:00:00Z").getTime()));
+    });
+
+    it("asks for the stamps of the tournament it was given", async () => {
+        tournamentRepository.getChangeStamps.mockResolvedValue({ tournament_update: null, division_update: null });
+
+        await tournamentService.getTournamentChangeKey("tour-9");
+
+        expect(tournamentRepository.getChangeStamps).toHaveBeenCalledWith("tour-9");
+    });
+
+    // No key at all, so the controller falls through and the full path 404s.
+    it("is null for a tournament that does not exist", async () => {
+        tournamentRepository.getChangeStamps.mockResolvedValue(null);
+
+        expect(await tournamentService.getTournamentChangeKey("tour-1")).toBeNull();
     });
 });
 

@@ -94,11 +94,13 @@ a phone at the venue, and this is the side of the app with the most room to grow
 
 ### Live view
 
-Poll the tournament while the tab is visible (15–30s), show "updated 20s ago" and a Live
-badge on matches in progress. The ETag already exists for this. It only becomes cheap once
-the 304 path skips the full payload build — see `known-limitations.md`, Performance.
-Distinct from live *scoring* below: this is about seeing saved results without
-reloading.
+> Polling shipped 2026-10-23: an Ongoing tournament refreshes every 20 seconds while
+> visible, and an unchanged check is answered before the payload is built. What remains
+> is below.
+
+Show "updated 20s ago" and a Live badge on matches in progress, so a spectator can tell
+the page is current. Distinct from live *scoring* below: this is about seeing saved
+results without reloading.
 
 ### Team pages and "follow my team"
 

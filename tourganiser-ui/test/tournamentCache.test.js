@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fetchTournamentData, clearTournamentCache } from '../src/requests';
+import { fetchTournamentData, refreshTournamentData, clearTournamentCache } from '../src/requests';
 
 // The client half of the tournament view cache. The server's viewer-aware ETag
 // is what actually makes it safe — a stale entry from another session simply
@@ -345,5 +345,53 @@ describe('fetchTournamentData', () => {
 		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ANONYMOUS_BODY));
 
 		await expect(fetchTournamentData('tour-1')).resolves.toEqual(ANONYMOUS_BODY);
+	});
+});
+
+// The live view's half. A poll must be able to tell "nothing new" apart from
+// "here is new data", or every 20 seconds it would hand the page a freshly
+// parsed copy of what it already shows.
+describe('refreshTournamentData', () => {
+	it('answers null when the server confirms the cached copy is current', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"v1"' }));
+		await fetchTournamentData('tour-1', 1);
+
+		globalThis.fetch.mockResolvedValueOnce(notModified('"v1"'));
+
+		expect(await refreshTournamentData('tour-1', 1)).toBeNull();
+		expect(headerFor(1)).toBe('"v1"');
+	});
+
+	it('answers the new payload when the tournament has changed, and caches it', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ORGANISER_BODY, { etag: '"v1"' }));
+		await fetchTournamentData('tour-1', 1);
+
+		const updated = { success: true, data: { creator: true, tournament: { name: 'Summer Open 2' } } };
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(updated, { etag: '"v2"' }));
+
+		expect(await refreshTournamentData('tour-1', 1)).toEqual(updated);
+		expect(storedEntries()[0]).toMatchObject({ id: 'tour-1', etag: '"v2"', payload: updated });
+	});
+
+	it('answers the payload when there was nothing cached to compare with', async () => {
+		globalThis.fetch.mockResolvedValueOnce(jsonResponse(ANONYMOUS_BODY));
+
+		expect(await refreshTournamentData('tour-1')).toEqual(ANONYMOUS_BODY);
+	});
+
+	// A 304 to a header this tab never sent leaves nothing to show, so it asks
+	// again in full — and that answer is news, not "unchanged".
+	it('treats a 304 it cannot use as news, once refetched in full', async () => {
+		globalThis.fetch.mockResolvedValueOnce(notModified()).mockResolvedValueOnce(jsonResponse(ANONYMOUS_BODY));
+
+		expect(await refreshTournamentData('tour-1', 1)).toEqual(ANONYMOUS_BODY);
+	});
+
+	it('propagates a failure, for the caller to decide what to do with', async () => {
+		globalThis.fetch.mockResolvedValueOnce(
+			jsonResponse({ success: false, message: 'Tournament not found', data: null }, { status: 404 }),
+		);
+
+		await expect(refreshTournamentData('tour-1', 1)).rejects.toMatchObject({ status: 404 });
 	});
 });

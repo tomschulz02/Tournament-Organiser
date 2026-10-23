@@ -31,7 +31,7 @@ async function fetchTournamentDetails(req, res){
     }
 
     const viewerUserId = req.user?.id || null;
-    const tournament = await tournamentService.fetchTournamentDetails(tournamentId, viewerUserId);
+    const ifNoneMatch = req.headers["if-none-match"];
 
     // This response differs by session cookie — `creator`, `editor` and `loggedIn` all
     // do — so no shared cache may hand one reader's copy to another. Vary says
@@ -40,13 +40,28 @@ async function fetchTournamentDetails(req, res){
     res.set("Vary", "Cookie");
     res.set("Cache-Control", "no-cache");
 
+    // A reader asking "has this changed?" is answered from the change key alone,
+    // one light query, before the view is built. Anything this cannot answer —
+    // no match, an unknown key, a missing tournament — falls through to the full
+    // path below, which behaves exactly as it did without this.
+    if (ifNoneMatch) {
+        const earlyEtag = buildTournamentEtag(await tournamentService.getTournamentChangeKey(tournamentId), viewerUserId);
+
+        if (earlyEtag && matchesEtag(ifNoneMatch, earlyEtag)) {
+            res.set("ETag", earlyEtag);
+            return res.status(304).end();
+        }
+    }
+
+    const tournament = await tournamentService.fetchTournamentDetails(tournamentId, viewerUserId);
+
     // Covers the viewer as well as the data. See src/utils/etag.js for why the
     // timestamp alone would be wrong.
     const etag = buildTournamentEtag(tournament.changeKey, viewerUserId);
     if (etag) {
         res.set("ETag", etag);
 
-        if (matchesEtag(req.headers["if-none-match"], etag)) {
+        if (matchesEtag(ifNoneMatch, etag)) {
             // 304 carries no body by specification, which is fine alongside the
             // envelope: the client already holds the payload this validates.
             return res.status(304).end();

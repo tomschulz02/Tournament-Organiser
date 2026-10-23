@@ -1877,6 +1877,59 @@ Confirmation Dialog styles
 	background-color: rgb(from var(--secondary-text-color) r g b / 0.1);
 }
 
+.confirm-title {
+	margin: 0 0 var(--space-2) 0;
+	font-size: 1.2em;
+	color: var(--secondary-text-color);
+}
+
+/* An action that loses something. After the :first-child rules above, which
+   have the same specificity, so this wins. */
+.confirm-buttons button.confirm-danger {
+	background-color: var(--error-color);
+	color: white;
+}
+
+.confirm-buttons button.confirm-danger:hover {
+	background-color: rgb(from var(--error-color) r g b / 0.85);
+}
+
+/* Only ConfirmDialog's submit button. TeamsTab's rebuild modal reuses
+   .confirm-buttons and disables its buttons while busy, and keeps its look. */
+.confirm-buttons button[type='submit']:disabled,
+.confirm-buttons button[type='submit']:disabled:hover {
+	background-color: rgb(from var(--secondary-text-color) r g b / 0.2);
+	color: var(--secondary-text-color);
+	cursor: not-allowed;
+}
+
+.confirm-require {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+	color: var(--secondary-text-color);
+}
+
+.confirm-require strong {
+	overflow-wrap: anywhere;
+}
+
+.confirm-require input {
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.3);
+	border-radius: 4px;
+	background-color: var(--background-color);
+	color: var(--secondary-text-color);
+	font-size: 1rem;
+}
+
+.confirm-require input:focus-visible,
+.confirm-buttons button:focus-visible {
+	outline: 2px solid var(--main-color);
+	outline-offset: 2px;
+}
+
 @keyframes slideIn {
 	from {
 		opacity: 0;
@@ -1940,10 +1993,25 @@ Score Update Modal styles
 	margin-bottom: var(--space-2);
 }
 
-.score-modal-header h3 {
+.score-modal:focus {
+	outline: none;
+}
+
+.score-modal-heading {
 	flex: 1;
+	min-width: 0;
+}
+
+.score-modal-header h3 {
 	margin: 0;
 	color: var(--secondary-text-color);
+}
+
+.score-modal-context {
+	margin: var(--space-1) 0 0;
+	font-size: 0.85rem;
+	color: var(--secondary-text-color);
+	opacity: 0.8;
 }
 
 .score-modal-close {

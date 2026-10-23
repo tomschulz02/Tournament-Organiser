@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { Suspense, lazy, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchTournamentData } from '../requests';
+import { Suspense, lazy, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchTournamentData, refreshTournamentData } from '../requests';
 import { AuthContext } from '../AuthContext';
 import '../App.css';
 import TournamentShell from '../components/tournament/TournamentShell';
@@ -34,6 +34,10 @@ const loadScoresheetPrefill = () => import('../utils/scoresheetPrefill');
 // but the component is still worth deferring.
 const ScheduleMakerModal = lazy(() => import('../components/ScheduleMakerModal'));
 
+// How often an open Ongoing tournament checks for new results. See the live
+// updates effect in ViewPage.
+const LIVE_POLL_MS = 20000;
+
 export default function ViewPage() {
 	const { id } = useParams();
 	const { activeTab, selectTab } = useTournamentTab();
@@ -59,11 +63,27 @@ export default function ViewPage() {
 	const { sessionVersion } = useContext(AuthContext);
 	const requestKey = `${id}:${attempt}:${sessionVersion}`;
 
-	// The result is tagged with the request it answered. Loading is then derived
-	// rather than stored, which keeps every setState out of the effect body and
-	// means switching tournaments shows the skeleton immediately instead of the
-	// previous tournament's data.
-	const [result, setResult] = useState({ key: null, data: null, error: null });
+	// The result is tagged with the request it answered, and with the tournament
+	// and session it belongs to. Loading is then derived rather than stored, which
+	// keeps every setState out of the effect body.
+	const [result, setResult] = useState({ key: null, id: null, session: null, data: null, error: null });
+
+	// Whether the data held is this tournament's, fetched for this session. A
+	// refetch of the same tournament — after a save, or a retry — keeps showing it
+	// until the new answer lands. Blanking it unmounted the tabs, which reset the
+	// Fixtures filters and the scroll position after every score saved.
+	//
+	// A different tournament or a different session is not held: the first would
+	// show the wrong tournament, the second the wrong viewer's controls.
+	const holding = Boolean(result.data) && result.id === id && result.session === sessionVersion;
+
+	// Read by the request below when it fails, to choose between keeping the page
+	// and showing the error state. A ref, because the effect must not re-run when
+	// it changes — that would refetch as soon as the first answer arrived.
+	const holdingRef = useRef(holding);
+	useEffect(() => {
+		holdingRef.current = holding;
+	});
 
 	// One request feeds the whole page — see the handover, decision A1. It is not
 	// split per section, so a failure is one error in the content area rather than
@@ -78,29 +98,43 @@ export default function ViewPage() {
 				// cached copy must never outlive the session it was fetched for.
 				const response = await fetchTournamentData(id, sessionVersion);
 
-				if (active) setResult({ key: requestKey, data: response.data, error: null });
+				if (active) setResult({ key: requestKey, id, session: sessionVersion, data: response.data, error: null });
 			} catch (apiError) {
-				// Display-ready by contract, including "Tournament not found".
-				if (active) setResult({ key: requestKey, data: null, error: apiError.message });
+				if (!active) return;
+
+				// A refetch that fails keeps the page it was refreshing and says
+				// so; only a page with nothing to show falls back to the error
+				// state. Display-ready by contract, including "Tournament not found".
+				if (holdingRef.current) {
+					setResult((previous) => ({ ...previous, key: requestKey }));
+					showMessage(apiError.message, 'error');
+				} else {
+					setResult({ key: requestKey, id, session: sessionVersion, data: null, error: apiError.message });
+				}
 			}
 		};
 
 		load();
 
-		// A slower first request must not overwrite a newer one's result.
+		// A slower request must not overwrite a newer one's result.
 		return () => {
 			active = false;
 		};
 		// sessionVersion is already inside requestKey, so listing it adds no
 		// extra runs — it is here because the effect now reads it directly.
-	}, [id, requestKey, sessionVersion]);
+	}, [id, requestKey, sessionVersion, showMessage]);
 
-	const loading = result.key !== requestKey;
+	// The skeleton is for having nothing to show, not for every request.
+	const loading = result.key !== requestKey && !holding;
+
+	// What the page renders: nothing while loading, so a previous tournament's or
+	// session's data never shows under the skeleton.
+	const data = loading ? null : result.data;
 
 	// Null while loading, which is what draws the skeleton. A failed load falls
 	// back to a generic title rather than leaving the skeleton shimmering over an
 	// error that is never going to resolve into a name.
-	const title = result.data?.tournament?.name ?? (loading ? null : 'Tournament');
+	const title = data?.tournament?.name ?? (loading ? null : 'Tournament');
 
 	// An Overview card sets both at once: which section to show, and which
 	// division that section should be showing.
@@ -124,7 +158,7 @@ export default function ViewPage() {
 	const [scoringFixtureId, setScoringFixtureId] = useState(null);
 
 	const scoringFixture = scoringFixtureId
-		? flattenFixtures(result.data?.divisions ?? []).find((fixture) => fixture.id === scoringFixtureId)
+		? flattenFixtures(data?.divisions ?? []).find((fixture) => fixture.id === scoringFixtureId)
 		: null;
 
 	// Both of the modal's buttons are the same call; only the intent differs.
@@ -208,12 +242,12 @@ export default function ViewPage() {
 	// current round's fixtures. The server enforces both — see
 	// resolveResultRole in fixtures.service.js — this only decides where the
 	// control is offered.
-	const editorFixtureIds = result.data?.editor ? editableFixtureIds(result.data.divisions ?? []) : null;
+	const editorFixtureIds = data?.editor ? editableFixtureIds(data.divisions ?? []) : null;
 
 	const renderScoreAction = (fixture) => {
-		if (!result.data?.creator && !editorFixtureIds?.has(fixture.id)) return null;
+		if (!data?.creator && !editorFixtureIds?.has(fixture.id)) return null;
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
-		if ((result.data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
+		if ((data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
 		if (fixture.locked) return null;
 
 		// An icon on the row, where the word would be the widest thing in its
@@ -239,7 +273,7 @@ export default function ViewPage() {
 	// every click, so the fixture and toolbar buttons can show the
 	// device-bound-miss state up front instead of erroring on click — see
 	// docs/handover-scoresheets.md, Step 7's Don't.
-	const scoresheetTemplateKey = result.data?.tournament?.scoresheet_template ?? null;
+	const scoresheetTemplateKey = data?.tournament?.scoresheet_template ?? null;
 	const [resolvedScoresheetTemplate, setResolvedScoresheetTemplate] = useState(null);
 	// Neither the single-fixture download nor "print all" showed any wait
 	// before — the pdf-lib overlay work is fast for one fixture but "print
@@ -263,9 +297,10 @@ export default function ViewPage() {
 	}, [scoresheetTemplateKey]);
 
 	// Day, start time and court name per fixture, resolved once from the same
-	// schedule ScheduleTab already reads — not re-derived per fixture.
-	const scoresheetScheduleIndex = useMemo(() => {
-		const schedule = getScheduleForTournament(result.data?.tournament ?? {});
+	// schedule ScheduleTab already reads — not re-derived per fixture. Read by
+	// the scoresheets and by the score dialog's header.
+	const scheduleIndex = useMemo(() => {
+		const schedule = getScheduleForTournament(data?.tournament ?? {});
 		const index = new Map();
 
 		schedule.entries.forEach((entry) => {
@@ -279,7 +314,7 @@ export default function ViewPage() {
 		});
 
 		return index;
-	}, [result.data?.tournament]);
+	}, [data?.tournament]);
 
 	const openGeneratedPdf = (bytes) => {
 		const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -299,9 +334,9 @@ export default function ViewPage() {
 			const { buildFieldValues, generateScoresheet } = await loadScoresheetPrefill();
 			const fieldValues = buildFieldValues(
 				fixture,
-				result.data.tournament,
+				data.tournament,
 				fixture.division_name || null,
-				scoresheetScheduleIndex.get(fixture.id),
+				scheduleIndex.get(fixture.id),
 			);
 			openGeneratedPdf(await generateScoresheet(resolvedScoresheetTemplate, fieldValues));
 		} catch {
@@ -316,7 +351,7 @@ export default function ViewPage() {
 	// this device. Absent rather than shown-and-erroring for anything else.
 	const renderScoresheetAction = (fixture) => {
 		// The organiser's tool. An editor enters results and nothing more.
-		if (!result.data?.creator) return null;
+		if (!data?.creator) return null;
 		if (!scoresheetTemplateKey) return null;
 
 		return (
@@ -339,15 +374,15 @@ export default function ViewPage() {
 		setGeneratingScoresheet(true);
 		try {
 			const { buildFieldValues, generateScoresheet, mergeScoresheets } = await loadScoresheetPrefill();
-			const fixtures = flattenFixtures(result.data?.divisions ?? []);
+			const fixtures = flattenFixtures(data?.divisions ?? []);
 			const pdfBytesList = [];
 
 			for (const fixture of fixtures) {
 				const fieldValues = buildFieldValues(
 					fixture,
-					result.data.tournament,
+					data.tournament,
 					fixture.division_name || null,
-					scoresheetScheduleIndex.get(fixture.id),
+					scheduleIndex.get(fixture.id),
 				);
 				// Sequential: each fixture's PDF is generated from the same shared
 				// template document, and there is nothing to gain from racing them.
@@ -396,6 +431,61 @@ export default function ViewPage() {
 	// the modal opens on whatever schedule exists, empty or not.
 	const [scheduleOpen, setScheduleOpen] = useState(false);
 
+	// Live updates. While an Ongoing tournament is on screen, ask every
+	// LIVE_POLL_MS whether anything changed — results entered on other courts,
+	// by editors or the organiser — and swap the new data in without the
+	// skeleton, so filters and scroll stay put. "Unchanged" is a 304 answered
+	// from one light query (see the early check in tournaments.controller.js), and
+	// leaves the page alone entirely.
+	//
+	// Paused while any dialog is open: a refresh mid-entry would hand the score
+	// dialog a new fixture and reset what is being typed. Paused on Settings,
+	// whose forms hold their own drafts. A hidden tab asks nothing, and asks
+	// once on its return.
+	const livePolling =
+		data?.tournament?.status === 'Ongoing' &&
+		!scoringFixtureId &&
+		!progressingDivisionId &&
+		!scheduleOpen &&
+		activeTab !== 'settings';
+
+	useEffect(() => {
+		if (!livePolling) return;
+		let active = true;
+
+		const poll = async () => {
+			if (document.visibilityState !== 'visible') return;
+
+			try {
+				const payload = await refreshTournamentData(id, sessionVersion);
+				// Only onto the same tournament and session it was asked for.
+				if (active && payload) {
+					setResult((previous) =>
+						previous.id === id && previous.session === sessionVersion ? { ...previous, data: payload.data } : previous,
+					);
+				}
+			} catch {
+				// Silent: the page still shows what it had, and the next poll
+				// tries again. A reader did not ask for this request.
+			}
+		};
+
+		const timer = setInterval(poll, LIVE_POLL_MS);
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') poll();
+		};
+		document.addEventListener('visibilitychange', onVisibilityChange);
+
+		return () => {
+			// Also drops a poll still in flight, so an answer asked before a
+			// save cannot land after the reload that save triggered.
+			active = false;
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+		};
+		// requestKey restarts the timer whenever the page itself reloads.
+	}, [livePolling, id, sessionVersion, requestKey]);
+
 	// The server validates the whole schedule before writing it and names the rule
 	// it broke, so a rejection is shown as it arrives rather than reworded here.
 	// The returned shape is what ScheduleMakerModal reads to decide whether to
@@ -427,9 +517,10 @@ export default function ViewPage() {
 			{/* The organiser or an editor, and only while a fixture is chosen.
 			    Guarded on the role as well as on the id, so a session that ends
 			    while the modal is open cannot leave a write control on screen. */}
-			{scoringFixture && (result.data?.creator || result.data?.editor) && (
+			{scoringFixture && (data?.creator || data?.editor) && (
 				<ScoreUpdateModal
 					fixture={scoringFixture}
+					slot={scheduleIndex.get(scoringFixture.id)}
 					onClose={() => setScoringFixtureId(null)}
 					onSave={handleSaveScore}
 					onEndMatch={handleEndMatch}
@@ -438,7 +529,7 @@ export default function ViewPage() {
 				/>
 			)}
 
-			{progressingDivisionId && result.data?.creator && (
+			{progressingDivisionId && data?.creator && (
 				<NextRoundModal
 					divisionId={progressingDivisionId}
 					onConfirmed={handleRoundProgressed}
@@ -446,13 +537,13 @@ export default function ViewPage() {
 				/>
 			)}
 
-			{scheduleOpen && result.data?.creator && (
+			{scheduleOpen && data?.creator && (
 				<Suspense fallback={<LoadingScreen />}>
 					<ScheduleMakerModal
 						isOpen
-						tournament={result.data.tournament}
-						divisions={result.data.divisions}
-						tournamentName={result.data.tournament?.name}
+						tournament={data.tournament}
+						divisions={data.divisions}
+						tournamentName={data.tournament?.name}
 						canEdit
 						onClose={() => setScheduleOpen(false)}
 						onSave={handleSaveSchedule}
@@ -460,9 +551,9 @@ export default function ViewPage() {
 				</Suspense>
 			)}
 
-			<TournamentShell tournamentId={id} name={title} creator={result.data?.creator}>
+			<TournamentShell tournamentId={id} name={title} creator={data?.creator}>
 				{loading && <SectionState variant="loading" />}
-				{!loading && result.error && (
+				{!loading && !data && result.error && (
 					<SectionState
 						variant="error"
 						title="This tournament could not be loaded"
@@ -470,10 +561,10 @@ export default function ViewPage() {
 						onRetry={reload}
 					/>
 				)}
-				{!loading && !result.error && result.data && (
+				{!loading && data && (
 					<TabPanel
 						tab={activeTab}
-						data={result.data}
+						data={data}
 						selectedDivisionId={selectedDivisionId}
 						onOpenDivision={handleOpenDivision}
 						onSelectDivision={setSelectedDivisionId}
@@ -482,9 +573,8 @@ export default function ViewPage() {
 						onDeleted={handleDeleted}
 						// Only for someone who can act on a fixture at all. Everyone
 						// else's rows carry no action slot.
-						renderFixtureAction={result.data.creator || result.data.editor ? renderFixtureAction : undefined}
+						renderFixtureAction={data.creator || data.editor ? renderFixtureAction : undefined}
 						onProgressRound={setProgressingDivisionId}
-						onSelectTab={selectTab}
 						onPrintAllScoresheets={handlePrintAllScoresheets}
 						scoresheetTemplateSelected={Boolean(scoresheetTemplateKey)}
 						scoresheetTemplateReady={Boolean(resolvedScoresheetTemplate)}
@@ -506,7 +596,6 @@ function TabPanel({
 	onDeleted,
 	renderFixtureAction,
 	onProgressRound,
-	onSelectTab,
 	onPrintAllScoresheets,
 	scoresheetTemplateSelected,
 	scoresheetTemplateReady,
@@ -556,7 +645,7 @@ function TabPanel({
 				<RoundCompleteBanner
 					divisions={data.divisions ?? []}
 					creator={data.creator}
-					onGoToStandings={() => onSelectTab('standings')}
+					onGoToStandings={(divisionId) => onOpenDivision(divisionId, 'standings')}
 				/>
 				{hasScheduledFixture ? (
 					<ScheduleTab

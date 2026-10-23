@@ -4,7 +4,7 @@ import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import Tooltip from './Tooltip';
 import { useMessage } from '../MessageContext';
-import { useConfirm } from './ConfirmDialog';
+import { useConfirm } from './ConfirmContext';
 import { useHelpTopic } from '../HelpContext';
 import '../styles/schedule-maker.css';
 import { generateAutomaticSchedule } from '../utils/scheduleGenerator';
@@ -374,7 +374,12 @@ export default function ScheduleMakerModal({
 
 	const handleClose = async () => {
 		if (dirty) {
-			const confirmed = await confirm('You have unsaved schedule changes. Close without saving?');
+			const confirmed = await confirm('You have unsaved schedule changes. They will be lost.', {
+				title: 'Close without saving?',
+				confirmLabel: 'Discard changes',
+				cancelLabel: 'Keep editing',
+				danger: true,
+			});
 			if (!confirmed) return;
 		}
 
@@ -459,7 +464,12 @@ export default function ScheduleMakerModal({
 	};
 
 	const handleDiscard = async () => {
-		const confirmed = await confirm('Discard all unsaved schedule changes?');
+		const confirmed = await confirm('The schedule goes back to how it was last saved.', {
+			title: 'Discard all unsaved changes?',
+			confirmLabel: 'Discard changes',
+			cancelLabel: 'Keep editing',
+			danger: true,
+		});
 		if (!confirmed) return;
 
 		dispatch({ type: 'reset', payload: initialScheduleRef.current || initialSchedule });
@@ -488,9 +498,12 @@ export default function ScheduleMakerModal({
 
 		// The count, not an abstract question — "are you sure?" tells nobody what
 		// they are about to lose.
-		const confirmed = await confirm(
-			`Remove ${parts.join(' and ')} from the whole schedule? Nothing is saved until you save, so Discard will bring it back.`
-		);
+		const confirmed = await confirm('Nothing is saved until you save, so Discard will bring it back.', {
+			title: `Remove ${parts.join(' and ')} from the whole schedule?`,
+			confirmLabel: 'Reset schedule',
+			cancelLabel: 'Keep',
+			danger: true,
+		});
 		if (!confirmed) return;
 
 		dispatch({ type: 'replace', payload: { ...schedule, entries: [] } });
@@ -548,7 +561,8 @@ export default function ScheduleMakerModal({
 			// Name what happens rather than warn that something is wrong: the
 			// fixtures are not lost, they go back to the unscheduled list.
 			const confirmed = await confirm(
-				`Remove ${court.name}? Its ${placedFixtures} scheduled ${placedFixtures === 1 ? 'fixture' : 'fixtures'} will be returned to the unscheduled list.`
+				`Its ${placedFixtures} scheduled ${placedFixtures === 1 ? 'fixture' : 'fixtures'} will be returned to the unscheduled list.`,
+				{ title: `Remove ${court.name}?`, confirmLabel: 'Remove court', cancelLabel: 'Keep' }
 			);
 			if (!confirmed) return;
 		}
@@ -862,7 +876,11 @@ export default function ScheduleMakerModal({
 	};
 
 	const handleDeleteEntry = async (entryId) => {
-		const confirmed = await confirm('Delete this schedule entry?');
+		const confirmed = await confirm('Nothing is saved until you save, so Discard will bring it back.', {
+			title: 'Remove this entry from the schedule?',
+			confirmLabel: 'Remove entry',
+			cancelLabel: 'Keep',
+		});
 		if (!confirmed) return;
 
 		dispatch({ type: 'removeEntry', payload: entryId });

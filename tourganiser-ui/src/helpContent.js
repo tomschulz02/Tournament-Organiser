@@ -89,7 +89,7 @@ export const HELP_TOPICS = {
 			{
 				heading: "If you're the organiser",
 				paragraphs: [
-					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament stops any further results being recorded, once the tournament is Ongoing.',
+					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament marks an Ongoing tournament as finished. Results can still be corrected afterwards.',
 					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Deleting the tournament, adding editors and each division's ranking and placement options are on the Settings tab.",
 					"While the tournament hasn't started, each division's card also offers a way to add or remove divisions — Add Division opens the same screen the creation page uses, and a division's own card can be removed (which takes its teams, fixtures and any scheduled slots with it). Both close once the tournament starts, since the schedule and standings would otherwise be describing a division that no longer matches them.",
 				],

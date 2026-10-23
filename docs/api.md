@@ -175,7 +175,7 @@ Implemented:
 | POST | `/api/tournaments/:tournamentId/editors` | required + owner | Add an editor. Body `{ identifier }` — an email or a username. |
 | DELETE | `/api/tournaments/:tournamentId/editors/:userId` | required + owner | Remove an editor |
 | PUT | `/api/fixtures/:fixtureId/result` | required + owner or editor | Record a result. See "Editors" below. |
-| GET | `/api/tournaments/` | any | List tournaments. Public browsing. |
+| GET | `/api/tournaments/` | any | List tournaments for Discover: `{ upcoming, ongoing, completed }`, each newest first, each item `{ id, name, start_date, end_date, location, status }`. Nothing else — no schedule, no creator. |
 | GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn`, `creator` and `editor` so the UI can adapt. Cached — see below. |
 | POST | `/api/tournaments/:tournamentId/save` | required | Save a tournament to the caller's profile. Idempotent — saving twice is not an error. Refuses the caller's own tournament with `CANNOT_SAVE_OWN_TOURNAMENT` (409). |
 | DELETE | `/api/tournaments/:tournamentId/save` | required | Unsave. A tournament that was never saved is also not an error. |
@@ -234,6 +234,15 @@ and there is no reason to put an identifier in either.
 
 A tournament whose change key cannot be determined is sent with no `ETag` at all and
 is never answered with a 304. Unknown means refetch.
+
+**A conditional request is answered before the view is built** (added 2026-10-23).
+When `If-None-Match` is present, the controller first reads just the two stamps in
+one query (`tournamentRepository.getChangeStamps`), builds the change key from them
+with the same `buildChangeKey`, and answers 304 if the validator matches. Only a
+miss — moved data, another viewer, an unknown key, a missing tournament — builds the
+full view, which then behaves exactly as it always did. Locally against Neon this took
+a 304 from ~750 ms to ~190 ms; in production the saving is smaller in time but cuts
+each "has anything changed?" check from about six queries to one.
 
 Express's own automatic ETag is **disabled** (`app.set("etag", false)`). It content-
 hashes every JSON response, which would both override the decision above and make the

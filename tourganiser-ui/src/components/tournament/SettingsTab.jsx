@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import SectionState from './SectionState';
 import LoadingScreen from '../LoadingScreen';
-import { useConfirm } from '../ConfirmDialog';
+import { useConfirm } from '../ConfirmContext';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 import {
@@ -144,7 +144,8 @@ function EditorsBand({ tournamentId }) {
 
 	const handleRemove = async (editor) => {
 		const confirmed = await confirm(
-			`Remove ${editor.username} as an editor? They will no longer be able to enter results. Results they have already entered stay as they are.`,
+			'They will no longer be able to enter results. Results they have already entered stay as they are.',
+			{ title: `Remove ${editor.username} as an editor?`, confirmLabel: 'Remove editor', cancelLabel: 'Keep', danger: true },
 		);
 		if (!confirmed) return;
 
@@ -420,9 +421,18 @@ function DangerZone({ tournament, onDeleted }) {
 	// cascade is named here because that is what makes it a decision rather than
 	// a surprise — the divisions, fixtures and results all go with it.
 	const handleDelete = async () => {
-		const ongoing = (tournament.status || 'Not Started') === 'Ongoing' ? ' It is currently in progress.' : '';
+		const ongoing = (tournament.status || 'Not Started') === 'Ongoing' ? 'It is currently in progress. ' : '';
 		const confirmed = await confirm(
-			`Delete ${tournament.name || 'this tournament'}?${ongoing} Its divisions, fixtures and results are deleted too. This cannot be undone.`,
+			`${ongoing}Its divisions, fixtures and results are deleted too. This cannot be undone.`,
+			{
+				title: `Delete ${tournament.name || 'this tournament'}?`,
+				confirmLabel: 'Delete tournament',
+				cancelLabel: 'Keep it',
+				danger: true,
+				// The one action that removes everything at once, so it takes more
+				// than a click.
+				requireText: tournament.name || null,
+			},
 		);
 		if (!confirmed) return;
 

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import TeamIdentity from './tournament/TeamIdentity';
 import { PRELIMINARY_STAGE } from './tournament/fixtureUtils';
-import { useConfirm } from './ConfirmDialog';
+import { useConfirm } from './ConfirmContext';
 import { useHelpTopic } from '../HelpContext';
+import { formatDateLabel } from '../utils/scheduleUtils';
 import '../App.css';
 
 // A set counts for whichever team scored more in it; a tie (including an
@@ -29,11 +30,34 @@ function tallySets(sets) {
 	);
 }
 
-const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch, onSaveChanges }) => {
+// The sets as last saved, in the modal's own shape. An unplayed fixture starts
+// from one empty set, the same as the draft does.
+function savedSets(result) {
+	if (!result?.length) return [{ team1: 0, team2: 0 }];
+	return result.map((set) => ({ team1: set[0] || 0, team2: set[1] || 0 }));
+}
+
+function sameSets(left, right) {
+	return (
+		left.length === right.length &&
+		left.every((set, index) => set.team1 === right[index].team1 && set.team2 === right[index].team2)
+	);
+}
+
+// `slot` is the fixture's schedule entry ({ day, startTime, courtName }), or
+// undefined when it has not been scheduled.
+const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancelMatch, onSaveChanges }) => {
 	useHelpTopic('score-update-modal');
 
-	const [sets, setSets] = useState([{ team1: 0, team2: 0 }]);
+	const [sets, setSets] = useState(() => savedSets(fixture.result));
 	const confirm = useConfirm();
+
+	// Focus moves into the dialog on open, so Escape works before anything in
+	// it has been clicked.
+	const dialogRef = useRef(null);
+	useEffect(() => {
+		dialogRef.current?.focus();
+	}, []);
 
 	// A match that was already COMPLETED when this modal opened is being
 	// reopened for a correction, not scored live — Cancel/Save/End (which all
@@ -59,15 +83,43 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	// fixture arrives with result: [], which is truthy — testing it directly
 	// replaced the default empty set with nothing, so the modal opened with no
 	// score inputs at all for exactly the case it exists to serve.
-	useEffect(() => {
-		if (fixture.result?.length) {
-			const result = fixture.result.map((set) => ({
-				team1: set[0] || 0,
-				team2: set[1] || 0,
-			}));
-			setSets(result);
-		}
-	}, [fixture.result]);
+	//
+	// Adjusted during render rather than in an effect: the draft starts from the
+	// saved sets, and is replaced when a refetch hands over a new result (after
+	// Save Score, which keeps the modal open).
+	const [hydratedFrom, setHydratedFrom] = useState(fixture.result);
+	if (fixture.result !== hydratedFrom) {
+		setHydratedFrom(fixture.result);
+		if (fixture.result?.length) setSets(savedSets(fixture.result));
+	}
+
+	// Compared against what is saved rather than tracked per edit, so a Save
+	// Score that keeps the modal open clears it once the refetched result lands.
+	const isDirty = !sameSets(sets, savedSets(fixture.result));
+
+	// × and Escape both close. Neither should silently throw away a score
+	// typed courtside, so unsaved edits are confirmed first.
+	const handleClose = async () => {
+		if (
+			isDirty &&
+			!(await confirm('The score changes you made will be lost.', {
+				title: 'Close without saving?',
+				confirmLabel: 'Discard changes',
+				cancelLabel: 'Keep editing',
+				danger: true,
+			}))
+		)
+			return;
+		onClose();
+	};
+
+	// On the dialog rather than on window: a confirm opened from here takes
+	// focus with it, so Escape there cannot stack a second confirm on the first.
+	const handleKeyDown = (event) => {
+		if (event.key !== 'Escape') return;
+		event.stopPropagation();
+		handleClose();
+	};
 
 	const handleAddSet = () => {
 		setSets([...sets, { team1: 0, team2: 0 }]);
@@ -113,7 +165,7 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 
 	// A completed match is only ever reopened to correct what's already there —
 	// there is nothing in progress to hand back to, so discarding just closes
-	// the modal and drops the edits, the same as the × button always has.
+	// the modal and drops the edits. No confirm: the button already says so.
 	const handleDiscardClick = () => {
 		if (busy) return;
 		onClose();
@@ -121,7 +173,11 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 
 	const handleEndMatchClick = async () => {
 		if (busy) return;
-		const confirmed = await confirm('End this match and record the current score as final?');
+		const confirmed = await confirm('The current score will be recorded as the final result.', {
+			title: 'End this match?',
+			confirmLabel: 'End match',
+			cancelLabel: 'Keep scoring',
+		});
 		if (!confirmed) return;
 
 		setSubmitting('end');
@@ -142,10 +198,13 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	// walkover. Said here because it is more than "cancelled" suggests.
 	const handleCancelMatchClick = async () => {
 		if (busy) return;
+		// "Mark as cancelled" / "Go back" rather than Cancel / Cancel: the dialog's
+		// own cancel button would otherwise share the action's name.
 		const confirmed = await confirm(
 			isKnockout
-				? 'Cancel this match? Neither team goes through, and the team due to meet the winner in the next round gets a walkover. The current score will not be recorded.'
-				: 'Cancel this match? It will be marked as cancelled and the current score will not be recorded.'
+				? 'Neither team goes through, and the team due to meet the winner in the next round gets a walkover. The current score will not be recorded.'
+				: 'It will be marked as cancelled and the current score will not be recorded.',
+			{ title: 'Cancel this match?', confirmLabel: 'Mark as cancelled', cancelLabel: 'Go back', danger: true }
 		);
 		if (!confirmed) return;
 
@@ -161,6 +220,13 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	// Ending — End Match, or Save changes on a finished match — needs a winner.
 	const needsWinner = isKnockout && tally.team1 === tally.team2;
 
+	// Match numbers repeat across divisions, so the title alone does not say
+	// which match this is. The round already names the pool for pool play.
+	const matchContext = [fixture.division_name, fixture.round].filter(Boolean).join(' · ');
+	const slotContext = slot
+		? [slot.courtName, formatDateLabel(slot.day), slot.startTime].filter(Boolean).join(' · ')
+		: '';
+
 	// Portalled onto document.body, the same as ScheduleMakerModal and
 	// CreateModal. Mounted inline from pages/View.jsx, inside <main id="app">,
 	// this shares a stacking context with the fixed header and the footer. On a
@@ -170,10 +236,21 @@ const ScoreUpdateModal = ({ fixture, onClose, onSave, onEndMatch, onCancelMatch,
 	// block for it.
 	return createPortal(
 		<div className="modal-overlay">
-			<div className="score-modal">
+			<div
+				className="score-modal"
+				ref={dialogRef}
+				tabIndex={-1}
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="score-modal-title"
+				onKeyDown={handleKeyDown}>
 				<div className="score-modal-header">
-					<h3>Match #{fixture.match_no}</h3>
-					<button type="button" className="score-modal-close" onClick={onClose} aria-label="Close">
+					<div className="score-modal-heading">
+						<h3 id="score-modal-title">Match #{fixture.match_no}</h3>
+						{matchContext && <p className="score-modal-context">{matchContext}</p>}
+						{slotContext && <p className="score-modal-context">{slotContext}</p>}
+					</div>
+					<button type="button" className="score-modal-close" onClick={handleClose} aria-label="Close">
 						&times;
 					</button>
 				</div>

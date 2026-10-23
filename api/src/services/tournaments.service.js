@@ -156,6 +156,27 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
     };
 }
 
+// The same change key fetchTournamentDetails returns, from one light query
+// instead of the whole view, so the controller can answer a matching
+// If-None-Match before building anything.
+//
+// It goes through buildChangeKey itself, with the divisions' latest stamp
+// standing in for all of them: the greatest of (tournament, max of divisions)
+// is the greatest of (tournament, every division), so the two keys cannot
+// differ. One definition of the key, not two. Null when the tournament does not
+// exist — the full path then answers its 404.
+async function getTournamentChangeKey(tournamentId) {
+    const stamps = await tournamentRepository.getChangeStamps(tournamentId);
+    if (!stamps) {
+        return null;
+    }
+
+    return buildChangeKey({
+        tournament: { last_update: stamps.tournament_update },
+        divisions: [{ last_update: stamps.division_update }]
+    });
+}
+
 // --- lifecycle --------------------------------------------------------------
 //
 // Not Started -> Ongoing -> Finished, one way. Each transition loads the
@@ -360,6 +381,7 @@ export const tournamentService = {
     createTournament,
     fetchTournaments,
     fetchTournamentDetails,
+    getTournamentChangeKey,
     getMyTournaments,
     getSavedTournaments,
     saveTournament,

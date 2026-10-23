@@ -11,6 +11,7 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         createTournament: vi.fn(),
         fetchTournaments: vi.fn(),
         fetchTournamentDetails: vi.fn(),
+        getTournamentChangeKey: vi.fn(),
         startTournament: vi.fn(),
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
@@ -33,6 +34,8 @@ beforeEach(() => {
     vi.mocked(tournamentService.createTournament).mockReset();
     vi.mocked(tournamentService.fetchTournaments).mockReset();
     vi.mocked(tournamentService.fetchTournamentDetails).mockReset();
+    // Unknown unless a test says otherwise: the full path answers.
+    vi.mocked(tournamentService.getTournamentChangeKey).mockReset().mockResolvedValue(null);
     vi.mocked(tournamentService.startTournament).mockReset();
     vi.mocked(tournamentService.endTournament).mockReset();
     vi.mocked(tournamentService.deleteTournament).mockReset();
@@ -259,6 +262,24 @@ describe("GET /api/tournaments/:tournamentId", () => {
 
             expect(response.status).toBe(200);
             expect(response.headers.etag).toBeUndefined();
+        });
+
+        it("answers an unchanged tournament with 304 before building the view", async () => {
+            serves();
+            const first = await request(app).get(`/api/tournaments/${VALID_UUID}`);
+            tournamentService.fetchTournamentDetails.mockClear();
+            tournamentService.getTournamentChangeKey.mockResolvedValue(CHANGE_KEY);
+
+            const second = await request(app)
+                .get(`/api/tournaments/${VALID_UUID}`)
+                .set("If-None-Match", first.headers.etag);
+
+            expect(second.status).toBe(304);
+            expect(second.text).toBeFalsy();
+            expect(second.headers.etag).toBe(first.headers.etag);
+            expect(second.headers.vary).toBe("Cookie");
+            expect(second.headers["cache-control"]).toBe("no-cache");
+            expect(tournamentService.fetchTournamentDetails).not.toHaveBeenCalled();
         });
     });
 

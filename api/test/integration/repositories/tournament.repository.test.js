@@ -58,11 +58,24 @@ describe("createTournament", () => {
 });
 
 describe("getAllTournaments", () => {
-    it("returns every tournament", async () => {
+    it("returns every tournament, newest first", async () => {
         db.query.mockResolvedValueOnce([{ id: "tour-1" }]);
 
         expect(await tournamentRepository.getAllTournaments()).toEqual([{ id: "tour-1" }]);
-        expect(db.query).toHaveBeenCalledWith("SELECT * FROM tournaments;", []);
+        expect(db.query).toHaveBeenCalledWith(
+            "SELECT id, name, start_date, end_date, location, status FROM tournaments ORDER BY start_date DESC",
+            []
+        );
+    });
+
+    // Public, so it carries only what a Discover card shows.
+    it("selects neither the schedule nor the creator", async () => {
+        db.query.mockResolvedValueOnce([]);
+
+        await tournamentRepository.getAllTournaments();
+
+        const [sql] = db.query.mock.calls[0];
+        expect(sql).not.toMatch(/\*|schedule|created_by/);
     });
 
     it("throws rather than returning an error string, keeping the cause", async () => {
@@ -72,6 +85,38 @@ describe("getAllTournaments", () => {
         const failure = await tournamentRepository.getAllTournaments().catch((err) => err);
 
         expect(failure.message).toBe("Failed to fetch tournaments");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
+describe("getChangeStamps", () => {
+    it("reads both stamps in one query", async () => {
+        const stamps = { tournament_update: new Date(1), division_update: new Date(2) };
+        db.query.mockResolvedValueOnce([stamps]);
+
+        expect(await tournamentRepository.getChangeStamps("tour-1")).toBe(stamps);
+        expect(db.query).toHaveBeenCalledTimes(1);
+        expect(squash(db.query.mock.calls[0][0])).toBe(
+            "SELECT t.last_update AS tournament_update, " +
+                "(SELECT max(d.last_update) FROM divisions d WHERE d.tournament_id = t.id) AS division_update " +
+                "FROM tournaments t WHERE t.id = $1::uuid"
+        );
+        expect(db.query.mock.calls[0][1]).toEqual(["tour-1"]);
+    });
+
+    it("returns null for a tournament that does not exist", async () => {
+        db.query.mockResolvedValueOnce([]);
+
+        expect(await tournamentRepository.getChangeStamps("tour-1")).toBeNull();
+    });
+
+    it("throws with the cause kept", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.getChangeStamps("tour-1").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch change stamps");
         expect(failure.cause).toBe(underlying);
     });
 });

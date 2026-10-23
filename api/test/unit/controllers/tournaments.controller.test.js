@@ -5,6 +5,7 @@ vi.mock("../../../src/services/tournaments.service.js", () => ({
         createTournament: vi.fn(),
         fetchTournaments: vi.fn(),
         fetchTournamentDetails: vi.fn(),
+        getTournamentChangeKey: vi.fn(),
         startTournament: vi.fn(),
         endTournament: vi.fn(),
         deleteTournament: vi.fn(),
@@ -26,6 +27,9 @@ beforeEach(() => {
     vi.mocked(tournamentService.createTournament).mockReset();
     vi.mocked(tournamentService.fetchTournaments).mockReset();
     vi.mocked(tournamentService.fetchTournamentDetails).mockReset();
+    // Unknown by default, which sends every request down the full path — the
+    // behaviour the caching tests below were written against.
+    vi.mocked(tournamentService.getTournamentChangeKey).mockReset().mockResolvedValue(null);
     vi.mocked(tournamentService.startTournament).mockReset();
     vi.mocked(tournamentService.endTournament).mockReset();
     vi.mocked(tournamentService.deleteTournament).mockReset();
@@ -233,6 +237,81 @@ describe("tournamentController.fetchTournamentDetails", () => {
 
             expect(res.headers.ETag).toBeUndefined();
             expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        // The early answer: a conditional request is checked against the change
+        // key alone, and the view is only built when that cannot answer it.
+        describe("before building the view", () => {
+            async function organiserEtag() {
+                loadableWith();
+                const res = makeRes();
+                await fetchAs(res);
+                tournamentService.fetchTournamentDetails.mockClear();
+                return res.headers.ETag;
+            }
+
+            it("answers a matching validator with 304 without building the view", async () => {
+                const etag = await organiserEtag();
+                tournamentService.getTournamentChangeKey.mockResolvedValue(CHANGE_KEY);
+                const res = makeRes();
+
+                await fetchAs(res, { ifNoneMatch: etag });
+
+                expect(tournamentService.getTournamentChangeKey).toHaveBeenCalledWith(VALID_UUID);
+                expect(tournamentService.fetchTournamentDetails).not.toHaveBeenCalled();
+                expect(res.status).toHaveBeenCalledWith(304);
+                expect(res.end).toHaveBeenCalled();
+                expect(res.json).not.toHaveBeenCalled();
+                // The same headers the full path sends with its 304.
+                expect(res.headers.ETag).toBe(etag);
+                expect(res.headers.Vary).toBe("Cookie");
+                expect(res.headers["Cache-Control"]).toBe("no-cache");
+            });
+
+            it("builds the view when the data has moved since the validator", async () => {
+                const etag = await organiserEtag();
+                tournamentService.getTournamentChangeKey.mockResolvedValue("1754042499999");
+                loadableWith({ changeKey: "1754042499999" });
+                const res = makeRes();
+
+                await fetchAs(res, { ifNoneMatch: etag });
+
+                expect(tournamentService.fetchTournamentDetails).toHaveBeenCalledWith(VALID_UUID, "user-1");
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.headers.ETag).not.toBe(etag);
+            });
+
+            it("does not look at the change key for an unconditional request", async () => {
+                loadableWith();
+
+                await fetchAs(makeRes());
+
+                expect(tournamentService.getTournamentChangeKey).not.toHaveBeenCalled();
+                expect(tournamentService.fetchTournamentDetails).toHaveBeenCalled();
+            });
+
+            // THE TRAP again, on the new path: the data half matches, the viewer
+            // half must still refuse it.
+            it("never answers 304 to a signed-out reader holding the organiser's validator", async () => {
+                const etag = await organiserEtag();
+                tournamentService.getTournamentChangeKey.mockResolvedValue(CHANGE_KEY);
+                loadableWith({ creator: false });
+                const res = makeRes();
+
+                await fetchAs(res, { user: null, ifNoneMatch: etag });
+
+                expect(res.status).not.toHaveBeenCalledWith(304);
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.json.mock.calls[0][0].data).toMatchObject({ loggedIn: false, creator: false });
+            });
+
+            it("leaves a missing tournament to the full path's 404", async () => {
+                tournamentService.getTournamentChangeKey.mockResolvedValue(null);
+                const failure = Object.assign(new Error("Tournament not found"), { code: "TOURNAMENT_NOT_FOUND" });
+                tournamentService.fetchTournamentDetails.mockRejectedValue(failure);
+
+                await expect(fetchAs(makeRes(), { ifNoneMatch: '"anything"' })).rejects.toBe(failure);
+            });
         });
     });
 

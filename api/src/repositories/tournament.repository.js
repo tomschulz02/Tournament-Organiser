@@ -19,10 +19,13 @@ async function createTournament(details, userId, client = db) {
     }
 }
 
-// fetches info on all tournaments for the browse page in the frontend
+// Every tournament, for the Discover page. Only what a Discover card shows: this
+// is public, and `SELECT *` sent every tournament's full schedule JSON plus
+// created_by, which no card reads and nobody browsing needs. Ordered like the
+// Profile lists below.
 async function getAllTournaments() {
     try {
-        const sql = "SELECT * FROM tournaments;";
+        const sql = "SELECT id, name, start_date, end_date, location, status FROM tournaments ORDER BY start_date DESC";
         const result = await db.query(sql, []);
 
         return result;
@@ -39,6 +42,25 @@ async function getTournamentById(tournamentId) {
         return result[0] || null;
     } catch (err) {
         throw new Error("Failed to fetch tournament", { cause: err });
+    }
+}
+
+// The two stamps the tournament view's change key is made of, in one query: the
+// tournament's last_update and the latest of its divisions'. Lets a conditional
+// GET be answered with a 304 without loading anything else — see
+// tournamentService.getTournamentChangeKey. division_update is null when there
+// are no divisions; the row itself is missing when the tournament is.
+async function getChangeStamps(tournamentId) {
+    try {
+        const sql =
+            "SELECT t.last_update AS tournament_update, " +
+            "(SELECT max(d.last_update) FROM divisions d WHERE d.tournament_id = t.id) AS division_update " +
+            "FROM tournaments t WHERE t.id = $1::uuid";
+        const result = await db.query(sql, [tournamentId]);
+
+        return result[0] || null;
+    } catch (err) {
+        throw new Error("Failed to fetch change stamps", { cause: err });
     }
 }
 
@@ -187,6 +209,7 @@ export const tournamentRepository = {
     createTournament,
     getAllTournaments,
     getTournamentById,
+    getChangeStamps,
     getTournamentsByCreator,
     getTournamentsByIds,
     startTournament,

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../Icons';
 import TournamentPattern from '../TournamentPattern';
 import { useMessage } from '../../MessageContext';
-import { saveTournament, unsaveTournament } from '../../requests';
+import { AuthContext } from '../../AuthContext';
+import { getMySavedTournaments, saveTournament, unsaveTournament } from '../../requests';
 import { tournamentAccentStyle } from '../../utils/tournamentIdentity';
 import { SETTINGS_TAB, TOURNAMENT_TABS, useTournamentTab } from './tournamentTabs';
 import '../../styles/tournament-view.css';
@@ -120,29 +121,57 @@ function TournamentNav({ activeTab, onSelect, creator = false }) {
 	);
 }
 
-// Follow and unfollow both answer 501 for now, so the toast carries the server's
-// message and the button never changes state. That is the intended behaviour
-// until the feature exists — the path and the wiring are what is being validated.
+// Saves the tournament to the viewer's Profile. The starting state comes from the
+// same saved list Profile reads, refetched when the session changes, so a
+// tournament saved earlier shows as Saved and can be unsaved from here.
 //
-// The button always starts unfollowed: nothing reads saved_tournaments yet, so
-// the current state is genuinely unknown rather than known to be false.
+// Saving needs an account. A signed-out click goes to sign-in and comes back
+// here, rather than showing an error for something the reader could not know.
 function FollowButton({ tournamentId }) {
 	const { showMessage } = useMessage();
-	const [following, setFollowing] = useState(false);
+	const { isLoggedIn, sessionVersion } = useContext(AuthContext);
+	const navigate = useNavigate();
+	const location = useLocation();
+	const [saved, setSaved] = useState(false);
 	const [pending, setPending] = useState(false);
+
+	// Nothing to show while signed out, whatever was last fetched.
+	const following = isLoggedIn && saved;
+
+	useEffect(() => {
+		if (!isLoggedIn || !tournamentId) return;
+		let active = true;
+
+		// A failure leaves the button unsaved, which is what it showed before
+		// this was read at all; clicking it still works.
+		getMySavedTournaments()
+			.then(({ data }) => {
+				if (active) setSaved((data ?? []).some((tournament) => tournament.id === tournamentId));
+			})
+			.catch(() => {});
+
+		return () => {
+			active = false;
+		};
+	}, [isLoggedIn, sessionVersion, tournamentId]);
 
 	const handleClick = async () => {
 		if (!tournamentId) return;
+
+		if (!isLoggedIn) {
+			navigate('/login', { state: { from: location } });
+			return;
+		}
 
 		setPending(true);
 		try {
 			if (following) {
 				await unsaveTournament(tournamentId);
-				setFollowing(false);
+				setSaved(false);
 				showMessage('Tournament removed from your saved list.', 'success');
 			} else {
 				await saveTournament(tournamentId);
-				setFollowing(true);
+				setSaved(true);
 				showMessage('Tournament saved.', 'success');
 			}
 		} catch (error) {

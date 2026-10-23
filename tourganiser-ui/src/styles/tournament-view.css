@@ -1013,6 +1013,7 @@ body.dark .tv-division-badge {
 
 .tv-round-banner-actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: var(--space-2);
 }
 

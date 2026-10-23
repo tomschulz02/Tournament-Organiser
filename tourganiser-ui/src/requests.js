@@ -44,7 +44,12 @@ async function requestWithMeta(path, { method = 'GET', body, headers } = {}, ret
 		// resolves normally, so nothing here can retry a 4xx or a 5xx. The old
 		// condition matched 'reset' or 'network' in the message, which never
 		// matches Chrome's 'Failed to fetch', so it never retried at all.
-		if (retries > 0) {
+		//
+		// Reads only. "Never completed" includes a request the server received
+		// and acted on whose response was lost, and repeating a create, an
+		// add-division or a progression then does it twice. A read can be
+		// repeated safely.
+		if (method === 'GET' && retries > 0) {
 			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
 			return requestWithMeta(path, { method, body, headers }, retries - 1);
 		}
@@ -228,7 +233,9 @@ export function clearTournamentCache() {
 	}
 }
 
-export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous') {
+// The one implementation behind both exports below. `unchanged` is true only
+// when the server confirmed the cached copy is current.
+async function loadTournament(tournamentId, sessionKey) {
 	const viewer = String(sessionKey);
 	const id = String(tournamentId);
 
@@ -240,12 +247,12 @@ export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous'
 	});
 
 	if (notModified) {
-		if (cached) return cached.payload;
+		if (cached) return { unchanged: true, payload: cached.payload };
 
 		// Nothing here to validate, so the 304 answered a header this function
 		// did not send. There is no body to fall back on, so ask again
 		// unconditionally rather than returning nothing to the page.
-		return await request(`tournaments/${id}`);
+		return { unchanged: false, payload: await request(`tournaments/${id}`) };
 	}
 
 	const others = entries.filter((entry) => entry.id !== id);
@@ -257,7 +264,21 @@ export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous'
 		etag && payload ? [{ id, etag, payload }, ...others].slice(0, MAX_CACHED_TOURNAMENTS) : others,
 	);
 
-	return payload;
+	return { unchanged: false, payload };
+}
+
+export async function fetchTournamentData(tournamentId, sessionKey = 'anonymous') {
+	return (await loadTournament(tournamentId, sessionKey)).payload;
+}
+
+// For a page that already shows the tournament and is checking for news: null
+// when nothing has changed, the new payload when something has. Unchanged must
+// be distinguishable, because the cached payload comes back freshly parsed —
+// handing it to the page would replace every object with an identical copy and
+// re-render it all for nothing.
+export async function refreshTournamentData(tournamentId, sessionKey = 'anonymous') {
+	const { unchanged, payload } = await loadTournament(tournamentId, sessionKey);
+	return unchanged ? null : payload;
 }
 
 export const createTournament = (tournamentData) =>

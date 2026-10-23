@@ -999,7 +999,6 @@ About page styles
 	padding: var(--space-6);
 	background: var(--background-color);
 	border-radius: 12px;
-	box-shadow: 0 2px 8px var(--card-shadow-color);
 	border: 1px solid var(--card-border-color);
 }
 
@@ -1043,7 +1042,6 @@ About page styles
 	padding: var(--space-6);
 	background: var(--background-color);
 	border-radius: 12px;
-	box-shadow: 0 2px 8px var(--card-shadow-color);
 	border: 1px solid var(--card-border-color);
 	text-align: center;
 }
@@ -1205,7 +1203,6 @@ Legal page styles
 .legal-page-section {
 	max-width: 1200px;
 	border: 1px solid var(--card-border-color);
-	box-shadow: 0 4px 8px var(--card-shadow-color);
 	border-radius: 10px;
 	margin: var(--space-4) auto;
 	padding: var(--space-6);
@@ -1415,22 +1412,15 @@ might show for users who are already signed in, or that could be in a separate "
 	/* font-size: clamp(1rem, 1.5vw, 1.2rem); */
 	font-weight: 600;
 	margin: var(--space-2) var(--space-4);
-	transition: all 0.3s ease;
-	box-shadow: 0 4px 6px rgba(41, 98, 255, 0.2);
+	transition: background-color 0.2s ease;
 	width: 150px;
 	text-align: center;
 	font-size: 1.2em;
 }
 
+/* Flat + Borders (DESIGN.md): hover changes colour only, no lift or shadow. */
 .cta-button:hover {
 	background-color: var(--secondary-color);
-	transform: translateY(-2px);
-	box-shadow: 0 6px 12px rgba(41, 98, 255, 0.3);
-}
-
-.cta-button:active {
-	transform: translateY(0);
-	box-shadow: 0 2px 4px rgba(41, 98, 255, 0.2);
 }
 
 .donate-button {
@@ -1559,7 +1549,6 @@ Login form styles
 	padding: var(--space-6);
 	border-radius: 10px;
 	border: 1px solid var(--card-border-color);
-	box-shadow: 0 4px 8px var(--card-shadow-color);
 	width: 100%;
 	max-width: 400px;
 	position: relative;
@@ -2734,7 +2723,6 @@ Tournaments page styles
 	background: var(--background-color);
 	border: 1px solid var(--card-border-color);
 	border-radius: 12px;
-	box-shadow: 0 2px 4px var(--card-shadow-color);
 	overflow: hidden;
 }
 
@@ -2821,7 +2809,6 @@ Tournaments page styles
 	border: 1px solid var(--card-border-color);
 	padding: 0;
 	border-radius: 18px;
-	box-shadow: 0 8px 20px rgb(from var(--card-shadow-color) r g b / 0.16);
 	position: relative;
 	isolation: isolate;
 	overflow: hidden;
@@ -2834,8 +2821,6 @@ Tournaments page styles
 	text-align: left;
 	appearance: none;
 	transition:
-		transform 0.2s ease,
-		box-shadow 0.2s ease,
 		border-color 0.2s ease,
 		background-color 0.2s ease;
 }
@@ -2874,11 +2859,11 @@ Tournaments page styles
 	color: var(--tournament-accent, var(--main-color));
 }
 
+/* Flat + Borders (DESIGN.md): the card never lifts or gains a shadow. Hover is
+   the border turning blue, strong enough to carry the state on its own. */
 .tournament-card:hover,
 .tournament-card:focus-visible {
-	transform: translateY(-3px);
-	border-color: rgb(from var(--main-color) r g b / 0.32);
-	box-shadow: 0 16px 30px rgb(from var(--card-shadow-color) r g b / 0.24);
+	border-color: rgb(from var(--main-color) r g b / 0.5);
 	background: rgb(from var(--background-color) r g b / 0.94);
 }
 
@@ -3210,7 +3195,6 @@ Profile page
 	background: var(--background-color);
 	border: 1px solid var(--card-border-color);
 	border-radius: 12px;
-	box-shadow: 0 2px 4px var(--card-shadow-color);
 	padding: var(--space-4);
 	color: var(--secondary-text-color);
 }
@@ -3838,17 +3822,11 @@ Temporary styles for teams page - taken from old version
 	position: relative;
 	padding: var(--space-4);
 	border-radius: 8px;
-	box-shadow: 0 2px 4px var(--card-shadow-color);
 	border: 1px solid var(--card-border-color);
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	transition: all 0.3s ease;
 	color: var(--secondary-text-color);
-}
-
-.team-card:hover {
-	transform: translateY(-2px);
 }
 
 .team-card svg {

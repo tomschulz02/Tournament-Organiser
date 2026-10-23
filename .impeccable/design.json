@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-23T00:00:00Z",
+  "title": "Design System: Tourganiser",
+  "extensions": {
+    "colorMeta": {
+      "tourganiser-blue": { "role": "primary", "displayName": "Tourganiser Blue", "canonical": "rgb(41, 98, 255)", "cssVar": "--main-color", "tonalRamp": ["oklch(20% 0.09 265)", "oklch(28% 0.13 265)", "oklch(38% 0.18 265)", "oklch(47% 0.22 265)", "oklch(56% 0.24 265)", "oklch(68% 0.17 265)", "oklch(83% 0.09 265)", "oklch(95% 0.03 265)"] },
+      "sky-blue": { "role": "secondary", "displayName": "Sky Blue", "canonical": "rgb(29, 168, 236)", "cssVar": "--secondary-color", "tonalRamp": ["oklch(20% 0.05 237)", "oklch(30% 0.08 237)", "oklch(42% 0.11 237)", "oklch(55% 0.14 237)", "oklch(68% 0.15 237)", "oklch(78% 0.11 237)", "oklch(88% 0.06 237)", "oklch(96% 0.02 237)"] },
+      "periwinkle": { "role": "secondary", "displayName": "Periwinkle", "canonical": "rgb(123, 128, 246)", "cssVar": "--quarternary-color", "tonalRamp": ["oklch(20% 0.07 278)", "oklch(30% 0.11 278)", "oklch(42% 0.15 278)", "oklch(53% 0.17 278)", "oklch(64% 0.17 278)", "oklch(75% 0.12 278)", "oklch(86% 0.07 278)", "oklch(95% 0.02 278)"] },
+      "aqua": { "role": "tertiary", "displayName": "Aqua", "canonical": "rgb(76, 222, 222)", "cssVar": "--tertiary-color", "tonalRamp": ["oklch(20% 0.04 193)", "oklch(32% 0.06 193)", "oklch(45% 0.08 193)", "oklch(58% 0.10 193)", "oklch(70% 0.12 193)", "oklch(83% 0.12 193)", "oklch(90% 0.07 193)", "oklch(96% 0.03 193)"] },
+      "success": { "role": "status", "displayName": "Success Green", "canonical": "rgb(76, 175, 80)", "cssVar": "--success-color", "tonalRamp": ["oklch(20% 0.05 145)", "oklch(30% 0.08 145)", "oklch(42% 0.12 145)", "oklch(55% 0.15 145)", "oklch(67% 0.16 145)", "oklch(78% 0.12 145)", "oklch(88% 0.07 145)", "oklch(96% 0.02 145)"] },
+      "error": { "role": "status", "displayName": "Error Red", "canonical": "rgb(244, 67, 54)", "cssVar": "--error-color", "tonalRamp": ["oklch(20% 0.07 29)", "oklch(30% 0.11 29)", "oklch(42% 0.16 29)", "oklch(53% 0.20 29)", "oklch(63% 0.22 29)", "oklch(75% 0.14 29)", "oklch(87% 0.07 29)", "oklch(96% 0.02 29)"] },
+      "warning": { "role": "status", "displayName": "Warning Orange", "canonical": "rgb(230, 120, 0)", "cssVar": "--warning-color", "tonalRamp": ["oklch(20% 0.05 55)", "oklch(30% 0.08 55)", "oklch(42% 0.12 55)", "oklch(55% 0.15 55)", "oklch(67% 0.17 55)", "oklch(78% 0.12 55)", "oklch(88% 0.07 55)", "oklch(96% 0.02 55)"] },
+      "on-primary": { "role": "neutral", "displayName": "On Primary White", "canonical": "rgb(255, 255, 255)", "cssVar": "--text-color", "note": "White in both themes. Only for text on filled blue." },
+      "background": { "role": "neutral", "displayName": "Page Grey", "canonical": "rgb(245, 245, 245)", "cssVar": "--background-color", "theme": "light" },
+      "surface": { "role": "neutral", "displayName": "Panel White", "canonical": "#ffffff", "aliases": ["--tv-surface", "--ct-surface", "--schedule-surface"], "theme": "light" },
+      "surface-alt": { "role": "neutral", "displayName": "Cool Well", "canonical": "#f4f7fb", "aliases": ["--tv-surface-alt", "--ct-surface-alt", "--schedule-surface-alt"], "theme": "light" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "rgb(37, 37, 37)", "cssVar": "--secondary-text-color", "theme": "light" },
+      "muted": { "role": "neutral", "displayName": "Muted Ink", "canonical": "rgba(37, 37, 37, 0.66)", "aliases": ["--tv-muted", "--ct-muted"], "theme": "light" },
+      "border": { "role": "neutral", "displayName": "Hairline", "canonical": "rgba(37, 37, 37, 0.12)", "aliases": ["--tv-border", "--ct-border", "--schedule-border"], "theme": "light" },
+      "dark-background": { "role": "neutral", "displayName": "Charcoal", "canonical": "rgb(54, 54, 54)", "cssVar": "--background-color", "theme": "dark" },
+      "dark-surface": { "role": "neutral", "displayName": "Panel Charcoal", "canonical": "#242424", "aliases": ["--tv-surface", "--ct-surface", "--schedule-surface"], "theme": "dark" },
+      "dark-surface-alt": { "role": "neutral", "displayName": "Charcoal Well", "canonical": "#2f2f2f", "aliases": ["--tv-surface-alt", "--ct-surface-alt", "--schedule-surface-alt"], "theme": "dark" },
+      "dark-ink": { "role": "neutral", "displayName": "Chalk", "canonical": "rgb(245, 245, 245)", "cssVar": "--secondary-text-color", "theme": "dark" },
+      "dark-muted": { "role": "neutral", "displayName": "Muted Chalk", "canonical": "rgba(245, 245, 245, 0.7)", "aliases": ["--tv-muted", "--ct-muted"], "theme": "dark" },
+      "dark-border": { "role": "neutral", "displayName": "Dark Hairline", "canonical": "rgba(245, 245, 245, 0.14)", "aliases": ["--tv-border", "--ct-border", "--schedule-border"], "theme": "dark" },
+      "footer": { "role": "neutral", "displayName": "Footer Black", "canonical": "rgb(32, 32, 32)" },
+      "identity-indigo": { "role": "identity", "displayName": "Indigo", "cssVar": "--accent-1", "dark": "rgb(129, 120, 255)" },
+      "identity-teal": { "role": "identity", "displayName": "Teal", "cssVar": "--accent-2", "dark": "rgb(45, 212, 191)" },
+      "identity-orange": { "role": "identity", "displayName": "Orange", "cssVar": "--accent-3", "dark": "rgb(251, 146, 60)" },
+      "identity-purple": { "role": "identity", "displayName": "Purple", "cssVar": "--accent-4", "dark": "rgb(192, 132, 252)" },
+      "identity-rose": { "role": "identity", "displayName": "Rose", "cssVar": "--accent-5", "dark": "rgb(251, 113, 133)" },
+      "identity-cyan": { "role": "identity", "displayName": "Cyan", "cssVar": "--accent-6", "dark": "rgb(56, 189, 248)" },
+      "identity-green": { "role": "identity", "displayName": "Green", "cssVar": "--accent-7", "dark": "rgb(74, 222, 128)" },
+      "identity-pink": { "role": "identity", "displayName": "Pink", "cssVar": "--accent-8", "dark": "rgb(244, 113, 200)" },
+      "identity-amber": { "role": "identity", "displayName": "Amber", "cssVar": "--accent-9", "dark": "rgb(250, 204, 21)" },
+      "identity-slate": { "role": "identity", "displayName": "Slate", "cssVar": "--accent-10", "dark": "rgb(148, 163, 184)" },
+      "identity-magenta": { "role": "identity", "displayName": "Magenta", "cssVar": "--accent-11", "dark": "rgb(226, 76, 240)" },
+      "identity-olive": { "role": "identity", "displayName": "Olive", "cssVar": "--accent-12", "dark": "rgb(52, 211, 153)" }
+    },
+    "typographyMeta": {
+      "wordmark": { "displayName": "Wordmark", "purpose": "\"Tourganiser\" in the header only." },
+      "display": { "displayName": "Display", "purpose": "Marketing headings on Home and About." },
+      "headline": { "displayName": "Headline", "purpose": "Tournament name in the tournament view; wraps, never truncates." },
+      "title": { "displayName": "Title", "purpose": "Panel, section and empty-state headings." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, values and inputs (1rem keeps mobile browsers from zooming)." },
+      "body-small": { "displayName": "Body Small", "purpose": "Meta lines and fixture detail; the most common size in the app." },
+      "label": { "displayName": "Label", "purpose": "Status pills and uppercase field captions." }
+    },
+    "shadows": [
+      { "name": "chrome", "value": "0 2px 4px rgba(0, 0, 0, 0.1)", "purpose": "The fixed header." },
+      { "name": "menu", "value": "0 4px 12px var(--card-shadow-color)", "purpose": "Profile menu and popovers." },
+      { "name": "popover", "value": "0 8px 24px rgba(0, 0, 0, 0.18)", "purpose": "Division colour picker menu." },
+      { "name": "raised-button", "value": "0 4px 8px rgba(0, 0, 0, 0.25)", "purpose": "Create button rising out of the mobile bottom nav." },
+      { "name": "dragging", "value": "0 12px 20px rgba(0, 0, 0, 0.14)", "purpose": "Schedule-maker entry while picked up or flashed." },
+      { "name": "focus-ring", "value": "0 0 0 3px rgb(from var(--main-color) r g b / 0.2)", "purpose": "Input focus, paired with a blue border." },
+      { "name": "division-edge", "value": "inset 3px 0 0 0 var(--tv-division-color)", "purpose": "Structural division colour edge, not depth." }
+    ],
+    "motion": [
+      { "name": "state", "value": "0.15s ease", "purpose": "Colour, border and background changes on pills, tabs and icon buttons." },
+      { "name": "state-default", "value": "0.2s ease", "purpose": "Button and input state transitions." },
+      { "name": "chrome", "value": "0.3s ease", "purpose": "Header background on scroll." },
+      { "name": "reduced-motion", "value": "@media (prefers-reduced-motion: reduce)", "purpose": "Stops the skeleton shimmer." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "480px" },
+      { "name": "tablet", "value": "768px", "note": "Main switch: bottom nav, spacing remap. Desktop nav from 769px." },
+      { "name": "desktop", "value": "1024px" },
+      { "name": "container", "value": "1200px", "note": "Maximum content width." }
+    ],
+    "spacingMobile": {
+      "note": "At max-width 768px steps 4-7 drop one place.",
+      "space-4": "12px", "space-5": "16px", "space-6": "24px", "space-7": "32px"
+    },
+    "zIndex": { "below": -1, "base": 0, "raised": 10, "chrome": 100, "menu": 200, "modal": 300, "confirm": 400, "toast": 500, "tooltip": 600, "loading": 700 }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action colour. Blue fill, white label, 44px minimum.",
+      "html": "<button class=\"ds-btn-primary\">Create tournament</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 16px; border: 1px solid transparent; border-radius: 8px; background: var(--main-color, #2962ff); color: #fff; font: 600 0.95rem 'Segoe UI', 'Roboto', sans-serif; cursor: pointer; transition: background-color 0.2s ease; } .ds-btn-primary:hover { background: var(--quarternary-color, #7b80f6); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.35); } .ds-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary action: bordered, transparent, fills on hover.",
+      "html": "<button class=\"ds-btn-quiet\">Cancel</button>",
+      "css": ".ds-btn-quiet { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 16px; border: 1px solid rgba(37, 37, 37, 0.12); border-radius: 8px; background: transparent; color: #252525; font: 600 0.95rem 'Segoe UI', 'Roboto', sans-serif; cursor: pointer; transition: background-color 0.2s ease; } .ds-btn-quiet:hover { background: #f4f7fb; } .ds-btn-quiet:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.35); }"
+    },
+    {
+      "name": "Pill Button",
+      "kind": "button",
+      "refersTo": "button-pill",
+      "description": "Subheader actions (Browse, Save). Blue border on hover, blue fill when active.",
+      "html": "<button class=\"ds-btn-pill\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h12v18l-6-4-6 4z\" fill=\"currentColor\"/></svg>Save</button>",
+      "css": ".ds-btn-pill { display: inline-flex; align-items: center; gap: 4px; padding: 8px 12px; border: 1px solid rgba(37, 37, 37, 0.12); border-radius: 999px; background: #fff; color: #252525; font: 400 0.9rem 'Segoe UI', 'Roboto', sans-serif; white-space: nowrap; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; } .ds-btn-pill:hover { border-color: #2962ff; color: #2962ff; } .ds-btn-pill:focus-visible { outline: 2px solid #2962ff; outline-offset: 2px; } .ds-btn-pill[aria-pressed=\"true\"] { background: #2962ff; border-color: #2962ff; color: #fff; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Cool-well fill, hairline border, blue border and ring on focus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Tournament name</span><input class=\"ds-input\" placeholder=\"e.g. HST 2026\"></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 8px; font-family: 'Segoe UI', 'Roboto', sans-serif; } .ds-field-label { font-size: 0.9rem; font-weight: 600; color: #252525; } .ds-input { min-height: 44px; padding: 8px 12px; border: 1px solid rgba(37, 37, 37, 0.12); border-radius: 8px; background: #f4f7fb; color: #252525; font: inherit; font-size: 1rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; } .ds-input:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.2); }"
+    },
+    {
+      "name": "Tournament Tabs",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "One scrolling row; active tab blue with a 2px underline.",
+      "html": "<nav class=\"ds-tabs\"><button class=\"ds-tab is-active\">Overview</button><button class=\"ds-tab\">Fixtures &amp; Schedule</button><button class=\"ds-tab\">Standings</button><button class=\"ds-tab\">Teams</button></nav>",
+      "css": ".ds-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid rgba(37, 37, 37, 0.12); font-family: 'Segoe UI', 'Roboto', sans-serif; } .ds-tab { flex: 0 0 auto; padding: 12px 16px; border: none; border-bottom: 2px solid transparent; background: none; color: rgba(37, 37, 37, 0.66); font-size: 0.95rem; white-space: nowrap; cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease; } .ds-tab:hover { color: #252525; } .ds-tab:focus-visible { outline: 2px solid #2962ff; outline-offset: -2px; } .ds-tab.is-active { color: #2962ff; border-bottom-color: #2962ff; font-weight: 600; }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "Tinted status wash with coloured border and uppercase label.",
+      "html": "<span class=\"ds-status ds-status--upcoming\">Upcoming</span> <span class=\"ds-status ds-status--ongoing\">Ongoing</span> <span class=\"ds-status ds-status--done\">Finished</span>",
+      "css": ".ds-status { display: inline-block; padding: 4px 12px; border-radius: 999px; border: 1px solid transparent; font: 700 0.78rem 'Segoe UI', 'Roboto', sans-serif; letter-spacing: 0.03em; text-transform: uppercase; } .ds-status--upcoming { background: rgba(41, 98, 255, 0.12); color: #2962ff; border-color: rgba(41, 98, 255, 0.18); } .ds-status--ongoing { background: rgba(76, 175, 80, 0.14); color: #2e7d32; border-color: rgba(76, 175, 80, 0.25); } .ds-status--done { background: rgba(37, 37, 37, 0.1); color: rgba(37, 37, 37, 0.8); border-color: rgba(37, 37, 37, 0.15); }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat bordered container; the base of the tournament view.",
+      "html": "<section class=\"ds-panel\"><h3 class=\"ds-panel-title\">Groenkloof Campus</h3><p class=\"ds-panel-meta\">19 September 2026 · 6 divisions · 64 teams</p></section>",
+      "css": ".ds-panel { padding: 24px; border: 1px solid rgba(37, 37, 37, 0.12); border-radius: 14px; background: #fff; color: #252525; font-family: 'Segoe UI', 'Roboto', sans-serif; } .ds-panel-title { margin: 0 0 4px; font-size: 1.1rem; font-weight: 600; } .ds-panel-meta { margin: 0; font-size: 0.85rem; color: rgba(37, 37, 37, 0.66); }"
+    },
+    {
+      "name": "Fixture Row",
+      "kind": "custom",
+      "refersTo": "fixture-row",
+      "description": "Signature row: division edge, status dot, court chip, aligned scores.",
+      "html": "<article class=\"ds-fixture\" style=\"--div: #e11d48\"><div class=\"ds-fixture-meta\"><span class=\"ds-dot\"></span>#1 <span class=\"ds-chip\">Court 1</span></div><div class=\"ds-fixture-teams\"><span>DSJ</span><strong>2</strong><span class=\"ds-sets\">15 15</span><span>Michael Mount</span><strong>0</strong><span class=\"ds-sets\">13 12</span></div></article>",
+      "css": ".ds-fixture { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 16px; padding: 16px 12px; border: 1px solid rgba(37, 37, 37, 0.12); border-left: 3px solid var(--div); border-radius: 10px; background: #fff; color: #252525; font: 400 0.85rem 'Segoe UI', 'Roboto', sans-serif; } .ds-fixture-meta { display: flex; align-items: center; gap: 8px; color: rgba(37, 37, 37, 0.66); } .ds-dot { width: 10px; height: 10px; border-radius: 50%; background: #f44336; } .ds-chip { padding: 2px 8px; border: 1px solid rgba(37, 37, 37, 0.12); border-radius: 999px; color: #252525; } .ds-fixture-teams { display: grid; grid-template-columns: 1fr auto auto; column-gap: 12px; row-gap: 4px; font-size: 1rem; } .ds-fixture-teams strong { font-weight: 700; font-variant-numeric: tabular-nums; } .ds-sets { font-size: 0.78rem; color: rgba(37, 37, 37, 0.66); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Header Bar",
+      "kind": "nav",
+      "refersTo": "header",
+      "description": "Fixed blue chrome with wordmark and white links that turn aqua on hover.",
+      "html": "<header class=\"ds-header\"><span class=\"ds-wordmark\">Tourganiser</span><nav class=\"ds-header-nav\"><a href=\"#\">Discover</a><a href=\"#\">Create</a></nav></header>",
+      "css": ".ds-header { display: flex; align-items: center; justify-content: space-between; height: 80px; padding: 16px 24px; background: #2962ff; color: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); font-family: 'Segoe UI', 'Roboto', sans-serif; } .ds-wordmark { font-size: 2em; font-weight: 500; } .ds-header-nav { display: flex; gap: 24px; } .ds-header-nav a { color: #fff; font-weight: 500; text-decoration: none; transition: color 0.2s ease; } .ds-header-nav a:hover { color: #4cdede; } .ds-header-nav a:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Courtside Board",
+    "overview": "Tourganiser should read like the results board at the venue: one strong blue that says where you are and what to press, quiet neutral panels underneath, and scores, courts and times you can take in at a glance on a phone held in one hand. The board is not decorated. Its job is to be read quickly by someone standing in a hall or on the sand, often between matches, on a weak connection.\n\nThe system is a light and a dark theme over the same structure (`body.light` / `body.dark`, set before first paint from the saved choice or the OS preference). Tourganiser Blue owns the chrome (fixed header, mobile bottom nav), the active tab and the primary action. Everything else sits on flat, bordered neutral panels. Colour beyond the blue carries one of two meanings and never both: **status** (success, error, warning, sky) or **identity** (the twelve-colour palette that marks which division or which tournament).\n\nDensity is moderate: organiser screens (create flow, schedule maker) are dense tools; spectator screens favour one column of large, tappable rows on a phone. Components are clear and sturdy: 44px tap targets, plain labels, obvious states, no ornament.",
+    "keyCharacteristics": [
+      "One brand blue on the chrome and the primary action; neutral panels for everything else.",
+      "Flat surfaces with 1px borders. Shadows only on what floats.",
+      "Status and identity are separate colour systems.",
+      "44px is the minimum height of anything tapped.",
+      "System sans (Segoe UI / Roboto), weight 600–700 for emphasis, small uppercase labels.",
+      "The page never scrolls sideways; tab rows, tables and the bracket scroll on their own axis."
+    ],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "Tourganiser Blue is the only colour that signals action or location. If something else needs attention, it gets a status colour or nothing.", "section": "colors" },
+      { "name": "The Status Is Not Identity Rule", "body": "The twelve identity hues say *which* division or tournament. They never mark a status, an error or a call to action, and a status colour is never used as an identity.", "section": "colors" },
+      { "name": "The White Token Trap", "body": "`--text-color` is white in both themes and belongs only on filled blue surfaces. Body text always uses `--secondary-text-color`.", "section": "colors" },
+      { "name": "The Weight Does The Work Rule", "body": "Emphasis is 600 or 700 in the same family. Do not add a second typeface or rely on colour alone for hierarchy.", "section": "typography" },
+      { "name": "The Flat + Borders Rule", "body": "Nothing that sits in the page flow gets a shadow at rest, and hover never lifts. Hover changes colour or border. Shadows are for menus, popovers, the header, the Create button and an entry being dragged.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** keep every tapped control at least 44px high.",
+      "**Do** use `--secondary-text-color` for text on panels and the page; reserve `--text-color` (white) for filled blue surfaces.",
+      "**Do** take division and tournament colours from the twelve-hue identity palette (`--accent-1` … `--accent-12`), in both theme variants.",
+      "**Do** pair every colour-coded status with text, visible or visually hidden.",
+      "**Do** use the `--space-*` scale for whitespace and the named `--z-*` roles for stacking.",
+      "**Do** use the shared neutral set (surface, surface-alt, border, muted) for new areas instead of declaring another prefixed copy.",
+      "**Do** stop looping animation (skeleton shimmer) under `prefers-reduced-motion: reduce`.",
+      "**Do** keep transitions short (0.15–0.2s ease) and limited to colour, border and background."
+    ],
+    "donts": [
+      "**Don't** add shadows to panels, rows or cards that sit in the page flow, and don't lift elements on hover.",
+      "**Don't** use a second accent colour for primary actions; Tourganiser Blue is the only action colour.",
+      "**Don't** use an identity hue to signal status, or a status colour as an identity.",
+      "**Don't** let the page scroll sideways; give wide content its own scroll container.",
+      "**Don't** truncate tournament or team names in headings; let them wrap.",
+      "**Don't** introduce a second typeface."
+    ]
+  }
+}

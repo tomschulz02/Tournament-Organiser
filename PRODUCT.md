@@ -10,7 +10,7 @@ web
 
 Two primary users, each owning its own surfaces. When their needs conflict, the surface decides.
 
-- **Organisers** (tournament directors, club and university volleyball organisers, e.g. TuksVolleyball). They create tournaments, enter teams and seeding, build the schedule, start the event, enter scores, advance rounds and end it. Work happens both ahead of the event (often on a laptop) and courtside on the day (often on a phone). Organisers can add **editors** who may enter results.
+- **Organisers** (tournament directors, club and university volleyball organisers, e.g. TuksVolleyball). They create tournaments, enter teams and seeding, build the schedule, start the event, enter scores, advance rounds and end it. Work happens both ahead of the event (often on a laptop) and courtside on the day (often on a phone). Organisers can add **collaborators** in one of three roles: Scorer, Match Manager or Co-organiser.
 - **Spectators** (players, parents, coaches). Most people who open a tournament are on a phone at the venue, looking for their team's next match, its court and time, and the latest results and standings. They have no account and need none.
 
 Surfaces split accordingly: setup, schedule maker, score entry and settings are organiser surfaces; the public tournament view (overview, fixtures and schedule, standings, knockout, final rankings, teams) is the spectator surface. Discover/Home serve both.
@@ -40,7 +40,7 @@ Success: an organiser can set up and run an event end to end without a spreadshe
 
 **Terminology** (source of truth: `docs/tournament-rules.md`): Tournament (one or more divisions), Division (an independent competition), Round, Fixture (a single match), Schedule (court, date, time, optional free-text officials), Seeding. Fixture statuses are exactly `UPCOMING`, `LIVE`, `COMPLETED`, `CANCELLED`.
 
-**Built:** account sign-up and sign-in; tournament creation with divisions (Classic: pools then knockout; League: round robin; Single Elimination offered but disabled); team entry and seeding (reorderable only before start); fixture generation; schedule maker and generator; per-set score entry; standings; knockout bracket; placement matches; final rankings; editors; schedule print; scoresheet templates; light and dark themes; in-app help.
+**Built:** account sign-up and sign-in; tournament creation with divisions (Classic: pools then knockout; League: round robin; Single Elimination offered but disabled); team entry and seeding (reorderable only before start); fixture generation; schedule maker and generator; per-set score entry; standings; knockout bracket; placement matches; final rankings; collaborators; schedule print; scoresheet templates; light and dark themes; in-app help.
 
 **Not built** (do not design as if present, do not advertise): analytics, statistics or reports beyond standings and final rankings; team pages / follow a team; live point-by-point scoring; editing tournament details after creation; draft/unlisted visibility; password reset and account management; forfeit handling.
 

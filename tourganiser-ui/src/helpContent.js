@@ -90,7 +90,7 @@ export const HELP_TOPICS = {
 				heading: "If you're the organiser",
 				paragraphs: [
 					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament marks an Ongoing tournament as finished. Results can still be corrected afterwards.',
-					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Deleting the tournament, adding editors and each division's ranking and placement options are on the Settings tab.",
+					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Deleting the tournament, adding collaborators and each division's ranking and placement options are on the Settings tab.",
 					"While the tournament hasn't started, each division's card also offers a way to add or remove divisions — Add Division opens the same screen the creation page uses, and a division's own card can be removed (which takes its teams, fixtures and any scheduled slots with it). Both close once the tournament starts, since the schedule and standings would otherwise be describing a division that no longer matches them.",
 				],
 			},
@@ -108,14 +108,17 @@ export const HELP_TOPICS = {
 		sections: [
 			{
 				paragraphs: [
-					'Only the organiser sees this tab. It holds who else can enter results, how each division ranks its teams and plays out its knockout, and deleting the tournament.',
+					"This tab holds who else works on the tournament, how each division ranks its teams and plays out its knockout, and deleting the tournament. The organiser sees all of it. A Co-organiser sees only the division options, and nobody else sees the tab.",
 				],
 			},
 			{
-				heading: 'Editors',
+				heading: 'Collaborators',
 				paragraphs: [
-					"Add someone by their email or username and they can enter results straight away — there's no invitation for them to accept. An editor can score the fixtures in each division's current round and nothing else: they can't change teams, the schedule, divisions or settings. Removing an editor takes effect immediately; results they already entered stay as they are.",
-					'You and your editors see who entered each result on its fixture. Nobody else does.',
+					"Add someone by their email or username, choose a role, and they have it straight away — there's no invitation for them to accept. Changing someone's role or removing them takes effect immediately too; results they already entered stay as they are.",
+					"A Scorer enters results for each division's current round and nothing else.",
+					'A Match Manager runs the day: as well as scoring, they can correct results in earlier rounds that have not been locked, edit the schedule, advance rounds and print scoresheets. Advancing a round locks it for everyone, you included.',
+					"A Co-organiser can also edit teams and divisions, choose the scoresheet template, and start and end the tournament. Only you can manage collaborators or delete the tournament.",
+					'You and your collaborators see who entered each result on its fixture. Nobody else does.',
 				],
 			},
 			{
@@ -156,7 +159,7 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Entering results and scheduling',
 				paragraphs: [
-					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match. An editor the organiser has added can do the same for the current round's fixtures.",
+					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match. A Scorer the organiser has added can do the same for the current round's fixtures, and a Match Manager or Co-organiser for any fixture the organiser can.",
 					"If you organise this tournament, Create Schedule opens the schedule builder, where you assign fixtures to courts and times — see its own help entry once it's open.",
 				],
 			},

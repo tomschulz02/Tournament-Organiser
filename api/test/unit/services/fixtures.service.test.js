@@ -29,7 +29,7 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
 
 vi.mock("../../../src/repositories/editors.repository.js", () => ({
     editorsRepository: {
-        isEditor: vi.fn()
+        getRole: vi.fn()
     }
 }));
 
@@ -46,8 +46,6 @@ const {
     setsWon,
     roundHolding,
     fixtureRoundsOf,
-    resolveResultRole,
-    currentRoundIndex
 } = await import("../../../src/services/fixtures.service.js");
 const { editorsRepository } = await import("../../../src/repositories/editors.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
@@ -62,7 +60,7 @@ beforeEach(() => {
     fixturesRepository.getFixtureWithOwner.mockReset();
     fixturesRepository.updateResult.mockReset();
     fixturesRepository.getFixtures.mockReset().mockResolvedValue([]);
-    editorsRepository.isEditor.mockReset().mockResolvedValue(false);
+    editorsRepository.getRole.mockReset().mockResolvedValue(null);
     fixturesRepository.countCompletedInRounds.mockReset().mockResolvedValue(0);
     divisionsRepository.getStateForUpdate.mockReset().mockResolvedValue(makeState());
     divisionsRepository.updateStateRounds.mockReset();
@@ -992,14 +990,9 @@ describe("editor access to fixtureService.updateResult", () => {
     }
 
     beforeEach(() => {
-        divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({ rounds }));
-        editorsRepository.isEditor.mockResolvedValue(true);
-        // Pool Play and Semifinals are bound; the final still reads "Rank 1".
-        fixturesRepository.getFixtures.mockResolvedValue([
-            fixtureIn("Pool Play", { id: "p1" }),
-            fixtureIn("Semifinals", { id: "s1" }),
-            fixtureIn("Finals", { id: "f9", team_1: null, team_2: null })
-        ]);
+        // Pool Play is over and the Semifinals are being played.
+        divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({ rounds, currentRound: 1 }));
+        editorsRepository.getRole.mockResolvedValue("SCORER");
     });
 
     it("lets an editor write a result in the current round, and stamps them", async () => {
@@ -1007,8 +1000,7 @@ describe("editor access to fixtureService.updateResult", () => {
 
         await fixtureService.updateResult("f1", "editor-1", [[21, 15]], true);
 
-        expect(editorsRepository.isEditor).toHaveBeenCalledWith("tour-1", "editor-1");
-        expect(fixturesRepository.getFixtures).toHaveBeenCalledWith("div-1");
+        expect(editorsRepository.getRole).toHaveBeenCalledWith("tour-1", "editor-1");
         expect(fixturesRepository.updateResult).toHaveBeenCalledWith(
             "f1", [[21], [15]], "COMPLETED", dbMock.client, "editor-1"
         );
@@ -1029,9 +1021,44 @@ describe("editor access to fixtureService.updateResult", () => {
 
         await fixtureService.updateResult("f1", "owner-1", [[21, 15]], true);
 
-        expect(editorsRepository.isEditor).not.toHaveBeenCalled();
-        expect(fixturesRepository.getFixtures).not.toHaveBeenCalled();
+        expect(editorsRepository.getRole).not.toHaveBeenCalled();
         expect(fixturesRepository.updateResult.mock.calls[0][4]).toBe("owner-1");
+    });
+
+    it.each(["MATCH_MANAGER", "CO_ORGANISER"])("lets a %s write outside the current round", async (role) => {
+        editorsRepository.getRole.mockResolvedValue(role);
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Pool Play"));
+
+        await fixtureService.updateResult("f1", "user-2", [[21, 15]], true);
+
+        expect(fixturesRepository.updateResult.mock.calls[0][4]).toBe("user-2");
+    });
+
+    it.each(["SCORER", "MATCH_MANAGER", "CO_ORGANISER"])("lets a %s write in the current round", async (role) => {
+        editorsRepository.getRole.mockResolvedValue(role);
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Semifinals"));
+
+        await fixtureService.updateResult("f1", "user-2", [[21, 15]], true);
+
+        expect(fixturesRepository.updateResult).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ["SCORER", "user-2"],
+        ["MATCH_MANAGER", "user-2"],
+        ["CO_ORGANISER", "user-2"],
+        ["the organiser", "owner-1"]
+    ])("refuses %s on a round that has been progressed past", async (role, userId) => {
+        editorsRepository.getRole.mockResolvedValue(role);
+        divisionsRepository.getStateForUpdate.mockResolvedValue(
+            makeState({ rounds: [makeRound({ name: "Pool Play", results: ["t1", "t2"] }), ...rounds.slice(1)], currentRound: 1 })
+        );
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Pool Play"));
+
+        await expect(fixtureService.updateResult("f1", userId, [[21, 15]], true))
+            .rejects.toMatchObject({ code: "ROUND_LOCKED" });
+
+        expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
     });
 
     it("reads a division with no rounds as having no current round to hold an editor to", async () => {
@@ -1043,8 +1070,56 @@ describe("editor access to fixtureService.updateResult", () => {
         expect(fixturesRepository.updateResult).toHaveBeenCalled();
     });
 
+    it("reads a missing currentRound as the first round, as progression does", async () => {
+        divisionsRepository.getStateForUpdate.mockResolvedValue({ teams: [], rounds });
+
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Pool Play"));
+        await fixtureService.updateResult("f1", "editor-1", [[21, 15]], true);
+        expect(fixturesRepository.updateResult).toHaveBeenCalledTimes(1);
+
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Semifinals"));
+        await expect(fixtureService.updateResult("f1", "editor-1", [[21, 15]], true))
+            .rejects.toMatchObject({ code: "EDITOR_ROUND_NOT_CURRENT" });
+    });
+
+    it("refuses an editor on a fixture whose round the division does not list", async () => {
+        fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Gone"));
+
+        await expect(fixtureService.updateResult("f1", "editor-1", [[21, 15]], true))
+            .rejects.toMatchObject({ code: "EDITOR_ROUND_NOT_CURRENT" });
+    });
+
+    describe("on a multi-leg League, where every leg's fixtures are bound from the start", () => {
+        const legs = [
+            makeRound({ name: "Round Robin (Leg 1)" }),
+            makeRound({ name: "Round Robin (Leg 2)" })
+        ];
+
+        it("holds an editor to the leg in progress, not the last leg", async () => {
+            divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({ rounds: legs, currentRound: 0 }));
+
+            fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Round Robin (Leg 1)"));
+            await fixtureService.updateResult("f1", "editor-1", [[21, 15]], true);
+            expect(fixturesRepository.updateResult).toHaveBeenCalledTimes(1);
+
+            fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Round Robin (Leg 2)"));
+            await expect(fixtureService.updateResult("f1", "editor-1", [[21, 15]], true))
+                .rejects.toMatchObject({ code: "EDITOR_ROUND_NOT_CURRENT", status: 403 });
+            expect(fixturesRepository.updateResult).toHaveBeenCalledTimes(1);
+        });
+
+        it("moves the editor on to the next leg once the round has advanced", async () => {
+            divisionsRepository.getStateForUpdate.mockResolvedValue(makeState({ rounds: legs, currentRound: 1 }));
+
+            fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn("Round Robin (Leg 2)"));
+            await fixtureService.updateResult("f1", "editor-1", [[21, 15]], true);
+
+            expect(fixturesRepository.updateResult).toHaveBeenCalledTimes(1);
+        });
+    });
+
     it("refuses someone who is neither organiser nor editor, in any round", async () => {
-        editorsRepository.isEditor.mockResolvedValue(false);
+        editorsRepository.getRole.mockResolvedValue(null);
 
         for (const round of ["Pool Play", "Semifinals"]) {
             fixturesRepository.getFixtureWithOwner.mockResolvedValue(fixtureIn(round));
@@ -1054,20 +1129,6 @@ describe("editor access to fixtureService.updateResult", () => {
         }
 
         expect(fixturesRepository.updateResult).not.toHaveBeenCalled();
-    });
-});
-
-describe("resolveResultRole", () => {
-    it("is OWNER for the organiser, without a lookup", async () => {
-        expect(await resolveResultRole({ created_by: "u1", tournament_id: "t" }, "u1")).toBe("OWNER");
-        expect(editorsRepository.isEditor).not.toHaveBeenCalled();
-    });
-
-    it("is EDITOR for a member and NONE otherwise", async () => {
-        editorsRepository.isEditor.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-
-        expect(await resolveResultRole({ created_by: "u1", tournament_id: "t" }, "u2")).toBe("EDITOR");
-        expect(await resolveResultRole({ created_by: "u1", tournament_id: "t" }, "u3")).toBe("NONE");
     });
 });
 
@@ -1088,21 +1149,5 @@ describe("fixtureRoundsOf with placement matches", () => {
     it("maps a placement fixture back to the round holding it", () => {
         expect(roundHolding("Semifinals · Places 5-8")).toBe("Semifinals");
         expect(roundHolding("Finals · 11th Place")).toBe("Finals");
-    });
-});
-
-describe("currentRoundIndex", () => {
-    const rounds = [makeRound({ name: "Pool Play" }), makeRound({ name: "Finals", type: "knockout" })];
-
-    it("is the highest round holding a fixture with both teams bound", () => {
-        expect(currentRoundIndex([
-            makeFixture({ round: "Pool Play", team_1: "a", team_2: "b" }),
-            makeFixture({ round: "3rd Place Playoff", team_1: "c", team_2: "d" }),
-            makeFixture({ round: "Finals", team_1: null, team_2: null })
-        ], rounds)).toBe(1);
-    });
-
-    it("ignores half-bound fixtures, and is -1 when nothing is bound", () => {
-        expect(currentRoundIndex([makeFixture({ round: "Finals", team_1: "a", team_2: null })], rounds)).toBe(-1);
     });
 });

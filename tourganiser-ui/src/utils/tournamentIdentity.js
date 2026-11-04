@@ -60,9 +60,9 @@ function buildElements(rand, motif) {
 			cy: range(rand, 8, 92),
 			size: range(rand, 14, 34),
 			rotation: range(rand, 0, 360),
-			// Visible without needing hover — always rendered at full strength, the
-			// card's own text panel (see .tournament-card-content) is what keeps
-			// this from ever competing with readability, not a low ceiling here.
+			// Visible without needing hover — always rendered at full strength. Each
+			// caller's stylesheet decides how strong the layer reads behind its own
+			// content, not a low ceiling here.
 			opacity: range(rand, 0.16, 0.34),
 		});
 	}

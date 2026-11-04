@@ -6,10 +6,17 @@ import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { generateFixtures, fixtureService, generatePartialRoundRobinPairs, roundHolding } from "./fixtures.service.js";
 import { qualifierCount } from "./progression.service.js";
 import { RANKING_BASES } from "../utils/standings.js";
+import { assertCan, resolveRole } from "../utils/tournamentPermissions.js";
 import { MAX_TEAMS_PER_DIVISION, MAX_ROUND_ROBIN_LEGS, MAX_FIXTURES_PER_DIVISION } from "../config/limits.js";
 import { v4 as uuidv4 } from "uuid";
 
 const db = DatabaseConnection();
+
+// requireAuth proves the caller is logged in. This proves their role on the
+// division's tournament covers changing how it is set up.
+async function assertManagesSetup(division, userId) {
+    assertCan(await resolveRole(division.tournament_id, division.created_by, userId), "manageSetup");
+}
 
 // `client` is required, not defaulted: a division is only ever created as part
 // of creating a tournament, inside that transaction. createTournament owns the
@@ -96,11 +103,7 @@ async function updateDivision(divisionId, userId, payload = {}) {
         throw new AppError("DIVISION_NOT_FOUND");
     }
 
-    // requireAuth proves the caller is logged in. This proves the tournament is
-    // theirs, the same check progression's loadDivision makes.
-    if (division.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    await assertManagesSetup(division, userId);
 
     const existingIds = teamIdsOf(division.state);
     const entries = readTeamEntries(payload.teams, existingIds);
@@ -129,10 +132,9 @@ async function updateDivision(divisionId, userId, payload = {}) {
 // one is the teams-and-structure editor: its reorder and rebuild paths are gated
 // on Not Started and on no results existing, and a colour has no business being
 // refused by either. A division's colour is presentation, so it is changeable
-// for as long as the organiser owns the tournament — during play, and after it
-// has finished.
+// at any time — during play, and after the tournament has finished.
 //
-// Ownership is the only check, the same one updateDivision makes. `colour` is
+// The role is the only check, the same one updateDivision makes. `colour` is
 // either one of the twelve palette tokens or null, which clears the choice and
 // hands the division back to the automatic accent.
 async function updateDivisionColour(divisionId, userId, colour) {
@@ -141,9 +143,7 @@ async function updateDivisionColour(divisionId, userId, colour) {
         throw new AppError("DIVISION_NOT_FOUND");
     }
 
-    if (division.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    await assertManagesSetup(division, userId);
 
     const value = normaliseDivisionColour(colour);
 
@@ -170,9 +170,7 @@ async function updateDivisionSettings(divisionId, userId, payload = {}) {
         throw new AppError("DIVISION_NOT_FOUND");
     }
 
-    if (division.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    await assertManagesSetup(division, userId);
 
     const current = {
         rankingBasis: division.ranking_basis ?? "MATCHES_WON",
@@ -506,9 +504,7 @@ async function deleteDivision(divisionId, userId) {
         throw new AppError("DIVISION_NOT_FOUND");
     }
 
-    if (division.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    await assertManagesSetup(division, userId);
 
     if ((division.tournament_status || "Not Started") !== "Not Started") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");

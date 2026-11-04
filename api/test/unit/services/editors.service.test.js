@@ -3,8 +3,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("../../../src/repositories/editors.repository.js", () => ({
     editorsRepository: {
         getEditors: vi.fn(),
-        isEditor: vi.fn(),
+        getRole: vi.fn(),
         addEditor: vi.fn(),
+        updateRole: vi.fn(),
         removeEditor: vi.fn(),
         getWorkedWith: vi.fn(),
         searchByUsernamePrefix: vi.fn()
@@ -36,8 +37,9 @@ beforeEach(() => {
     vi.mocked(tournamentRepository.getTournamentById).mockReset().mockResolvedValue(tournament);
     vi.mocked(tournamentRepository.touchTournament).mockReset();
     vi.mocked(editorsRepository.getEditors).mockReset().mockResolvedValue([]);
-    vi.mocked(editorsRepository.isEditor).mockReset().mockResolvedValue(false);
+    vi.mocked(editorsRepository.getRole).mockReset().mockResolvedValue(null);
     vi.mocked(editorsRepository.addEditor).mockReset();
+    vi.mocked(editorsRepository.updateRole).mockReset().mockResolvedValue(true);
     vi.mocked(editorsRepository.removeEditor).mockReset().mockResolvedValue(true);
     vi.mocked(userRepository.findUserByEmailOrUsername).mockReset();
 });
@@ -61,15 +63,15 @@ describe("ownership", () => {
 });
 
 describe("listEditors", () => {
-    it("returns id, username and when they were added", async () => {
+    it("returns id, username, role and when they were added", async () => {
         editorsRepository.getEditors.mockResolvedValue([
-            { id: "user-2", username: "priya", created_at: "2026-09-24T10:00:00Z" },
-            { id: "user-3", username: "sam" }
+            { id: "user-2", username: "priya", role: "SCORER", created_at: "2026-09-24T10:00:00Z" },
+            { id: "user-3", username: "sam", role: "CO_ORGANISER" }
         ]);
 
         expect(await editorService.listEditors("t-1", OWNER)).toEqual([
-            { id: "user-2", username: "priya", addedAt: "2026-09-24T10:00:00Z" },
-            { id: "user-3", username: "sam", addedAt: null }
+            { id: "user-2", username: "priya", role: "SCORER", addedAt: "2026-09-24T10:00:00Z" },
+            { id: "user-3", username: "sam", role: "CO_ORGANISER", addedAt: null }
         ]);
     });
 });
@@ -78,12 +80,27 @@ describe("addEditor", () => {
     it("resolves the user by email or username and grants access immediately", async () => {
         userRepository.findUserByEmailOrUsername.mockResolvedValue({ id: "user-2", username: "priya", email: "p@example.com" });
 
-        expect(await editorService.addEditor("t-1", OWNER, "  p@example.com ")).toEqual({ id: "user-2", username: "priya" });
+        expect(await editorService.addEditor("t-1", OWNER, "  p@example.com ")).toEqual({ id: "user-2", username: "priya", role: "SCORER" });
 
         expect(userRepository.findUserByEmailOrUsername).toHaveBeenCalledWith("p@example.com");
-        expect(editorsRepository.addEditor).toHaveBeenCalledWith("t-1", "user-2");
+        // Nobody is given more than a scorer without asking for it.
+        expect(editorsRepository.addEditor).toHaveBeenCalledWith("t-1", "user-2", "SCORER");
         // The editor's view changes, so the tournament's ETag has to move.
         expect(tournamentRepository.touchTournament).toHaveBeenCalledWith("t-1");
+    });
+
+    it.each(["SCORER", "MATCH_MANAGER", "CO_ORGANISER"])("gives them the %s role when asked", async (role) => {
+        userRepository.findUserByEmailOrUsername.mockResolvedValue({ id: "user-2", username: "priya" });
+
+        expect((await editorService.addEditor("t-1", OWNER, "priya", role)).role).toBe(role);
+        expect(editorsRepository.addEditor).toHaveBeenCalledWith("t-1", "user-2", role);
+    });
+
+    it.each(["ORGANISER", "ADMIN", "", null, 7])("refuses %s as a role before looking anyone up", async (role) => {
+        await expect(editorService.addEditor("t-1", OWNER, "priya", role)).rejects.toMatchObject({ code: "ROLE_INVALID", status: 400 });
+
+        expect(userRepository.findUserByEmailOrUsername).not.toHaveBeenCalled();
+        expect(editorsRepository.addEditor).not.toHaveBeenCalled();
     });
 
     it("refuses a user who does not exist", async () => {
@@ -102,7 +119,7 @@ describe("addEditor", () => {
 
     it("refuses someone who is already an editor", async () => {
         userRepository.findUserByEmailOrUsername.mockResolvedValue({ id: "user-2", username: "priya" });
-        editorsRepository.isEditor.mockResolvedValue(true);
+        editorsRepository.getRole.mockResolvedValue("SCORER");
 
         await expect(editorService.addEditor("t-1", OWNER, "priya")).rejects.toMatchObject({ code: "EDITOR_ALREADY_ADDED" });
         expect(editorsRepository.addEditor).not.toHaveBeenCalled();
@@ -112,6 +129,35 @@ describe("addEditor", () => {
         await expect(editorService.addEditor("t-1", OWNER, undefined)).rejects.toMatchObject({ code: "MISSING_FIELDS" });
         await expect(editorService.addEditor("t-1", OWNER, 42)).rejects.toMatchObject({ code: "FIELD_INVALID" });
         expect(userRepository.findUserByEmailOrUsername).not.toHaveBeenCalled();
+    });
+});
+
+describe("updateEditorRole", () => {
+    it("changes the role and moves the tournament's stamp, so their next load shows it", async () => {
+        expect(await editorService.updateEditorRole("t-1", OWNER, "user-2", "MATCH_MANAGER")).toEqual({ id: "user-2", role: "MATCH_MANAGER" });
+
+        expect(editorsRepository.updateRole).toHaveBeenCalledWith("t-1", "user-2", "MATCH_MANAGER");
+        expect(tournamentRepository.touchTournament).toHaveBeenCalledWith("t-1");
+    });
+
+    it("refuses someone who is not a collaborator, without moving the stamp", async () => {
+        editorsRepository.updateRole.mockResolvedValue(false);
+
+        await expect(editorService.updateEditorRole("t-1", OWNER, "nobody", "SCORER")).rejects.toMatchObject({ code: "EDITOR_NOT_FOUND" });
+        expect(tournamentRepository.touchTournament).not.toHaveBeenCalled();
+    });
+
+    it.each(["ORGANISER", "ADMIN", undefined, null])("refuses %s as a role without writing", async (role) => {
+        await expect(editorService.updateEditorRole("t-1", OWNER, "user-2", role)).rejects.toMatchObject({ code: "ROLE_INVALID" });
+
+        expect(editorsRepository.updateRole).not.toHaveBeenCalled();
+    });
+
+    it("refuses anyone but the organiser, a co-organiser included", async () => {
+        editorsRepository.getRole.mockResolvedValue("CO_ORGANISER");
+
+        await expect(editorService.updateEditorRole("t-1", "user-3", "user-2", "SCORER")).rejects.toMatchObject({ code: "ROLE_NOT_PERMITTED" });
+        expect(editorsRepository.updateRole).not.toHaveBeenCalled();
     });
 });
 

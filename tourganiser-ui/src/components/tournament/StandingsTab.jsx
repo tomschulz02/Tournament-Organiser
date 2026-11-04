@@ -25,7 +25,7 @@ export default function StandingsTab({
 	divisions = [],
 	selectedDivisionId,
 	onSelectDivision,
-	creator = false,
+	canProgressRounds = false,
 	onProgressRound,
 }) {
 	// Which stage the reader asked for, which is not necessarily one the current
@@ -94,7 +94,7 @@ export default function StandingsTab({
 				    not DivisionSelector rendered anything beside it — a single-division
 				    tournament leaves this the toolbar's only child, and justify-content:
 				    space-between alone would then put it on the left. */}
-				{creator && onProgressRound && canProgress(division) && (
+				{canProgressRounds && onProgressRound && canProgress(division) && (
 					<button
 						type="button"
 						className="tv-primary-action tv-standings-progress-action"

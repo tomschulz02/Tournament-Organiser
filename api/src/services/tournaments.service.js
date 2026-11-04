@@ -4,6 +4,7 @@ import { userRepository } from "../repositories/users.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { editorsRepository } from "../repositories/editors.repository.js";
+import { ORGANISER, ROLE_LABELS, assertCan, capabilitiesFor, resolveRole } from "../utils/tournamentPermissions.js";
 import { divisionService } from "./divisions.service.js";
 import { getISODate, getLongDate } from "../utils/DateHandler.js";
 import { formatTournamentViewPayload } from "../utils/tournamentViewFormatter.js";
@@ -67,12 +68,18 @@ async function fetchTournaments() {
     return groupTournamentsByStatus(formatTournamentDates(tournaments));
 }
 
-// The Profile page's two lists. Both flat, most-recent-first, unlike
+// The Profile page's lists. All flat, most-recent-first, unlike
 // fetchTournaments' status grouping — Profile's lists are simpler on purpose.
 // See docs/decisions.md.
 
 async function getMyTournaments(userId) {
     const tournaments = await tournamentRepository.getTournamentsByCreator(userId);
+
+    return formatTournamentDates(tournaments);
+}
+
+async function getCollaboratingTournaments(userId) {
+    const tournaments = await tournamentRepository.getTournamentsByCollaborator(userId);
 
     return formatTournamentDates(tournaments);
 }
@@ -130,10 +137,8 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
         fixturesRepository.getFixturesByDivisionIds(divisionIds)
     ]);
 
-    const creator = viewerUserId !== null && viewerUserId === tournament.created_by;
-    // Only asked for a signed-in viewer who is not the organiser: anyone else
-    // cannot be an editor, and a public view costs no extra query.
-    const editor = !creator && viewerUserId !== null && (await editorsRepository.isEditor(tournamentId, viewerUserId));
+    // A public view costs no extra query, and neither does the organiser's.
+    const role = await resolveRole(tournamentId, tournament.created_by, viewerUserId);
 
     const fixturesByDivisionId = groupByDivisionId(fixtures);
     const view = formatTournamentViewPayload({
@@ -143,12 +148,13 @@ async function fetchTournamentDetails(tournamentId, viewerUserId = null) {
         fixturesByDivisionId,
         // Who entered each result is for the people entering them. Everyone
         // else is handed no attribution at all, not an empty one.
-        attribution: creator || editor ? await buildAttribution(tournament, fixtures, viewerUserId) : null
+        attribution: role ? await buildAttribution(tournament, fixtures, viewerUserId) : null
     });
 
     return {
-        creator,
-        editor,
+        creator: role === ORGANISER,
+        role,
+        can: capabilitiesFor(role),
         // Derived from rows already loaded, so this costs no extra query. The
         // controller turns it into an ETag; it is not part of the payload.
         changeKey: buildChangeKey({ tournament, divisions }),
@@ -185,7 +191,7 @@ async function getTournamentChangeKey(tournamentId) {
 // zero rows affected for both.
 
 async function startTournament(tournamentId, userId) {
-    const tournament = await loadOwnedTournament(tournamentId, userId);
+    const tournament = await loadTournamentFor(tournamentId, userId, "manageSetup");
 
     if (statusOf(tournament) === "Ongoing") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");
@@ -200,7 +206,7 @@ async function startTournament(tournamentId, userId) {
 }
 
 async function endTournament(tournamentId, userId) {
-    const tournament = await loadOwnedTournament(tournamentId, userId);
+    const tournament = await loadTournamentFor(tournamentId, userId, "manageSetup");
 
     if (statusOf(tournament) === "Not Started") {
         throw new AppError("TOURNAMENT_NOT_STARTED");
@@ -219,7 +225,7 @@ async function endTournament(tournamentId, userId) {
 // there is no state a half-played tournament could otherwise be left in. It is
 // not silent: the client confirms first, naming what the cascade takes with it.
 async function deleteTournament(tournamentId, userId) {
-    await loadOwnedTournament(tournamentId, userId);
+    await loadTournamentFor(tournamentId, userId, "deleteTournament");
 
     await tournamentRepository.deleteTournament(tournamentId);
 
@@ -241,7 +247,7 @@ async function deleteTournament(tournamentId, userId) {
 // through the same path. The transaction exists because createDivision requires
 // a client and writes three tables.
 async function addDivision(tournamentId, userId, division) {
-    const tournament = await loadOwnedTournament(tournamentId, userId);
+    const tournament = await loadTournamentFor(tournamentId, userId, "manageSetup");
 
     if (statusOf(tournament) !== "Not Started") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");
@@ -280,7 +286,7 @@ async function addDivision(tournamentId, userId, division) {
 // Reading the fixtures before taking the lock would leave a window where both
 // orders lose. See docs/schedule.md, "Who writes this column".
 async function updateSchedule(tournamentId, userId, schedule) {
-    const tournament = await loadOwnedTournament(tournamentId, userId);
+    const tournament = await loadTournamentFor(tournamentId, userId, "editSchedule");
 
     return await db.withTransaction(async (client) => {
         await tournamentRepository.getScheduleForUpdate(tournamentId, client);
@@ -318,7 +324,7 @@ async function updateSchedule(tournamentId, userId, schedule) {
 // which is entirely the frontend's job (see docs/handover-scoresheets.md), so
 // this validates only that the shape is one of those, not which kind it is.
 async function updateScoresheetTemplate(tournamentId, userId, templateKey) {
-    await loadOwnedTournament(tournamentId, userId);
+    await loadTournamentFor(tournamentId, userId, "manageSetup");
 
     if (templateKey !== null && templateKey !== undefined) {
         assertText(templateKey, "scoresheetTemplate", { max: 200 });
@@ -330,8 +336,8 @@ async function updateScoresheetTemplate(tournamentId, userId, templateKey) {
 }
 
 // Names and roles for everyone who has entered a result in this tournament, keyed
-// by user id. The role is the one they hold now: someone removed as an editor is
-// still named on the results they entered, but no longer as an editor.
+// by user id. The role is the one they hold now: someone removed as a collaborator
+// is still named on the results they entered, but with no role beside their name.
 async function buildAttribution(tournament, fixtures, viewerUserId) {
     const ids = [...new Set(fixtures.map((fixture) => fixture.entered_by).filter(Boolean))];
     if (ids.length === 0) {
@@ -342,31 +348,29 @@ async function buildAttribution(tournament, fixtures, viewerUserId) {
         userRepository.getUsernamesByIds(ids),
         editorsRepository.getEditors(tournament.id)
     ]);
-    const editorIds = new Set(editors.map((editor) => editor.id));
+    const roles = new Map(editors.map((editor) => [editor.id, editor.role]));
 
     return new Map(
         users.map((user) => [
             user.id,
             {
                 name: user.username,
-                role: user.id === tournament.created_by ? "organiser" : editorIds.has(user.id) ? "editor" : null,
+                role: ROLE_LABELS[user.id === tournament.created_by ? ORGANISER : roles.get(user.id)] ?? null,
                 self: user.id === viewerUserId
             }
         ])
     );
 }
 
-// requireAuth proves the caller is logged in. This proves the tournament is
-// theirs, and is the tournament-level counterpart of progression's loadDivision.
-async function loadOwnedTournament(tournamentId, userId) {
+// requireAuth proves the caller is logged in. This proves their role covers this
+// capability, and is the tournament-level counterpart of progression's loadDivision.
+async function loadTournamentFor(tournamentId, userId, capability) {
     const tournament = await tournamentRepository.getTournamentById(tournamentId);
     if (!tournament) {
         throw new AppError("TOURNAMENT_NOT_FOUND");
     }
 
-    if (tournament.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    assertCan(await resolveRole(tournamentId, tournament.created_by, userId), capability);
 
     return tournament;
 }
@@ -383,6 +387,7 @@ export const tournamentService = {
     fetchTournamentDetails,
     getTournamentChangeKey,
     getMyTournaments,
+    getCollaboratingTournaments,
     getSavedTournaments,
     saveTournament,
     unsaveTournament,

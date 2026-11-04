@@ -59,6 +59,12 @@ async function getMyTournaments(req, res) {
     res.status(200).json({ success: true, message: 'Tournaments fetched', data: tournaments });
 }
 
+async function getMyCollaboratingTournaments(req, res) {
+    const tournaments = await tournamentService.getCollaboratingTournaments(req.user.id);
+
+    res.status(200).json({ success: true, message: 'Collaborating tournaments fetched', data: tournaments });
+}
+
 async function getMySavedTournaments(req, res) {
     const tournaments = await tournamentService.getSavedTournaments(req.user.id);
 
@@ -82,6 +88,7 @@ export const userController = {
     changePassword,
     getUserProfile,
     getMyTournaments,
+    getMyCollaboratingTournaments,
     getMySavedTournaments,
     checkLogin
 }

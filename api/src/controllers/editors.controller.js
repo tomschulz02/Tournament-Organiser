@@ -18,16 +18,33 @@ async function listEditors(req, res) {
     res.status(200).json({ success: true, message: "Editors fetched", data });
 }
 
-// The body is `{ identifier }` — an email or a username.
+// The body is `{ identifier, role }`: an email or a username, and optionally the
+// role to give them.
 async function addEditor(req, res) {
     const { tournamentId } = req.params;
     if (!isUuid(tournamentId)) {
         throw new AppError("TOURNAMENT_NOT_FOUND");
     }
 
-    const data = await editorService.addEditor(tournamentId, req.user.id, req.body?.identifier);
+    const data = await editorService.addEditor(tournamentId, req.user.id, req.body?.identifier, req.body?.role);
 
     res.status(201).json({ success: true, message: "Editor added", data });
+}
+
+// The body is `{ role }`.
+async function updateEditorRole(req, res) {
+    const { tournamentId, userId } = req.params;
+    if (!isUuid(tournamentId)) {
+        throw new AppError("TOURNAMENT_NOT_FOUND");
+    }
+    // A malformed id can never be an editor's.
+    if (!isUuid(userId)) {
+        throw new AppError("EDITOR_NOT_FOUND");
+    }
+
+    const data = await editorService.updateEditorRole(tournamentId, req.user.id, userId, req.body?.role);
+
+    res.status(200).json({ success: true, message: "Role updated", data });
 }
 
 // ?q= is whatever has been typed so far. What it may match is the service's.
@@ -60,6 +77,7 @@ async function removeEditor(req, res) {
 export const editorController = {
     listEditors,
     addEditor,
+    updateEditorRole,
     removeEditor,
     searchEditorCandidates
 };

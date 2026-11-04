@@ -55,8 +55,8 @@ export default function ViewPage() {
 	// Retry bumps this, which changes the request key and re-runs the effect.
 	const [attempt, setAttempt] = useState(0);
 
-	// data.creator is resolved server-side from the session cookie, so logging
-	// in or out has to refetch for the organiser controls to be right. The
+	// data.can is resolved server-side from the session cookie, so logging in or
+	// out has to refetch for the management controls to be right. The
 	// version only moves on a real session change — keying on isLoggedIn would
 	// fetch twice on every load, since it is false until the mount check
 	// resolves. See AuthProvider.
@@ -238,14 +238,15 @@ export default function ViewPage() {
 	// quarterfinals start, while the round it belongs to is still ongoing it
 	// stays editable.
 	//
-	// An editor gets this and nothing else the organiser has, and only on the
-	// current round's fixtures. The server enforces both — see
-	// resolveResultRole in fixtures.service.js — this only decides where the
-	// control is offered.
-	const editorFixtureIds = data?.editor ? editableFixtureIds(data.divisions ?? []) : null;
+	// A role limited to the current round is offered it on that round's fixtures
+	// only. The server enforces this — see updateResult in fixtures.service.js —
+	// and every `can` below only decides what is offered.
+	const can = data?.can ?? {};
+	const currentRoundFixtureIds =
+		can.enterCurrentRoundResults && !can.enterAnyRoundResults ? editableFixtureIds(data.divisions ?? []) : null;
 
 	const renderScoreAction = (fixture) => {
-		if (!data?.creator && !editorFixtureIds?.has(fixture.id)) return null;
+		if (!can.enterAnyRoundResults && !currentRoundFixtureIds?.has(fixture.id)) return null;
 		if (!fixture.team_1_id || !fixture.team_2_id) return null;
 		if ((data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
 		if (fixture.locked) return null;
@@ -350,8 +351,8 @@ export default function ViewPage() {
 	// ways as the toolbar's "Print all": selected at all, and resolvable on
 	// this device. Absent rather than shown-and-erroring for anything else.
 	const renderScoresheetAction = (fixture) => {
-		// The organiser's tool. An editor enters results and nothing more.
-		if (!data?.creator) return null;
+		// A scorer enters results and nothing more.
+		if (!can.printScoresheets) return null;
 		if (!scoresheetTemplateKey) return null;
 
 		return (
@@ -514,10 +515,10 @@ export default function ViewPage() {
 
 			{/* Mounted only while open, so the fixture set is not rebuilt on every
 			    render of the page behind it. */}
-			{/* The organiser or an editor, and only while a fixture is chosen.
-			    Guarded on the role as well as on the id, so a session that ends
-			    while the modal is open cannot leave a write control on screen. */}
-			{scoringFixture && (data?.creator || data?.editor) && (
+			{/* Only while a fixture is chosen. Guarded on the capability as well as
+			    on the id, so a session that ends while the modal is open cannot
+			    leave a write control on screen. */}
+			{scoringFixture && can.enterCurrentRoundResults && (
 				<ScoreUpdateModal
 					fixture={scoringFixture}
 					slot={scheduleIndex.get(scoringFixture.id)}
@@ -529,7 +530,7 @@ export default function ViewPage() {
 				/>
 			)}
 
-			{progressingDivisionId && data?.creator && (
+			{progressingDivisionId && can.progressRounds && (
 				<NextRoundModal
 					divisionId={progressingDivisionId}
 					onConfirmed={handleRoundProgressed}
@@ -537,7 +538,7 @@ export default function ViewPage() {
 				/>
 			)}
 
-			{scheduleOpen && data?.creator && (
+			{scheduleOpen && can.editSchedule && (
 				<Suspense fallback={<LoadingScreen />}>
 					<ScheduleMakerModal
 						isOpen
@@ -551,7 +552,7 @@ export default function ViewPage() {
 				</Suspense>
 			)}
 
-			<TournamentShell tournamentId={id} name={title} creator={data?.creator}>
+			<TournamentShell tournamentId={id} name={title} creator={data?.creator} canOpenSettings={can.manageSetup}>
 				{loading && <SectionState variant="loading" />}
 				{!loading && !data && result.error && (
 					<SectionState
@@ -573,7 +574,7 @@ export default function ViewPage() {
 						onDeleted={handleDeleted}
 						// Only for someone who can act on a fixture at all. Everyone
 						// else's rows carry no action slot.
-						renderFixtureAction={data.creator || data.editor ? renderFixtureAction : undefined}
+						renderFixtureAction={can.enterCurrentRoundResults ? renderFixtureAction : undefined}
 						onProgressRound={setProgressingDivisionId}
 						onPrintAllScoresheets={handlePrintAllScoresheets}
 						scoresheetTemplateSelected={Boolean(scoresheetTemplateKey)}
@@ -600,14 +601,17 @@ function TabPanel({
 	scoresheetTemplateSelected,
 	scoresheetTemplateReady,
 }) {
-	// The organiser's settings. The tab is only offered to them, and a link to it
-	// followed by anyone else lands on Overview rather than an empty page — the
-	// server's owner check on every endpoint below it is the real gate.
-	if (tab === 'settings' && data.creator) {
+	const can = data.can ?? {};
+
+	// The tab is only offered to a role with something to change there, and a link
+	// to it followed by anyone else lands on Overview rather than an empty page —
+	// the server's check on every endpoint below it is the real gate.
+	if (tab === 'settings' && can.manageSetup) {
 		return (
 			<SettingsTab
 				tournament={data.tournament}
 				divisions={data.divisions ?? []}
+				can={can}
 				onChanged={onReload}
 				onDeleted={onDeleted}
 			/>
@@ -620,7 +624,7 @@ function TabPanel({
 				tournament={data.tournament}
 				dashboard={data.dashboard}
 				onOpenDivision={onOpenDivision}
-				creator={data.creator}
+				canManageSetup={can.manageSetup}
 				onChanged={onReload}
 			/>
 		);
@@ -644,14 +648,15 @@ function TabPanel({
 			<>
 				<RoundCompleteBanner
 					divisions={data.divisions ?? []}
-					creator={data.creator}
+					canProgressRounds={can.progressRounds}
 					onGoToStandings={(divisionId) => onOpenDivision(divisionId, 'standings')}
 				/>
 				{hasScheduledFixture ? (
 					<ScheduleTab
 						tournament={data.tournament}
 						divisions={data.divisions ?? []}
-						creator={data.creator}
+						canEditSchedule={can.editSchedule}
+						canPrintScoresheets={can.printScoresheets}
 						onEditSchedule={onOpenSchedule}
 						renderFixtureAction={renderFixtureAction}
 						onPrintAllScoresheets={onPrintAllScoresheets}
@@ -661,7 +666,7 @@ function TabPanel({
 				) : (
 					<FixturesTab
 						divisions={data.divisions ?? []}
-						creator={data.creator}
+						canEditSchedule={can.editSchedule}
 						onCreateSchedule={onOpenSchedule}
 						renderFixtureAction={renderFixtureAction}
 					/>
@@ -676,7 +681,7 @@ function TabPanel({
 				divisions={data.divisions ?? []}
 				selectedDivisionId={selectedDivisionId}
 				onSelectDivision={onSelectDivision}
-				creator={data.creator}
+				canProgressRounds={can.progressRounds}
 				onProgressRound={onProgressRound}
 			/>
 		);
@@ -687,7 +692,7 @@ function TabPanel({
 			divisions={data.divisions ?? []}
 			selectedDivisionId={selectedDivisionId}
 			onSelectDivision={onSelectDivision}
-			creator={data.creator}
+			canManageSetup={can.manageSetup}
 			// Reseeding is gated on Not Started, and the tab offers the handle
 			// only where the server would accept the request.
 			status={data.tournament?.status}

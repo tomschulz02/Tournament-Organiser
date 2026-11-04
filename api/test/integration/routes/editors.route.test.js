@@ -7,7 +7,7 @@ vi.mock("../../../src/config/db.js", async () => {
 });
 
 vi.mock("../../../src/services/editors.service.js", () => ({
-    editorService: { listEditors: vi.fn(), addEditor: vi.fn(), removeEditor: vi.fn(), searchCandidates: vi.fn() }
+    editorService: { listEditors: vi.fn(), addEditor: vi.fn(), updateEditorRole: vi.fn(), removeEditor: vi.fn(), searchCandidates: vi.fn() }
 }));
 
 const app = (await import("../../../src/app.js")).default;
@@ -23,6 +23,7 @@ const BASE = `/api/tournaments/${TOURNAMENT}/editors`;
 beforeEach(() => {
     vi.mocked(editorService.listEditors).mockReset();
     vi.mocked(editorService.addEditor).mockReset();
+    vi.mocked(editorService.updateEditorRole).mockReset();
     vi.mocked(editorService.removeEditor).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -74,7 +75,15 @@ describe("POST /api/tournaments/:tournamentId/editors", () => {
 
         expect(response.status).toBe(201);
         expect(response.body).toEqual({ success: true, message: "Editor added", data: { id: EDITOR, username: "priya" } });
-        expect(editorService.addEditor).toHaveBeenCalledWith(TOURNAMENT, "user-1", "priya@example.com");
+        expect(editorService.addEditor).toHaveBeenCalledWith(TOURNAMENT, "user-1", "priya@example.com", undefined);
+    });
+
+    it("hands the service the role when one is sent", async () => {
+        editorService.addEditor.mockResolvedValue({ id: EDITOR, username: "priya", role: "MATCH_MANAGER" });
+
+        await request(app).post(BASE).set("Cookie", authCookie({ id: "user-1" })).send({ identifier: "priya", role: "MATCH_MANAGER" });
+
+        expect(editorService.addEditor).toHaveBeenCalledWith(TOURNAMENT, "user-1", "priya", "MATCH_MANAGER");
     });
 
     it("passes the refusal through with its catalogue message", async () => {
@@ -83,7 +92,7 @@ describe("POST /api/tournaments/:tournamentId/editors", () => {
         const response = await request(app).post(BASE).set("Cookie", authCookie()).send({ identifier: "priya" });
 
         expect(response.status).toBe(409);
-        expect(response.body.message).toBe("That user is already an editor of this tournament");
+        expect(response.body.message).toBe("That user is already a collaborator on this tournament");
     });
 
     it("answers 404 for a malformed tournament id without reaching the service", async () => {
@@ -99,7 +108,62 @@ describe("POST /api/tournaments/:tournamentId/editors", () => {
         const response = await request(app).post(BASE).set("Cookie", authCookie({ id: "user-1" }));
 
         expect(response.status).toBe(400);
-        expect(editorService.addEditor).toHaveBeenCalledWith(TOURNAMENT, "user-1", undefined);
+        expect(editorService.addEditor).toHaveBeenCalledWith(TOURNAMENT, "user-1", undefined, undefined);
+    });
+});
+
+describe("PUT /api/tournaments/:tournamentId/editors/:userId", () => {
+    it("requires a session", async () => {
+        const response = await request(app).put(`${BASE}/${EDITOR}`).send({ role: "SCORER" });
+
+        expect(response.status).toBe(401);
+        expect(editorService.updateEditorRole).not.toHaveBeenCalled();
+    });
+
+    it("changes the role", async () => {
+        editorService.updateEditorRole.mockResolvedValue({ id: EDITOR, role: "CO_ORGANISER" });
+
+        const response = await request(app)
+            .put(`${BASE}/${EDITOR}`)
+            .set("Cookie", authCookie({ id: "user-1" }))
+            .send({ role: "CO_ORGANISER" });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, message: "Role updated", data: { id: EDITOR, role: "CO_ORGANISER" } });
+        expect(editorService.updateEditorRole).toHaveBeenCalledWith(TOURNAMENT, "user-1", EDITOR, "CO_ORGANISER");
+    });
+
+    it("answers 400 for a role that can't be given", async () => {
+        editorService.updateEditorRole.mockRejectedValue(new AppError("ROLE_INVALID"));
+
+        const response = await request(app).put(`${BASE}/${EDITOR}`).set("Cookie", authCookie()).send({ role: "ORGANISER" });
+
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe("That isn't a role you can give a collaborator");
+    });
+
+    it("hands the service an undefined role when there is no body", async () => {
+        editorService.updateEditorRole.mockRejectedValue(new AppError("ROLE_INVALID"));
+
+        await request(app).put(`${BASE}/${EDITOR}`).set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(editorService.updateEditorRole).toHaveBeenCalledWith(TOURNAMENT, "user-1", EDITOR, undefined);
+    });
+
+    it("answers 404 for a malformed tournament id without reaching the service", async () => {
+        const response = await request(app).put(`/api/tournaments/nope/editors/${EDITOR}`).set("Cookie", authCookie()).send({ role: "SCORER" });
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Tournament not found");
+        expect(editorService.updateEditorRole).not.toHaveBeenCalled();
+    });
+
+    it("answers 404 for a malformed user id without reaching the service", async () => {
+        const response = await request(app).put(`${BASE}/nope`).set("Cookie", authCookie()).send({ role: "SCORER" });
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("That user is not a collaborator on this tournament");
+        expect(editorService.updateEditorRole).not.toHaveBeenCalled();
     });
 });
 
@@ -120,14 +184,14 @@ describe("DELETE /api/tournaments/:tournamentId/editors/:userId", () => {
         const response = await request(app).delete(`${BASE}/${EDITOR}`).set("Cookie", authCookie());
 
         expect(response.status).toBe(404);
-        expect(response.body.message).toBe("That user is not an editor of this tournament");
+        expect(response.body.message).toBe("That user is not a collaborator on this tournament");
     });
 
     it("answers 404 for a malformed user id without reaching the service", async () => {
         const response = await request(app).delete(`${BASE}/nope`).set("Cookie", authCookie());
 
         expect(response.status).toBe(404);
-        expect(response.body.message).toBe("That user is not an editor of this tournament");
+        expect(response.body.message).toBe("That user is not a collaborator on this tournament");
         expect(editorService.removeEditor).not.toHaveBeenCalled();
     });
 

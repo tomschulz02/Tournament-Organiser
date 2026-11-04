@@ -14,11 +14,56 @@ import {
 	orderedStages,
 	PRELIMINARY_STAGE,
 	PLAYOFFS_STAGE,
+	editableFixtureIds,
 } from '../src/components/tournament/fixtureUtils';
 
 function filters(overrides = {}) {
 	return { ...EMPTY_FILTERS, ...overrides };
 }
+
+describe('editableFixtureIds', () => {
+	const bound = { team_1_id: 't1', team_2_id: 't2' };
+
+	it('offers only the leg in progress on a multi-leg League, whose legs are all bound', () => {
+		const division = (currentRound) => ({
+			state: { rounds: [{ name: 'Round Robin (Leg 1)' }, { name: 'Round Robin (Leg 2)' }], currentRound },
+			fixtures: [
+				{ id: 'leg-1', round: 'Round Robin (Leg 1)', ...bound },
+				{ id: 'leg-2', round: 'Round Robin (Leg 2)', ...bound },
+			],
+		});
+
+		expect([...editableFixtureIds([division(0)])]).toEqual(['leg-1']);
+		expect([...editableFixtureIds([division(1)])]).toEqual(['leg-2']);
+	});
+
+	it('counts a placement match as part of the round holding it', () => {
+		const division = {
+			state: { rounds: [{ name: 'Pool Play' }, { name: 'Semifinals' }], currentRound: 1 },
+			fixtures: [
+				{ id: 'pool', round: 'Pool Play', ...bound },
+				{ id: 'semi', round: 'Semifinals', ...bound },
+				{ id: 'places', round: 'Semifinals · Places 5-8', ...bound },
+			],
+		};
+
+		expect([...editableFixtureIds([division])]).toEqual(['semi', 'places']);
+	});
+
+	it('reads a missing currentRound as the first round, and copes with no state or fixtures', () => {
+		const division = {
+			state: { rounds: [{ name: 'Pool Play' }, { name: 'Finals' }] },
+			fixtures: [
+				{ id: 'pool', round: 'Pool Play', ...bound },
+				{ id: 'final', round: 'Finals', ...bound },
+			],
+		};
+
+		expect([...editableFixtureIds([division])]).toEqual(['pool']);
+		expect(editableFixtureIds([{}]).size).toBe(0);
+		expect(editableFixtureIds().size).toBe(0);
+	});
+});
 
 describe('flattenFixtures', () => {
 	it('stamps each fixture with its division name', () => {

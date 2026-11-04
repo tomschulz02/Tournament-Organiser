@@ -136,11 +136,15 @@ export const ERRORS = {
 	// refusal is decided here, at the moment the organiser asks. A user who does
 	// not exist is USER_NOT_FOUND, from the accounts section above.
 	EDITOR_IS_ORGANISER: [409, "You are the organiser of this tournament already"],
-	EDITOR_ALREADY_ADDED: [409, "That user is already an editor of this tournament"],
-	EDITOR_NOT_FOUND: [404, "That user is not an editor of this tournament"],
-	// An editor enters results for the round being played and nothing else. The
-	// organiser is not held to it — see resolveResultRole in fixtures.service.js.
-	EDITOR_ROUND_NOT_CURRENT: [403, "Editors can only enter results for the current round"],
+	EDITOR_ALREADY_ADDED: [409, "That user is already a collaborator on this tournament"],
+	EDITOR_NOT_FOUND: [404, "That user is not a collaborator on this tournament"],
+	// A scorer enters results for the round being played and nothing else. Other
+	// roles are not held to it — see utils/tournamentPermissions.js.
+	EDITOR_ROUND_NOT_CURRENT: [403, "Scorers can only enter results for the current round"],
+	// A collaborator asking for something their role does not include. A stranger
+	// gets NOT_TOURNAMENT_OWNER instead.
+	ROLE_NOT_PERMITTED: [403, "Your role on this tournament doesn't allow that"],
+	ROLE_INVALID: [400, "That isn't a role you can give a collaborator"],
 
 	// Saving a schedule. One code per rule rather than one INVALID_SCHEDULE: the
 	// message is display-ready by contract, and "that schedule is invalid" tells

@@ -41,7 +41,7 @@ export default function OverviewTab({
 	tournament = {},
 	dashboard = {},
 	onOpenDivision,
-	creator = false,
+	canManageSetup = false,
 	onChanged,
 }) {
 	useHelpTopic('tournament-overview');
@@ -53,7 +53,7 @@ export default function OverviewTab({
 			<TournamentInformation
 				tournament={tournament}
 				dashboard={dashboard}
-				creator={creator}
+				canManageSetup={canManageSetup}
 				onChanged={onChanged}
 			/>
 			<DivisionsBand
@@ -61,7 +61,7 @@ export default function OverviewTab({
 				onOpenDivision={onOpenDivision}
 				tournamentId={tournament.id}
 				status={tournament.status}
-				creator={creator}
+				canManageSetup={canManageSetup}
 				onChanged={onChanged}
 			/>
 			<ActivityBand dashboard={dashboard} divisions={divisions} />
@@ -72,7 +72,7 @@ export default function OverviewTab({
 // The only place the tournament's own metadata appears. The subheader carries
 // the name and nothing else, so this band is where a reader finds out what they
 // are looking at.
-function TournamentInformation({ tournament, dashboard, creator, onChanged }) {
+function TournamentInformation({ tournament, dashboard, canManageSetup, onChanged }) {
 	// Both labels are pre-formatted by the backend ('1 August 2026'). Do not
 	// reformat them here — the server owns date presentation.
 	const start = tournament.start_date_label;
@@ -96,7 +96,7 @@ function TournamentInformation({ tournament, dashboard, creator, onChanged }) {
 					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} icon="teams" stat />
 				</dl>
 
-				{creator && (
+				{canManageSetup && (
 					<LifecycleActions
 						tournamentId={tournament.id}
 						status={tournament.status}
@@ -231,7 +231,7 @@ function StatusPill({ status }) {
 // One card per division, summarising it and offering a way into the tab that
 // holds the detail. No fixture lists and no standings — a card says how big a
 // division is and how far through it is, and nothing more.
-function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status, creator, onChanged }) {
+function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status, canManageSetup, onChanged }) {
 	const confirm = useConfirm();
 	const { showMessage } = useMessage();
 	const [busy, setBusy] = useState(false);
@@ -260,7 +260,7 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 	// afterwards the schedule and the standings are describing a fixed set of
 	// them. Absent entirely for a viewer, and absent once started, rather than
 	// shown and then refused with a 409.
-	const canCompose = creator && isNotStarted(status);
+	const canCompose = canManageSetup && isNotStarted(status);
 
 	const run = async (action, successMessage) => {
 		setBusy(true);
@@ -392,7 +392,7 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 							// the standings then describe a fixed set of them. A
 							// colour describes nothing, so the organiser keeps it
 							// for the tournament's whole life.
-							canRecolour={creator}
+							canRecolour={canManageSetup}
 							onRecolour={handleColour}
 						/>
 					))}

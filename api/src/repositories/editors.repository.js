@@ -12,7 +12,7 @@ const db = DatabaseConnection();
 async function getEditors(tournamentId) {
     try {
         const sql = `
-            SELECT u.id, u.username, e.created_at
+            SELECT u.id, u.username, e.created_at, e.role
             FROM tournament_editors e
             JOIN users u ON u.id = e.user_id
             WHERE e.tournament_id = $1::uuid
@@ -25,26 +25,40 @@ async function getEditors(tournamentId) {
     }
 }
 
-// Whether this user currently holds an editor row on this tournament.
-async function isEditor(tournamentId, userId) {
+// The role this user currently holds on this tournament, or null if they hold no
+// row. What a role allows is utils/tournamentPermissions.js's.
+async function getRole(tournamentId, userId) {
     try {
-        const sql = "SELECT 1 FROM tournament_editors WHERE tournament_id = $1::uuid AND user_id = $2::uuid LIMIT 1";
+        const sql = "SELECT role FROM tournament_editors WHERE tournament_id = $1::uuid AND user_id = $2::uuid LIMIT 1";
         const rows = await db.query(sql, [tournamentId, userId]);
 
-        return rows.length > 0;
+        return rows[0]?.role ?? null;
     } catch (err) {
-        throw new Error("Failed to check editor", { cause: err });
+        throw new Error("Failed to check role", { cause: err });
     }
 }
 
 // The unique index on (tournament_id, user_id) is the real guard against a
 // double insert; the service checks first only so it can answer with a message.
-async function addEditor(tournamentId, userId) {
+async function addEditor(tournamentId, userId, role) {
     try {
-        const sql = "INSERT INTO tournament_editors (tournament_id, user_id) VALUES ($1::uuid, $2::uuid)";
-        await db.query(sql, [tournamentId, userId]);
+        const sql = "INSERT INTO tournament_editors (tournament_id, user_id, role) VALUES ($1::uuid, $2::uuid, $3)";
+        await db.query(sql, [tournamentId, userId, role]);
     } catch (err) {
         throw new Error("Failed to add editor", { cause: err });
+    }
+}
+
+// Returns whether a row changed, so the service can refuse someone who is not a
+// collaborator rather than reporting a success that changed nothing.
+async function updateRole(tournamentId, userId, role) {
+    try {
+        const sql = "UPDATE tournament_editors SET role = $3 WHERE tournament_id = $1::uuid AND user_id = $2::uuid RETURNING user_id";
+        const rows = await db.query(sql, [tournamentId, userId, role]);
+
+        return rows.length > 0;
+    } catch (err) {
+        throw new Error("Failed to update role", { cause: err });
     }
 }
 
@@ -118,7 +132,8 @@ export const editorsRepository = {
     getWorkedWith,
     searchByUsernamePrefix,
     getEditors,
-    isEditor,
+    getRole,
     addEditor,
+    updateRole,
     removeEditor
 };

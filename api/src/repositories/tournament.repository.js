@@ -76,6 +76,22 @@ async function getTournamentsByCreator(userId) {
     }
 }
 
+// The tournaments this user collaborates on, with the role they hold on each.
+// Same explicit column list as getTournamentsByCreator, schedule still left out.
+async function getTournamentsByCollaborator(userId) {
+    try {
+        const sql = `
+            SELECT t.id, t.name, t.start_date, t.end_date, t.location, t.description, t.status, t.created_by, e.role
+            FROM tournament_editors e
+            JOIN tournaments t ON t.id = e.tournament_id
+            WHERE e.user_id = $1::uuid
+            ORDER BY t.start_date DESC`;
+        return await db.query(sql, [userId]);
+    } catch (err) {
+        throw new Error("Failed to fetch tournaments by collaborator", { cause: err });
+    }
+}
+
 // Tournaments by id, for resolving a user's saved_tournaments rows into the
 // tournaments themselves. Mirrors divisions.repository.js#getTeamsByIds: same
 // explicit column list as getTournamentsByCreator, same empty-array
@@ -211,6 +227,7 @@ export const tournamentRepository = {
     getTournamentById,
     getChangeStamps,
     getTournamentsByCreator,
+    getTournamentsByCollaborator,
     getTournamentsByIds,
     startTournament,
     endTournament,

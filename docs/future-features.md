@@ -55,28 +55,19 @@ may end up wanting the same infrastructure.
 ### Editors and scorers
 
 > Shipped 2026-09-24 in release 1.1 as editors: result entry for the current round only,
-> added by email or username with no invite step. See `docs/api.md`, "Editors". An
-> invite/accept flow and any wider editor rights remain future work.
+> added by email or username with no invite step. Widened on 2026-11-04 to collaborators
+> with three roles, Scorer, Match Manager and Co-organiser. See `docs/api.md`,
+> "Collaborators", and `docs/decisions.md`. An invite/accept flow remains future work.
 
 > This supersedes **Friends**, which was removed on 2026-08-11. Friends was a step
 > towards letting someone other than the organiser update a tournament, and a per-
 > tournament permission is a more useful relationship than a global friendship — an
 > editor is someone trusted with *this* event, not with everything you own.
 
-A tournament currently has exactly one person who can change anything: `created_by`.
-Ownership is checked in the service, per `docs/decisions.md`.
+What the 2026-10-22 review found missing from editors as shipped, and what remains:
 
-The proposal is a second role with write access to **fixture results only**, while the
-organiser retains the ability to overwrite any result within the current round. That needs
-a membership table joining users to tournaments with a role, and the ownership check to
-become a permission check — every service that currently compares `created_by` to
-`req.user.id` would consult it instead. The pattern is already in one place, which makes
-this tractable, but it touches every mutating endpoint.
-
-What the 2026-10-22 review found missing from editors as shipped:
-
-- Profile has no "Tournaments I can edit" list, so an editor has no route to the
-  tournaments they were given.
+- ~~Profile has no "Tournaments I can edit" list, so an editor has no route to the
+  tournaments they were given.~~ Done 2026-11-04: "Collaborating On".
 - The person is not told they were added, and cannot accept or decline.
 - There is no per-court scorer role.
 

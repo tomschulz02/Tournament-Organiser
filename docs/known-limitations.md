@@ -90,8 +90,8 @@ sought.
 ## Authentication
 
 The five items this section used to list are all fixed in code, confirmed in the
-2026-10-22 review: every mutating service checks ownership against `created_by` (or
-editor membership for results), `authLimiter` throttles login and signup, `assertText`
+2026-10-22 review: every mutating service checks the caller's role on the tournament
+(`utils/tournamentPermissions.js`, since 2026-11-04), `authLimiter` throttles login and signup, `assertText`
 validates user and tournament fields, `helmet` is installed, and bcrypt runs at cost 12.
 
 Outstanding, from the 2026-10-22 review (`docs/review-2026-10-22.md`, section 6):
@@ -291,9 +291,8 @@ From making the tournament runnable, 2026-08-09.
 From the redesign of 2026-08-08.
 
 - **Around 70 `App.css` classes are referenced by no source file**, left after the sweep
-  removed 1,000 lines. They are not a deletion list: `Browse.jsx` builds
-  `tournament-card-${statusVariant}`, so several appear unused while being alive. Any
-  further removal needs the same per-class proof the sweep used — a selector is dead when
+  removed 1,000 lines. They are not a deletion list: class names built at runtime can
+  appear unused while being alive. Any further removal needs the same per-class proof the sweep used — a selector is dead when
   *any* class in it is dead, not when all of them are. Largest clusters: the old
   `overview-tab-*` block, `tournament-standings` / `pools-standings` / `round-header`,
   `tournament-teams*` / `teams-grid` / `team-card*`, `division-schedule-summary*`,
@@ -441,8 +440,8 @@ Still open:
   query per division, and `updateResult` reads the division state `FOR UPDATE` up to
   three times.
 - **No foreign-key indexes.** `fixtures.division_id`, `divisions.tournament_id`,
-  `teams.division_id`, `saved_tournaments.user_id`, `tournaments.created_by` and
-  `tournament_editors.user_id` have none. Adding them is a schema change.
+  `teams.division_id`, `saved_tournaments.user_id` and `tournaments.created_by` have none.
+  Adding them is a schema change.
 
 ## Scheduling
 

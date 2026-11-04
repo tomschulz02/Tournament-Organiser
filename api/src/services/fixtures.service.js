@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import DatabaseConnection from "../config/db.js";
 import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { divisionsRepository } from "../repositories/divisions.repository.js";
-import { editorsRepository } from "../repositories/editors.repository.js";
+import { assertCan, capabilitiesFor, resolveRole } from "../utils/tournamentPermissions.js";
 import { AppError } from "../errors.js";
 
 const db = DatabaseConnection();
@@ -41,13 +41,12 @@ async function updateResult(fixtureId, userId, sets, finished) {
         throw new AppError("FIXTURE_NOT_FOUND");
     }
 
-    // requireAuth proves the caller is logged in. This proves they may write
-    // here: the organiser always, an editor only within the current round, which
-    // is checked inside the transaction below once the division is locked.
-    const role = await resolveResultRole(fixture, userId);
-    if (role === NONE) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    // requireAuth proves the caller is logged in. This proves they may write here.
+    // A role limited to the current round is checked inside the transaction below,
+    // once the division is locked.
+    const role = await resolveRole(fixture.tournament_id, fixture.created_by, userId);
+    assertCan(role, "enterCurrentRoundResults");
+    const { enterAnyRoundResults } = capabilitiesFor(role);
 
     // A knockout placeholder still reading "Rank 1" has nobody to score.
     if (!fixture.team_1 || !fixture.team_2) {
@@ -62,7 +61,7 @@ async function updateResult(fixtureId, userId, sets, finished) {
     return await db.withTransaction(async (client) => {
         await assertRoundNotLocked(fixture, client);
 
-        if (role === EDITOR) {
+        if (!enterAnyRoundResults) {
             await assertCurrentRound(fixture, client);
         }
 
@@ -86,48 +85,22 @@ async function updateResult(fixtureId, userId, sets, finished) {
     });
 }
 
-// Who may write a result, for the one endpoint where that is more than the
-// organiser. OWNER is tournaments.created_by. EDITOR is anyone holding a
-// tournament_editors row — whether the fixture is in a round they may touch is a
-// separate question, answered by assertCurrentRound. NONE is everyone else.
+// A role without enterAnyRoundResults writes to the current round only:
+// state.currentRound, read the way progression's loadDivision reads it. Which
+// fixtures have teams bound cannot answer this, because every leg of a League is
+// bound from the start. Roles above that are not held to this: a result entered
+// wrongly in an earlier round has to have a route to correction.
 //
-// Every other mutating endpoint keeps its own owner-only check; this resolver is
-// deliberately not shared with them. See docs/decisions.md.
-const OWNER = "OWNER";
-const EDITOR = "EDITOR";
-const NONE = "NONE";
-
-async function resolveResultRole(fixture, userId) {
-    if (fixture.created_by === userId) {
-        return OWNER;
-    }
-
-    return (await editorsRepository.isEditor(fixture.tournament_id, userId)) ? EDITOR : NONE;
-}
-
-// An editor writes to the current round only. The current round is the highest
-// index in state.rounds holding a fixture with both teams bound — the round being
-// played, as opposed to one whose fixtures still read "Rank 1". The organiser is
-// not held to this: a result entered wrongly in an earlier round has to have a
-// route to correction, and that route is the organiser.
+// A division with no rounds has no current round to hold anyone to.
 async function assertCurrentRound(fixture, client) {
     const state = normalizeState(await divisionsRepository.getStateForUpdate(fixture.division_id, client));
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
-    const fixtures = await fixturesRepository.getFixtures(fixture.division_id);
+    const current = Number.isInteger(state.currentRound) ? state.currentRound : 0;
+    const holding = rounds.findIndex((round) => round.name === roundHolding(fixture.round));
 
-    if (holdingIndex(fixture, rounds) !== currentRoundIndex(fixtures, rounds)) {
+    if (rounds.length > 0 && holding !== current) {
         throw new AppError("EDITOR_ROUND_NOT_CURRENT");
     }
-}
-
-function currentRoundIndex(fixtures, rounds) {
-    return fixtures
-        .filter((fixture) => fixture.team_1 && fixture.team_2)
-        .reduce((current, fixture) => Math.max(current, holdingIndex(fixture, rounds)), -1);
-}
-
-function holdingIndex(fixture, rounds) {
-    return rounds.findIndex((round) => round.name === roundHolding(fixture.round));
 }
 
 // A round is locked for editing the moment progression commits its results —
@@ -536,7 +509,5 @@ export {
     validateSets,
     deriveStatus,
     roundHolding,
-    fixtureRoundsOf,
-    resolveResultRole,
-    currentRoundIndex
+    fixtureRoundsOf
 };

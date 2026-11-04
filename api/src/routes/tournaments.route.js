@@ -30,15 +30,16 @@ tournamentRouter.put('/:tournamentId/schedule', requireAuth, tournamentControlle
 // docs/handover-scoresheets.md for what a template key means.
 tournamentRouter.put('/:tournamentId/scoresheet-template', requireAuth, tournamentController.updateScoresheetTemplate);
 
-// The tournament's editors: users the organiser has allowed to enter results.
-// Organiser-only, all three — the service checks ownership. Adding and removing
-// take effect immediately; there is no invite step.
+// The tournament's collaborators, and the role each holds. Organiser-only, all of
+// them — the service checks. Changes take effect immediately; there is no invite
+// step.
 tournamentRouter.get('/:tournamentId/editors', requireAuth, editorController.listEditors);
 // Suggestions for the add field: usernames only, previous collaborators first,
 // anyone else from a three-character prefix. Rate-limited per user, after
 // requireAuth so the limiter can key on who is asking.
 tournamentRouter.get('/:tournamentId/editors/search', requireAuth, searchLimiter, editorController.searchEditorCandidates);
 tournamentRouter.post('/:tournamentId/editors', requireAuth, editorController.addEditor);
+tournamentRouter.put('/:tournamentId/editors/:userId', requireAuth, editorController.updateEditorRole);
 tournamentRouter.delete('/:tournamentId/editors/:userId', requireAuth, editorController.removeEditor);
 
 // Route to add a division after a tournament has been created

@@ -47,7 +47,7 @@ export default function SectionState({
 	}
 
 	// Empty. `children` is the slot for an organiser action — Add Team, Create
-	// Schedule — and is simply absent for a viewer who is not the creator, so this
+	// Schedule — and is simply absent for a viewer whose role does not cover it, so this
 	// component never needs to know about permissions.
 	return (
 		<div className="tv-panel tv-panel-message">

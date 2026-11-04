@@ -31,6 +31,8 @@ export default defineConfig({
                 // editor and the page-count indicator — agree on what a row
                 // index means. See docs/schedule.md.
                 "src/utils/schedulePrintLayout.js",
+                // The Discover card's date tile and start countdown.
+                "src/utils/tournamentDates.js",
                 "src/components/tournament/fixtureUtils.js",
                 // The port of server generation the creation review computes its
                 // pools and bracket from. Pinned to the server's arithmetic by

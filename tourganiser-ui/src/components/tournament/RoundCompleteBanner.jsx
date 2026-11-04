@@ -5,8 +5,8 @@ import { canProgress } from './fixtureUtils';
 // division that can advance and opens Standings on that division — opening it
 // on whichever division happened to sort first sent the organiser to one with
 // nothing to progress.
-export default function RoundCompleteBanner({ divisions = [], creator = false, onGoToStandings }) {
-	const ready = creator ? divisions.filter(canProgress) : [];
+export default function RoundCompleteBanner({ divisions = [], canProgressRounds = false, onGoToStandings }) {
+	const ready = canProgressRounds ? divisions.filter(canProgress) : [];
 	if (ready.length === 0) return null;
 
 	const single = ready.length === 1;

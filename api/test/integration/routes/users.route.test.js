@@ -11,7 +11,7 @@ vi.mock("../../../src/services/users.service.js", () => ({
 }));
 
 vi.mock("../../../src/services/tournaments.service.js", () => ({
-    tournamentService: { getMyTournaments: vi.fn(), getSavedTournaments: vi.fn() }
+    tournamentService: { getMyTournaments: vi.fn(), getCollaboratingTournaments: vi.fn(), getSavedTournaments: vi.fn() }
 }));
 
 const app = (await import("../../../src/app.js")).default;
@@ -26,6 +26,7 @@ beforeEach(() => {
     vi.mocked(userService.loginUser).mockReset();
     vi.mocked(userService.changePassword).mockReset();
     vi.mocked(tournamentService.getMyTournaments).mockReset();
+    vi.mocked(tournamentService.getCollaboratingTournaments).mockReset();
     vi.mocked(tournamentService.getSavedTournaments).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
     // Signup and login are rate limited per IP, and every test here comes from
@@ -362,6 +363,41 @@ describe("GET /api/users/profile/tournaments", () => {
 
         const response = await request(app)
             .get("/api/users/profile/tournaments")
+            .set("Cookie", authCookie());
+
+        expect(response.status).toBe(500);
+    });
+});
+
+describe("GET /api/users/profile/collaborating", () => {
+    it("requires a session", async () => {
+        const response = await request(app).get("/api/users/profile/collaborating");
+
+        expect(response.status).toBe(401);
+        expect(tournamentService.getCollaboratingTournaments).not.toHaveBeenCalled();
+    });
+
+    it("returns the tournaments the caller collaborates on, for the caller only", async () => {
+        tournamentService.getCollaboratingTournaments.mockResolvedValue([{ id: "tour-3", role: "SCORER" }]);
+
+        const response = await request(app)
+            .get("/api/users/profile/collaborating")
+            .set("Cookie", authCookie({ id: "user-1" }));
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            success: true,
+            message: "Collaborating tournaments fetched",
+            data: [{ id: "tour-3", role: "SCORER" }]
+        });
+        expect(tournamentService.getCollaboratingTournaments).toHaveBeenCalledWith("user-1");
+    });
+
+    it("reports a failure as 500", async () => {
+        tournamentService.getCollaboratingTournaments.mockRejectedValue(new Error("connection lost"));
+
+        const response = await request(app)
+            .get("/api/users/profile/collaborating")
             .set("Cookie", authCookie());
 
         expect(response.status).toBe(500);

@@ -13,6 +13,10 @@ vi.mock("../../../src/repositories/fixtures.repository.js", () => ({
     fixturesRepository: { updateFixtures: vi.fn() }
 }));
 
+vi.mock("../../../src/repositories/editors.repository.js", () => ({
+    editorsRepository: { getRole: vi.fn(async () => null) }
+}));
+
 const {
     progressionService,
     bindFixturesToResults,

@@ -45,7 +45,8 @@ function toMillis(value) {
 // tournamentViewFormatter.js changes what it emits for unchanged data.
 // 2: knockout slots named after their feeding match, pool names on pool fixtures.
 // 3: standings groups named "Pool A" rather than "Group A".
-export const PAYLOAD_VERSION = 3;
+// 4: role and can, without which a cached body hides every organiser control.
+export const PAYLOAD_VERSION = 4;
 
 // Hashed rather than concatenated so the header carries no user id. A viewer
 // already knows their own, but an ETag is echoed back by clients and stored by

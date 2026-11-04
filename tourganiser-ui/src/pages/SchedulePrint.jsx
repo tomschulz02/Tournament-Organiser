@@ -21,7 +21,7 @@ import '../styles/schedule-print.css';
 // page must work for someone who arrives from a message rather than a click.
 export default function SchedulePrintPage() {
 	const { id } = useParams();
-	// data.creator is resolved server-side from the session cookie, so the
+	// data.can is resolved server-side from the session cookie, so the
 	// session has to be part of the request key or logging in would not reveal
 	// the editing controls. Same reasoning as View.jsx.
 	const { sessionVersion } = useContext(AuthContext);
@@ -54,7 +54,7 @@ export default function SchedulePrintPage() {
 
 	const loading = result.key !== requestKey;
 	const tournament = result.data?.tournament ?? null;
-	const creator = result.data?.creator ?? false;
+	const canEditSchedule = result.data?.can?.editSchedule ?? false;
 
 	const { schedule, fixtures } = useMemo(
 		() => buildTournamentSchedule(tournament ?? {}, result.data?.divisions ?? []),
@@ -195,10 +195,10 @@ export default function SchedulePrintPage() {
 						))}
 					</div>
 
-					{/* Organiser only, and the only editing affordance on the page —
+					{/* The only editing affordance on the page —
 					    a viewer sees the saved arrangement and nothing that suggests
 					    it can be changed. */}
-					{creator && (
+					{canEditSchedule &&(
 						<button type="button" className="schedule-print-action" onClick={() => setEditing((value) => !value)}>
 							{editing ? 'Done editing' : 'Edit page breaks'}
 						</button>
@@ -208,13 +208,13 @@ export default function SchedulePrintPage() {
 					    "Save", and it says when there is something to save — an
 					    organiser who has moved a break needs to be able to tell at a
 					    glance whether it is only on their screen. */}
-					{creator && editing && (
+					{canEditSchedule &&editing && (
 						<button type="button" className="schedule-print-action is-primary" disabled={saving} onClick={handleSave}>
 							{saving ? 'Saving…' : layoutsDirty ? 'Save layout •' : 'Save layout'}
 						</button>
 					)}
 
-					{creator && editing && layoutsDirty && !saving && <span className="schedule-print-dirty">Unsaved changes</span>}
+					{canEditSchedule &&editing && layoutsDirty && !saving && <span className="schedule-print-dirty">Unsaved changes</span>}
 
 					{/* Never gated on having saved first: what is on screen is what
 					    prints, saved or not. */}
@@ -226,7 +226,7 @@ export default function SchedulePrintPage() {
 
 			{result.error && <p className="schedule-print-error">{result.error}</p>}
 
-			{creator && pruned.dropped && !staleNoticeDismissed && (
+			{canEditSchedule &&pruned.dropped && !staleNoticeDismissed && (
 				<div className="schedule-print-notice">
 					<p>This saved layout may not reflect recent schedule changes — some page breaks pointed at a day or court that no longer exists.</p>
 					<button type="button" onClick={() => setStaleNoticeDismissed(true)}>
@@ -235,7 +235,7 @@ export default function SchedulePrintPage() {
 				</div>
 			)}
 
-			{creator && editing && (
+			{canEditSchedule &&editing && (
 				<div className="schedule-print-editor">
 					<SchedulePrintLayoutEditor
 						type={type}

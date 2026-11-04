@@ -34,7 +34,8 @@ import { useHelpTopic } from '../../HelpContext';
 export default function ScheduleTab({
 	tournament = {},
 	divisions = [],
-	creator = false,
+	canEditSchedule = false,
+	canPrintScoresheets = false,
 	onEditSchedule,
 	renderFixtureAction,
 	onPrintAllScoresheets,
@@ -112,7 +113,7 @@ export default function ScheduleTab({
 					    the same distinction the per-fixture button makes — rather than
 					    absent, so an organiser who has not picked one yet knows the
 					    control exists. */}
-					{creator && scoresheetTemplateSelected && onPrintAllScoresheets && (
+					{canPrintScoresheets && scoresheetTemplateSelected && onPrintAllScoresheets && (
 						<button
 							type="button"
 							className="tv-primary-action"
@@ -137,7 +138,7 @@ export default function ScheduleTab({
 					</Link>
 
 					{/* In place of Create Schedule, not alongside it. */}
-					{creator && onEditSchedule && (
+					{canEditSchedule && onEditSchedule && (
 						<button type="button" className="tv-primary-action" onClick={onEditSchedule}>
 							Edit Schedule
 						</button>

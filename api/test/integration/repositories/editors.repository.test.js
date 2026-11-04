@@ -23,7 +23,7 @@ describe("getEditors", () => {
 
         const [sql, params] = db.query.mock.calls[0];
         expect(squash(sql)).toBe(
-            "SELECT u.id, u.username, e.created_at FROM tournament_editors e JOIN users u ON u.id = e.user_id WHERE e.tournament_id = $1::uuid ORDER BY e.created_at ASC"
+            "SELECT u.id, u.username, e.created_at, e.role FROM tournament_editors e JOIN users u ON u.id = e.user_id WHERE e.tournament_id = $1::uuid ORDER BY e.created_at ASC"
         );
         expect(params).toEqual(["t-1"]);
     });
@@ -39,36 +39,39 @@ describe("getEditors", () => {
     });
 });
 
-describe("isEditor", () => {
-    it("is true when a row exists", async () => {
-        db.query.mockResolvedValue([{ "?column?": 1 }]);
+describe("getRole", () => {
+    it("is the stored role when a row exists", async () => {
+        db.query.mockResolvedValue([{ role: "MATCH_MANAGER" }]);
 
-        expect(await editorsRepository.isEditor("t-1", "user-2")).toBe(true);
-        expect(db.query.mock.calls[0][1]).toEqual(["t-1", "user-2"]);
+        expect(await editorsRepository.getRole("t-1", "user-2")).toBe("MATCH_MANAGER");
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe("SELECT role FROM tournament_editors WHERE tournament_id = $1::uuid AND user_id = $2::uuid LIMIT 1");
+        expect(params).toEqual(["t-1", "user-2"]);
     });
 
-    it("is false when none does", async () => {
-        expect(await editorsRepository.isEditor("t-1", "user-2")).toBe(false);
+    it("is null when none does", async () => {
+        expect(await editorsRepository.getRole("t-1", "user-2")).toBeNull();
     });
 
     it("rethrows with the pg error as cause", async () => {
         const pgError = new Error("boom");
         db.query.mockRejectedValue(pgError);
 
-        const failure = await editorsRepository.isEditor("t-1", "user-2").catch((err) => err);
+        const failure = await editorsRepository.getRole("t-1", "user-2").catch((err) => err);
 
-        expect(failure.message).toBe("Failed to check editor");
+        expect(failure.message).toBe("Failed to check role");
         expect(failure.cause).toBe(pgError);
     });
 });
 
 describe("addEditor", () => {
     it("inserts the membership row", async () => {
-        await editorsRepository.addEditor("t-1", "user-2");
+        await editorsRepository.addEditor("t-1", "user-2", "SCORER");
 
         const [sql, params] = db.query.mock.calls[0];
-        expect(squash(sql)).toBe("INSERT INTO tournament_editors (tournament_id, user_id) VALUES ($1::uuid, $2::uuid)");
-        expect(params).toEqual(["t-1", "user-2"]);
+        expect(squash(sql)).toBe("INSERT INTO tournament_editors (tournament_id, user_id, role) VALUES ($1::uuid, $2::uuid, $3)");
+        expect(params).toEqual(["t-1", "user-2", "SCORER"]);
     });
 
     it("rethrows with the pg error as cause, so a unique violation survives", async () => {
@@ -79,6 +82,34 @@ describe("addEditor", () => {
 
         expect(failure.message).toBe("Failed to add editor");
         expect(failure.cause.code).toBe("23505");
+    });
+});
+
+describe("updateRole", () => {
+    it("reports true when a row changed", async () => {
+        db.query.mockResolvedValue([{ user_id: "user-2" }]);
+
+        expect(await editorsRepository.updateRole("t-1", "user-2", "CO_ORGANISER")).toBe(true);
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE tournament_editors SET role = $3 WHERE tournament_id = $1::uuid AND user_id = $2::uuid RETURNING user_id"
+        );
+        expect(params).toEqual(["t-1", "user-2", "CO_ORGANISER"]);
+    });
+
+    it("reports false when nothing matched", async () => {
+        expect(await editorsRepository.updateRole("t-1", "user-2", "SCORER")).toBe(false);
+    });
+
+    it("rethrows with the pg error as cause", async () => {
+        const pgError = new Error("boom");
+        db.query.mockRejectedValue(pgError);
+
+        const failure = await editorsRepository.updateRole("t-1", "user-2", "SCORER").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to update role");
+        expect(failure.cause).toBe(pgError);
     });
 });
 

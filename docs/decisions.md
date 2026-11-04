@@ -494,6 +494,51 @@ transaction once the division row is locked. Every other endpoint keeps its own
 owner-only check; the resolver is deliberately not shared with them, so widening one
 endpoint cannot widen another.
 
+Superseded on 2026-11-04 by the entry below. The current-round rule here also changed that
+day, from the highest round with bound fixtures to `state.currentRound`.
+
+### Extension: collaborator roles replace the owner checks
+
+Decided 2026-11-04.
+
+A tournament has an organiser (`tournaments.created_by`) and collaborators
+(`tournament_editors`), each holding one of three fixed roles. There are no per-person
+permissions. `api/src/utils/tournamentPermissions.js` is the one source of truth.
+
+| Capability | Scorer | Match Manager | Co-organiser | Organiser |
+|---|---|---|---|---|
+| `enterCurrentRoundResults` | ✓ | ✓ | ✓ | ✓ |
+| `enterAnyRoundResults` (any unlocked round) | | ✓ | ✓ | ✓ |
+| `progressRounds` | | ✓ | ✓ | ✓ |
+| `editSchedule` | | ✓ | ✓ | ✓ |
+| `printScoresheets` | | ✓ | ✓ | ✓ |
+| `manageSetup` | | | ✓ | ✓ |
+| `manageCollaborators` | | | | ✓ |
+| `deleteTournament` | | | | ✓ |
+
+Which capability each endpoint needs is in `docs/api.md`, and
+`api/test/unit/services/rolePermissions.test.js` tests every endpoint against every role.
+
+Reason for sharing the check, which reverses the entry above:
+Keeping the resolver separate protected one endpoint from another only while there was a
+single role beyond the owner. With three, a separate check per endpoint would mean the rules
+were spread across every service. The protection that separation gave now comes from the
+per-endpoint test table, whose rows are written out by hand rather than derived from the map,
+so widening an endpoint has to be done on purpose in both.
+
+What follows from the model:
+
+- Match Manager is whoever runs the day: correcting a score, moving a match, advancing rounds.
+  Advancing is one way, because it locks the round for everyone, the organiser included.
+- A stranger is refused with `NOT_TOURNAMENT_OWNER` and a collaborator with
+  `ROLE_NOT_PERMITTED`, so a refusal can be explained by the role that caused it.
+- The organiser is never stored, and cannot be granted or passed on.
+- `printScoresheets` only decides what the client offers. Scoresheets are generated in the
+  browser, so the server has nothing to refuse.
+- The word users see is "collaborator". The `tournament_editors` table, `/editors` routes,
+  `EDITOR_*` codes and code names keep their names: renaming them would change a table, routes
+  and many tests for no visible benefit.
+
 ## Editor Suggestions Search Usernames, Never Emails
 
 Decided 2026-09-24.

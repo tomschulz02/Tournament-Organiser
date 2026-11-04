@@ -140,8 +140,9 @@ Login failures return a single generic message for both an unknown email and a w
 password. This is deliberate — distinguishing them allows account enumeration. Do not
 reintroduce separate cases.
 
-Still missing: **ownership checks**. `requireAuth` proves a caller is logged in, not
-that they own the resource. See Security Recommendations.
+`requireAuth` proves a caller is logged in. What they may do on a tournament is decided
+by their role in the service, and the Auth column below names the capability each endpoint
+needs. See "Collaborators".
 
 The frontend sends `credentials: 'include'` on every request. CORS is configured with
 `credentials: true` and an origin of `FRONTEND_URL` (plus `http://localhost:5173` when
@@ -162,21 +163,23 @@ Implemented:
 | GET | `/api/users/profile` | required | Fetch the caller's own profile, self-scoped from `req.user` |
 | GET | `/api/users/profile/tournaments` | required | The caller's created tournaments, flat, `start_date DESC` |
 | GET | `/api/users/profile/saved-tournaments` | required | The caller's saved tournaments, flat, `start_date DESC` |
+| GET | `/api/users/profile/collaborating` | required | The tournaments the caller collaborates on, flat, `start_date DESC`, each with the `role` they hold |
 | POST | `/api/tournaments/create` | required | Create tournament and divisions |
-| GET | `/api/divisions/:divisionId/progression` | required + owner | Proposed ranking and qualifiers for the current round. Read only. |
-| POST | `/api/divisions/:divisionId/progression` | required + owner | Commit the confirmed ranking and advance the round |
-| PUT | `/api/divisions/:divisionId` | required + owner | Replace a division's teams and structure |
-| DELETE | `/api/divisions/:divisionId` | required + owner | Remove a division. Cascades to its teams and fixtures; repairs the schedule. |
-| POST | `/api/tournaments/:tournamentId/divisions` | required + owner | Add a division to a Not Started tournament |
-| PUT | `/api/tournaments/:tournamentId/schedule` | required + owner | Save the tournament schedule |
-| PUT | `/api/divisions/:divisionId/settings` | required + owner | Ranking basis and placement depth. See below. |
-| GET | `/api/tournaments/:tournamentId/editors` | required + owner | The tournament's editors: `[{ id, username, addedAt }]` |
-| GET | `/api/tournaments/:tournamentId/editors/search?q=` | required + owner, rate-limited | Suggestions for the add field. See "Editors" below. |
-| POST | `/api/tournaments/:tournamentId/editors` | required + owner | Add an editor. Body `{ identifier }` — an email or a username. |
-| DELETE | `/api/tournaments/:tournamentId/editors/:userId` | required + owner | Remove an editor |
-| PUT | `/api/fixtures/:fixtureId/result` | required + owner or editor | Record a result. See "Editors" below. |
+| GET | `/api/divisions/:divisionId/progression` | `progressRounds` | Proposed ranking and qualifiers for the current round. Read only. |
+| POST | `/api/divisions/:divisionId/progression` | `progressRounds` | Commit the confirmed ranking and advance the round |
+| PUT | `/api/divisions/:divisionId` | `manageSetup` | Replace a division's teams and structure |
+| DELETE | `/api/divisions/:divisionId` | `manageSetup` | Remove a division. Cascades to its teams and fixtures; repairs the schedule. |
+| POST | `/api/tournaments/:tournamentId/divisions` | `manageSetup` | Add a division to a Not Started tournament |
+| PUT | `/api/tournaments/:tournamentId/schedule` | `editSchedule` | Save the tournament schedule |
+| PUT | `/api/divisions/:divisionId/settings` | `manageSetup` | Ranking basis and placement depth. See below. |
+| GET | `/api/tournaments/:tournamentId/editors` | `manageCollaborators` | The tournament's collaborators: `[{ id, username, role, addedAt }]` |
+| GET | `/api/tournaments/:tournamentId/editors/search?q=` | `manageCollaborators`, rate-limited | Suggestions for the add field. See "Collaborators" below. |
+| POST | `/api/tournaments/:tournamentId/editors` | `manageCollaborators` | Add a collaborator. Body `{ identifier, role }` — an email or a username, and optionally a role. |
+| PUT | `/api/tournaments/:tournamentId/editors/:userId` | `manageCollaborators` | Change a collaborator's role. Body `{ role }`. |
+| DELETE | `/api/tournaments/:tournamentId/editors/:userId` | `manageCollaborators` | Remove a collaborator |
+| PUT | `/api/fixtures/:fixtureId/result` | `enterCurrentRoundResults` | Record a result. See "Collaborators" below. |
 | GET | `/api/tournaments/` | any | List tournaments for Discover: `{ upcoming, ongoing, completed }`, each newest first, each item `{ id, name, start_date, end_date, location, status }`. Nothing else — no schedule, no creator. |
-| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn`, `creator` and `editor` so the UI can adapt. Cached — see below. |
+| GET | `/api/tournaments/:tournamentId` | any | Tournament detail view. Returns `loggedIn`, `creator`, `role` and `can` so the UI can adapt. Cached — see below. |
 | POST | `/api/tournaments/:tournamentId/save` | required | Save a tournament to the caller's profile. Idempotent — saving twice is not an error. Refuses the caller's own tournament with `CANNOT_SAVE_OWN_TOURNAMENT` (409). |
 | DELETE | `/api/tournaments/:tournamentId/save` | required | Unsave. A tournament that was never saved is also not an error. |
 
@@ -221,8 +224,8 @@ The validator is built from three things, and all of them matter:
 | Viewer | The requesting user's id, or anonymous |
 | Payload version | `PAYLOAD_VERSION` in `api/src/utils/etag.js`. Bump it whenever the formatter changes what it emits for unchanged data, or clients holding a body from before the deploy keep being told it's current. Added 2026-09-24 at version 2. |
 
-**The viewer half is not optional.** The payload carries `creator` and `loggedIn`,
-which depend on who is asking rather than on when anything changed. An ETag built
+**The viewer half is not optional.** The payload carries `creator`, `role`, `can` and
+`loggedIn`, which depend on who is asking rather than on when anything changed. An ETag built
 from the timestamp alone would give one value to two genuinely different
 representations, and a signed-out reader presenting the organiser's validator would
 get a 304 — then render the organiser's cached page, management controls included.
@@ -348,7 +351,8 @@ Rejections:
 | Status | Code | Meaning |
 |---|---|---|
 | 400 | `INVALID_DIVISION_COLOUR` | Not one of the twelve palette tokens |
-| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller holds no role on the tournament |
+| 403 | `ROLE_NOT_PERMITTED` | Caller's role does not include this |
 | 404 | `DIVISION_NOT_FOUND` | No such division |
 
 There is deliberately no 409. Neither the tournament's status nor the division's results
@@ -380,22 +384,53 @@ Rejections:
 | 400 | `INVALID_RANKING_BASIS` | Not one of the four |
 | 400 | `PLACEMENT_NOT_AVAILABLE` | Not a Classic division with a knockout stage |
 | 400 | `INVALID_PLACEMENT_DEPTH` | Not null or an odd place from 5 to the knockout's size |
-| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller holds no role on the tournament |
+| 403 | `ROLE_NOT_PERMITTED` | Caller's role does not include this |
 | 404 | `DIVISION_NOT_FOUND` | No such division |
 | 409 | `KNOCKOUT_ALREADY_STARTED` | Placement depth sent after the knockout stage began |
 
 Success returns `{ divisionId, rankingBasis, placementDepth }`. The division payload
 carries both as `ranking_basis` and `placement_depth`.
 
-### Editors
+### Collaborators
 
-An editor is a user the organiser has allowed to enter results. Adding is immediate —
-there is no invite to accept — and so is removing. Both move `tournaments.last_update`,
-because the editor's view of the tournament changes and the ETag has to say so.
+A collaborator is a user the organiser has given a role on one tournament. The routes,
+codes and table keep the older name "editor"; users see "collaborator". See
+`docs/decisions.md`.
 
-`POST /editors` resolves `identifier` with the same lookup sign-in uses and refuses
-with `USER_NOT_FOUND` (404), `EDITOR_IS_ORGANISER` (409) or `EDITOR_ALREADY_ADDED`
-(409). `DELETE /editors/:userId` refuses someone who is not an editor with
+| Capability | Scorer | Match Manager | Co-organiser | Organiser |
+|---|---|---|---|---|
+| `enterCurrentRoundResults` | ✓ | ✓ | ✓ | ✓ |
+| `enterAnyRoundResults` | | ✓ | ✓ | ✓ |
+| `progressRounds` | | ✓ | ✓ | ✓ |
+| `editSchedule` | | ✓ | ✓ | ✓ |
+| `printScoresheets` | | ✓ | ✓ | ✓ |
+| `manageSetup` | | | ✓ | ✓ |
+| `manageCollaborators` | | | | ✓ |
+| `deleteTournament` | | | | ✓ |
+
+`POST /start`, `POST /end` and `PUT /scoresheet-template` on a tournament, and
+`PUT /colour` on a division, need `manageSetup`. `DELETE` on a tournament needs
+`deleteTournament`.
+
+`GET /api/tournaments/:tournamentId` reports the viewer's standing: `role` is `ORGANISER`,
+`CO_ORGANISER`, `MATCH_MANAGER`, `SCORER` or null, and `can` holds all eight capabilities as
+booleans, all false for anyone without a role. `can` only decides what the client offers. The
+server enforces every one of them, except `printScoresheets`: scoresheets are generated in the
+browser, so there is nothing to refuse.
+
+A caller with no role gets `NOT_TOURNAMENT_OWNER` (403) and a collaborator whose role does not
+include the capability gets `ROLE_NOT_PERMITTED` (403).
+
+Adding is immediate — there is no invite to accept — and so are changing a role and removing.
+All three move `tournaments.last_update`, because that person's view of the tournament changes
+and the ETag has to say so.
+
+`POST /editors` resolves `identifier` with the same lookup sign-in uses. `role` is optional and
+defaults to `SCORER`. It refuses with `ROLE_INVALID` (400), `USER_NOT_FOUND` (404),
+`EDITOR_IS_ORGANISER` (409) or `EDITOR_ALREADY_ADDED` (409). `PUT /editors/:userId` takes
+`{ role }` and refuses with `ROLE_INVALID` (400); Organiser is never a role that can be given.
+`PUT` and `DELETE /editors/:userId` refuse someone who is not a collaborator with
 `EDITOR_NOT_FOUND` (404) rather than succeeding silently.
 
 `GET /editors/search?q=` returns up to five `{ username, workedWith }`: people the
@@ -406,16 +441,16 @@ Usernames only — never an email, never an id — and `%` and `_` match literal
 organiser and this tournament's editors are left out. Limited to 30 requests a minute
 per user; over that is `TOO_MANY_REQUESTS` (429).
 
-The only thing an editor can do is `PUT /api/fixtures/:fixtureId/result`, and only for a
-fixture in the division's current round — the highest round in `state.rounds` holding a
-fixture with both teams bound. Outside it they get `EDITOR_ROUND_NOT_CURRENT` (403). The
-organiser may write to any round. Every other endpoint stays organiser-only.
+A Scorer can write a result only for a fixture in the division's current round,
+`state.currentRound`. Outside it they get `EDITOR_ROUND_NOT_CURRENT` (403). Every other role
+may write to any round that is not locked. A round that has been progressed past is locked for
+everyone, the organiser included, with `ROUND_LOCKED`.
 
 Every successful result write stamps `fixtures.entered_by` with the caller. The tournament
-view sends the organiser and the tournament's current editors an `enteredBy` on each
+view sends the organiser and the tournament's current collaborators an `enteredBy` on each
 fixture that has a result and an author — `{ name, role, self }`, where `role` is
-`"organiser"`, `"editor"` or null for someone no longer an editor. Nobody else receives
-the key at all.
+`"organiser"`, `"co-organiser"`, `"match manager"`, `"scorer"` or null for someone no longer a
+collaborator. Nobody else receives the key at all.
 
 ### Saving a schedule
 
@@ -445,7 +480,8 @@ which rule they broke. Each carries the offending entry ids in `data`.
 | 409 | `SCHEDULE_COURT_CLASH` | Two entries overlap on the same court. `courtId: null` spans every court that day, so an all-courts break clashes with everything |
 | 409 | `SCHEDULE_TEAM_CLASH` | A team is required in two places at once |
 | 409 | `SCHEDULE_ROUND_ORDER` | A fixture starts before an earlier round of its own division has finished |
-| 403 | `NOT_TOURNAMENT_OWNER` | Caller does not own the tournament |
+| 403 | `NOT_TOURNAMENT_OWNER` | Caller holds no role on the tournament |
+| 403 | `ROLE_NOT_PERMITTED` | Caller's role does not include this |
 | 404 | `TOURNAMENT_NOT_FOUND` | No such tournament |
 
 `title`, `notes` and `officials` are free text and are stored without inspection, as are
@@ -660,13 +696,10 @@ Implemented:
 
 Outstanding, in rough priority order:
 
-- **Ownership checks.** Still unimplemented outside round progression, and urgent the
-  moment the pending division and fixture endpoints are wired up. The approach was
-  settled on 2026-08-08: the check lives in the service, not in middleware. Every
-  mutating service function takes `userId` as a required parameter and resolves the
-  owner as part of a fetch it already needed. `requireAuth` proves identity; the service
-  proves permission. See `docs/decisions.md`, and `progression.service.js` for the
-  reference implementation.
+- ~~**Ownership checks.**~~ Done. The check lives in the service, not in middleware: every
+  mutating service function takes `userId` and resolves the caller's role as part of a fetch
+  it already needed. `requireAuth` proves identity; the service proves permission. See
+  `docs/decisions.md` and `utils/tournamentPermissions.js`.
 - Extend the same length and type validation to division and team names, which
   `divisionService.createDivision` still passes through unchecked. `divisions.type` is
   `varchar(50)` and both names are unbounded `text`.

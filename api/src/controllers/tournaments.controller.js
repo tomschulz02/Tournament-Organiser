@@ -33,8 +33,8 @@ async function fetchTournamentDetails(req, res){
     const viewerUserId = req.user?.id || null;
     const ifNoneMatch = req.headers["if-none-match"];
 
-    // This response differs by session cookie — `creator`, `editor` and `loggedIn` all
-    // do — so no shared cache may hand one reader's copy to another. Vary says
+    // This response differs by session cookie — `creator`, `role`, `can` and `loggedIn`
+    // all do — so no shared cache may hand one reader's copy to another. Vary says
     // that; no-cache lets a client store the body but never reuse it without
     // asking, which is what makes the ETag below the only thing deciding.
     res.set("Vary", "Cookie");
@@ -74,9 +74,10 @@ async function fetchTournamentDetails(req, res){
         data: {
             loggedIn: Boolean(req.user),
             creator: tournament.creator,
-            // A signed-in user the organiser has made an editor. They are offered
-            // score entry on the current round and nothing else the organiser is.
-            editor: tournament.editor,
+            // What this viewer holds and may do. The server enforces every one of
+            // these; the client only uses them to decide what to offer.
+            role: tournament.role,
+            can: tournament.can,
             ...tournament.view
         }
     });

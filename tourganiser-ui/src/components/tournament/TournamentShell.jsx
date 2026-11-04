@@ -12,7 +12,7 @@ import '../../styles/tournament-view.css';
 // Subheader and navigation. Both render on mount, before any data arrives — only
 // the content area waits. See the handover, decision A1: one request feeds the
 // page, so loading is section-level but error isolation cannot be.
-export default function TournamentShell({ tournamentId, name, creator, children }) {
+export default function TournamentShell({ tournamentId, name, creator, canOpenSettings, children }) {
 	const { activeTab, selectTab } = useTournamentTab();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -46,7 +46,7 @@ export default function TournamentShell({ tournamentId, name, creator, children 
 					{!creator && <FollowButton tournamentId={tournamentId} />}
 				</div>
 
-				<TournamentNav activeTab={activeTab} onSelect={selectTab} creator={creator} />
+				<TournamentNav activeTab={activeTab} onSelect={selectTab} canOpenSettings={canOpenSettings} />
 			</div>
 
 			<div className="tv-content">{children}</div>
@@ -57,9 +57,9 @@ export default function TournamentShell({ tournamentId, name, creator, children 
 // One row, always. It scrolls sideways rather than wrapping to a second row,
 // because a wrapping tab bar changes the page's height as the window narrows and
 // pushes the content below it around.
-function TournamentNav({ activeTab, onSelect, creator = false }) {
-	// Settings is the organiser's alone, so nobody else is shown the tab.
-	const tabs = creator ? [...TOURNAMENT_TABS, SETTINGS_TAB] : TOURNAMENT_TABS;
+function TournamentNav({ activeTab, onSelect, canOpenSettings = false }) {
+	// Only offered to a role with something to change there.
+	const tabs = canOpenSettings ? [...TOURNAMENT_TABS, SETTINGS_TAB] : TOURNAMENT_TABS;
 
 	const listRef = useRef(null);
 

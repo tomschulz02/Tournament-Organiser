@@ -258,8 +258,8 @@ Complete:
 - `divisions` — round progression only. `divisions.controller.js` and
   `divisions.route.js` implement `GET` and `POST /:divisionId/progression`, backed by
   `progression.service.js` and `standings.js`. This is the newest code in the repository
-  and the pattern the rest should follow: the service owns the rules, checks ownership
-  via `getDivisionWithOwner`, and revalidates untrusted input; the controller maps named
+  and the pattern the rest should follow: the service owns the rules, checks the caller's
+  role via `utils/tournamentPermissions.js`, and revalidates untrusted input; the controller maps named
   service errors to status codes through a lookup table.
 
 Incomplete:

@@ -12,6 +12,7 @@ import {
     seedKnockoutResults
 } from "../utils/standings.js";
 import { AppError } from "../errors.js";
+import { assertCan, resolveRole } from "../utils/tournamentPermissions.js";
 import { roundHolding, isPlacementRound, setsWon } from "./fixtures.service.js";
 
 // Round progression.
@@ -427,10 +428,9 @@ async function loadDivision(divisionId, userId) {
         throw new AppError("DIVISION_NOT_FOUND");
     }
 
-    // requireAuth proves the caller is logged in. This proves the tournament is theirs.
-    if (division.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    // requireAuth proves the caller is logged in. This proves their role covers
+    // advancing rounds.
+    assertCan(await resolveRole(division.tournament_id, division.created_by, userId), "progressRounds");
 
     const state = normalizeState(division.state);
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];

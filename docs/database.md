@@ -4,6 +4,7 @@ Changes to the database schema should never be done without explicit permission.
 CREATE SCHEMA "public";
 CREATE TYPE "tournament_status" AS ENUM('Not Started', 'Ongoing', 'Finished');
 CREATE TYPE "fixture_status" AS ENUM('UPCOMING', 'CANCELLED', 'COMPLETED', 'LIVE');
+CREATE TYPE "editor_role" AS ENUM('SCORER', 'MATCH_MANAGER', 'CO_ORGANISER');
 CREATE TABLE "divisions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"tournament_id" uuid NOT NULL,
@@ -43,7 +44,8 @@ CREATE TABLE "tournament_editors" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"tournament_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"role" "editor_role" DEFAULT 'SCORER' NOT NULL
 );
 CREATE TABLE "tournaments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -70,6 +72,7 @@ CREATE UNIQUE INDEX "fixtures_pkey" ON "fixtures" ("id");
 CREATE UNIQUE INDEX "saved_tournaments_pkey" ON "saved_tournaments" ("id");
 CREATE UNIQUE INDEX "teams_pkey" ON "teams" ("id");
 CREATE UNIQUE INDEX "tournament_editors_unique" ON "tournament_editors" ("tournament_id", "user_id");
+CREATE INDEX "tournament_editors_user_idx" ON "tournament_editors" ("user_id");
 CREATE UNIQUE INDEX "tournaments_pkey" ON "tournaments" ("id");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
 CREATE UNIQUE INDEX "users_pkey" ON "users" ("id");
@@ -133,6 +136,15 @@ are unaffected by that guard, because assigning the column is itself a change.
 
 None of these carry a trigger. Writes to `tournament_editors` and
 `fixtures.entered_by` move no ETag stamp on their own, and nothing reads them for one.
+
+### Collaborator roles (applied 2026-11-04)
+
+- `tournament_editors.role` is what a collaborator may do on that tournament: `SCORER`
+  (the default, and what every earlier row became), `MATCH_MANAGER` or `CO_ORGANISER`. The
+  organiser is never stored here; `tournaments.created_by` decides that.
+- `tournament_editors_user_idx` serves looking up the tournaments a user collaborates on.
+
+The table keeps its name, and users see "collaborator". See `docs/decisions.md`.
 
 ### What the stamps are for
 

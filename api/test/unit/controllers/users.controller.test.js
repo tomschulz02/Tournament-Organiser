@@ -11,6 +11,7 @@ vi.mock("../../../src/services/users.service.js", () => ({
 vi.mock("../../../src/services/tournaments.service.js", () => ({
     tournamentService: {
         getMyTournaments: vi.fn(),
+        getCollaboratingTournaments: vi.fn(),
         getSavedTournaments: vi.fn()
     }
 }));
@@ -35,6 +36,7 @@ beforeEach(() => {
     vi.mocked(userService.loginUser).mockReset();
     vi.mocked(userService.changePassword).mockReset();
     vi.mocked(tournamentService.getMyTournaments).mockReset();
+    vi.mocked(tournamentService.getCollaboratingTournaments).mockReset();
     vi.mocked(tournamentService.getSavedTournaments).mockReset();
 });
 
@@ -223,6 +225,33 @@ describe("userController.getMyTournaments", () => {
 
         await expect(
             userController.getMyTournaments(makeReq({ user: { id: "user-1" } }), makeRes())
+        ).rejects.toBe(failure);
+    });
+});
+
+describe("userController.getMyCollaboratingTournaments", () => {
+    it("returns the tournaments the caller collaborates on in data", async () => {
+        const tournaments = [{ id: "tour-3", role: "SCORER" }];
+        tournamentService.getCollaboratingTournaments.mockResolvedValue(tournaments);
+        const res = makeRes();
+
+        await userController.getMyCollaboratingTournaments(makeReq({ user: { id: "user-1" } }), res);
+
+        expect(tournamentService.getCollaboratingTournaments).toHaveBeenCalledWith("user-1");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            message: "Collaborating tournaments fetched",
+            data: tournaments
+        });
+    });
+
+    it("lets a failure propagate", async () => {
+        const failure = new Error("connection lost");
+        tournamentService.getCollaboratingTournaments.mockRejectedValue(failure);
+
+        await expect(
+            userController.getMyCollaboratingTournaments(makeReq({ user: { id: "user-1" } }), makeRes())
         ).rejects.toBe(failure);
     });
 });

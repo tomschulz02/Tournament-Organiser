@@ -104,6 +104,9 @@ export const getMyTournaments = () => request('users/profile/tournaments');
 
 export const getMySavedTournaments = () => request('users/profile/saved-tournaments');
 
+// The tournaments the caller collaborates on, each with the `role` they hold.
+export const getMyCollaboratingTournaments = () => request('users/profile/collaborating');
+
 export const logoutUser = () => request('users/logout', { method: 'POST' });
 
 // Tournaments
@@ -318,9 +321,8 @@ export const updateTournamentSchedule = (tournamentId, schedule) =>
 export const updateTournamentScoresheetTemplate = (tournamentId, scoresheetTemplate) =>
 	request(`tournaments/${tournamentId}/scoresheet-template`, { method: 'PUT', body: { scoresheetTemplate } });
 
-// Editors: users the organiser has allowed to enter results. All three are
-// organiser-only. Adding and removing take effect at once — there is no invite
-// to accept. `identifier` is an email or a username.
+// Collaborators and their roles. All organiser-only. Changes take effect at once —
+// there is no invite to accept. `identifier` is an email or a username.
 export const getTournamentEditors = (tournamentId) => request(`tournaments/${tournamentId}/editors`);
 
 // Suggestions for the add field: `[{ username, workedWith }]`, people the
@@ -329,8 +331,11 @@ export const getTournamentEditors = (tournamentId) => request(`tournaments/${tou
 export const searchEditorCandidates = (tournamentId, query) =>
 	request(`tournaments/${tournamentId}/editors/search?q=${encodeURIComponent(query)}`);
 
-export const addTournamentEditor = (tournamentId, identifier) =>
-	request(`tournaments/${tournamentId}/editors`, { method: 'POST', body: { identifier } });
+export const addTournamentEditor = (tournamentId, identifier, role) =>
+	request(`tournaments/${tournamentId}/editors`, { method: 'POST', body: { identifier, role } });
+
+export const updateTournamentEditorRole = (tournamentId, userId, role) =>
+	request(`tournaments/${tournamentId}/editors/${userId}`, { method: 'PUT', body: { role } });
 
 export const removeTournamentEditor = (tournamentId, userId) =>
 	request(`tournaments/${tournamentId}/editors/${userId}`, { method: 'DELETE' });

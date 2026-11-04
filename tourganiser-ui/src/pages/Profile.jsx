@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMessage } from '../MessageContext';
 import { useHelpTopic } from '../HelpContext';
-import { getMyProfile, getMyTournaments, getMySavedTournaments, unsaveTournament } from '../requests';
+import { getMyCollaboratingTournaments, getMyProfile, getMyTournaments, getMySavedTournaments, unsaveTournament } from '../requests';
 import LoadingScreen from '../components/LoadingScreen';
+import { roleLabel } from '../components/tournament/collaboratorRoles';
 import { TournamentCard } from './Browse';
 import '../App.css';
 
@@ -56,7 +57,9 @@ export default function Profile() {
 	const [profile, setProfile] = useState(null);
 	const [createdTournaments, setCreatedTournaments] = useState([]);
 	const [savedTournaments, setSavedTournaments] = useState([]);
+	const [collaborating, setCollaborating] = useState([]);
 	const [createdPage, setCreatedPage] = useState(1);
+	const [collaboratingPage, setCollaboratingPage] = useState(1);
 	const [savedPage, setSavedPage] = useState(1);
 
 	// Fetched unconditionally rather than gated on AuthContext.isLoggedIn: the
@@ -70,15 +73,21 @@ export default function Profile() {
 		let active = true;
 
 		const fetchProfile = async () => {
-			const results = await Promise.allSettled([getMyProfile(), getMyTournaments(), getMySavedTournaments()]);
+			const results = await Promise.allSettled([
+				getMyProfile(),
+				getMyTournaments(),
+				getMySavedTournaments(),
+				getMyCollaboratingTournaments(),
+			]);
 			if (!active) return;
 
-			const [profileResult, createdResult, savedResult] = results;
+			const [profileResult, createdResult, savedResult, collaboratingResult] = results;
 
-			// A failure in one fetch must not blank what the other two returned.
+			// A failure in one fetch must not blank what the others returned.
 			if (profileResult.status === 'fulfilled') setProfile(profileResult.value.data);
 			if (createdResult.status === 'fulfilled') setCreatedTournaments(createdResult.value.data);
 			if (savedResult.status === 'fulfilled') setSavedTournaments(savedResult.value.data);
+			if (collaboratingResult.status === 'fulfilled') setCollaborating(collaboratingResult.value.data);
 
 			const failures = results.filter((result) => result.status === 'rejected');
 			if (failures.some((failure) => failure.reason?.status === 401)) {
@@ -143,6 +152,8 @@ export default function Profile() {
 	const visibleCreatedPage = Math.min(createdPage, createdTotalPages);
 	const savedTotalPages = Math.max(1, Math.ceil(savedTournaments.length / PAGE_SIZE));
 	const visibleSavedPage = Math.min(savedPage, savedTotalPages);
+	const collaboratingTotalPages = Math.max(1, Math.ceil(collaborating.length / PAGE_SIZE));
+	const visibleCollaboratingPage = Math.min(collaboratingPage, collaboratingTotalPages);
 
 	return (
 		<div className="profile-page">
@@ -169,6 +180,26 @@ export default function Profile() {
 					<p className="profile-empty-message">You haven't created any tournaments yet.</p>
 				)}
 			</section>
+
+			{/* Absent when empty, unlike the two either side: most people never
+			    collaborate, and an empty section would only advertise a feature they
+			    can't act on from here. */}
+			{collaborating.length > 0 && (
+				<section className="profile-section">
+					<h3>Collaborating On</h3>
+					<div className="tournaments-grid">
+						{paginate(collaborating, visibleCollaboratingPage).map((tournament) => (
+							<TournamentCard
+								key={tournament.id}
+								details={tournament}
+								roleName={roleLabel(tournament.role)}
+								action={() => openTournament(tournament.id)}
+							/>
+						))}
+					</div>
+					<Pagination page={visibleCollaboratingPage} totalPages={collaboratingTotalPages} onChange={setCollaboratingPage} />
+				</section>
+			)}
 
 			<section className="profile-section">
 				<h3>Saved Tournaments</h3>

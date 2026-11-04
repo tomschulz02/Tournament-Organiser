@@ -168,6 +168,28 @@ describe("getTournamentsByCreator", () => {
     });
 });
 
+describe("getTournamentsByCollaborator", () => {
+    it("selects the card columns and the role, newest start date first, without the schedule", async () => {
+        db.query.mockResolvedValueOnce([{ id: "tour-1", role: "SCORER" }]);
+
+        expect(await tournamentRepository.getTournamentsByCollaborator("user-2")).toEqual([{ id: "tour-1", role: "SCORER" }]);
+        expect(squash(db.query.mock.calls[0][0])).toBe(
+            "SELECT t.id, t.name, t.start_date, t.end_date, t.location, t.description, t.status, t.created_by, e.role FROM tournament_editors e JOIN tournaments t ON t.id = e.tournament_id WHERE e.user_id = $1::uuid ORDER BY t.start_date DESC"
+        );
+        expect(db.query.mock.calls[0][1]).toEqual(["user-2"]);
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        const failure = await tournamentRepository.getTournamentsByCollaborator("user-2").catch((err) => err);
+
+        expect(failure.message).toBe("Failed to fetch tournaments by collaborator");
+        expect(failure.cause).toBe(underlying);
+    });
+});
+
 describe("getTournamentsByIds", () => {
     it("returns an empty list without querying when given no ids", async () => {
         expect(await tournamentRepository.getTournamentsByIds([])).toEqual([]);

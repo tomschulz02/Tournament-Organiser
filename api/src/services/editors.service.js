@@ -3,9 +3,10 @@ import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { userRepository } from "../repositories/users.repository.js";
 import { AppError } from "../errors.js";
 import { assertText } from "../utils/validation.js";
+import { ASSIGNABLE_ROLES, SCORER, assertCan, resolveRole } from "../utils/tournamentPermissions.js";
 
-// A tournament's editors. Every function here is organiser-only: an editor can
-// enter results, but who else may do so is the organiser's decision alone.
+// A tournament's collaborators. Every function here is organiser-only: who else
+// may work on a tournament, and in which role, is the organiser's decision alone.
 //
 // Membership is immediate in both directions — no invite, no acceptance. The
 // schema would take a pending state later without reshaping anything; nothing
@@ -20,12 +21,14 @@ async function listEditors(tournamentId, userId) {
 }
 
 // `identifier` is an email or a username, resolved by the same lookup sign-in
-// uses, so an organiser can type whichever of the two they know.
-async function addEditor(tournamentId, userId, identifier) {
+// uses, so an organiser can type whichever of the two they know. Someone added
+// without a role is a scorer, the least a collaborator can be.
+async function addEditor(tournamentId, userId, identifier, role = SCORER) {
     const tournament = await loadOwnedTournament(tournamentId, userId);
 
     // users.email and users.username are both varchar(100).
     assertText(identifier, "identifier", { max: 100 });
+    assertAssignable(role);
 
     const user = await userRepository.findUserByEmailOrUsername(identifier.trim());
     if (!user) {
@@ -36,16 +39,40 @@ async function addEditor(tournamentId, userId, identifier) {
         throw new AppError("EDITOR_IS_ORGANISER");
     }
 
-    if (await editorsRepository.isEditor(tournamentId, user.id)) {
+    if ((await editorsRepository.getRole(tournamentId, user.id)) !== null) {
         throw new AppError("EDITOR_ALREADY_ADDED");
     }
 
-    await editorsRepository.addEditor(tournamentId, user.id);
-    // The new editor's view of the tournament changes — they are offered score
-    // entry — but nothing the ETag reads has moved. See touchTournament.
+    await editorsRepository.addEditor(tournamentId, user.id, role);
+    // The new collaborator's view of the tournament changes — they are offered
+    // what their role covers — but nothing the ETag reads has moved. See
+    // touchTournament.
     await tournamentRepository.touchTournament(tournamentId);
 
-    return { id: user.id, username: user.username };
+    return { id: user.id, username: user.username, role };
+}
+
+// Takes effect on that person's next request, and their next load of the
+// tournament shows it, for the same reason adding has to touch the tournament.
+async function updateEditorRole(tournamentId, userId, editorId, role) {
+    await loadOwnedTournament(tournamentId, userId);
+
+    assertAssignable(role);
+
+    const updated = await editorsRepository.updateRole(tournamentId, editorId, role);
+    if (!updated) {
+        throw new AppError("EDITOR_NOT_FOUND");
+    }
+
+    await tournamentRepository.touchTournament(tournamentId);
+
+    return { id: editorId, role };
+}
+
+function assertAssignable(role) {
+    if (!ASSIGNABLE_ROLES.includes(role)) {
+        throw new AppError("ROLE_INVALID");
+    }
 }
 
 // Removal takes effect the moment the row is gone. Results the editor already
@@ -104,28 +131,27 @@ function escapeLike(text) {
     return text.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
-// requireAuth proves the caller is logged in. This proves the tournament is
-// theirs — the same check tournaments.service.js's loadOwnedTournament makes.
+// requireAuth proves the caller is logged in. This proves their role covers
+// managing collaborators, which only the organiser's does.
 async function loadOwnedTournament(tournamentId, userId) {
     const tournament = await tournamentRepository.getTournamentById(tournamentId);
     if (!tournament) {
         throw new AppError("TOURNAMENT_NOT_FOUND");
     }
 
-    if (tournament.created_by !== userId) {
-        throw new AppError("NOT_TOURNAMENT_OWNER");
-    }
+    assertCan(await resolveRole(tournamentId, tournament.created_by, userId), "manageCollaborators");
 
     return tournament;
 }
 
 function toEditor(row) {
-    return { id: row.id, username: row.username, addedAt: row.created_at ?? null };
+    return { id: row.id, username: row.username, role: row.role, addedAt: row.created_at ?? null };
 }
 
 export const editorService = {
     listEditors,
     addEditor,
+    updateEditorRole,
     removeEditor,
     searchCandidates
 };

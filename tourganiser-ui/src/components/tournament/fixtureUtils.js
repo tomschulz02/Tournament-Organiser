@@ -194,29 +194,25 @@ function playedIn(round, fixture) {
 }
 
 // The fixtures an editor may enter a result for: those in the division's current
-// round, which is the highest round in state.rounds holding a fixture with both
-// teams bound. Mirrors assertCurrentRound in fixtures.service.js — the server is
-// the gate, and this only decides where the control is offered.
+// round, state.currentRound. Mirrors assertCurrentRound in fixtures.service.js —
+// the server is the gate, and this only decides where the control is offered.
 export function editableFixtureIds(divisions = []) {
 	const ids = new Set();
 
 	divisions.forEach((division) => {
 		const rounds = Array.isArray(division.state?.rounds) ? division.state.rounds : [];
-		const fixtures = division.fixtures ?? [];
-		const holdingIndex = (fixture) => rounds.findIndex((round) => round.name === roundHolding(fixture.round));
-		const current = fixtures
-			.filter((fixture) => fixture.team_1_id && fixture.team_2_id)
-			.reduce((highest, fixture) => Math.max(highest, holdingIndex(fixture)), -1);
+		const current = division.state?.currentRound ?? 0;
 
-		fixtures.forEach((fixture) => {
-			if (current !== -1 && holdingIndex(fixture) === current) ids.add(fixture.id);
+		(division.fixtures ?? []).forEach((fixture) => {
+			const holding = rounds.findIndex((round) => round.name === roundHolding(fixture.round));
+			if (holding === current) ids.add(fixture.id);
 		});
 	});
 
 	return ids;
 }
 
-// "you", or a name with the role it is held under now: "Priya (editor)". The
+// "you", or a name with the role it is held under now: "Priya (scorer)". The
 // server only sends enteredBy to the organiser and the tournament's editors.
 export function enteredByLabel(enteredBy) {
 	if (!enteredBy) return null;

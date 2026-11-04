@@ -36,7 +36,7 @@ export default function TeamsTab({
 	divisions = [],
 	selectedDivisionId,
 	onSelectDivision,
-	creator = false,
+	canManageSetup = false,
 	status,
 	onChanged,
 }) {
@@ -105,7 +105,7 @@ export default function TeamsTab({
 	//
 	// Hidden rather than disabled, and hidden rather than offered-then-refused:
 	// see tournamentStatus.js.
-	const canEditTeams = creator && isNotStarted(status);
+	const canEditTeams = canManageSetup && isNotStarted(status);
 
 	const setTeams = (rows) => setDraft({ divisionId: division.id, teams: rows });
 
@@ -482,8 +482,8 @@ export default function TeamsTab({
 			<div className="tv-standings-toolbar">
 				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={handleSelectDivision} />
 
-				{/* Prominent, and absent entirely for anyone who is not the creator —
-				    a viewer sees no management affordance at all, not a disabled one. */}
+				{/* Prominent, and absent entirely for anyone whose role does not cover
+				    it — a viewer sees no management affordance at all, not a disabled one. */}
 				{canEditTeams && !adding && (
 					<button type="button" className="tv-primary-action" onClick={startAdding}>
 						Add Team
@@ -495,7 +495,7 @@ export default function TeamsTab({
 			    division, exactly as in Standings. */}
 			<h2 className="tv-band-heading">{division.name}</h2>
 
-			{creator && dirty && (
+			{canManageSetup && dirty && (
 				<div className="tv-teams-pending">
 					<p className="tv-teams-pending-note">
 						{setChanged

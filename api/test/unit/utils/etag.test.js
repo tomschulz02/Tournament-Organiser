@@ -92,6 +92,15 @@ describe("buildTournamentEtag", () => {
         expect(buildTournamentEtag("1000", "user-1")).not.toBe(unversioned);
     });
 
+    // Version 3 bodies carry no `can`. Revalidating one must not keep it, or the
+    // organiser's cached page loses every control when the UI starts reading it.
+    it("does not match a body from before role and can were added", async () => {
+        const { createHash } = await import("node:crypto");
+        const version3 = `"${createHash("sha256").update("1000|user-1|3").digest("base64url").slice(0, 27)}"`;
+
+        expect(buildTournamentEtag("1000", "user-1")).not.toBe(version3);
+    });
+
     it("treats undefined and null viewers as the same anonymous reader", () => {
         expect(buildTournamentEtag("1000", undefined)).toBe(buildTournamentEtag("1000", null));
     });

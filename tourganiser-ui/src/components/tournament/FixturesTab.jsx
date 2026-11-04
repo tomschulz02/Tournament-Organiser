@@ -25,7 +25,7 @@ const STATUS_ORDER = ['LIVE', 'UPCOMING', 'COMPLETED', 'CANCELLED'];
 // scheduling that has not happened yet. ScheduleTab replaces this presentation
 // wholesale when tournament.schedule is non-null — it is not a view the user can
 // toggle.
-export default function FixturesTab({ divisions = [], creator = false, onCreateSchedule, renderFixtureAction }) {
+export default function FixturesTab({ divisions = [], canEditSchedule = false, onCreateSchedule, renderFixtureAction }) {
 	useHelpTopic('tournament-fixtures-unscheduled');
 
 	const fixtures = useMemo(() => flattenFixtures(divisions), [divisions]);
@@ -66,8 +66,8 @@ export default function FixturesTab({ divisions = [], creator = false, onCreateS
 					statuses={statuses}
 				/>
 
-				{/* Organiser only. A viewer sees nothing extra at all. */}
-				{creator && onCreateSchedule && (
+				{/* A viewer sees nothing extra at all. */}
+				{canEditSchedule && onCreateSchedule && (
 					<button type="button" className="tv-primary-action" onClick={onCreateSchedule}>
 						Create Schedule
 					</button>

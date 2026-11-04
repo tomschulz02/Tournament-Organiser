@@ -125,9 +125,28 @@ body.dark {
 	transform: translateY(-1px);
 }
 
+.schedule-maker-toolbar-actions button {
+	min-height: 44px;
+	background: transparent;
+	color: var(--schedule-text);
+	border: 1px solid var(--schedule-border);
+}
+
+.schedule-maker-toolbar-actions button:hover {
+	transform: none;
+	background: var(--schedule-surface-alt);
+}
+
 .schedule-maker-toolbar-actions button.primary,
 .schedule-panel button.primary {
-	background: linear-gradient(135deg, var(--main-color), var(--secondary-color));
+	background: var(--main-color);
+	color: #fff;
+	border-color: var(--main-color);
+}
+
+.schedule-maker-toolbar-actions button.primary:hover:not(:disabled) {
+	background: var(--quarternary-color);
+	border-color: var(--quarternary-color);
 }
 
 .schedule-panel button.danger {
@@ -245,14 +264,44 @@ body.dark {
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
 	scrollbar-width: none;
-	margin-bottom: var(--space-3);
-	flex: 0 0 auto;
+	flex: 0 1 auto;
+	min-width: 0;
 	/* Makes this the offsetParent of its buttons, so their offsetLeft is measured
 	   from this box rather than from whatever positioned ancestor is above it.
 	   The scroll-into-view arithmetic compares offsetLeft against scrollLeft, and
 	   without this the two are in different coordinate spaces — a constant error
 	   that clamping hides at the right-hand end and exposes at the left. */
 	position: relative;
+}
+
+/* The day strip, and beside it the one setting that belongs to the board itself. */
+.schedule-board-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2) var(--space-3);
+	margin-bottom: var(--space-3);
+	flex: 0 0 auto;
+}
+
+.schedule-grid-lines {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--schedule-muted);
+}
+
+.schedule-grid-lines select {
+	min-height: 44px;
+	padding: var(--space-2) var(--space-3);
+	font: inherit;
+	color: var(--schedule-text);
+	background: var(--schedule-surface);
+	border: 1px solid var(--schedule-border);
+	border-radius: 8px;
 }
 
 .schedule-maker-day-tabs::-webkit-scrollbar {
@@ -301,29 +350,6 @@ body.dark {
 	color: var(--error-color);
 }
 
-.schedule-day-toggle {
-	position: absolute;
-	top: var(--space-1);
-	right: var(--space-1);
-	min-width: 0;
-	flex-direction: row;
-	align-items: center;
-	justify-content: center;
-	padding: 2px var(--space-2);
-	font-size: 0.7rem;
-	font-weight: 600;
-	border-radius: 999px;
-	border: 1px solid var(--schedule-border);
-	background: var(--schedule-surface);
-	color: var(--schedule-muted);
-}
-
-.schedule-day-toggle:hover,
-.schedule-day-toggle:focus-visible {
-	color: var(--schedule-text);
-	border-color: var(--main-color);
-}
-
 .schedule-maker-toolbar-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -340,10 +366,19 @@ body.dark {
 	display: contents;
 }
 
-/* The overflow is the inverse: absent until the breakpoint. */
+/* The More menu holds what is rare and undoes a lot, at every width. Below the
+   breakpoint it also takes the inline actions, which have no room. */
 .schedule-maker-overflow {
-	display: none;
 	position: relative;
+}
+
+.schedule-maker-overflow.is-narrow-only,
+.schedule-maker-overflow-menu button.is-narrow-only {
+	display: none;
+}
+
+.schedule-maker-toolbar-actions .schedule-maker-overflow-menu button.is-destructive:not(:disabled) {
+	color: var(--error-color);
 }
 
 .schedule-maker-overflow-menu {
@@ -388,6 +423,8 @@ body.dark {
 	background: transparent;
 	color: var(--schedule-text);
 	padding: var(--space-2) var(--space-3);
+	border: none;
+	min-height: 36px;
 }
 
 /* Long labels by default, short ones below 768px. Rendered together and picked
@@ -402,16 +439,240 @@ body.dark {
 }
 
 .schedule-maker-layout {
+	position: relative;
 	display: grid;
-	grid-template-columns: 280px minmax(0, 1fr) 320px;
+	grid-template-columns: 280px minmax(0, 1fr);
 	gap: var(--space-4);
 	padding: var(--space-4) var(--space-5) var(--space-5);
 	min-height: 0;
 }
 
+/* A panel over the right of the board, which stays usable beside it. It floats, so it
+   takes a shadow. Above everything on the board, including its sticky headers. */
+.schedule-sheet {
+	position: absolute;
+	inset: 0 0 0 auto;
+	z-index: calc(var(--z-raised) + 5);
+	width: min(440px, 100%);
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	background: var(--schedule-surface);
+	border-left: 1px solid var(--schedule-border);
+	box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+}
+
+.schedule-sheet-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-4);
+	border-bottom: 1px solid var(--schedule-border);
+}
+
+.schedule-sheet-head h3 {
+	margin: 0;
+}
+
+.schedule-sheet-close {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 1px solid var(--schedule-border);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--schedule-text);
+	cursor: pointer;
+}
+
+.schedule-sheet-close svg {
+	fill: var(--schedule-text);
+}
+
+.schedule-sheet-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: var(--space-4);
+}
+
+/* So the time pickers' icons can be seen on the dark surface. */
+body.dark .schedule-sheet input,
+body.dark .schedule-popover input {
+	color-scheme: dark;
+}
+
+.schedule-setup {
+	display: grid;
+	gap: var(--space-3);
+}
+
+.schedule-setup-court {
+	display: grid;
+	gap: var(--space-1);
+}
+
+.schedule-setup-court summary {
+	cursor: pointer;
+	font-size: 0.85rem;
+	color: var(--schedule-muted);
+	min-height: 32px;
+}
+
+.schedule-setup-error {
+	color: var(--error-color);
+	font-size: 0.82rem;
+}
+
+.schedule-setup-warning {
+	color: var(--warning-color);
+	font-size: 0.82rem;
+}
+
+/* A sheet that needs the room: the page-break editor is a table of courts across time. */
+.schedule-sheet.is-wide {
+	inset: 0;
+	width: 100%;
+	border-left: none;
+}
+
+.schedule-print-sheet-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+/* Beside what it is about. Fixed, so that the board's scroller can't clip it, and placed
+   from the anchor by BoardPopover. It floats, so it takes a shadow. */
+.schedule-popover {
+	position: fixed;
+	z-index: calc(var(--z-raised) + 6);
+	width: min(340px, calc(100vw - 16px));
+	max-height: calc(100vh - 16px);
+	display: flex;
+	flex-direction: column;
+	background: var(--schedule-surface);
+	border: 1px solid var(--schedule-border);
+	border-radius: 14px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.schedule-popover-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-2) var(--space-1) var(--space-3);
+}
+
+.schedule-popover-head h3 {
+	margin: 0;
+	padding-top: var(--space-2);
+	font-size: 1rem;
+	line-height: 1.25;
+}
+
+.schedule-popover-body {
+	flex: 1 1 auto;
+	gap: var(--space-3);
+	padding: 0 var(--space-3) var(--space-3);
+}
+
+.schedule-popover .schedule-form-grid {
+	gap: var(--space-2);
+}
+
+.schedule-popover .schedule-form-grid input,
+.schedule-popover .schedule-form-grid select,
+.schedule-popover .schedule-form-grid textarea {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* Quiet on purpose. The destructive action is never the filled one. */
+.schedule-panel button.schedule-popover-remove {
+	align-self: flex-start;
+	min-height: 44px;
+	padding: 0;
+	background: transparent;
+	color: var(--error-color);
+}
+
+.schedule-panel button.schedule-popover-remove:hover {
+	transform: none;
+	text-decoration: underline;
+}
+
+/* A bottom sheet on a phone, under the thumb. The placement above is inline, so it takes
+   !important to overrule it, and it costs nothing to leave running. */
+@media (max-width: 768px) {
+	.schedule-popover {
+		left: 0 !important;
+		right: 0;
+		top: auto !important;
+		bottom: 0;
+		width: 100%;
+		max-height: 75vh;
+		border-radius: 14px 14px 0 0;
+	}
+
+	.schedule-popover input,
+	.schedule-popover select {
+		min-height: 44px;
+	}
+}
+
+.schedule-board-empty-action {
+	min-height: 44px;
+	margin-top: var(--space-3);
+	padding: var(--space-2) var(--space-4);
+	font-weight: 600;
+	color: #fff;
+	background: var(--main-color);
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+/* Full screen below 900px, where it is being tapped: 44px is the floor. Placed after the
+   base rules it overrides, and scoped to the sheet so the rest of the panels are untouched. */
+@media (max-width: 900px) {
+	.schedule-sheet {
+		width: 100%;
+		border-left: none;
+	}
+
+	.schedule-sheet input:not([type='checkbox']),
+	.schedule-sheet select,
+	.schedule-sheet .schedule-court-remove,
+	.schedule-sheet .schedule-inline-form button,
+	.schedule-sheet .schedule-panel-section-action {
+		min-height: 44px;
+	}
+
+	/* Padding rather than flex, which would drop the disclosure arrow. */
+	.schedule-sheet summary {
+		padding-block: var(--space-3);
+	}
+
+	.schedule-sheet .schedule-generator-toggle,
+	.schedule-sheet .schedule-court-division-option {
+		display: flex;
+		align-items: center;
+		min-height: 44px;
+	}
+}
+
 /* The small-screen panel switcher. Hidden here and shown below 900px, where the
-   three panels stop fitting side by side. data-mobile-panel on the layout is
-   what it drives; above 900px both are inert and all three panels show. */
+   two panels stop fitting side by side. data-mobile-panel on the layout is
+   what it drives; above 900px both are inert and both panels show. */
 .schedule-maker-panel-switcher {
 	display: none;
 	gap: var(--space-1);
@@ -442,8 +703,7 @@ body.dark {
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-.schedule-maker-sidebar,
-.schedule-maker-inspector {
+.schedule-maker-sidebar {
 	background: var(--schedule-surface-alt);
 	border: 1px solid var(--schedule-border);
 	border-radius: 20px;
@@ -570,6 +830,11 @@ body.dark {
 .schedule-fixture-pill.pending {
 	border-color: var(--schedule-fixture);
 	background: var(--schedule-surface-soft);
+}
+
+/* A new break, at the top of the list. It covers every court, so it has no division. */
+.schedule-break-pill {
+	border-style: dashed;
 }
 
 .schedule-pending-banner {
@@ -770,41 +1035,44 @@ button.schedule-grid-header-court:hover {
 .schedule-grid-cells {
 	padding: 1px;
 	position: relative;
-	/* Columns are still separated by the container's background showing through a
-	   1px gap. Rows are not: an entry is positioned from its own start time in
-	   minutes, and a gap between every row makes the pixel position of a minute
-	   depend on how many row boundaries precede it — so a block drawn at 16:00
-	   would sit visibly below the 16:00 label at the end of a long day. The row
-	   lines are a border on the cells instead, which takes no height. */
+	/* Columns are separated by the container's background showing through a 1px gap.
+	   There is one row, the height of the day. Everything on it is positioned in
+	   minutes, so the grid lines are a background on each column and take no height. */
 	column-gap: 1px;
 	row-gap: 0;
 }
 
-.schedule-grid-time,
-.schedule-grid-cell {
+.schedule-grid-time {
 	background: var(--schedule-surface);
-	border-top: 1px solid var(--schedule-border);
-	box-sizing: border-box;
 }
 
-.schedule-grid-time {
-	padding: var(--space-3) var(--space-2);
-	font-size: 0.88rem;
+.schedule-grid-time-label {
+	position: absolute;
+	left: 0;
+	right: var(--space-2);
+	padding-top: 2px;
+	text-align: right;
+	font-size: 0.82rem;
 	font-weight: 700;
+	line-height: 1;
 	color: var(--schedule-muted);
 }
 
-.schedule-grid-cell {
+/* A court for the whole day. The lines are drawn here at whatever spacing the grid is
+   set to, and nothing else depends on them. */
+.schedule-grid-column {
+	background-color: var(--schedule-surface);
+	background-image: linear-gradient(to bottom, var(--schedule-border) 1px, transparent 1px);
+	background-size: 100% var(--schedule-grid-line-gap);
+}
+
+.schedule-grid-column.is-open {
 	cursor: pointer;
 	transition: background-color 0.2s ease;
 }
 
-.schedule-grid-cell.open:hover {
-	background: var(--schedule-surface-soft);
-}
-
-.schedule-grid-cell.occupied {
-	cursor: default;
+.schedule-grid-column.is-open:hover {
+	background-color: var(--schedule-surface-soft);
 }
 
 /* Positioned rather than laid out. The button is an absolutely positioned child
@@ -827,14 +1095,15 @@ button.schedule-grid-header-court:hover {
 	   is reduced by the same 3px so the content position is unchanged either
 	   way. */
 	border-left: 3px solid var(--tv-division-color, transparent);
-	border-radius: 18px;
-	padding: var(--space-3);
-	padding-left: calc(var(--space-3) - 3px);
+	border-radius: 10px;
+	padding: 6px 0 6px 5px;
 	text-align: left;
 	color: #fff;
-	display: grid;
-	align-content: start;
-	gap: var(--space-1);
+	/* Wrapping the column pushes a line that doesn't fit out of view whole, rather than
+	   slicing it through the middle. See the right-hand padding on its children. */
+	display: flex;
+	flex-flow: column wrap;
+	align-content: flex-start;
 	cursor: pointer;
 	z-index: var(--z-raised);
 	box-shadow: 0 12px 20px rgba(0, 0, 0, 0.14);
@@ -844,13 +1113,20 @@ button.schedule-grid-header-court:hover {
 	min-width: 0;
 }
 
+/* The right-hand gap lives on the lines: a line pushed out of view sits one block-width
+   to the right, and overflow clips at the padding box, so padding on the block would
+   leave a sliver of it showing. */
+.schedule-grid-entry > div {
+	width: 100%;
+	min-width: 0;
+	padding-right: 6px;
+	box-sizing: border-box;
+}
+
 /* A short match has a short block. Its times are what it is for at that height,
-   so the two lines that will not fit are dropped rather than clipped mid-word,
-   and the padding and the corner radius come down to match. */
+   so the two lines that will not fit are dropped rather than clipped mid-word. */
 .schedule-grid-entry.compact {
-	padding: var(--space-1) var(--space-2);
-	border-radius: 12px;
-	gap: 0;
+	padding-block: var(--space-1);
 }
 
 .schedule-grid-entry.compact .schedule-grid-entry-subtitle,
@@ -866,6 +1142,33 @@ button.schedule-grid-header-court:hover {
 
 .schedule-grid-entry.compact .schedule-grid-entry-title {
 	line-height: 1.15;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Too short for two lines. The teams are what it is for at that height. */
+.schedule-grid-entry.tiny {
+	padding-block: 1px;
+	justify-content: center;
+}
+
+.schedule-grid-entry.tiny .schedule-grid-entry-time {
+	display: none;
+}
+
+.schedule-grid-entry.tiny .schedule-grid-entry-title {
+	font-size: 0.78rem;
+}
+
+/* The other matches of the teams being dragged. */
+.schedule-grid-entry.linked {
+	outline: 2px dashed var(--schedule-text);
+	outline-offset: 1px;
+}
+
+.schedule-grid-entry.is-being-dragged {
+	opacity: 0.4;
 }
 
 /* Lifted while its edge is being dragged, so the block being changed is the one
@@ -919,6 +1222,43 @@ button.schedule-grid-header-court:hover {
 	z-index: calc(var(--z-raised) + 3);
 }
 
+/* Where a dragged match would land, while it is somewhere it can't go or shouldn't. */
+.schedule-grid-draft.is-refused {
+	border-color: var(--error-color);
+	background: rgb(from var(--error-color) r g b / 0.18);
+}
+
+.schedule-grid-draft.is-warned {
+	border-color: var(--warning-color);
+	background: rgb(from var(--warning-color) r g b / 0.18);
+}
+
+/* The times and any reason, beside the pointer during a drag. On the document body, so
+   it takes the global tokens rather than the --schedule-* ones. */
+.schedule-drop-chip {
+	position: fixed;
+	z-index: var(--z-tooltip);
+	max-width: 280px;
+	display: grid;
+	gap: 2px;
+	padding: var(--space-1) var(--space-2);
+	font-size: 0.85rem;
+	color: var(--secondary-text-color);
+	background: var(--card-surface-color);
+	border: 1px solid var(--main-color);
+	border-radius: 8px;
+	box-shadow: 0 4px 12px var(--card-shadow-color);
+	pointer-events: none;
+}
+
+.schedule-drop-chip.is-refused {
+	border-color: var(--error-color);
+}
+
+.schedule-drop-chip.is-warned {
+	border-color: var(--warning-color);
+}
+
 /* A drag across the board would otherwise select the time column's labels on the
    way past, which leaves the grid full of highlighted text when it ends. */
 .schedule-grid-shell.is-dragging,
@@ -944,8 +1284,8 @@ button.schedule-grid-header-court:hover {
 	}
 }
 
-/* An organiser can drag a placed entry to another slot; a click still opens the
-   inspector. A viewer can only click. */
+/* An organiser can drag a placed match somewhere else; a click still opens it. A viewer
+   can only click. */
 .schedule-grid-entry[draggable='true'] {
 	cursor: grab;
 }
@@ -963,22 +1303,26 @@ button.schedule-grid-header-court:hover {
 }
 
 .schedule-grid-entry-time {
-	font-size: 0.78rem;
+	font-size: 0.76rem;
+	line-height: 1.2;
 	opacity: 0.85;
+	white-space: nowrap;
 }
 
 .schedule-grid-entry-title {
+	font-size: 0.88rem;
 	font-weight: 700;
-	line-height: 1.35;
+	line-height: 1.2;
 }
 
-.schedule-grid-entry-subtitle {
-	font-size: 0.82rem;
-	opacity: 0.9;
-}
-
+.schedule-grid-entry-subtitle,
 .schedule-grid-entry-officials {
-	font-size: 0.9rem;
+	font-size: 0.74rem;
+	line-height: 1.25;
+	opacity: 0.9;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .schedule-list-day {
@@ -1031,14 +1375,8 @@ button.schedule-grid-header-court:hover {
 	color: var(--schedule-muted);
 }
 
-/* The inspector's panels scroll. None of them did, so a slot assignment list or
-   a long entry form was simply cut off by the modal's overflow: hidden — which
-   is what made the only working mobile placement path undiscoverable.
-
-   The panel is the scroller and its heading is sticky, rather than the heading
-   sitting outside a scrolling region. Same result — the heading stays put, and
-   it is what tells you which panel you are in — without restructuring five
-   panels' markup. */
+/* What a sheet or popover holds. It scrolls, so a long list is never cut off by the
+   modal's overflow: hidden. */
 .schedule-panel {
 	display: flex;
 	flex-direction: column;
@@ -1048,26 +1386,12 @@ button.schedule-grid-header-court:hover {
 	overscroll-behavior-y: contain;
 }
 
-.schedule-maker-inspector > .schedule-panel {
-	flex: 1 1 auto;
-}
-
 .schedule-panel > * {
 	flex: 0 0 auto;
 }
 
 .schedule-panel h3 {
 	font-size: 1.05rem;
-}
-
-/* Opaque, or the content scrolls visibly through it. The inspector's own
-   surface is the colour behind it. */
-.schedule-panel > h3 {
-	position: sticky;
-	top: 0;
-	z-index: var(--z-raised);
-	padding-bottom: var(--space-2);
-	background: var(--schedule-surface-alt);
 }
 
 .schedule-panel p {
@@ -1091,7 +1415,8 @@ button.schedule-grid-header-court:hover {
 	margin: 0;
 }
 
-.schedule-panel .schedule-panel-section-action {
+.schedule-panel .schedule-panel-section-action,
+.schedule-generation-report .schedule-panel-section-action {
 	border: 1px solid var(--schedule-border);
 	border-radius: 10px;
 	padding: var(--space-1) var(--space-3);
@@ -1100,48 +1425,6 @@ button.schedule-grid-header-court:hover {
 	font-size: 0.8rem;
 	font-weight: 600;
 	cursor: pointer;
-}
-
-/* A quiet, left-aligned link back to the overview from a sub-panel. Deliberately
-   not a primary button — it competes with nothing. */
-.schedule-panel .schedule-panel-back {
-	align-self: start;
-	border: none;
-	background: transparent;
-	color: var(--schedule-muted);
-	padding: 0;
-	font-size: 0.85rem;
-	font-weight: 600;
-	cursor: pointer;
-}
-
-.schedule-panel .schedule-panel-back:hover {
-	color: var(--schedule-text);
-	transform: none;
-}
-
-.schedule-stat-grid {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: var(--space-3);
-}
-
-.schedule-stat-grid div {
-	background: var(--schedule-surface);
-	border: 1px solid var(--schedule-border);
-	border-radius: 16px;
-	padding: var(--space-3);
-	display: grid;
-	gap: var(--space-1);
-}
-
-.schedule-stat-grid strong {
-	font-size: 1.35rem;
-}
-
-.schedule-stat-grid span {
-	font-size: 0.88rem;
-	color: var(--schedule-muted);
 }
 
 .schedule-court-list {
@@ -1216,16 +1499,6 @@ button.schedule-grid-header-court:hover {
 	grid-column: 1 / -1;
 }
 
-.schedule-panel-actions {
-	display: flex;
-	justify-content: space-between;
-	gap: var(--space-3);
-}
-
-.schedule-panel-actions button {
-	flex: 1;
-}
-
 .full-width {
 	width: 100%;
 }
@@ -1234,10 +1507,6 @@ button.schedule-grid-header-court:hover {
 @media (max-width: 1200px) {
 	.schedule-maker-layout {
 		grid-template-columns: 240px minmax(0, 1fr);
-	}
-
-	.schedule-maker-inspector {
-		grid-column: 1 / -1;
 	}
 }
 
@@ -1277,9 +1546,8 @@ button.schedule-grid-header-court:hover {
 	}
 
 	/* One panel at a time, filling what the header, toolbar and switcher leave.
-	   Stacking all three put 840px of minimum content inside a modal that is
-	   already spending height on chrome, which turned the board — the thing
-	   being worked in — into a 280px window below two other panels.
+	   Stacking them left the board, the thing being worked in, a small window below
+	   the fixtures list.
 
 	   The 280px floor stays, but as a floor for the one visible panel rather
 	   than a sum of three. */
@@ -1293,14 +1561,12 @@ button.schedule-grid-header-court:hover {
 	   which is the failure this whole piece is fixing. On a short viewport the
 	   floor yields and the panel's own scroller takes over. */
 	.schedule-maker-layout > .schedule-maker-sidebar,
-	.schedule-maker-layout > .schedule-maker-board,
-	.schedule-maker-layout > .schedule-maker-inspector {
+	.schedule-maker-layout > .schedule-maker-board {
 		display: none;
 		min-height: min(280px, 100%);
 	}
 
 	.schedule-maker-layout[data-mobile-panel='fixtures'] > .schedule-maker-sidebar,
-	.schedule-maker-layout[data-mobile-panel='inspector'] > .schedule-maker-inspector,
 	.schedule-maker-layout[data-mobile-panel='board'] > .schedule-maker-board {
 		display: flex;
 	}
@@ -1327,11 +1593,14 @@ button.schedule-grid-header-court:hover {
 		padding: var(--space-2) var(--space-3);
 	}
 
-	/* The kicker and the subtitle orient someone before they open the modal.
-	   Once inside, they cost about 60px to say what the screen already shows. */
-	.schedule-maker-kicker,
-	.schedule-maker-subtitle {
+	/* The kicker orients someone before they open the modal. Once inside, it costs height
+	   to say what the screen already shows. Progress stays, because nothing else says it. */
+	.schedule-maker-kicker {
 		display: none;
+	}
+
+	.schedule-maker-subtitle {
+		font-size: 0.8rem;
 	}
 
 	.schedule-maker-header h2 {
@@ -1359,14 +1628,18 @@ button.schedule-grid-header-court:hover {
 		height: 44px;
 	}
 
-	/* Swap the inline secondary actions for the overflow. Save and Generate stay
-	   inline; everything else is two taps away rather than a second toolbar row. */
+	/* Swap the inline actions for the More menu. Save and Auto-schedule stay inline;
+	   everything else is two taps away rather than a second toolbar row. */
 	.schedule-maker-inline-actions {
 		display: none;
 	}
 
-	.schedule-maker-overflow {
+	.schedule-maker-overflow.is-narrow-only {
 		display: block;
+	}
+
+	.schedule-maker-overflow-menu button.is-narrow-only {
+		display: flex;
 	}
 
 	.schedule-label-long {
@@ -1404,13 +1677,11 @@ button.schedule-grid-header-court:hover {
 		grid-template-columns: 1fr;
 	}
 
-	.schedule-form-grid,
-	.schedule-stat-grid {
+	.schedule-form-grid {
 		grid-template-columns: 1fr;
 	}
 
-	.schedule-inline-form,
-	.schedule-panel-actions {
+	.schedule-inline-form {
 		grid-template-columns: 1fr;
 		display: grid;
 	}
@@ -1462,6 +1733,14 @@ button.schedule-grid-header-court:hover {
 
 /* What the last generation bent or left out. Amber while there is something to
    read, quiet once there is not. */
+/* Above the board, and bounded, so a long report can't take the board's room. */
+.schedule-maker-board > .schedule-generation-report {
+	flex: 0 0 auto;
+	max-height: 30%;
+	overflow-y: auto;
+	margin-bottom: var(--space-3);
+}
+
 .schedule-generation-report {
 	display: grid;
 	gap: var(--space-2);

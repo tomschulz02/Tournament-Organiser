@@ -405,45 +405,54 @@ export const HELP_TOPICS = {
 		sections: [
 			{
 				paragraphs: [
-					"The organiser's tool for assigning fixtures to courts and times. It has four parts: the day tabs and board where the schedule itself lives, the fixtures sidebar, the inspector, and the toolbar's own actions — covered one at a time below. Nothing here is visible to anyone but the organiser; everyone else sees the result on the read-only Schedule tab once it's saved.",
+					"The organiser's tool for assigning fixtures to courts and times. The fixtures list is on the left and the board fills the rest, with the day tabs above it. Everything else opens when you need it: Set up, Auto-schedule and Print from the toolbar, and each match's own details when you click it. Nothing here is visible to anyone but the organiser; everyone else sees the result on the read-only Schedule tab once it's saved.",
 				],
 				image: null, // Screenshot needed: the full modal open on a multi-day, multi-court schedule with the grid view active and a few fixtures already placed, wide enough to show the day tabs, the board and the inspector together.
 			},
 			{
 				heading: 'The board',
 				paragraphs: [
-					"Switch between a grid view (courts across, times down) and a list view (one row per placed fixture) with the view toggle. Each day gets its own tab — a day can be switched off with the small On/Off control on its tab, which excludes it from generation and blocks placing anything on it by hand, without removing it from the schedule; switch it back on to reuse it.",
-					'Drag a fixture from the sidebar onto an open slot to place it, or drag an already-placed entry to move it. Tap an empty slot to open the same placement form if dragging isn\'t convenient. Click a placed entry to open it in the inspector for editing or removal.',
+					"Switch between the board (courts across, times down) and a list (one row per placed match) with the Board and List buttons. Each day gets its own tab. A day that's off, which you choose in Set up, says so on its tab: nothing can be placed on it and it isn't auto-scheduled, but it stays in the schedule to switch back on.",
+					"The grid lines are only a guide. A match can start at any five-minute mark, cross a line, or share an hour with another match. Drag a fixture from the sidebar onto the board and it lands where you drop it, at its round's length. Drag a placed match to move it, or drag its top or bottom edge to change its length. A match dropped close to another one butts up against it.",
+					'While you drag, the board shows where the match would land and outlines the other matches of its teams. If it can\'t go there, for example because a team is playing on another court, the reason appears beside your pointer and dropping it changes nothing. Two teams playing back to back gets a warning, but is allowed.',
+					"Click a match to edit it where it sits: its start, length, court, day, officials and notes. Each change applies as you leave the field, and if it can't be done the reason shows there and the match stays as it was. Click or tap any empty time to choose a fixture for it, or drag down an empty court to choose the exact times first.",
 				],
 			},
 			{
 				heading: 'Fixtures sidebar',
 				paragraphs: [
-					"Every fixture that isn't placed on the schedule yet, searchable and filterable by round or division. On a narrow screen where the sidebar and board aren't shown together, tap a fixture here first, then tap the slot it belongs in.",
+					"Every fixture that isn't placed on the schedule yet, searchable and filterable by round or division. On a narrow screen where the sidebar and board aren't shown together, tap a fixture here first, then tap the time it belongs at. If that time is taken, it goes to the next free time on that court.",
 				],
 			},
 			{
-				heading: 'The inspector',
+				heading: 'Breaks',
 				paragraphs: [
-					"Shows different content depending on what's selected. With nothing selected, it lists the courts (add or remove one here, and restrict a court to specific divisions by clicking its header on the board) and a shortcut into Day Settings — the start time, end time and slot length the whole grid is drawn against.",
-					'Selecting a placed entry opens its own editor here: which day, court and time it occupies, officials, and notes, plus a delete control. Add Break (in the toolbar) opens a form here for a break in play — a lunch break, a change of ends — which can span one court or every court at once.',
+					'Drag Break from the top of the fixtures list onto the board, or tap it and then tap a time. A new break covers every court for 30 minutes. It opens straight away so you can name it, and you can limit it to one court or change its length there. A lunch break can be dragged like a match.',
 				],
 			},
 			{
-				heading: 'Generating automatically',
+				heading: 'Set up',
 				paragraphs: [
-					'The generator (opened from the toolbar) fills the whole board at once from your courts, day start and end, and match length. Open "Match length by round" to give a round its own length, for example longer finals; blank rounds use the main match length. It works through the day like you would on a whiteboard. At each time it plays the matches whose teams have the most still to play, in any order within a round. Divisions sharing a court take turns whenever that finishes sooner. Your settings are saved with the schedule.',
+					"What you have to work with, all in one place: the day's start and end, match lengths, your courts and which days are in use. Placing a fixture by hand and Auto-schedule both read from here. On a phone it's under More in the toolbar.",
+					'Match length is what a new match starts at, whether you place it or Auto-schedule does. Give a round its own length under "By round", for example longer finals. Changing a length moves nothing already on the board, and you can drag any one match to change just that match.',
+					'Each court can be limited to certain divisions, and clicking a court\'s heading on the board takes you straight to it. Choosing nothing means the court takes any division. "Grid lines every", above the board, only changes how the board is ruled.',
+				],
+			},
+			{
+				heading: 'Auto-schedule',
+				paragraphs: [
+					'Auto-schedule (in the toolbar) fills the whole board at once from your set up, following the rules you choose. It works through the day like you would on a whiteboard. At each time it plays the matches whose teams have the most still to play, in any order within a round. Divisions sharing a court take turns whenever that finishes sooner. Your settings are saved with the schedule.',
 					'Some rules always apply: rounds are played in order (no knockout match starts until every pool match of its division has finished), no team or court is double-booked, and courts limited to certain divisions are respected. Four rules are yours to switch: a minimum rest between a team\'s matches (off allows back-to-back matches), a maximum number of matches per team per day, the longest a team should wait between two matches on the same day (teams near it play first; a longer wait is reported), and a break before each knockout round (minimum rest can\'t cover knockout teams, because they aren\'t known in advance). After a break in play, courts restart the moment the break ends.',
-					'With "Bend rules to fit every fixture" on, a fixture that has nowhere else to go may shorten a rest or a knockout break, or exceed the daily limit. The generator bends as few times as it can and spreads the bends across teams instead of repeating them for one. "Run past the day\'s end time" is the last resort. It adds time after the final day only when bending isn\'t enough. The Generation Report in the overview lists every bend with the teams affected. Show highlights those matches on the board. Anything still left out is listed with the rule that stopped it.',
+					'With "Bend rules to fit every fixture" on, a fixture that has nowhere else to go may shorten a rest or a knockout break, or exceed the daily limit. The generator bends as few times as it can and spreads the bends across teams instead of repeating them for one. "Run past the day\'s end time" is the last resort. It adds time after the final day only when bending isn\'t enough. The Generation Report above the board lists every bend with the teams affected. Show highlights those matches on the board. Anything still left out is listed with the rule that stopped it.',
 					'Preferences decide the court, never whether a match plays: keeping a pool on one court, and keeping a court on one division. "Spread matches evenly across days" shares the matches between days instead of finishing as early as possible. Officials can also be assigned automatically, kept off by default.',
-					'Generating replaces whatever is currently on the board — any hand-placed entries are discarded and regenerated with everything else.',
+					'Auto-schedule replaces whatever is currently on the board — any hand-placed matches are discarded and placed again with everything else. Breaks are kept.',
 				],
 			},
 			{
 				heading: 'Saving, discarding and printing',
 				paragraphs: [
-					"Save writes the schedule to the tournament — nothing is visible to anyone else until this is pressed. Discard Changes reverts everything back to what was last saved; Reset Schedule empties the board entirely (previously saved entries included), which only takes effect once Save is pressed afterwards.",
-					'Print Grid and Print List open the same printable document the read-only Schedule tab\'s View/Print Schedule button does, in a new tab with its own Print button — this reads whatever is currently on the board, saved or not.',
+					"Save Schedule writes the schedule to the tournament — nothing is visible to anyone else until this is pressed. Under More, Discard Changes reverts everything back to what was last saved, and Reset Schedule empties the board entirely (previously saved matches included), which only takes effect once you save afterwards.",
+					'Print shows where the pages break, with Grid and List to choose between, and you can move any break there. Print this layout opens the printable document in a new tab with its own Print button, using whatever is on the board, saved or not. Page breaks are saved with the rest of the schedule.',
 				],
 			},
 		],

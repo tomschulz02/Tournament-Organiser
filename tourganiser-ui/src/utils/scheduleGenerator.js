@@ -3,6 +3,7 @@ import {
 	compareTimes,
 	createFixtureEntry,
 	DEFAULT_GENERATOR_SETTINGS,
+	getTeams,
 	isTimeRangeValid,
 	minutesToTime,
 	normaliseGeneratorSettings,
@@ -69,42 +70,9 @@ function roundHolding(fixtureRound) {
 	return separator === -1 ? fixtureRound : fixtureRound.slice(0, separator);
 }
 
-// The formatter's own sentinel for a knockout slot with no team bound yet. See
-// getTeamKey.
-const UNBOUND_TEAM_NAME = 'TBD';
-
 // --- identity ---------------------------------------------------------------
 
-// The teams a fixture actually commits, as keys that cannot collide across
-// divisions.
-//
-// An unbound knockout slot carries a placeholder rather than a team — `Rank 1`,
-// `Winner of SF1`, `TBD` — and constrains nothing, which is how the server's
-// validator treats a null `team_1`. Conflating two divisions' "Rank 1" would
-// forbid two semifinals from ever running at once.
-//
-// Ids where the payload carries them, names only as a fallback, and the division
-// scopes both — two divisions may well each have a "Team A".
-function getTeams(fixture) {
-	return [1, 2]
-		.map((side) => ({ key: getTeamKey(fixture, side), name: fixture[`team${side}`] || '' }))
-		.filter((team) => team.key !== null);
-}
-
-function getTeamKey(fixture, side) {
-	const scope = fixture.division_id ?? '';
-	const id = fixture[`team_${side}_id`];
-
-	if (id) return `${scope}:${id}`;
-	if (fixture[`team_${side}_placeholder`]) return null;
-
-	const name = fixture[`team${side}`];
-	if (!name || name === UNBOUND_TEAM_NAME) return null;
-
-	return `${scope}:${name}`;
-}
-
-// Scoped to the division for the same reason: "Pool A" exists in most divisions,
+// Scoped to the division, as team keys are: "Pool A" exists in most divisions,
 // and an unscoped key would pin every division's Pool A to one court.
 function getFixtureCourtKey(fixture) {
 	const key = fixture.poolKey || fixture.round;

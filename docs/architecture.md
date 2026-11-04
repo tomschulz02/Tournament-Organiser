@@ -93,8 +93,8 @@ navigation immediately; only the tab content waits on the request.
 html2canvas and DOMPurify with the PDF export — around half the application's JavaScript
 for a screen only an organiser opens. Printing through the browser replaced that on
 2026-08-10 and all three dependencies are gone, taking the chunk from roughly 427kB to
-30kB. It stays lazy because it is still the largest single screen: a grid, a list, an
-inspector and a generator.
+30kB. It stays lazy because it is still the largest single screen: a board, a list, its
+sheets and a generator.
 
 The two print layouts (grid and list) moved out to `components/ScheduleExportView.jsx`
 and `utils/scheduleExportDocument.js` on 2026-09-03, so both the organiser's own print

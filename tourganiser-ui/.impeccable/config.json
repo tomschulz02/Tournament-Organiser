@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/schedule-maker.css"
+        ],
+        "createdAt": "2026-11-04T12:15:24.795Z",
+        "reason": "DESIGN.md documents the 3px division edge as a system component; these rules draw a match's division colour, not a decorative accent"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/schedule-print.css"
+        ],
+        "createdAt": "2026-11-04T12:15:25.012Z",
+        "reason": "DESIGN.md documents the 3px division edge as a system component; these rules draw a match's division colour, not a decorative accent"
+      }
+    ]
+  }
+}

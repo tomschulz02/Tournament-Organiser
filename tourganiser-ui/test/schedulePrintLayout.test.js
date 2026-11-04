@@ -13,8 +13,17 @@ import {
 } from '../src/utils/scheduleUtils';
 import {
 	COURTS_PER_GROUP,
+	getBlockTier,
+	getGridPrintScale,
+	getGridRowsForDay,
+	getMinimumGridScale,
+	getPageBlocks,
 	getPageStartRows,
 	getPrintRowsForDay,
+	MAX_MM_PER_MINUTE,
+	MIN_MM_PER_MINUTE,
+	PRINT_GRID_HEIGHT_MM,
+	PRINT_LIST_ROWS_PER_PAGE,
 	materialisePrintLayout,
 	resolveCourtBreaks,
 	resolveRowBreaks,
@@ -261,57 +270,78 @@ describe('getPrintRowsForDay', () => {
 		expect(getPrintRowsForDay('list', schedule, DAY).rows).toHaveLength(1);
 	});
 
-	it("treats a grid row as natural to break before when the row above it is empty", () => {
+	it('treats a grid row as natural to break before when nothing crosses its line', () => {
 		const schedule = scheduleWith({
 			entries: [
-				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:30', fixtureId: 'f1' },
+				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:45', fixtureId: 'f1' },
 			],
 		});
 		const { isNaturalBreak } = getPrintRowsForDay('grid', schedule, DAY);
 
-		// Row 0 is occupied, so breaking before row 1 would cut across it.
+		// The match crosses the 09:30 line at the top of row 1, and ends before row 2.
 		expect(isNaturalBreak(1)).toBe(false);
 		expect(isNaturalBreak(2)).toBe(true);
 	});
 
-	// A printed grid cell stacks every entry that starts in its row, so a row with
-	// two matches on one court is about twice as tall. Seven of those overflow the
-	// sheet, and an overflowing page loses what falls off it — the one failure
-	// schedulePrintLayout.js's own comment says the estimate must never cause.
-	it('gives a page its usual row budget when nothing shares a cell', () => {
+	it('does not count a match ending exactly on the line as crossing it', () => {
 		const schedule = scheduleWith({
 			entries: [
 				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:30', fixtureId: 'f1' },
-				{ id: 'e2', type: 'fixture', day: '2026-09-12', courtId: 'court-2', startTime: '09:30', endTime: '10:00', fixtureId: 'f2' },
 			],
 		});
 
-		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(7);
+		expect(getPrintRowsForDay('grid', schedule, DAY).isNaturalBreak(1)).toBe(true);
 	});
 
-	it('halves the row budget when a cell holds two entries', () => {
+	it('treats a venue-wide break as crossing the lines inside it', () => {
 		const schedule = scheduleWith({
 			entries: [
-				// Both start inside the 09:00 row of a 30-minute grid, on one court.
-				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:15', fixtureId: 'f1' },
-				{ id: 'e2', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:15', endTime: '09:30', fixtureId: 'f2' },
+				{ id: 'b1', type: 'break', day: '2026-09-12', courtId: null, startTime: '12:15', endTime: '12:45', title: 'Lunch' },
 			],
 		});
 
-		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(3);
+		// 09:00 + 7 rows of 30 minutes is the 12:30 line.
+		expect(getPrintRowsForDay('grid', schedule, DAY).isNaturalBreak(7)).toBe(false);
 	});
 
-	// A break spans every court and prints once across the row, so it is not what
-	// makes a cell tall and must not shrink the page on its own.
-	it('does not count a venue-wide break against the budget', () => {
+	it('holds as many rows as the minimum scale allows', () => {
+		const expected = Math.floor(PRINT_GRID_HEIGHT_MM.landscape / MIN_MM_PER_MINUTE / 30);
+
+		expect(getPrintRowsForDay('grid', scheduleWith(), DAY).rowsPerPage).toBe(expected);
+	});
+
+	it('holds more rows on a portrait sheet', () => {
+		const landscape = getPrintRowsForDay('grid', scheduleWith(), DAY, 'landscape').rowsPerPage;
+		const portrait = getPrintRowsForDay('grid', scheduleWith(), DAY, 'portrait').rowsPerPage;
+
+		expect(portrait).toBeGreaterThan(landscape);
+	});
+
+	it('holds fewer rows when a short match needs more room', () => {
 		const schedule = scheduleWith({
 			entries: [
-				{ id: 'b1', type: 'break', day: '2026-09-12', courtId: null, startTime: '12:00', endTime: '12:15', title: 'Lunch' },
-				{ id: 'b2', type: 'break', day: '2026-09-12', courtId: null, startTime: '12:15', endTime: '12:30', title: 'Presentation' },
+				{ id: 'e1', type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime: '09:00', endTime: '09:20', fixtureId: 'f1' },
 			],
 		});
 
-		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(7);
+		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBeLessThan(
+			getPrintRowsForDay('grid', scheduleWith(), DAY).rowsPerPage,
+		);
+	});
+
+	it('does not let a venue-wide break shrink the page', () => {
+		const schedule = scheduleWith({
+			entries: [
+				{ id: 'b1', type: 'break', day: '2026-09-12', courtId: null, startTime: '12:00', endTime: '12:10', title: 'Toss' },
+			],
+		});
+
+		expect(getPrintRowsForDay('grid', schedule, DAY).rowsPerPage).toBe(getPrintRowsForDay('grid', scheduleWith(), DAY).rowsPerPage);
+	});
+
+	it('gives the list a page budget for each orientation', () => {
+		expect(getPrintRowsForDay('list', scheduleWith(), DAY).rowsPerPage).toBe(PRINT_LIST_ROWS_PER_PAGE.portrait);
+		expect(getPrintRowsForDay('list', scheduleWith(), DAY, 'landscape').rowsPerPage).toBe(PRINT_LIST_ROWS_PER_PAGE.landscape);
 	});
 
 	it('treats a list row as natural to break before when it starts a new time', () => {
@@ -330,13 +360,143 @@ describe('getPrintRowsForDay', () => {
 	});
 });
 
+describe('getGridRowsForDay', () => {
+	const entry = (id, startTime, endTime) => ({ id, type: 'fixture', day: '2026-09-12', courtId: 'court-1', startTime, endTime, fixtureId: id });
+
+	it('places entries in minutes from the start of the day', () => {
+		const schedule = scheduleWith({ entries: [entry('e1', '09:10', '09:35')] });
+		const [placed] = getGridRowsForDay(schedule, DAY).entries;
+
+		expect(placed.startOffset).toBe(10);
+		expect(placed.endOffset).toBe(35);
+	});
+
+	it('returns an entry outside the day separately rather than losing it', () => {
+		const schedule = scheduleWith({ entries: [entry('e1', '18:30', '19:00'), entry('e2', '09:00', '09:30')] });
+		const { entries, outsideEntries } = getGridRowsForDay(schedule, DAY);
+
+		expect(entries.map((item) => item.entry.id)).toEqual(['e2']);
+		expect(outsideEntries.map((item) => item.id)).toEqual(['e1']);
+	});
+});
+
+describe('getMinimumGridScale', () => {
+	const item = (startOffset, endOffset, type = 'fixture') => ({ entry: { type }, startOffset, endOffset });
+
+	it('uses the minimum with nothing on the day', () => {
+		expect(getMinimumGridScale([])).toBe(MIN_MM_PER_MINUTE);
+	});
+
+	it('uses the minimum when every match is long enough', () => {
+		expect(getMinimumGridScale([item(0, 50)])).toBe(MIN_MM_PER_MINUTE);
+	});
+
+	it('rises for a short match', () => {
+		expect(getMinimumGridScale([item(0, 50), item(50, 75)])).toBeGreaterThan(MIN_MM_PER_MINUTE);
+	});
+
+	it('is capped, so a five-minute match does not demand a page per hour', () => {
+		expect(getMinimumGridScale([item(0, 5)])).toBe(0.6);
+	});
+
+	it('ignores breaks', () => {
+		expect(getMinimumGridScale([item(0, 5, 'break')])).toBe(MIN_MM_PER_MINUTE);
+	});
+});
+
+describe('getGridPrintScale', () => {
+	const pages = (...lengths) => lengths.map((length) => Array.from({ length }));
+
+	it('fills the sheet with the longest page', () => {
+		const scale = getGridPrintScale({ pages: pages(8, 4), slotMinutes: 60, orientation: 'landscape' });
+
+		expect(scale).toBeCloseTo(PRINT_GRID_HEIGHT_MM.landscape / 480);
+	});
+
+	it('still fits the sheet when a saved layout puts a long day on one page', () => {
+		const scale = getGridPrintScale({ pages: pages(36), slotMinutes: 30, orientation: 'landscape' });
+
+		expect(scale * 36 * 30).toBeCloseTo(PRINT_GRID_HEIGHT_MM.landscape);
+		expect(scale).toBeLessThan(MIN_MM_PER_MINUTE);
+	});
+
+	it('leaves room for anything else the page has to hold', () => {
+		const scale = getGridPrintScale({ pages: pages(36), slotMinutes: 30, orientation: 'landscape', reservedMm: 20 });
+
+		expect(scale * 36 * 30).toBeCloseTo(PRINT_GRID_HEIGHT_MM.landscape - 20);
+	});
+
+	it('stops growing on a short day', () => {
+		expect(getGridPrintScale({ pages: pages(2), slotMinutes: 30, orientation: 'portrait' })).toBe(MAX_MM_PER_MINUTE);
+	});
+
+	it('survives a day with no rows', () => {
+		expect(getGridPrintScale({ pages: pages(0), slotMinutes: 30, orientation: 'landscape' })).toBe(MAX_MM_PER_MINUTE);
+	});
+});
+
+describe('getPageBlocks', () => {
+	const item = (id, startOffset, endOffset) => ({ entry: { id }, startOffset, endOffset });
+	const page = { startOffset: 60, endOffset: 120 };
+
+	it('measures a block from the top of its page', () => {
+		expect(getPageBlocks([item('a', 70, 95)], page)).toEqual([
+			{ entry: { id: 'a' }, top: 10, length: 25, continuesFromPrevious: false, continuesToNext: false },
+		]);
+	});
+
+	it('leaves out entries wholly on other pages, including ones touching the edge', () => {
+		expect(getPageBlocks([item('a', 0, 60), item('b', 120, 150)], page)).toEqual([]);
+	});
+
+	it('clips a match crossing the top of the page and marks it', () => {
+		expect(getPageBlocks([item('a', 45, 90)], page)).toEqual([
+			{ entry: { id: 'a' }, top: 0, length: 30, continuesFromPrevious: true, continuesToNext: false },
+		]);
+	});
+
+	it('clips a match crossing the foot of the page and marks it', () => {
+		expect(getPageBlocks([item('a', 100, 150)], page)).toEqual([
+			{ entry: { id: 'a' }, top: 40, length: 20, continuesFromPrevious: false, continuesToNext: true },
+		]);
+	});
+
+	it('shows a match spanning a whole page on that page', () => {
+		const [block] = getPageBlocks([item('a', 30, 150)], page);
+
+		expect(block).toMatchObject({ top: 0, length: 60, continuesFromPrevious: true, continuesToNext: true });
+	});
+});
+
+describe('getBlockTier', () => {
+	it('says less as a block gets shorter', () => {
+		expect(getBlockTier(25)).toBe('tall');
+		expect(getBlockTier(14)).toBe('full');
+		expect(getBlockTier(10)).toBe('compact');
+		expect(getBlockTier(5)).toBe('minimal');
+	});
+});
+
 describe('materialisePrintLayout', () => {
 	it('turns no layout into an explicit one matching the smart default', () => {
 		const layout = materialisePrintLayout({ type: 'grid', schedule: scheduleWith(), layout: null });
 
 		expect(layout.orientation).toBe('landscape');
 		expect(layout.courtBreaks).toEqual([]);
-		expect(layout.rowBreaksByDay.day_1).toEqual([7, 14]);
+		// Nine hours at the minimum scale fits one landscape sheet.
+		expect(layout.rowBreaksByDay.day_1).toEqual([]);
+	});
+
+	it('takes its default breaks from the layout orientation', () => {
+		const longDay = scheduleWith({ settings: { dayStartTime: '08:00', dayEndTime: '20:00', slotMinutes: 30 } });
+		const { rowsPerPage } = getPrintRowsForDay('grid', longDay, DAY, 'landscape');
+
+		expect(materialisePrintLayout({ type: 'grid', schedule: longDay, layout: null }).rowBreaksByDay.day_1).toEqual([rowsPerPage]);
+
+		const portrait = materialisePrintLayout({ type: 'grid', schedule: longDay, layout: { orientation: 'portrait' } });
+
+		expect(portrait.orientation).toBe('portrait');
+		expect(portrait.rowBreaksByDay.day_1).toEqual([]);
 	});
 
 	it('gives the list no court breaks', () => {

@@ -72,7 +72,7 @@ rounded:
   row: "10px"
   panel: "14px"
   modal: "16px"
-  card: "18px"
+  card: "12px"
   pill: "999px"
   circle: "50%"
 spacing:
@@ -177,7 +177,7 @@ A single saturated blue over cool, near-white neutrals (or charcoal in dark mode
 - **Tourganiser Blue** (`tourganiser-blue`): the fixed header, the mobile bottom nav, the active tab underline and label, primary buttons, focus borders, the active Save/Follow pill, and the "upcoming" status. It is the one colour that means "you are here" or "press this".
 
 ### Secondary
-- **Sky Blue** (`sky-blue`): secondary brand tone. Footer section headings, the Legal banner, the "ongoing" pill on Discover cards, the CTA hover on Home.
+- **Sky Blue** (`sky-blue`): secondary brand tone. Footer section headings, the Legal banner, the CTA hover on Home.
 - **Periwinkle** (`periwinkle`): hover state of primary buttons in the create flow; the About banner.
 
 ### Tertiary
@@ -256,7 +256,7 @@ Flat by default. Panels, fixture rows, division cards and inputs sit flat on the
 **The Flat + Borders Rule.** Nothing that sits in the page flow gets a shadow at rest, and hover never lifts. Hover changes colour or border. Shadows are for menus, popovers, the header, the Create button and an entry being dragged.
 ## Shapes
 
-Gently rounded, with the radius growing with the size of the container: 4px for small tags, 8px for buttons and inputs, 10px for fixture rows and menus, 14px for panels, 16px for modals, 18px for Discover cards. Pills (999px) for status, filter chips and the subheader's Browse/Save buttons; full circles for icon buttons and the Create button. Borders are always 1px, except the 2px active-tab underline and the 3px division edge on fixture rows and division cards.
+Gently rounded, with the radius growing with the size of the container: 4px for small tags, 8px for buttons and inputs, 10px for fixture rows and menus, 12px for Discover cards, 14px for panels, 16px for modals. Pills (999px) for status, filter chips and the subheader's Browse/Save buttons; full circles for icon buttons and the Create button. Borders are always 1px, except the 2px active-tab underline and the 3px division edge on fixture rows and division cards.
 
 ## Components
 
@@ -269,17 +269,17 @@ Clear and sturdy: plain labels, 44px minimum height, an obvious hover.
 - **Icon / theme buttons:** 32–36px circles in a translucent white on the blue header.
 
 ### Chips and status
-- **Status pill:** 999px, label type (0.78rem, 600–700, uppercase on Discover cards). On Discover it is a tinted wash with a coloured border and label (blue upcoming, sky ongoing, muted completed); in the tournament view it is a solid fill (sky, green when ongoing, muted when finished).
-- **Status dot:** a 10px circle on each fixture row: blue upcoming, green live, red completed, muted cancelled, always paired with visually hidden text.
+- **Status pill:** 999px, label type (0.78rem, 600–700). In the tournament view it is a solid fill (sky, green when ongoing, muted when finished).
+- **Status dot:** a 10px circle on each fixture row: blue upcoming, green live, red completed, muted cancelled, always paired with visually hidden text. Discover cards use the same dot beside visible text: blue upcoming, green ongoing, muted completed.
 - **Format tag:** small bordered tag ("League", "Classic") next to a division name.
 
-Known drift: "ongoing" is sky on Discover and green in the tournament view, and a completed fixture uses the error red. Reconcile when the status components are next touched.
+Known drift: a completed fixture uses the error red. Reconcile when the status components are next touched.
 
 ### Cards / Containers
 - **Panel:** surface, 1px border, 14px radius, 24px padding, no shadow. The base container of the tournament view.
 - **Division card:** a panel with a 3px left edge in the division's identity colour, a small stat grid (TEAMS, FIXTURES, ROUND) and a progress bar in the same colour.
 - **Fixture row:** surface, 1px border, 10px radius, a 3px left edge in the division colour when the tournament has several divisions. A three-column grid: meta (match number, court chip, division chip, stage), the two teams with sets won and per-set scores aligned under each other, then actions.
-- **Tournament card (Discover):** a 12px status bar on the left, a soft identity-colour wash with a generated pattern behind the content, 18px radius.
+- **Tournament card (Discover):** surface, 1px border, 12px radius. A full-height date tile on the left (76px, 64px on a phone) carries the month, day or day range and year on a flat identity-colour tint with the generated pattern. Beside it: the name, location, and a status dot with its label. An upcoming tournament adds how long until it starts.
 
 ### Inputs / Fields
 - **Style:** surface-alt fill, 1px border, 8px radius, 44px minimum height, 1rem text. Label above at 0.9rem 600; hint, error and character counter share one row below at 0.8rem.
@@ -290,6 +290,13 @@ Known drift: "ongoing" is sky on Discover and green in the tournament view, and 
 - **Header:** fixed 80px Tourganiser Blue bar, wordmark left. Desktop links in white at 500, turning Aqua on hover; circular theme and profile buttons on the right.
 - **Bottom nav (≤768px):** fixed 64px blue bar, five items with icon over label, the centre Create button a raised Aqua circle.
 - **Tournament tabs:** one row that scrolls sideways, never wraps. Inactive tabs are muted; the active tab is blue at 600 with a 2px blue underline.
+
+### Schedule maker
+A dense tool: the fixtures list on the left and the board filling the rest, with nothing else on screen until it is asked for.
+- **Board:** courts across, time down, at a fixed scale of 1.6px a minute. Grid lines are only a reading aid. Matches sit at their own start and length, and a drag previews the true time, with any reason beside the pointer.
+- **Toolbar:** one filled button (Save). Set up, Print and Auto-schedule are quiet. What is rare and undoes a lot (Discard, Reset) sits in More, in red. Below 768px Set up and Print also move to More.
+- **Sheets:** Set up and Auto-schedule slide over the right of the board and leave it usable. Print takes the full width. Full screen below 900px.
+- **Popover:** a match or break edits in place, beside its block, applying each field as it is left. A refusal gives its reason there and leaves the match unchanged. A bottom sheet at 768px and below.
 
 ### Modals
 - **Shell:** every task modal uses `CreateModal` (`components/create/CreateModal.jsx`): a fixed header with a 44px close button, a body that scrolls, and a footer whose actions stay on screen. It handles Escape, backdrop click, focus trap and scroll lock. At 768px and below it fills the screen. The `size` prop becomes a `ct-modal-<size>` class for per-modal width (score 560px, round 880px).

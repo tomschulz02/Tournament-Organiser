@@ -91,6 +91,7 @@ body.light {
 	--background-color: rgb(245, 245, 245);
 	--text-color: rgb(255, 255, 255);
 	--secondary-text-color: rgb(37, 37, 37);
+	--card-surface-color: #ffffff;
 	--card-border-color: rgba(37, 37, 37, 0.15);
 	--card-shadow-color: rgba(37, 37, 37, 0.2);
 
@@ -126,6 +127,7 @@ body.dark {
 	--background-color: rgb(54, 54, 54);
 	--text-color: rgb(255, 255, 255);
 	--secondary-text-color: rgb(245, 245, 245);
+	--card-surface-color: #242424;
 	--card-border-color: rgba(245, 245, 245, 0.15);
 	--card-shadow-color: rgba(245, 245, 245, 0.2);
 
@@ -2673,42 +2675,52 @@ Tournaments page styles
 	width: calc(100vw - 450px);
 }
 
+/* Three columns in one row at every width: date tile, text, arrow. The tile
+   stretches to the row, so it reaches the bottom of the card however the text
+   wraps. */
 .tournament-card {
 	width: 100%;
 	border: 1px solid var(--card-border-color);
 	padding: 0;
-	border-radius: 18px;
-	position: relative;
-	isolation: isolate;
+	border-radius: 12px;
 	overflow: hidden;
 	display: grid;
-	grid-template-columns: 12px minmax(0, 1fr) auto;
+	grid-template-columns: 76px minmax(0, 1fr) auto;
 	align-items: stretch;
-	background: var(--background-color);
+	background: var(--card-surface-color);
 	color: var(--secondary-text-color);
 	cursor: pointer;
 	text-align: left;
 	appearance: none;
-	transition:
-		border-color 0.2s ease,
-		background-color 0.2s ease;
+	transition: border-color 0.2s ease;
 }
 
-/* The tournament's generated identity: a very soft accent wash plus the pattern
-   drawn on top of it, both behind the card's real content. Clipped by the card's
-   own border-radius via the card's `overflow: hidden` above. Colour, not the
-   status accent bar's meaning: the left bar still says upcoming/ongoing/
-   completed, this says which tournament.
-   Grid items (.tournament-card-accent, .tournament-card-body,
-   .tournament-card-action) paint like inline-blocks regardless of DOM order,
-   which sits above a plain positioned box with z-index: auto — --z-below is
-   what actually guarantees this layer stays behind them. */
-.tournament-card-identity {
-	position: absolute;
-	inset: 0;
-	z-index: var(--z-below);
-	pointer-events: none;
-	background: linear-gradient(160deg, rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.22), transparent 80%);
+/* Flat + Borders (DESIGN.md): the card never lifts or gains a shadow. Hover is
+   the border turning blue, strong enough to carry the state on its own. */
+.tournament-card:hover,
+.tournament-card:focus-visible {
+	border-color: rgb(from var(--main-color) r g b / 0.5);
+}
+
+.tournament-card:focus-visible {
+	outline: 2px solid rgb(from var(--main-color) r g b / 0.5);
+	outline-offset: 3px;
+}
+
+/* Which tournament this is, in its identity colour, and when it is. A translucent
+   tint rather than a solid fill, so the same value works over either theme's card
+   surface. isolation is what lets --z-below put the pattern above this background
+   and behind the date. */
+.tournament-card-tile {
+	position: relative;
+	isolation: isolate;
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	padding: var(--space-3) var(--space-1);
+	overflow: hidden;
+	text-align: center;
+	background: rgb(from var(--tournament-accent, var(--main-color)) r g b / 0.18);
 }
 
 /* Base rule for TournamentPattern.jsx wherever it is used: never intercepts a
@@ -2720,75 +2732,63 @@ Tournaments page styles
 	pointer-events: none;
 }
 
-.tournament-card-identity .tournament-pattern {
+.tournament-card-tile .tournament-pattern {
 	position: absolute;
 	inset: 0;
+	z-index: var(--z-below);
 	width: 100%;
 	height: 100%;
+	opacity: 0.5;
 	color: var(--tournament-accent, var(--main-color));
 }
 
-/* Flat + Borders (DESIGN.md): the card never lifts or gains a shadow. Hover is
-   the border turning blue, strong enough to carry the state on its own. */
-.tournament-card:hover,
-.tournament-card:focus-visible {
-	border-color: rgb(from var(--main-color) r g b / 0.5);
-	background: rgb(from var(--background-color) r g b / 0.94);
+.tournament-card-month {
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 }
 
-.tournament-card:focus-visible {
-	outline: 2px solid rgb(from var(--main-color) r g b / 0.5);
-	outline-offset: 3px;
+/* "SEPT–OCT" has to fit the phone tile's 64px. */
+.tournament-card-month.spans-months {
+	font-size: 0.66rem;
+	letter-spacing: 0;
 }
 
-.tournament-card-upcoming .tournament-card-accent {
-	background: linear-gradient(180deg, var(--main-color), rgb(from var(--main-color) r g b / 0.7));
+.tournament-card-day {
+	font-size: 1.65rem;
+	font-weight: 700;
+	line-height: 1.05;
+	font-variant-numeric: tabular-nums;
 }
 
-.tournament-card-ongoing .tournament-card-accent {
-	background: linear-gradient(180deg, var(--secondary-color), rgb(from var(--secondary-color) r g b / 0.72));
+.tournament-card-day.is-range {
+	font-size: 1.15rem;
+	line-height: 1.3;
 }
 
-.tournament-card-completed .tournament-card-accent {
-	background: linear-gradient(180deg, rgb(from var(--quarternary-color) r g b / 0.72), rgb(from var(--secondary-text-color) r g b / 0.28));
+.tournament-card-year {
+	font-size: 0.74rem;
+	color: rgb(from var(--secondary-text-color) r g b / 0.72);
+	font-variant-numeric: tabular-nums;
 }
 
-.tournament-card-accent {
-	height: 100%;
-}
-
-/* The frame around .tournament-card-content: deliberately thin padding and no
-   background of its own, so the identity pattern behind it (see
-   .tournament-card-identity) is always visible around the text panel's edges —
-   not just on hover, and without needing to fight the text for contrast. */
 .tournament-card-body {
-	padding: var(--space-2);
-	display: grid;
-	min-width: 0;
-}
-
-/* The text panel itself. Near-opaque rather than fully solid, so a hint of the
-   pattern still comes through behind the text — --background-color is already
-   the right colour for this: near-white in light mode, dark grey in dark mode,
-   exactly the "background behind the text" the card needs for its numbers and
-   status pill to stay readable regardless of how visible the pattern is. */
-.tournament-card-content {
-	background: rgb(from var(--background-color) r g b / 0.6);
-	border-radius: 12px;
-	padding: var(--space-3);
-	display: grid;
-	gap: var(--space-3);
-	min-width: 0;
 	position: relative;
+	padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+	display: grid;
+	align-content: center;
+	gap: var(--space-1);
+	min-width: 0;
 }
 
 /* Profile's saved-tournaments list only — Browse's cards never pass onRemove.
-   Positioned over the card rather than inline, so it does not disturb the
-   name/status layout every other caller of TournamentCard already relies on. */
+   Positioned over the card rather than inline, so it takes no row of its own; the
+   name leaves room for it below. */
 .tournament-card-remove {
 	position: absolute;
 	top: var(--space-2);
-	right: var(--space-2);
+	right: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -2807,87 +2807,65 @@ Tournaments page styles
 	background: rgb(from var(--secondary-text-color) r g b / 0.2);
 }
 
+.tournament-card-body.has-remove .tournament-card-name {
+	padding-right: var(--space-6);
+}
+
 .tournament-card-name {
-	font-size: 1.2rem;
+	font-size: 1.1rem;
 	font-weight: 700;
 	line-height: 1.25;
 }
 
-.tournament-card-topline {
+.tournament-card-meta {
 	display: flex;
 	align-items: flex-start;
-	justify-content: space-between;
-	gap: var(--space-3);
-}
-
-.tournament-card-status {
-	flex-shrink: 0;
-	padding: var(--space-1) var(--space-3);
-	border-radius: 999px;
-	font-size: 0.78rem;
-	font-weight: 700;
-	letter-spacing: 0.03em;
-	text-transform: uppercase;
-	border: 1px solid transparent;
-}
-
-.tournament-card-status.upcoming {
-	background: rgb(from var(--main-color) r g b / 0.12);
-	color: var(--main-color);
-	border-color: rgb(from var(--main-color) r g b / 0.18);
-}
-
-.tournament-card-status.ongoing {
-	background: rgb(from var(--secondary-color) r g b / 0.14);
-	color: var(--secondary-color);
-	border-color: rgb(from var(--secondary-color) r g b / 0.2);
-}
-
-.tournament-card-status.completed {
-	background: rgb(from var(--secondary-text-color) r g b / 0.1);
-	color: rgb(from var(--secondary-text-color) r g b / 0.8);
-	border-color: rgb(from var(--secondary-text-color) r g b / 0.15);
-}
-
-.tournament-card-subline,
-.tournament-card-meta,
-.tournament-card-dates {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-3) var(--space-4);
-}
-
-.tournament-card-type,
-.tournament-card-location,
-.tournament-card-date {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-2);
-	font-size: 0.94rem;
-	color: rgb(from var(--secondary-text-color) r g b / 0.82);
+	gap: var(--space-1);
+	font-size: 0.88rem;
+	color: rgb(from var(--secondary-text-color) r g b / 0.72);
 	min-width: 0;
 }
 
-.tournament-card-type-empty {
-	font-size: 0.9rem;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: rgb(from var(--secondary-text-color) r g b / 0.58);
-}
-
-.tournament-card-location {
-	max-width: 100%;
-}
-
-.tournament-card-type span,
-.tournament-card-location span,
-.tournament-card-date span {
+.tournament-card-meta span {
 	min-width: 0;
 }
 
 .tournament-card-meta-icon {
 	flex-shrink: 0;
 	fill: currentColor;
+}
+
+.tournament-card-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-1) var(--space-2);
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.tournament-card-status-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.tournament-card-status-dot.upcoming {
+	background: var(--main-color);
+}
+
+.tournament-card-status-dot.ongoing {
+	background: var(--success-color);
+}
+
+.tournament-card-status-dot.completed {
+	background: rgb(from var(--secondary-text-color) r g b / 0.45);
+}
+
+.tournament-card-countdown {
+	font-weight: 400;
+	color: rgb(from var(--secondary-text-color) r g b / 0.72);
 }
 
 .tournament-card-action {
@@ -2900,7 +2878,7 @@ Tournaments page styles
 .tournament-card:hover .tournament-card-action,
 .tournament-card:focus-visible .tournament-card-action {
 	transform: translateX(6px);
-	fill: var(--secondary-color);
+	fill: var(--main-color);
 }
 
 .browse-group-empty-message {
@@ -3579,31 +3557,15 @@ Standings Tab styles - temporary from old UI
 	}
 
 	.tournament-card {
-		grid-template-columns: 10px minmax(0, 1fr);
+		grid-template-columns: 64px minmax(0, 1fr) auto;
 	}
 
 	.tournament-card-body {
-		padding: var(--space-2);
-	}
-
-	.tournament-card-content {
-		padding: var(--space-3);
-		gap: var(--space-2);
-	}
-
-	.tournament-card-topline {
-		flex-direction: column;
-		align-items: flex-start;
-	}
-
-	.tournament-card-dates {
-		flex-direction: column;
-		gap: var(--space-2);
+		padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
 	}
 
 	.tournament-card-action {
-		margin: 0 var(--space-4) var(--space-4) auto;
-		grid-column: 2;
+		margin-right: var(--space-1);
 	}
 
 	.round-header {

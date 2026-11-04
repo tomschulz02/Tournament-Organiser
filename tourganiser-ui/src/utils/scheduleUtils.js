@@ -1,4 +1,4 @@
-import { flattenFixtures } from '../components/tournament/fixtureUtils';
+import { flattenFixtures, roundHolding } from '../components/tournament/fixtureUtils';
 import { divisionColorStyle } from './divisionColors';
 
 export const SCHEDULE_VERSION = 1;
@@ -685,7 +685,157 @@ export function findEntryConflict(entries, candidate, ignoreEntryId = null) {
 	});
 }
 
-export function validateScheduleEntry(schedule, candidate, ignoreEntryId = null) {
+// The formatter's own sentinel for a knockout slot with no team bound yet.
+const UNBOUND_TEAM_NAME = 'TBD';
+
+// The teams a fixture actually commits, as keys that cannot collide across divisions.
+//
+// An unbound knockout slot carries a placeholder rather than a team — `Rank 1`,
+// `Winner of SF1`, `TBD` — and constrains nothing, which is how the server's validator
+// treats a null `team_1`. Conflating two divisions' "Rank 1" would forbid two semifinals
+// from ever running at once.
+//
+// Ids where the payload carries them, names only as a fallback, and the division scopes
+// both — two divisions may well each have a "Team A".
+export function getTeams(fixture) {
+	return [1, 2]
+		.map((side) => ({ key: getTeamKey(fixture, side), name: fixture[`team${side}`] || '' }))
+		.filter((team) => team.key !== null);
+}
+
+export function getTeamKey(fixture, side) {
+	const scope = fixture.division_id ?? '';
+	const id = fixture[`team_${side}_id`];
+
+	if (id) return `${scope}:${id}`;
+	if (fixture[`team_${side}_placeholder`]) return null;
+
+	const name = fixture[`team${side}`];
+	if (!name || name === UNBOUND_TEAM_NAME) return null;
+
+	return `${scope}:${name}`;
+}
+
+// How long a fixture is when it first goes on the board: its round's own length, then
+// the schedule's match length, then the grid's slot. Only ever a starting point. Once
+// placed, an entry's length is its own.
+export function getFixtureDefaultLength(fixture, settings = {}) {
+	const generator = settings.generator;
+	const roundLength = fixture ? generator?.roundDurations?.[roundHolding(fixture.round)] : null;
+
+	return Number(roundLength) || Number(generator?.fixtureDurationMinutes) || Number(settings.slotMinutes) || DEFAULT_SLOT_MINUTES;
+}
+
+// The settings with new match lengths written in. They live at settings.generator with
+// the rest of what Auto-schedule reads, and a schedule that has never been generated has
+// no generator settings yet, so it starts from the defaults.
+export function withMatchLengths(settings, lengths) {
+	return { generator: { ...(settings.generator ?? DEFAULT_GENERATOR_SETTINGS), ...lengths } };
+}
+
+// How close a dropped entry has to come to its neighbour to butt up against it.
+export const NEIGHBOUR_SNAP_MINUTES = 7;
+
+// A gap this short between two of a team's matches is worth a warning. Not the
+// generator's minimum rest: this warns, and never refuses.
+export const BACK_TO_BACK_MINUTES = 15;
+
+function entriesSharingCourt(entries, { day, courtId, ignoreEntryId = null }) {
+	return entries.filter(
+		(entry) =>
+			entry.id !== ignoreEntryId &&
+			entry.day === day &&
+			(entry.courtId === courtId || entry.courtId === null || courtId === null),
+	);
+}
+
+// Moves a start time to touch a neighbour on the same court, if one is within reach,
+// choosing whichever is nearest. Everything is minutes from midnight.
+export function snapToNeighbour(entries, { day, courtId, start, length, ignoreEntryId = null }) {
+	let best = start;
+	let nearest = NEIGHBOUR_SNAP_MINUTES + 1;
+
+	entriesSharingCourt(entries, { day, courtId, ignoreEntryId }).forEach((entry) => {
+		const candidates = [timeToMinutes(entry.endTime), timeToMinutes(entry.startTime) - length];
+
+		candidates.forEach((candidate) => {
+			const distance = Math.abs(start - candidate);
+
+			if (distance < nearest) {
+				nearest = distance;
+				best = candidate;
+			}
+		});
+	});
+
+	return best;
+}
+
+// The first start at or after `from` where `length` minutes are free on this court, or
+// null if there is no such time before `latestEnd`.
+export function findNextFreeStart(entries, { day, courtId, from, length, latestEnd, ignoreEntryId = null }) {
+	const blocking = entriesSharingCourt(entries, { day, courtId, ignoreEntryId })
+		.map((entry) => ({ start: timeToMinutes(entry.startTime), end: timeToMinutes(entry.endTime) }))
+		.sort((left, right) => left.start - right.start);
+	let start = from;
+
+	blocking.forEach((entry) => {
+		if (start < entry.end && start + length > entry.start) start = entry.end;
+	});
+
+	return start + length <= latestEnd ? start : null;
+}
+
+function describeCourtConflict(schedule, conflict) {
+	if (conflict.type === 'break') return `${conflict.title || 'A break'} runs until ${conflict.endTime}`;
+
+	return `${getCourtName(schedule, conflict.courtId)} is in use until ${conflict.endTime}`;
+}
+
+// What, if anything, is wrong with putting this entry here. A severity of 'error' is a
+// placement the server would refuse on save, so it is refused now, with its reason. A
+// 'warning' is allowed. Round order and court division limits stay with the server.
+export function getPlacementProblem(schedule, candidate, fixturesById = {}, ignoreEntryId = null) {
+	const conflict = findEntryConflict(schedule.entries, candidate, ignoreEntryId);
+	if (conflict) return { severity: 'error', message: describeCourtConflict(schedule, conflict) };
+
+	const fixture = candidate.type === 'fixture' ? fixturesById[candidate.fixtureId] : null;
+	if (!fixture) return null;
+
+	const teams = getTeams(fixture);
+	const start = timeToMinutes(candidate.startTime);
+	const end = timeToMinutes(candidate.endTime);
+	let warning = null;
+
+	for (const other of schedule.entries) {
+		const otherFixture = other.type === 'fixture' ? fixturesById[other.fixtureId] : null;
+
+		if (otherFixture && other.id !== ignoreEntryId && other.id !== candidate.id && other.day === candidate.day) {
+			const otherKeys = getTeams(otherFixture).map((team) => team.key);
+			const shared = teams.find((team) => otherKeys.includes(team.key));
+
+			if (shared) {
+				const otherStart = timeToMinutes(other.startTime);
+				const otherEnd = timeToMinutes(other.endTime);
+
+				if (start < otherEnd && end > otherStart) {
+					return {
+						severity: 'error',
+						message: `${shared.name} is playing on ${getCourtName(schedule, other.courtId)} until ${other.endTime}`,
+					};
+				}
+
+				if (Math.max(otherStart - end, start - otherEnd) < BACK_TO_BACK_MINUTES) {
+					warning = { severity: 'warning', message: `Back to back for ${shared.name}` };
+				}
+			}
+		}
+	}
+
+	return warning;
+}
+
+export function validateScheduleEntry(schedule, candidate, ignoreEntryId = null, fixturesById = {}) {
 	if (!candidate.day) return 'Choose a schedule day.';
 	if (schedule.days.find((day) => day.date === candidate.day)?.enabled === false) {
 		return 'This day is excluded from scheduling.';
@@ -695,12 +845,9 @@ export function validateScheduleEntry(schedule, candidate, ignoreEntryId = null)
 	if (candidate.type === 'fixture' && !candidate.fixtureId) return 'Select a fixture to schedule.';
 	if (candidate.type === 'break' && !candidate.title?.trim()) return 'Enter a break title.';
 
-	const conflict = findEntryConflict(schedule.entries, candidate, ignoreEntryId);
-	if (conflict) {
-		return 'That timeslot overlaps an existing schedule entry.';
-	}
+	const problem = getPlacementProblem(schedule, candidate, fixturesById, ignoreEntryId);
 
-	return '';
+	return problem?.severity === 'error' ? `${problem.message}.` : '';
 }
 
 export function upsertScheduleEntry(schedule, nextEntry) {
@@ -801,10 +948,9 @@ export function buildGridRowTimes(schedule, bounds) {
 // Where an entry sits on that axis, in rows. rowStart is a 1-based grid line and
 // the entry occupies rowStart through rowStart + rowSpan - 1.
 //
-// This is the PRINTED grid's arithmetic. The board stopped using it on
-// 2026-09-10 and positions its blocks from getEntryDayPlacement's minutes
-// instead; a sheet of paper has no way to draw a block at an arbitrary offset
-// and keep the row it is in legible, so print keeps whole rows.
+// Only the page-break editor's preview still reads this, to say what a row holds.
+// The board and the printed grid both draw an entry from getEntryDayPlacement's
+// minutes, at its own start and length.
 //
 // Arithmetic in minutes rather than a lookup in the row list, so an entry's drawn
 // position and a cell's occupied state are derived from the same expression and

@@ -525,6 +525,26 @@ here. What is left:
     tournament schedule");~~ fixed for courts 2026-11-04;
   - ~~the generator's Courts number duplicates the Courts & Fields list.~~ fixed 2026-11-04,
     when courts moved to Set up.
+- Schedule maker, after the 2026-11-04 calendar rework:
+  - **Hours apply to every day.** There is one `dayStartTime` and `dayEndTime`, not one per day.
+  - **A fixture doesn't remember its length once unscheduled.** Length lives on the entry, which
+    is deleted, so it returns to its round's length when placed again.
+  - **Round order can't be checked as a match is placed.** Only the generator and the server
+    implement it, so it stays a save-time error that highlights the entry. A court's division
+    limit is the same.
+  - **Unbound knockout fixtures get no back-to-back warning**, because their teams aren't known
+    until the round before is played.
+  - **A printed day fitting one page is a target, not a promise.** It depends on hours, courts,
+    the shortest match and text wrapping. The default page breaks add a page before clipping,
+    and a saved layout shrinks to fit its sheet.
+  - **Auto-schedule still replaces hand-placed fixtures.** Only breaks are kept.
+  - **A dismissed generation report can come back.** Each undo step restores the report that was
+    showing when that step was taken, so undoing a change made before a dismissal shows it again.
+  - **The maker's read-only branch can't be reached.** `View.jsx` only mounts it with `canEdit`
+    set, so the `canEdit` false paths aren't exercised.
+  - **`schedule-print.css` and `SchedulePrintLayoutEditor.jsx` still say "inspector"** in comments.
+    The page-break editor now sits in the Print sheet. Its narrow rules key off the editor's own
+    width, so they still apply on a phone.
 
 ## Overlays and stacking
 

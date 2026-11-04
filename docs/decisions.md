@@ -803,3 +803,36 @@ Given up: rows no longer grow to fit their content, so a very short match or a v
 one page says less. Long round names are shortened on a block, and the printed list still gives
 them in full. Sizes are in millimetres, so a block keeps its height on screen rather than filling
 the window.
+
+## The Schedule Maker Works Like A Calendar
+
+Decided 2026-11-04.
+
+The maker was built around slots, and organisers had to learn its panels before they could place
+a match. It now behaves like a calendar: grid lines are a reading aid, a match occupies exactly
+the time it takes, and each option lives in one place.
+
+- **Two matches may not overlap on one court.** A court hosts one match at a time, so the server
+  rule stays and no side-by-side layout exists.
+- **The board's scale is fixed at 1.6px a minute** (`PX_PER_MINUTE`). A 50-minute match is 80px on
+  any grid, which is what lets changing the grid move nothing.
+- **Placement snaps to 5 minutes, and to a neighbouring entry within 7.**
+- **Grid line choices are 15, 30 and 60 minutes.** A saved value outside these, such as 50, stays
+  selectable until it is changed, so an older schedule opens as it was saved.
+- **A team's gap under 15 minutes warns and never refuses.** It is unrelated to the generator's
+  minimum rest. The client refuses only what the server would refuse on save.
+- **Match length is a default for new placements, stored in `settings.generator`.** Nothing new
+  was added to the JSONB. Editing a length moves nothing on the board, so this doesn't repeat the
+  coupling rejected above.
+- **Four rules stay in view on Auto-schedule:** minimum rest, a break before knockout rounds,
+  bending rules to fit every fixture, and assigning officials. The other six sit under More rules.
+- **The names changed.** Generate is Auto-schedule, Slot Length is Grid lines every, and Grid and
+  List are Board and List. Inspector, entry and slot are gone from the interface.
+- **A saved print layout always fits its sheet.** The scale shrinks and text drops a tier, which
+  only affects layouts an organiser chose. Default page breaks use a minimum scale instead.
+- **Undo is one stack of schedule snapshots, capped at 50, with no redo.** It is cleared on save
+  and on discard and isn't stored. A run of edits to one Set up field counts as one step, because
+  those fields write as they are typed in.
+
+Given up: HTML5 drag-and-drop stays for moving matches and placing them from the list, so a phone
+still places by tapping. Create and resize use pointer events, so they work by touch.

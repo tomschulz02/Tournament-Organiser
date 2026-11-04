@@ -51,6 +51,11 @@ import { orderedStages, roundHolding } from './tournament/fixtureUtils';
 import SchedulePrintLayoutEditor from './SchedulePrintLayoutEditor';
 import '../styles/schedule-print.css';
 
+const MAX_UNDO_STEPS = 50;
+
+// How close together edits to one setting have to be to count as the same edit.
+const SETTINGS_BURST_MS = 1500;
+
 function scheduleReducer(state, action) {
 	switch (action.type) {
 		case 'reset':
@@ -244,8 +249,57 @@ export default function ScheduleMakerModal({
 	const modalRef = useRef(null);
 	const dayTabsRef = useRef(null);
 	const overflowRef = useRef(null);
-	const [schedule, dispatch] = useReducer(scheduleReducer, initialSchedule);
+	const [schedule, dispatchSchedule] = useReducer(scheduleReducer, initialSchedule);
+	// What Undo goes back to, newest last. Each snapshot keeps the report that was showing
+	// with it, so undoing Auto-schedule takes its report away too. Not saved, and gone on
+	// save, on discard and on closing.
+	const [undoStack, setUndoStack] = useState([]);
+	const lastSettingsEditRef = useRef(null);
 	const deferredSearch = useDeferredValue(fixtureSearch);
+
+	const handleUndo = () => {
+		const previous = undoStack[undoStack.length - 1];
+		if (!previous || saving) return;
+
+		// An entry going back to another day takes the board with it, or the undo would
+		// look like it did nothing.
+		const returned = previous.schedule.entries.find(
+			(entry) => !schedule.entries.some((item) => item.id === entry.id && item.day === entry.day)
+		);
+
+		dispatchSchedule({ type: 'reset', payload: previous.schedule });
+		setUndoStack(undoStack.slice(0, -1));
+		setGenerationReport(previous.report);
+		setPopover(null);
+		popoverCommitRef.current = null;
+		setPendingFixtureId(null);
+		setDirty(true);
+		clearTimeout(lastSettingsEditRef.current?.timer);
+		lastSettingsEditRef.current = null;
+		if (returned) setActiveDay(returned.day);
+	};
+
+	// On the document rather than the modal: undoing or removing the block that held focus
+	// drops focus to the body, and the next Ctrl+Z has to work anyway. A text field keeps
+	// its own undo, and anything open over the modal, like a confirmation, holds focus
+	// outside it and is left alone.
+	useEffect(() => {
+		if (!isOpen || !canEdit) return;
+
+		const onKeyDown = (event) => {
+			if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'z') return;
+
+			const { target } = event;
+			if (target !== document.body && !modalRef.current?.contains(target)) return;
+			if (target.matches?.('textarea, [contenteditable], input:not([type="checkbox"], [type="radio"], [type="button"])')) return;
+
+			event.preventDefault();
+			handleUndo();
+		};
+
+		document.addEventListener('keydown', onKeyDown);
+		return () => document.removeEventListener('keydown', onKeyDown);
+	});
 
 	useEffect(() => {
 		if (!isOpen) return;
@@ -353,6 +407,34 @@ export default function ScheduleMakerModal({
 
 	const divisionList = divisions || [];
 
+	// Every change to the schedule comes through here, and each is one step of Undo. A drop
+	// back where it started changes nothing, so it adds no step. Set up writes as it is
+	// typed in, so a run of edits to the same setting counts as one.
+	const dispatch = (action) => {
+		const changes = JSON.stringify(scheduleReducer(schedule, action)) !== JSON.stringify(schedule);
+
+		if (changes) {
+			const settingKey = action.type === 'updateSettings' ? Object.keys(action.payload).join() : null;
+			const last = lastSettingsEditRef.current;
+			const sameBurst = settingKey && last?.key === settingKey;
+
+			clearTimeout(last?.timer);
+			lastSettingsEditRef.current = settingKey
+				? {
+						key: settingKey,
+						timer: setTimeout(() => {
+							lastSettingsEditRef.current = null;
+						}, SETTINGS_BURST_MS),
+					}
+				: null;
+			if (!sameBurst) {
+				setUndoStack((stack) => [...stack, { schedule, report: generationReport }].slice(-MAX_UNDO_STEPS));
+			}
+		}
+
+		dispatchSchedule(action);
+	};
+
 	const markDirty = () => {
 		if (!dirty) setDirty(true);
 	};
@@ -444,6 +526,7 @@ export default function ScheduleMakerModal({
 			setHighlightEntryIds([]);
 			initialScheduleRef.current = schedule;
 			setDirty(false);
+			setUndoStack([]);
 			showMessage('Schedule saved successfully.', 'success');
 		} catch {
 			showMessage('Failed to save the schedule. Please try again later.', 'error');
@@ -477,7 +560,8 @@ export default function ScheduleMakerModal({
 		});
 		if (!confirmed) return;
 
-		dispatch({ type: 'reset', payload: initialScheduleRef.current || initialSchedule });
+		dispatchSchedule({ type: 'reset', payload: initialScheduleRef.current || initialSchedule });
+		setUndoStack([]);
 		setSheet(null);
 		setPopover(null);
 		setGenerationReport(null);
@@ -1191,6 +1275,9 @@ export default function ScheduleMakerModal({
 						    render; a media query picks. */}
 						{canEdit && (
 							<>
+								<button type="button" onClick={handleUndo} disabled={undoStack.length === 0 || saving}>
+									Undo
+								</button>
 								<button type="button" onClick={() => openSheet('auto')}>
 									<span className="schedule-label-long">Auto-schedule</span>
 									<span className="schedule-label-short">Auto</span>
@@ -2791,6 +2878,15 @@ function SetUpSheet({
 }) {
 	const [hours, setHours] = useState({ start: schedule.settings.dayStartTime, end: schedule.settings.dayEndTime });
 	const [matchLength, setMatchLength] = useState(String(getFixtureDefaultLength(null, schedule.settings)));
+	// Undo can change these underneath the fields.
+	const [syncedSettings, setSyncedSettings] = useState(schedule.settings);
+
+	if (schedule.settings !== syncedSettings) {
+		setSyncedSettings(schedule.settings);
+		setHours({ start: schedule.settings.dayStartTime, end: schedule.settings.dayEndTime });
+		setMatchLength(String(getFixtureDefaultLength(null, schedule.settings)));
+	}
+
 	const roundDurations = schedule.settings.generator?.roundDurations ?? {};
 	const bodyRef = useRef(null);
 

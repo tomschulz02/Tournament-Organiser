@@ -1651,7 +1651,7 @@ button.schedule-grid-header-court:hover {
 	}
 
 	/* One row, and it has to stay one row — a second row here is 45px of chrome
-	   on the axis this whole piece is trying to reclaim. Four controls in 294px
+	   on the axis this whole piece is trying to reclaim. Five controls in 294px
 	   only fits with the short labels above and the tighter metrics below. */
 	.schedule-maker-toolbar {
 		padding: var(--space-2) var(--space-3);
@@ -1671,6 +1671,15 @@ button.schedule-grid-header-court:hover {
 	.schedule-maker-overflow > button {
 		padding: var(--space-2);
 		min-height: 44px;
+	}
+
+	@media (max-width: 359px) {
+		.schedule-view-toggle button,
+		.schedule-maker-toolbar-actions > button,
+		.schedule-maker-overflow > button {
+			padding-inline: 6px;
+			min-width: 44px;
+		}
 	}
 
 	.schedule-list-entry {

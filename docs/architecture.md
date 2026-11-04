@@ -150,6 +150,14 @@ them on `document.body` so that neither `<main>`'s layout nor the header's and f
 Each of these cost real time to diagnose during the tournament view redesign. All fail
 silently — the page still renders, it is just wrong.
 
+**Testing the schedule maker and its print output.** Components have no tests, so these are
+checked in a browser. An HTML5 drag can't be started by an automated browser's mouse, so use
+dispatched `DragEvent`s with a `DataTransfer`, or a real browser by hand. `dataTransfer.getData`
+returns nothing during `dragover`, so a live preview reads the dragged item from React state. PDFs
+need no print dialog: `msedge --headless=new --print-to-pdf=out.pdf <url>`. `schedule-export.css`
+is inlined into the standalone print document as raw text, so it can only use tokens it declares
+itself, and anything that must print has to be a real border rather than a background or shadow.
+
 **Do not use `<header>`, `<main>` or `<img>` in new markup.** `App.css` styles them as
 bare element selectors. `header` in particular is the site's fixed top bar —
 `position: fixed; width: 100vw; height: 80px` — so a semantic `<header>` inside a card is

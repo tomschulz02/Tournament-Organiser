@@ -294,7 +294,7 @@ Known drift: a completed fixture uses the error red. Reconcile when the status c
 ### Schedule maker
 A dense tool: the fixtures list on the left and the board filling the rest, with nothing else on screen until it is asked for.
 - **Board:** courts across, time down, at a fixed scale of 1.6px a minute. Grid lines are only a reading aid. Matches sit at their own start and length, and a drag previews the true time, with any reason beside the pointer.
-- **Toolbar:** one filled button (Save). Set up, Print and Auto-schedule are quiet. What is rare and undoes a lot (Discard, Reset) sits in More, in red. Below 768px Set up and Print also move to More.
+- **Toolbar:** one filled button (Save). Set up, Print, Undo and Auto-schedule are quiet. What is rare and undoes a lot (Discard, Reset) sits in More, in red. Below 768px Set up and Print also move to More.
 - **Sheets:** Set up and Auto-schedule slide over the right of the board and leave it usable. Print takes the full width. Full screen below 900px.
 - **Popover:** a match or break edits in place, beside its block, applying each field as it is left. A refusal gives its reason there and leaves the match unchanged. A bottom sheet at 768px and below.
 

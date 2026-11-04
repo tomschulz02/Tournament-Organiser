@@ -5,6 +5,7 @@ import {
 	DEFAULT_PRINT_ORIENTATION,
 	getDayBounds,
 	getDayEntries,
+	getEntryDayPlacement,
 	getEntryRowPlacement,
 	getSlotMinutes,
 } from './scheduleUtils';
@@ -20,23 +21,37 @@ import {
 // Nothing here renders. A row index means the same thing to every reader
 // because they all get it from getPrintRowsForDay.
 
-// How many list rows / grid slot-rows one printed A4 page is estimated to
-// hold, derived from the row heights already governing rendering (the list
-// row's own padding, the grid's min-height: 56px cell) against the @page
-// dimensions (utils/scheduleExportDocument.jsx) minus margins and the header's
-// own height.
+// How many list rows one printed A4 page holds, measured against real PDF output with
+// every row at its tallest: a long team name and officials.
 //
-// Deliberately conservative: the safe failure mode is a page that breaks a
-// little early and prints with some blank space at the foot, not one that
-// overflows and silently reintroduces the bug this exists to fix (every
-// `.schedule-export-page` forces `break-after: page` in print, so an
-// undersized estimate costs whitespace, never a split). Tune these against
-// real printed/PDF output if a page comes out badly under- or over-full.
+// Deliberately conservative: the safe failure mode is a page that breaks a little
+// early and prints with some blank space at the foot, not one that overflows.
+// Since 2026-09-08 this is only the *default* page size: an organiser can move any
+// break, and a saved layout's breaks are used verbatim.
+export const PRINT_LIST_ROWS_PER_PAGE = { landscape: 12, portrait: 18 };
+
+// The printed grid draws time to scale, in millimetres, so a match is the height of
+// the time it takes. These are the sheet's numbers, measured against real PDF output.
 //
-// Since 2026-09-08 these are only the *default* page size: an organiser can
-// move any break, and a saved layout's breaks are used verbatim.
-export const PRINT_LIST_ROWS_PER_PAGE = 14;
-export const PRINT_GRID_SLOTS_PER_PAGE = 7;
+// The height left for the time grid on one A4 sheet, after the @page margin (see
+// utils/scheduleExportDocument.jsx) and the page's header and court names.
+export const PRINT_GRID_HEIGHT_MM = { landscape: 145, portrait: 228 };
+
+// The least a default page may use. It gives a 50-minute match room for its time,
+// teams and round. A default page is cut short rather than go below this.
+export const MIN_MM_PER_MINUTE = 0.26;
+
+// Short matches need two lines, which can raise that minimum. Capped, because
+// matches of a few minutes would otherwise demand a page per hour.
+const TWO_LINE_BLOCK_MM = 8.6;
+const MAX_REQUIRED_MM_PER_MINUTE = 0.6;
+
+// The most a page may use. A short day leaves blank paper rather than enormous blocks.
+export const MAX_MM_PER_MINUTE = 0.5;
+
+// What a block of a given height has room to say.
+const TALL_BLOCK_MM = 20;
+const FULL_BLOCK_MM = 12.6;
 
 // The ceiling on how many courts share one grid table by default. Past this a
 // single table of columns stops being readable — 19 courts in one row was the
@@ -46,24 +61,38 @@ export const PRINT_GRID_SLOTS_PER_PAGE = 7;
 export const COURTS_PER_GROUP = 6;
 
 // The day's own grid rows and the entries placed against them, resolved once.
-// The same fixed axis and the same row arithmetic the schedule maker's screen
-// uses, so the printed page puts an entry in the row the organiser saw it in.
+// The same fixed axis the schedule maker's board uses, so the printed page puts an
+// entry at the time the organiser saw it at.
+//
+// An entry outside the day's hours has nowhere on that axis to be drawn. It is
+// returned separately so the page can list it rather than lose it.
 export function getGridRowsForDay(schedule, day) {
 	const dayBounds = getDayBounds(schedule);
 	const allSlots = buildGridRowTimes(schedule, dayBounds);
-	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: allSlots.length };
-	const entries = getDayEntries(schedule, day.date)
-		.map((entry) => ({ entry, ...getEntryRowPlacement(entry, axis) }))
-		.filter((item) => item.inDay);
+	const slotMinutes = getSlotMinutes(schedule);
+	const axis = { start: dayBounds.start, slotMinutes, rowCount: allSlots.length };
+	const located = getDayEntries(schedule, day.date).map((entry) => ({
+		entry,
+		...getEntryRowPlacement(entry, axis),
+		...getEntryDayPlacement(entry, axis),
+	}));
 
-	return { slots: allSlots, entries };
+	return {
+		slots: allSlots,
+		slotMinutes,
+		entries: located.filter((item) => item.inDay),
+		outsideEntries: located.filter((item) => !item.inDay).map((item) => item.entry),
+	};
 }
 
-// A grid page reads best when it ends on an empty slot row rather than in the
-// middle of a run of matches — so a break before `index` is natural when the
-// row above it has nothing on it.
-export function makeGridNaturalBreakTest(entries) {
-	return (index) => !entries.some((item) => item.rowStart <= index && item.rowStart + item.rowSpan > index);
+// A grid page reads best when no match is cut in two — so a break before row
+// `index` is natural when nothing crosses the line at the top of that row.
+export function makeGridNaturalBreakTest(entries, slotMinutes) {
+	return (index) => {
+		const line = index * slotMinutes;
+
+		return !entries.some((item) => item.startOffset < line && item.endOffset > line);
+	};
 }
 
 // The list equivalent: a break before `index` is natural when that row starts a
@@ -95,51 +124,91 @@ export function getPrintableDays(schedule) {
 	return schedule.days.filter((day) => day.enabled !== false);
 }
 
-// The rows one day contributes to a layout of this type: grid slot times, or
-// the day's entries, along with everything needed to break them into pages.
-// The most entries any one cell of this day's grid holds. One, on a day where
-// every match is at least as long as a grid row — which was every day until the
-// two came apart. Two 25-minute matches on a 45-minute grid share a cell, and
-// the cell prints them stacked, so the row is that many times as tall.
-//
-// Whole-day worst case rather than per-row: the page budget below is one number
-// for the day, and a row-by-row budget means teaching computeSmartDefaultRowBreaks
-// to weigh rows unequally, which the list view shares and does not want.
-function getBusiestCell(entries) {
-	const counts = new Map();
+// The least millimetres per minute this day's shortest match can live with. Breaks
+// don't count: a break is one line across the page, whatever its length.
+export function getMinimumGridScale(entries) {
+	const lengths = entries.filter((item) => item.entry.type !== 'break').map((item) => item.endOffset - item.startOffset);
+	if (lengths.length === 0) return MIN_MM_PER_MINUTE;
 
-	entries.forEach((item) => {
-		if (item.entry.courtId === null) return;
+	const required = TWO_LINE_BLOCK_MM / Math.min(...lengths);
 
-		const key = `${item.entry.courtId}_${item.rowStart}`;
-		counts.set(key, (counts.get(key) || 0) + 1);
-	});
-
-	return Math.max(1, ...counts.values(), 1);
+	return Math.max(MIN_MM_PER_MINUTE, Math.min(required, MAX_REQUIRED_MM_PER_MINUTE));
 }
 
-export function getPrintRowsForDay(type, schedule, day) {
+// How many grid rows a default page holds.
+export function getGridRowsPerPage({ entries, slotMinutes, orientation }) {
+	const minutesPerPage = PRINT_GRID_HEIGHT_MM[orientation] / getMinimumGridScale(entries);
+
+	return Math.max(1, Math.floor(minutesPerPage / slotMinutes));
+}
+
+// Millimetres per minute for a whole day's pages, so a match is the same height
+// wherever it falls. Set by the day's longest page, which therefore fills its
+// sheet. A saved layout can ask for more on one page than the default would allow;
+// it still fits the sheet, and the blocks say less. See getBlockTier.
+//
+// reservedMm is height a page needs for something else, such as the list of entries
+// outside the day's hours.
+export function getGridPrintScale({ pages, slotMinutes, orientation, reservedMm = 0 }) {
+	const longestPage = Math.max(1, ...pages.map((page) => page.length));
+
+	return Math.min(MAX_MM_PER_MINUTE, (PRINT_GRID_HEIGHT_MM[orientation] - reservedMm) / (longestPage * slotMinutes));
+}
+
+// The entries one page shows, measured from the top of that page. A match crossing
+// a page break appears on both pages, clipped to each, and says so.
+export function getPageBlocks(entries, { startOffset, endOffset }) {
+	return entries
+		.filter((item) => item.startOffset < endOffset && item.endOffset > startOffset)
+		.map((item) => {
+			const from = Math.max(item.startOffset, startOffset);
+			const to = Math.min(item.endOffset, endOffset);
+
+			return {
+				entry: item.entry,
+				top: from - startOffset,
+				length: to - from,
+				continuesFromPrevious: item.startOffset < startOffset,
+				continuesToNext: item.endOffset > endOffset,
+			};
+		});
+}
+
+// What a block has room to say. 'tall' and 'full' are time, teams, officials and
+// round, and only 'tall' can wrap a long round name onto a second line. 'compact' is
+// time and teams; 'minimal' is teams alone.
+export function getBlockTier(heightMm) {
+	if (heightMm >= TALL_BLOCK_MM) return 'tall';
+	if (heightMm >= FULL_BLOCK_MM) return 'full';
+	if (heightMm >= TWO_LINE_BLOCK_MM) return 'compact';
+
+	return 'minimal';
+}
+
+// The rows one day contributes to a layout of this type: grid slot times, or the
+// day's entries, along with everything needed to break them into pages.
+export function getPrintRowsForDay(type, schedule, day, orientation = DEFAULT_PRINT_ORIENTATION[type]) {
 	if (type === 'grid') {
-		const { slots, entries } = getGridRowsForDay(schedule, day);
+		const { slots, slotMinutes, entries, outsideEntries } = getGridRowsForDay(schedule, day);
 
-		// A page holds PRINT_GRID_SLOTS_PER_PAGE rows of one entry each. Where a
-		// cell stacks two, its row is about twice as tall, and seven of those
-		// overflow the sheet — which is the one failure this file's own comment
-		// says must not happen, because a page that overflows loses what falls off
-		// rather than costing whitespace. So the budget is divided by the fullest
-		// cell of the day.
-		//
-		// A day where nothing shares a cell divides by one and paginates exactly as
-		// it always did. A saved layout still wins verbatim; this is only the
-		// default.
-		const rowsPerPage = Math.max(1, Math.floor(PRINT_GRID_SLOTS_PER_PAGE / getBusiestCell(entries)));
-
-		return { rows: slots, entries, rowsPerPage, isNaturalBreak: makeGridNaturalBreakTest(entries) };
+		return {
+			rows: slots,
+			slotMinutes,
+			entries,
+			outsideEntries,
+			rowsPerPage: getGridRowsPerPage({ entries, slotMinutes, orientation }),
+			isNaturalBreak: makeGridNaturalBreakTest(entries, slotMinutes),
+		};
 	}
 
 	const entries = getDayEntries(schedule, day.date);
 
-	return { rows: entries, entries, rowsPerPage: PRINT_LIST_ROWS_PER_PAGE, isNaturalBreak: makeListNaturalBreakTest(entries) };
+	return {
+		rows: entries,
+		entries,
+		rowsPerPage: PRINT_LIST_ROWS_PER_PAGE[orientation],
+		isNaturalBreak: makeListNaturalBreakTest(entries),
+	};
 }
 
 // The row each page starts at, without accumulating into a mutable counter
@@ -160,15 +229,16 @@ export function getPageStartRows(pages) {
 // rebuilds rowBreaksByDay from the days that do.
 export function materialisePrintLayout({ type, schedule, layout }) {
 	const rowBreaksByDay = {};
+	const orientation = layout?.orientation || DEFAULT_PRINT_ORIENTATION[type];
 
 	getPrintableDays(schedule).forEach((day) => {
-		const { rows, rowsPerPage, isNaturalBreak } = getPrintRowsForDay(type, schedule, day);
+		const { rows, rowsPerPage, isNaturalBreak } = getPrintRowsForDay(type, schedule, day, orientation);
 
 		rowBreaksByDay[day.id] = resolveRowBreaks({ layout, day, rows, rowsPerPage, isNaturalBreak });
 	});
 
 	return {
-		orientation: layout?.orientation || DEFAULT_PRINT_ORIENTATION[type],
+		orientation,
 		courtBreaks: type === 'grid' ? resolveCourtBreaks(schedule, layout) : [],
 		rowBreaksByDay,
 	};

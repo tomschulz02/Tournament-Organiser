@@ -1,4 +1,4 @@
-import React, { startTransition, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
@@ -17,6 +17,7 @@ import {
 	createBreakEntry,
 	createFixtureEntry,
 	DEFAULT_GENERATOR_SETTINGS,
+	findNextFreeStart,
 	formatDateLabel,
 	getCourtName,
 	getDayBounds,
@@ -26,7 +27,10 @@ import {
 	getEntryLabel,
 	getEntryOfficials,
 	getEntrySecondary,
+	getFixtureDefaultLength,
+	getPlacementProblem,
 	getSlotMinutes,
+	getTeams,
 	getUnscheduledFixtures,
 	isTimeRangeValid,
 	minutesToTime,
@@ -35,10 +39,12 @@ import {
 	serialiseScheduleForSave,
 	SNAP_MINUTES,
 	snapToIncrement,
+	snapToNeighbour,
 	sortScheduleEntries,
 	timeToMinutes,
 	upsertScheduleEntry,
 	validateScheduleEntry,
+	withMatchLengths,
 } from '../utils/scheduleUtils';
 import { divisionColorStyle } from '../utils/divisionColors';
 import { orderedStages, roundHolding } from './tournament/fixtureUtils';
@@ -98,10 +104,6 @@ function getFixtureDivisionStyle(fixture, divisions = []) {
 	return divisionColorStyle(fixture.division_id, divisions);
 }
 
-function getSlotKey(day, courtId, startTime) {
-	return `${day}_${courtId}_${startTime}`;
-}
-
 // The division names a court is restricted to, comma-joined, or '' when the court
 // takes any division. An id with no matching division reads as "Unknown" rather
 // than vanishing, so a stale restriction is visible rather than silent.
@@ -112,12 +114,13 @@ function courtDivisionLabel(court, divisions = []) {
 	return ids.map((id) => divisions.find((division) => division.id === id)?.name || 'Unknown').join(', ');
 }
 
-// Two things can be dropped on a cell and they mean different things: a fixture
+// Two things can be dropped on the board and they mean different things: a fixture
 // from the sidebar creates an entry, an entry already on the grid moves one. The
 // payload is prefixed so the drop handler can tell them apart — a bare id could
 // be either.
 const FIXTURE_DRAG = 'fixture:';
 const ENTRY_DRAG = 'entry:';
+const BREAK_DRAG = 'break:';
 
 function readDragPayload(event) {
 	const payload = event.dataTransfer.getData('text/plain') || '';
@@ -129,6 +132,8 @@ function readDragPayload(event) {
 	if (payload.startsWith(FIXTURE_DRAG)) {
 		return { kind: 'fixture', id: payload.slice(FIXTURE_DRAG.length) };
 	}
+
+	if (payload.startsWith(BREAK_DRAG)) return { kind: 'break', id: '' };
 
 	return { kind: 'none', id: '' };
 }
@@ -151,13 +156,11 @@ function nextCourtId(courts) {
 	return `court-${highest + 1}`;
 }
 
-function createSlotDraft(day, courtId, startTime, slotMinutes) {
-	return {
-		day,
-		courtId,
-		startTime,
-		endTime: addMinutesToTime(startTime, slotMinutes),
-	};
+// A tap says where and nothing else, so its draft has no end: the fixture chosen for it
+// brings its own length. A drag says how long as well and passes an end of its own,
+// which is then kept.
+function createSlotDraft(day, courtId, startTime, endTime = '') {
+	return { day, courtId, startTime, endTime };
 }
 
 export default function ScheduleMakerModal({
@@ -181,18 +184,21 @@ export default function ScheduleMakerModal({
 	const [dirty, setDirty] = useState(false);
 	const [viewMode, setViewMode] = useState(getDefaultViewMode);
 	const [activeDay, setActiveDay] = useState(() => initialSchedule.days[0]?.date || '');
-	const [panelMode, setPanelMode] = useState('overview');
-	// Which of the three panels is showing below 900px, where they no longer fit
-	// side by side and stacking them left the board a 280px window reached by
-	// scrolling past the other two. Above 900px this is inert — the stylesheet
-	// ignores it and all three panels show. The board is the default because it
-	// is what the organiser came for; the other two are things they reach for.
+	// Which of the two panels is showing below 900px, where they no longer fit side by
+	// side. Above 900px this is inert: the stylesheet ignores it and both show.
 	const [mobilePanel, setMobilePanel] = useState('board');
-	const [selectedEntryId, setSelectedEntryId] = useState(null);
+	// What is open on the board: { kind: 'entry', entryId } to edit a match or break, or
+	// { kind: 'picker', draft } to choose a fixture for an empty time.
+	const [popover, setPopover] = useState(null);
+	const popoverCommitRef = useRef(null);
+	const popoverOpenerRef = useRef(null);
+	const popoverJustDismissedRef = useRef(false);
 	// The fixture chosen from the unscheduled list, waiting for a slot to be
 	// tapped. Dragging covers this on desktop and cannot work below 900px, where
 	// the list and the board are never on screen together.
 	const [pendingFixtureId, setPendingFixtureId] = useState(null);
+	// The same for a new break, which has no id to wait with.
+	const [pendingBreak, setPendingBreak] = useState(false);
 	// Open state of the toolbar's overflow menu. Only its open/closed state is
 	// React's — whether the menu exists as a control at all is a media query,
 	// because a width measured in JavaScript cannot be trusted here.
@@ -200,45 +206,40 @@ export default function ScheduleMakerModal({
 	const [fixtureSearch, setFixtureSearch] = useState('');
 	const [roundFilter, setRoundFilter] = useState('all');
 	const [divisionFilter, setDivisionFilter] = useState('all');
-	const [slotDraft, setSlotDraft] = useState(null);
 	// Which placed entry is mid-drag, so the cells it currently occupies stay
 	// droppable. Without it a nudge from 09:00 to 09:30 is refused by the entry's
 	// own occupancy.
 	const [draggingEntryId, setDraggingEntryId] = useState(null);
-	const [breakDraft, setBreakDraft] = useState(null);
+	// The same for a fixture dragged in from the list. The drag's own payload can't be
+	// read until the drop, and the live preview needs to know what is being dragged.
+	const [draggingFixtureId, setDraggingFixtureId] = useState(null);
+	const [draggingBreak, setDraggingBreak] = useState(false);
 	const [courtDraft, setCourtDraft] = useState('');
-	// The court whose division restriction is being edited in the inspector. Set
-	// when a court header is clicked; a panelMode of 'court' shows the picker.
-	const [courtConfigId, setCourtConfigId] = useState(null);
-	// A working copy of the day settings while the settings panel is open. Applied
-	// to schedule.settings on save; null when the panel is closed.
-	const [settingsDraft, setSettingsDraft] = useState(null);
+	// Which sheet is open over the board: 'setup', 'auto', 'print' or neither. One at a
+	// time. sheetCourtId is the court to bring into view, when a court's heading opened it.
+	const [sheet, setSheet] = useState(null);
+	const [sheetCourtId, setSheetCourtId] = useState(null);
+	const sheetOpenerRef = useRef(null);
 	// The schedule entries the last failed save named as the ones breaking a rule,
 	// highlighted on the grid and scrolled into view. Cleared on the next save or
 	// after a short delay.
 	const [highlightEntryIds, setHighlightEntryIds] = useState([]);
-	// Opens on the rules the schedule was last generated with — saved at
-	// settings.generator — or the defaults for one never generated. An unchosen
-	// duration is the grid's slot length and an unchosen rest is the duration,
-	// which is what both always were. See docs/schedule.md.
+	// Opens on the rules the schedule was last generated with, or the defaults for one
+	// never generated. A rest or knockout break of null means "not chosen", which the
+	// generator reads as one match length. Match lengths, hours and courts aren't here:
+	// Set up owns them, and Auto-schedule reads them from the schedule.
 	const [generatorDraft, setGeneratorDraft] = useState(() => {
 		const saved = initialSchedule.settings.generator || DEFAULT_GENERATOR_SETTINGS;
-		const duration = saved.fixtureDurationMinutes ?? initialSchedule.settings.slotMinutes;
+		const rules = { ...saved };
 
-		return {
-			...saved,
-			courtCount: Math.max(1, initialSchedule.courts.length || 2),
-			dailyStartTime: initialSchedule.settings.dayStartTime,
-			dailyEndTime: initialSchedule.settings.dayEndTime,
-			fixtureDurationMinutes: duration,
-			restMinutes: saved.restMinutes ?? duration,
-			knockoutGapMinutes: saved.knockoutGapMinutes ?? duration,
-		};
+		delete rules.fixtureDurationMinutes;
+		delete rules.roundDurations;
+
+		return rules;
 	});
-	// What the last generation had to bend or leave out, shown in the overview
-	// until the next generation or until dismissed. Not saved.
+	// What the last generation had to bend or leave out, shown above the board until
+	// the next generation or until dismissed. Not saved.
 	const [generationReport, setGenerationReport] = useState(null);
-	const [entryForm, setEntryForm] = useState(null);
 	const initialScheduleRef = useRef(null);
 	const modalRef = useRef(null);
 	const dayTabsRef = useRef(null);
@@ -326,10 +327,6 @@ export default function ScheduleMakerModal({
 	}, [activeDay, mobilePanel]);
 
 	const fixturesById = useMemo(() => buildFixtureIndex(fixtures), [fixtures]);
-	const selectedEntry = useMemo(
-		() => schedule.entries.find((entry) => entry.id === selectedEntryId) || null,
-		[schedule.entries, selectedEntryId]
-	);
 	const roundOptions = useMemo(() => {
 		return ['all', ...orderedStages(fixtures)];
 	}, [fixtures]);
@@ -355,7 +352,6 @@ export default function ScheduleMakerModal({
 	if (!isOpen) return null;
 
 	const divisionList = divisions || [];
-	const courtConfig = courtConfigId ? schedule.courts.find((court) => court.id === courtConfigId) || null : null;
 
 	const markDirty = () => {
 		if (!dirty) setDirty(true);
@@ -398,15 +394,24 @@ export default function ScheduleMakerModal({
 				setMenuOpen(false);
 				return;
 			}
+			if (popover) {
+				closePopover();
+				return;
+			}
+			if (sheet) {
+				closeSheet();
+				return;
+			}
 			handleClose();
 			return;
 		}
 
 		if (event.key !== 'Tab' || !modalRef.current) return;
 
-		// offsetParent is null for anything display:none, which is how the hidden
-		// export roots stay out of the cycle.
-		const items = [...modalRef.current.querySelectorAll(FOCUSABLE)].filter((node) => node.offsetParent !== null);
+		// An open popover holds focus while it is open. offsetParent is null for anything
+		// display:none, which keeps hidden panels out of the cycle.
+		const scope = modalRef.current.querySelector('.schedule-popover') ?? modalRef.current;
+		const items = [...scope.querySelectorAll(FOCUSABLE)].filter((node) => node.offsetParent !== null);
 		if (items.length === 0) return;
 
 		const first = items[0];
@@ -473,10 +478,10 @@ export default function ScheduleMakerModal({
 		if (!confirmed) return;
 
 		dispatch({ type: 'reset', payload: initialScheduleRef.current || initialSchedule });
+		setSheet(null);
+		setPopover(null);
 		setGenerationReport(null);
 		setDirty(false);
-		setSelectedEntryId(null);
-		setPanelMode('overview');
 	};
 
 	// Reset and Discard are different actions and the labels have to carry that.
@@ -507,11 +512,11 @@ export default function ScheduleMakerModal({
 		if (!confirmed) return;
 
 		dispatch({ type: 'replace', payload: { ...schedule, entries: [] } });
+		setSheet(null);
+		setPopover(null);
 		setGenerationReport(null);
-		setSelectedEntryId(null);
-		setSlotDraft(null);
 		setPendingFixtureId(null);
-		setPanelMode('overview');
+		setPendingBreak(false);
 		setMobilePanel('board');
 		markDirty();
 		showMessage('Schedule cleared. Discard to bring it back.', 'success');
@@ -540,7 +545,7 @@ export default function ScheduleMakerModal({
 		});
 		setCourtDraft('');
 		markDirty();
-		showMessage(`${nextName} added to the tournament schedule.`, 'success');
+		showMessage(`${nextName} added. Save the schedule to keep it.`, 'success');
 	};
 
 	// Removing a court never regenerates the list: buildCourtList reuses by index,
@@ -576,14 +581,39 @@ export default function ScheduleMakerModal({
 			},
 		});
 		markDirty();
-		showMessage(`${court.name} removed from the tournament schedule.`, 'success');
+		showMessage(`${court.name} removed. Save the schedule to keep this.`, 'success');
 	};
 
-	const handleAssignFixtureToSlot = (fixture, draft) => {
-		if (!fixture || !draft) return;
+	// A draft with no end came from a tap, so it means "about here": it takes the given
+	// length, touches a neighbour within reach, and moves along to the next free time if
+	// that one is busy. A draft with an end was shown to the organiser exactly as it is,
+	// and stands or falls as it is.
+	const resolveDraftTimes = (length, draft) => {
+		if (draft.endTime) return draft;
+
+		const { start: dayStart } = getDayBounds(schedule);
+		const slotMinutes = getSlotMinutes(schedule);
+		const latestEnd = timeToMinutes(dayStart) + buildGridRowTimes(schedule, getDayBounds(schedule)).length * slotMinutes;
+		const placing = { day: draft.day, courtId: draft.courtId, length };
+		const near = snapToNeighbour(schedule.entries, { ...placing, start: timeToMinutes(draft.startTime) });
+		const start = findNextFreeStart(schedule.entries, { ...placing, from: near, latestEnd });
+
+		if (start === null) return null;
+
+		return { ...draft, startTime: minutesToTime(start), endTime: minutesToTime(start + length) };
+	};
+
+	const handleAssignFixtureToSlot = (fixture, requestedDraft) => {
+		if (!fixture || !requestedDraft) return;
 
 		if (schedule.courts.length === 0) {
 			showMessage('Add at least one court or field before scheduling fixtures.', 'error');
+			return;
+		}
+
+		const draft = resolveDraftTimes(getFixtureDefaultLength(fixture, schedule.settings), requestedDraft);
+		if (!draft) {
+			showMessage(`No free time left on ${getCourtName(schedule, requestedDraft.courtId)} after ${requestedDraft.startTime}.`, 'error');
 			return;
 		}
 
@@ -595,22 +625,27 @@ export default function ScheduleMakerModal({
 			fixtureId: fixture.id,
 		});
 
-		const validationError = validateScheduleEntry(schedule, candidate);
+		const validationError = validateScheduleEntry(schedule, candidate, null, fixturesById);
 		if (validationError) {
 			showMessage(validationError, 'error');
 			return;
 		}
 
+		const warning = getPlacementProblem(schedule, candidate, fixturesById);
+
 		dispatch({ type: 'upsertEntry', payload: candidate });
-		setPanelMode('overview');
-		setSlotDraft(null);
+		setPopover(null);
 		// Placed, so it is no longer pending. A rejected placement returns above
 		// this line and leaves it pending, so another slot can be tried.
 		setPendingFixtureId(null);
 		// Back to the board so the organiser sees where it landed.
 		setMobilePanel('board');
 		markDirty();
-		showMessage(`${fixture.team1} vs ${fixture.team2} scheduled.`, 'success');
+		setDraggingFixtureId(null);
+		showMessage(
+			`${fixture.team1} vs ${fixture.team2} scheduled at ${draft.startTime}.${warning ? ` ${warning.message}.` : ''}`,
+			warning ? 'warning' : 'success',
+		);
 	};
 
 	// A move keeps the entry's duration and changes only where it sits. It is
@@ -625,21 +660,27 @@ export default function ScheduleMakerModal({
 		const candidate = {
 			...entry,
 			day,
-			courtId,
+			// A break spanning every court stays that way, wherever it is dropped.
+			courtId: entry.courtId === null ? null : courtId,
 			startTime,
 			endTime: addMinutesToTime(startTime, durationMinutes),
 		};
 
-		const validationError = validateScheduleEntry(schedule, candidate, entry.id);
+		const validationError = validateScheduleEntry(schedule, candidate, entry.id, fixturesById);
 		if (validationError) {
 			showMessage(validationError, 'error');
 			return;
 		}
 
+		const warning = getPlacementProblem(schedule, candidate, fixturesById, entry.id);
+
 		dispatch({ type: 'upsertEntry', payload: candidate });
 		setMobilePanel('board');
 		markDirty();
-		showMessage(`Moved to ${candidate.startTime} on ${getCourtName(schedule, candidate.courtId)}.`, 'success');
+		showMessage(
+			`Moved to ${candidate.startTime} on ${getCourtName(schedule, candidate.courtId)}.${warning ? ` ${warning.message}.` : ''}`,
+			warning ? 'warning' : 'success',
+		);
 	};
 
 	// Dragging an entry's own edge changes one of its times and nothing else. The
@@ -653,37 +694,39 @@ export default function ScheduleMakerModal({
 
 		const candidate = { ...entry, startTime, endTime };
 
-		const validationError = validateScheduleEntry(schedule, candidate, entry.id);
+		const validationError = validateScheduleEntry(schedule, candidate, entry.id, fixturesById);
 		if (validationError) {
 			showMessage(validationError, 'error');
 			return;
 		}
 
 		dispatch({ type: 'upsertEntry', payload: candidate });
-		// The inspector may be open on this very entry. Its form is a copy, so
-		// without this the next Save Changes would write the old times back over
-		// the resize.
-		setEntryForm((current) => (current && current.id === entryId ? { ...current, startTime, endTime } : current));
 		markDirty();
 		showMessage(`Now ${startTime} - ${endTime}.`, 'success');
 	};
 
-	const handleDropOnSlot = (event, day, courtId, startTime) => {
+	// The board has worked out the time from the pointer, and shown it, before this runs.
+	const handleDropOnBoard = (event, day, courtId, startTime, endTime) => {
 		event.preventDefault();
 		const payload = readDragPayload(event);
+
+		setDraggingFixtureId(null);
+		setDraggingBreak(false);
 
 		if (payload.kind === 'entry') {
 			handleMoveEntry(payload.id, day, courtId, startTime);
 			return;
 		}
 
+		if (payload.kind === 'break') {
+			handleAddBreak(createSlotDraft(day, null, startTime, endTime));
+			return;
+		}
+
 		const fixture = fixturesById[payload.id];
 		if (!fixture) return;
 
-		handleAssignFixtureToSlot(
-			fixture,
-			createSlotDraft(day, courtId, startTime, schedule.settings.slotMinutes)
-		);
+		handleAssignFixtureToSlot(fixture, createSlotDraft(day, courtId, startTime, endTime));
 	};
 
 	// Fixture-first placement: choose a fixture, then choose where it goes.
@@ -699,21 +742,58 @@ export default function ScheduleMakerModal({
 		}
 
 		setPendingFixtureId(fixtureId);
+		setPendingBreak(false);
 		setMobilePanel('board');
+		// The list view has no times to tap.
+		setViewMode('grid');
 	};
 
-	// A tapped cell says only where, so the draft is one grid row long — that is
-	// all a tap can mean. A drag on the board says how long as well and passes its
-	// own end. Both arrive at the same picker and the same assignment path.
-	const handleOpenSlotPicker = (day, courtId, startTime, endTime = '') => {
-		const draft = endTime
-			? { day, courtId, startTime, endTime }
-			: createSlotDraft(day, courtId, startTime, schedule.settings.slotMinutes);
+	const handleSelectBreakForPlacement = () => {
+		setPendingBreak((pending) => !pending);
+		setPendingFixtureId(null);
+		setMobilePanel('board');
+		setViewMode('grid');
+	};
 
-		// A fixture is waiting for somewhere to go, so this tap is the answer to
-		// that rather than a request to open the picker. Same function the
-		// slot-first path calls — a second entry point, not a second
-		// implementation.
+	// A new break covers every court until it is told otherwise. It opens straight away
+	// for naming, because "Break" is only a placeholder.
+	const handleAddBreak = (requestedDraft) => {
+		const draft = resolveDraftTimes(NEW_BREAK_MINUTES, { ...requestedDraft, courtId: null });
+		if (!draft) {
+			showMessage(`No time left when every court is free after ${requestedDraft.startTime}.`, 'error');
+			return;
+		}
+
+		const candidate = createBreakEntry({ day: draft.day, startTime: draft.startTime, endTime: draft.endTime, title: 'Break' });
+		const validationError = validateScheduleEntry(schedule, candidate, null, fixturesById);
+		if (validationError) {
+			showMessage(validationError, 'error');
+			return;
+		}
+
+		dispatch({ type: 'upsertEntry', payload: candidate });
+		setPendingBreak(false);
+		markDirty();
+		openEntryPopover(candidate);
+	};
+
+	// A tap and a drag on the board arrive at the same picker and the same assignment
+	// path. See createSlotDraft for the difference between them.
+	const handleOpenSlotPicker = (day, courtId, startTime, endTime = '') => {
+		const draft = createSlotDraft(day, courtId, startTime, endTime);
+
+		// The press that dismissed a popover was to close it, not to start something new.
+		// A range dragged out is a deliberate new thing either way.
+		if (popoverJustDismissedRef.current && !endTime) return;
+
+		if (pendingBreak) {
+			handleAddBreak(draft);
+			return;
+		}
+
+		// A fixture is waiting for somewhere to go, so this tap is the answer to that
+		// rather than a request to open the picker. Same function the picker calls: a
+		// second entry point, not a second implementation.
 		if (pendingFixtureId) {
 			const fixture = fixturesById[pendingFixtureId];
 			if (fixture) {
@@ -723,30 +803,91 @@ export default function ScheduleMakerModal({
 			setPendingFixtureId(null);
 		}
 
-		setSelectedEntryId(null);
-		setSlotDraft(draft);
-		setPanelMode('slot');
-		// The slot form lives in the inspector. Without this the organiser taps an
-		// empty cell on a phone and nothing appears to happen.
-		setMobilePanel('inspector');
+		popoverOpenerRef.current = null;
+		setPopover({ kind: 'picker', draft });
 	};
 
-	// Clicking a court header opens its division picker in the inspector — the same
-	// shape as opening a slot draft, reusing the inspector rather than adding a
-	// second kind of popup.
-	const handleOpenCourtConfig = (courtId) => {
-		setSelectedEntryId(null);
-		setSlotDraft(null);
-		setPendingFixtureId(null);
-		setCourtConfigId(courtId);
-		setPanelMode('court');
-		// The picker lives in the inspector. Without this the organiser taps a
-		// court header on a phone and nothing appears to happen.
-		setMobilePanel('inspector');
+	// Editing happens on the match itself, like a calendar event.
+	const openEntryPopover = (entry) => {
+		popoverOpenerRef.current = document.activeElement;
+		setPopover({ kind: 'entry', entryId: entry.id });
 	};
 
-	// Toggled per division rather than saved as a batch: the picker writes straight
-	// to schedule.courts and the change is visible on the header. Dirty until the
+	const closePopover = () => {
+		setPopover(null);
+		popoverCommitRef.current = null;
+
+		const opener = popoverOpenerRef.current;
+		popoverOpenerRef.current = null;
+		if (opener?.isConnected) opener.focus();
+	};
+
+	// A press outside commits what was typed, then closes. Refused, it stays open with
+	// its reason, so nothing typed is lost without saying so.
+	const dismissPopover = () => {
+		if (popoverCommitRef.current?.() === false) return;
+
+		setPopover(null);
+		popoverCommitRef.current = null;
+		popoverOpenerRef.current = null;
+		popoverJustDismissedRef.current = true;
+		window.addEventListener(
+			'pointerup',
+			() => {
+				window.setTimeout(() => {
+					popoverJustDismissedRef.current = false;
+				}, 0);
+			},
+			{ once: true },
+		);
+	};
+
+	// Where the picker points: the court's column, at the time it is for.
+	const getPickerAnchor = (draft) => {
+		const column = modalRef.current?.querySelector(`[data-court-id="${CSS.escape(draft.courtId)}"]`);
+		if (!column) return null;
+
+		const rect = column.getBoundingClientRect();
+		const offset = timeToMinutes(draft.startTime) - timeToMinutes(getDayBounds(schedule).start);
+
+		return { left: rect.left, right: rect.right, top: rect.top + offset * PX_PER_MINUTE };
+	};
+
+	// What every edit on the popover goes through. It returns the reason if there is
+	// one, and only an 'error' leaves the entry as it was.
+	const handleApplyEntryEdit = (entry, candidate) => {
+		const message = validateScheduleEntry(schedule, candidate, entry.id, fixturesById);
+		if (message) return { severity: 'error', message: message.replace(/\.$/, '') };
+
+		dispatch({ type: 'upsertEntry', payload: candidate });
+		markDirty();
+		if (candidate.day !== activeDay) setActiveDay(candidate.day);
+
+		return getPlacementProblem(schedule, candidate, fixturesById, entry.id);
+	};
+
+	// A sheet goes over the right of the board rather than taking the panel over, so that
+	// the board can still be read while a setting is changed. Focus goes in on opening, and
+	// back to whatever opened it on closing.
+	const openSheet = (next, courtId = null) => {
+		sheetOpenerRef.current = document.activeElement;
+		setSheetCourtId(courtId);
+		setSheet(next);
+		setPopover(null);
+		setMenuOpen(false);
+	};
+
+	const closeSheet = () => {
+		setSheet(null);
+		setSheetCourtId(null);
+		sheetOpenerRef.current?.focus?.();
+	};
+
+	// A court's heading is a shortcut to that court in Set up.
+	const handleOpenCourtConfig = (courtId) => openSheet('setup', courtId);
+
+	// Toggled per division rather than saved as a batch: this writes straight to
+	// schedule.courts and the change is visible on the header. Dirty until the
 	// schedule itself is saved, so Discard still brings the old restriction back.
 	const handleSetCourtDivisions = (courtId, divisions) => {
 		dispatch({
@@ -766,89 +907,23 @@ export default function ScheduleMakerModal({
 		markDirty();
 	};
 
-	// Day settings can be edited on their own, and are no longer a side effect of
-	// automatic generation — the generator stopped writing slotMinutes on
-	// 2026-09-10, so a grid chosen here survives a regeneration. The panel writes
-	// to schedule.settings, which is the grid's axis alone; changing the slot
-	// length re-rules the board and moves nothing, because an entry is drawn from
-	// its own times rather than from the rows.
-	const handleOpenSettings = () => {
-		setSettingsDraft({
-			dayStartTime: schedule.settings.dayStartTime,
-			dayEndTime: schedule.settings.dayEndTime,
-			slotMinutes: schedule.settings.slotMinutes,
-		});
-		setSelectedEntryId(null);
-		setPanelMode('settings');
-		setMobilePanel('inspector');
-	};
-
-	const handleSaveSettings = () => {
-		if (!settingsDraft) return;
-
-		const slotMinutes = Number(settingsDraft.slotMinutes);
-		if (!isTimeRangeValid(settingsDraft.dayStartTime, settingsDraft.dayEndTime)) {
-			showMessage('The day must end after it starts.', 'error');
-			return;
-		}
-		if (!slotMinutes || slotMinutes < 5) {
-			showMessage('A slot must be at least 5 minutes.', 'error');
-			return;
-		}
-
-		dispatch({
-			type: 'updateSettings',
-			payload: {
-				dayStartTime: settingsDraft.dayStartTime,
-				dayEndTime: settingsDraft.dayEndTime,
-				slotMinutes,
-			},
-		});
-		setSettingsDraft(null);
-		setPanelMode('overview');
+	// The sheet only sends hours that make sense. Each one writes straight to the draft
+	// schedule like every other change here, so Discard still brings the old ones back.
+	const handleSetHours = (dayStartTime, dayEndTime) => {
+		dispatch({ type: 'updateSettings', payload: { dayStartTime, dayEndTime } });
 		markDirty();
-		showMessage('Day settings updated.', 'success');
 	};
 
-	// Closes whatever inspector sub-panel is open and returns to the overview,
-	// without deleting or saving anything. The only way back from the entry editor
-	// used to be Delete or placing another fixture; the generator and the court
-	// picker had no way back at all.
-	const handleBackToOverview = () => {
-		setSelectedEntryId(null);
-		setEntryForm(null);
-		setSlotDraft(null);
-		setBreakDraft(null);
-		setPendingFixtureId(null);
-		setCourtConfigId(null);
-		setSettingsDraft(null);
-		setPanelMode('overview');
-	};
-
-	const handleCreateBreak = () => {
-		if (!breakDraft) return;
-
-		const candidate = createBreakEntry({
-			day: breakDraft.day,
-			startTime: breakDraft.startTime,
-			endTime: breakDraft.endTime,
-			title: breakDraft.title,
-			courtId: breakDraft.courtId || null,
-			notes: breakDraft.notes,
-		});
-
-		const validationError = validateScheduleEntry(schedule, candidate);
-		if (validationError) {
-			showMessage(validationError, 'error');
-			return;
-		}
-
-		dispatch({ type: 'upsertEntry', payload: candidate });
-		setBreakDraft(null);
-		setPanelMode('overview');
-		setMobilePanel('board');
+	// Redraws the lines and moves nothing: an entry is drawn from its own times.
+	const handleSetGridLines = (slotMinutes) => {
+		dispatch({ type: 'updateSettings', payload: { slotMinutes } });
 		markDirty();
-		showMessage('Break added to the schedule.', 'success');
+	};
+
+	// A default for new matches. Nothing already on the board changes.
+	const handleSetMatchLengths = (lengths) => {
+		dispatch({ type: 'updateSettings', payload: withMatchLengths(schedule.settings, lengths) });
+		markDirty();
 	};
 
 	// Dropping a placed entry back onto the unscheduled list removes it from the
@@ -866,60 +941,30 @@ export default function ScheduleMakerModal({
 
 		dispatch({ type: 'removeEntry', payload: payload.id });
 		setDraggingEntryId(null);
-		if (selectedEntryId === payload.id) {
-			handleBackToOverview();
-		}
+		if (popover?.entryId === payload.id) setPopover(null);
 		markDirty();
 
-		const label = entry.type === 'break' ? 'Break' : 'Fixture';
+		const label = entry.type === 'break' ? 'Break' : 'Match';
 		showMessage(`${label} removed from the schedule.`, 'success');
 	};
 
-	const handleDeleteEntry = async (entryId) => {
+	const handleDeleteEntry = async (entry) => {
+		const label = entry.type === 'break' ? 'break' : 'match';
+
+		// Closed first, so the confirmation isn't competing with it for the same screen.
+		closePopover();
+
 		const confirmed = await confirm('Nothing is saved until you save, so Discard will bring it back.', {
-			title: 'Remove this entry from the schedule?',
-			confirmLabel: 'Remove entry',
+			title: `Remove this ${label} from the schedule?`,
+			confirmLabel: `Remove ${label}`,
 			cancelLabel: 'Keep',
 		});
 		if (!confirmed) return;
 
-		dispatch({ type: 'removeEntry', payload: entryId });
-		setSelectedEntryId(null);
-		setPanelMode('overview');
+		dispatch({ type: 'removeEntry', payload: entry.id });
 		setMobilePanel('board');
 		markDirty();
-		showMessage('Schedule entry removed.', 'success');
-	};
-
-	const openEntryEditor = (entry) => {
-		setSelectedEntryId(entry.id);
-		setEntryForm({
-			...entry,
-			title: entry.title || '',
-			officials: entry.officials || '',
-			notes: entry.notes || '',
-		});
-		setPanelMode('entry');
-		setMobilePanel('inspector');
-	};
-
-	const handleUpdateEntry = () => {
-		if (!entryForm) return;
-
-		const candidate = {
-			...entryForm,
-			courtId: entryForm.type === 'break' ? entryForm.courtId || null : entryForm.courtId,
-		};
-
-		const validationError = validateScheduleEntry(schedule, candidate, entryForm.id);
-		if (validationError) {
-			showMessage(validationError, 'error');
-			return;
-		}
-
-		dispatch({ type: 'upsertEntry', payload: candidate });
-		markDirty();
-		showMessage('Schedule entry updated.', 'success');
+		showMessage(`${label === 'break' ? 'Break' : 'Match'} removed from the schedule.`, 'success');
 	};
 
 	const handleGenerateSchedule = () => {
@@ -932,10 +977,10 @@ export default function ScheduleMakerModal({
 			divisions: divisionList,
 			startDate: tournament.startDate || tournament.start_date,
 			endDate: tournament.endDate || tournament.end_date || tournament.startDate || tournament.start_date,
-			courtCount: Number(generatorDraft.courtCount),
-			dailyStartTime: generatorDraft.dailyStartTime,
-			dailyEndTime: generatorDraft.dailyEndTime,
-			fixtureDurationMinutes: Number(generatorDraft.fixtureDurationMinutes),
+			courtCount: schedule.courts.length,
+			dailyStartTime: schedule.settings.dayStartTime,
+			dailyEndTime: schedule.settings.dayEndTime,
+			fixtureDurationMinutes: getFixtureDefaultLength(null, schedule.settings),
 			// Passed raw, not through Number(): an emptied field is Number('') === 0,
 			// and a silent "no rest at all" is not what clearing a box means. The
 			// generator falls back to the fixture duration for anything it cannot
@@ -954,7 +999,7 @@ export default function ScheduleMakerModal({
 			courtAffinity: generatorDraft.courtAffinity,
 			groupDivisions: generatorDraft.groupDivisions,
 			assignOfficials: generatorDraft.assignOfficials,
-			roundDurations: generatorDraft.roundDurations,
+			roundDurations: schedule.settings.generator?.roundDurations ?? {},
 		});
 
 		if (!result.report) {
@@ -964,17 +1009,18 @@ export default function ScheduleMakerModal({
 
 		replaceSchedule(result.schedule);
 		setGenerationReport({ ...result.report, warnings: result.warnings });
-		setPanelMode('overview');
+		setSheet(null);
+		setPopover(null);
 		setMobilePanel('board');
 		setViewMode('grid');
 
 		const { placed, total, ruleBreaks } = result.report;
 		if (placed < total) {
-			showMessage(`${total - placed} of ${total} fixtures could not be scheduled. See the report in the overview panel.`, 'warning', 9000);
+			showMessage(`${total - placed} of ${total} fixtures could not be scheduled. See the report above the board.`, 'warning', 9000);
 		} else if (ruleBreaks.length > 0) {
-			showMessage('Every fixture was scheduled, but some rules had to bend. See the report in the overview panel.', 'warning', 9000);
+			showMessage('Every fixture was scheduled, but some rules had to bend. See the report above the board.', 'warning', 9000);
 		} else {
-			showMessage('Automatic schedule generated. You can edit any slot afterwards.', 'success');
+			showMessage('Schedule filled. You can change any match afterwards.', 'success');
 		}
 	};
 
@@ -983,14 +1029,9 @@ export default function ScheduleMakerModal({
 		setMobilePanel('board');
 	};
 
-	// The fixtures panel only exists for an editor, so a read-only viewer gets a
-	// two-option switcher and can never be left looking at a panel that is not
-	// rendered.
-	const mobilePanels = [
-		...(canEdit ? [{ id: 'fixtures', label: 'Fixtures' }] : []),
-		{ id: 'board', label: 'Board' },
-		{ id: 'inspector', label: 'Inspector' },
-	];
+	// The fixtures panel only exists for an editor, so a read-only viewer can never be
+	// left looking at a panel that is not rendered.
+	const mobilePanels = [...(canEdit ? [{ id: 'fixtures', label: 'Fixtures' }] : []), { id: 'board', label: 'Board' }];
 	const activeMobilePanel = mobilePanels.some((panel) => panel.id === mobilePanel) ? mobilePanel : 'board';
 
 	// Opens the chosen layout as a standalone document in a new tab, driven by
@@ -1041,8 +1082,7 @@ export default function ScheduleMakerModal({
 			showMessage('This print layout may not reflect recent schedule changes.', 'info', 7000);
 		}
 
-		setPanelMode('print-layout');
-		setMobilePanel('inspector');
+		openSheet('print');
 	};
 
 	const handlePrintLayoutChange = (type, nextLayout) => {
@@ -1053,42 +1093,29 @@ export default function ScheduleMakerModal({
 	const placedCount = schedule.entries.length;
 	const pendingFixture = pendingFixtureId ? fixturesById[pendingFixtureId] : null;
 
-	// One definition, rendered twice: inline in the toolbar above 768px and
-	// inside the overflow menu below it. A media query decides which is visible,
-	// so nothing here measures a width.
+	// One definition, rendered twice: inline in the toolbar above 768px and inside the
+	// More menu below it, where there is no room. A media query decides which is visible,
+	// so nothing here measures a width. Discard and Reset are always in the menu: they
+	// are rare and undo a lot, so they don't sit beside the routine actions.
 	//
-	// Descriptors carry no handlers. Building an array of closures during render
-	// that reach through to a ref — handleDiscard reads initialScheduleRef — is
-	// what react-hooks flags as accessing refs during render. The id is data; the
-	// work happens in runSecondaryAction at event time.
-	const secondaryActions = [
-		...(canEdit ? [{ id: 'break', label: 'Add Break' }] : []),
-		// One action where there were two. Grid and list are now a choice made
-		// inside the panel, alongside the page breaks that differ between them.
-		{ id: 'print-layout', label: 'Edit Print Layout' },
-		...(canEdit
-			? [
-					{ id: 'discard', label: 'Discard Changes', disabled: !dirty },
-					{ id: 'reset', label: 'Reset Schedule', disabled: placedCount === 0 },
-			  ]
-			: []),
-	];
+	// Descriptors carry no handlers. Building an array of closures during render that
+	// reach through to a ref — handleDiscard reads initialScheduleRef — is what
+	// react-hooks flags as accessing refs during render. The id is data; the work happens
+	// in runAction at event time.
+	const inlineActions = [...(canEdit ? [{ id: 'setup', label: 'Set up' }] : []), { id: 'print', label: 'Print' }];
+	const destructiveActions = canEdit
+		? [
+				{ id: 'discard', label: 'Discard Changes', disabled: !dirty },
+				{ id: 'reset', label: 'Reset Schedule', disabled: placedCount === 0 },
+		  ]
+		: [];
 
-	const runSecondaryAction = (id) => {
+	const runAction = (id) => {
 		switch (id) {
-			case 'break':
-				setBreakDraft({
-					day: activeDay,
-					startTime: schedule.settings.dayStartTime,
-					endTime: addMinutesToTime(schedule.settings.dayStartTime, schedule.settings.slotMinutes),
-					title: '',
-					courtId: '',
-					notes: '',
-				});
-				setPanelMode('break');
-				setMobilePanel('inspector');
+			case 'setup':
+				openSheet('setup');
 				break;
-			case 'print-layout':
+			case 'print':
 				openPrintLayoutPanel();
 				break;
 			case 'discard':
@@ -1129,9 +1156,7 @@ export default function ScheduleMakerModal({
 						<p className="schedule-maker-kicker">Schedule Maker</p>
 						<h2 id="schedule-maker-title">{tournamentName}</h2>
 						<p className="schedule-maker-subtitle">
-							{stats.scheduledFixtures} of {stats.totalFixtures} fixtures scheduled across {stats.days} day
-							{stats.days === 1 ? '' : 's'}
-							{divisionList.length > 1 && ` and ${divisionList.length} divisions`}
+							{stats.scheduledFixtures} of {stats.totalFixtures} fixtures scheduled
 						</p>
 					</div>
 					<div className="schedule-maker-header-actions">
@@ -1143,45 +1168,32 @@ export default function ScheduleMakerModal({
 
 				<div className="schedule-maker-toolbar">
 					<div className="schedule-maker-toolbar-actions">
-						{/* Both labels render; a media query picks. Same reason as the
-						    action set below — nothing here measures a width. */}
 						<div className="schedule-view-toggle">
-							<button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}>
-								{/* <span className="schedule-label-long"><Icon name='grid'/></span>
-								<span className="schedule-label-short"><Icon name='grid'/></span> */}
-								{viewMode === 'grid' ? <Icon name='grid' fill='white'/> : <Icon name='grid' fill='var(--secondary-text-color)'/>}
+							<button type="button" className={viewMode === 'grid' ? 'active' : ''} aria-pressed={viewMode === 'grid'} onClick={() => setViewMode('grid')}>
+								Board
 							</button>
-							<button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>
-								{/* <span className="schedule-label-long"><Icon name='list'/></span>
-								<span className="schedule-label-short"><Icon name='list'/></span> */}
-								{viewMode === 'list' ? <Icon name='list' fill='white'/> : <Icon name='list' fill='var(--secondary-text-color)'/>}
+							<button type="button" className={viewMode === 'list' ? 'active' : ''} aria-pressed={viewMode === 'list'} onClick={() => setViewMode('list')}>
+								List
 							</button>
 						</div>
 
-						{/* Rendered whatever the width; the stylesheet hides this group
-						    below 768px, where the same actions appear in the overflow. */}
+						{/* Rendered whatever the width; the stylesheet hides this group below
+						    768px, where the same actions appear in the More menu. */}
 						<div className="schedule-maker-inline-actions">
-							{secondaryActions.map((action) => (
-								<button
-									key={action.id}
-									type="button"
-									onClick={() => runSecondaryAction(action.id)}
-									disabled={action.disabled}>
+							{inlineActions.map((action) => (
+								<button key={action.id} type="button" onClick={() => runAction(action.id)}>
 									{action.label}
 								</button>
 							))}
 						</div>
 
-						{/* Generate and Save stay visible at every width. */}
+						{/* Auto-schedule and Save stay visible at every width. Both labels
+						    render; a media query picks. */}
 						{canEdit && (
 							<>
-								<button
-									type="button"
-									onClick={() => {
-										setPanelMode('generate');
-										setMobilePanel('inspector');
-									}}>
-									Generate
+								<button type="button" onClick={() => openSheet('auto')}>
+									<span className="schedule-label-long">Auto-schedule</span>
+									<span className="schedule-label-short">Auto</span>
 								</button>
 								<button type="button" className="primary" onClick={handleSave} disabled={!dirty || saving}>
 									<span className="schedule-label-long">Save Schedule</span>
@@ -1190,9 +1202,7 @@ export default function ScheduleMakerModal({
 							</>
 						)}
 
-						{/* The counterpart: hidden above 768px, so the toolbar stays one
-						    short row on a phone without any of it becoming unreachable. */}
-						<div className="schedule-maker-overflow" ref={overflowRef}>
+						<div className={`schedule-maker-overflow${canEdit ? '' : ' is-narrow-only'}`} ref={overflowRef}>
 							<button
 								type="button"
 								aria-haspopup="menu"
@@ -1203,15 +1213,29 @@ export default function ScheduleMakerModal({
 							</button>
 							{menuOpen && (
 								<div className="schedule-maker-overflow-menu" role="menu">
-									{secondaryActions.map((action) => (
+									{inlineActions.map((action) => (
 										<button
 											key={action.id}
 											type="button"
 											role="menuitem"
+											className="is-narrow-only"
+											onClick={() => {
+												setMenuOpen(false);
+												runAction(action.id);
+											}}>
+											{action.label}
+										</button>
+									))}
+									{destructiveActions.map((action) => (
+										<button
+											key={action.id}
+											type="button"
+											role="menuitem"
+											className="is-destructive"
 											disabled={action.disabled}
 											onClick={() => {
 												setMenuOpen(false);
-												runSecondaryAction(action.id);
+												runAction(action.id);
 											}}>
 											{action.label}
 										</button>
@@ -1287,6 +1311,21 @@ export default function ScheduleMakerModal({
 								{draggingEntryId && (
 									<div className="schedule-unschedule-hint">Drop here to remove from the schedule</div>
 								)}
+								<button
+									type="button"
+									draggable
+									aria-pressed={pendingBreak}
+									className={`schedule-fixture-pill schedule-break-pill${pendingBreak ? ' pending' : ''}`}
+									onDragStart={(event) => {
+										event.dataTransfer.effectAllowed = 'move';
+										event.dataTransfer.setData('text/plain', BREAK_DRAG);
+										setDraggingBreak(true);
+									}}
+									onDragEnd={() => setDraggingBreak(false)}
+									onClick={handleSelectBreakForPlacement}>
+									<strong>Break</strong>
+									<small>{NEW_BREAK_MINUTES} minutes across all courts</small>
+								</button>
 								{filteredUnscheduledFixtures.length > 0 ? (
 									filteredUnscheduledFixtures.map((fixture) => (
 										<button
@@ -1303,7 +1342,9 @@ export default function ScheduleMakerModal({
 												// valid drop target, but readDragPayload sees nothing.
 												event.dataTransfer.effectAllowed = 'move';
 												event.dataTransfer.setData('text/plain', `${FIXTURE_DRAG}${fixture.id}`);
+												setDraggingFixtureId(fixture.id);
 											}}
+											onDragEnd={() => setDraggingFixtureId(null)}
 											onClick={() => handleSelectFixtureForPlacement(fixture.id)}>
 											<strong>{fixture.team1}</strong>
 											<span>vs</span>
@@ -1324,51 +1365,58 @@ export default function ScheduleMakerModal({
 					)}
 
 					<section className="schedule-maker-board">
-						{/* The day only ever affected the board. It used to sit in the
-						    toolbar, where the fixtures list and the inspector paid for a
-						    control neither of them uses. */}
-						<div className="schedule-maker-day-tabs" role="tablist" aria-label="Schedule days" ref={dayTabsRef}>
-							{schedule.days.map((day) => {
-								const enabled = day.enabled !== false;
+						{/* The day only ever affected the board. */}
+						<div className="schedule-board-bar">
+							<div className="schedule-maker-day-tabs" role="tablist" aria-label="Schedule days" ref={dayTabsRef}>
+								{schedule.days.map((day) => {
+									const enabled = day.enabled !== false;
 
-								return (
-									<button
-										key={day.id}
-										type="button"
-										role="tab"
-										data-day={day.date}
-										className={`${activeDay === day.date ? 'active' : ''} ${enabled ? '' : 'schedule-day-disabled'}`.trim()}
-										aria-selected={activeDay === day.date}
-										onClick={() => setActiveDay(day.date)}>
-										{day.label}
-										<span>{formatDateLabel(day.date)}</span>
-										{!enabled && <span className="schedule-day-disabled-badge">Not scheduling</span>}
-										{canEdit && (
-											<button
-												type="button"
-												className="schedule-day-toggle"
-												title={enabled ? 'Exclude this day from scheduling' : 'Include this day in scheduling'}
-												aria-label={enabled ? `Exclude ${day.label} from scheduling` : `Include ${day.label} in scheduling`}
-												onMouseDown={(event) => event.stopPropagation()}
-												onClick={(event) => {
-													event.stopPropagation();
-													handleToggleDayEnabled(day.id);
-												}}>
-												{enabled ? 'On' : 'Off'}
-											</button>
-										)}
-									</button>
-								);
-							})}
+									return (
+										<button
+											key={day.id}
+											type="button"
+											role="tab"
+											data-day={day.date}
+											className={`${activeDay === day.date ? 'active' : ''} ${enabled ? '' : 'schedule-day-disabled'}`.trim()}
+											aria-selected={activeDay === day.date}
+											onClick={() => setActiveDay(day.date)}>
+											{day.label}
+											<span>{formatDateLabel(day.date)}</span>
+											{!enabled && <span className="schedule-day-disabled-badge">Off</span>}
+										</button>
+									);
+								})}
+							</div>
+							{canEdit && viewMode === 'grid' && (
+								<GridLinesControl value={getSlotMinutes(schedule)} onChange={handleSetGridLines} />
+							)}
 						</div>
 
 						{/* Below 900px the fixtures list is not on screen while the board
 						    is, so the pending fixture has to say so here — and be
 						    cancellable here. */}
+						{generationReport && (
+							<GenerationReport
+								report={generationReport}
+								multiDay={schedule.days.length > 1}
+								onShowEntries={handleShowReportEntries}
+								onDismiss={() => setGenerationReport(null)}
+							/>
+						)}
+
+						{pendingBreak && (
+							<div className="schedule-pending-banner" role="status">
+								<span>Tap the board to place a break</span>
+								<button type="button" onClick={() => setPendingBreak(false)}>
+									Cancel
+								</button>
+							</div>
+						)}
+
 						{pendingFixture && (
 							<div className="schedule-pending-banner" role="status">
 								<span>
-									Tap a free slot for <strong>{pendingFixture.team1}</strong> v{' '}
+									Tap the board to place <strong>{pendingFixture.team1}</strong> v{' '}
 									<strong>{pendingFixture.team2}</strong>
 								</span>
 								<button type="button" onClick={() => setPendingFixtureId(null)}>
@@ -1384,10 +1432,13 @@ export default function ScheduleMakerModal({
 								fixturesById={fixturesById}
 								canEdit={canEdit}
 								draggingEntryId={draggingEntryId}
-								onSelectEntry={openEntryEditor}
+								draggingFixtureId={draggingFixtureId}
+								draggingBreak={draggingBreak}
+								onSelectEntry={openEntryPopover}
 								onOpenSlot={handleOpenSlotPicker}
 								onOpenCourtConfig={handleOpenCourtConfig}
-								onDropOnSlot={handleDropOnSlot}
+								onOpenSetUp={() => openSheet('setup')}
+								onDropOnBoard={handleDropOnBoard}
 								onDragEntry={setDraggingEntryId}
 								onResizeEntry={handleResizeEntry}
 								divisions={divisionList}
@@ -1399,75 +1450,78 @@ export default function ScheduleMakerModal({
 								activeDay={activeDay}
 								fixturesById={fixturesById}
 								divisions={divisionList}
-								onSelectEntry={openEntryEditor}
+								onSelectEntry={openEntryPopover}
 							/>
 						)}
 					</section>
 
-					<aside className="schedule-maker-inspector">
-						{panelMode === 'entry' && selectedEntry && entryForm ? (
-							<EntryEditorPanel
-								entry={entryForm}
-								fixturesById={fixturesById}
-								schedule={schedule}
-								onChange={setEntryForm}
-								onSave={handleUpdateEntry}
-								onDelete={() => handleDeleteEntry(selectedEntry.id)}
-								onBack={handleBackToOverview}
-							/>
-						) : panelMode === 'generate' ? (
-							<GeneratorPanel
-								draft={generatorDraft}
-								rounds={generatorRounds}
-								onChange={setGeneratorDraft}
-								onGenerate={handleGenerateSchedule}
-								onBack={handleBackToOverview}
-							/>
-						) : panelMode === 'break' && breakDraft ? (
-							<BreakPanel draft={breakDraft} schedule={schedule} onChange={setBreakDraft} onSave={handleCreateBreak} onBack={handleBackToOverview} />
-						) : panelMode === 'slot' && slotDraft ? (
-							<SlotAssignmentPanel
-								draft={slotDraft}
-								schedule={schedule}
-								fixtures={filteredUnscheduledFixtures}
-								divisions={divisionList}
-								onAssign={(fixture) => handleAssignFixtureToSlot(fixture, slotDraft)}
-								onBack={handleBackToOverview}
-							/>
-						) : panelMode === 'court' && courtConfig ? (
-							<CourtConfigPanel
-								court={courtConfig}
-								divisions={divisionList}
-								onSave={(nextDivisions) => handleSetCourtDivisions(courtConfig.id, nextDivisions)}
-								onBack={handleBackToOverview}
-							/>
-						) : panelMode === 'print-layout' ? (
-							<PrintLayoutPanel
-								schedule={schedule}
-								fixturesById={fixturesById}
-								onChange={handlePrintLayoutChange}
-								onPrint={handlePrint}
-								onBack={handleBackToOverview}
-							/>
-						) : panelMode === 'settings' && settingsDraft ? (
-							<SettingsPanel draft={settingsDraft} onChange={setSettingsDraft} onSave={handleSaveSettings} onBack={handleBackToOverview} />
-						) : (
-							<ScheduleOverviewPanel
-								stats={stats}
-								schedule={schedule}
-								courtDraft={courtDraft}
-								onCourtDraftChange={setCourtDraft}
-								onAddCourt={handleAddCourt}
-								onRemoveCourt={handleRemoveCourt}
-								onEditSettings={handleOpenSettings}
-								report={generationReport}
-								onShowReportEntries={handleShowReportEntries}
-								onDismissReport={() => setGenerationReport(null)}
-								canEdit={canEdit}
-							/>
-						)}
-					</aside>
+					{sheet === 'setup' && (
+						<SetUpSheet
+							key={sheetCourtId ?? 'all'}
+							schedule={schedule}
+							rounds={generatorRounds}
+							divisions={divisionList}
+							focusCourtId={sheetCourtId}
+							courtDraft={courtDraft}
+							onCourtDraftChange={setCourtDraft}
+							onAddCourt={handleAddCourt}
+							onRemoveCourt={handleRemoveCourt}
+							onSetCourtDivisions={handleSetCourtDivisions}
+							onToggleDay={handleToggleDayEnabled}
+							onSetHours={handleSetHours}
+							onSetMatchLengths={handleSetMatchLengths}
+							onClose={closeSheet}
+						/>
+					)}
+					{sheet === 'auto' && (
+						<AutoScheduleSheet
+							schedule={schedule}
+							draft={generatorDraft}
+							onChange={setGeneratorDraft}
+							onGenerate={handleGenerateSchedule}
+							onOpenSetUp={() => setSheet('setup')}
+							onClose={closeSheet}
+						/>
+					)}
+					{sheet === 'print' && (
+						<PrintSheet
+							schedule={schedule}
+							fixturesById={fixturesById}
+							canEdit={canEdit}
+							onChange={handlePrintLayoutChange}
+							onPrint={handlePrint}
+							onClose={closeSheet}
+						/>
+					)}
 				</div>
+
+				{popover?.kind === 'entry' && schedule.entries.some((entry) => entry.id === popover.entryId) && (
+					<EntryPopover
+						key={popover.entryId}
+						entry={schedule.entries.find((entry) => entry.id === popover.entryId)}
+						schedule={schedule}
+						fixturesById={fixturesById}
+						canEdit={canEdit}
+						commitRef={popoverCommitRef}
+						getAnchor={() => modalRef.current?.querySelector(`[data-entry-id="${popover.entryId}"]`)?.getBoundingClientRect() ?? null}
+						onApply={handleApplyEntryEdit}
+						onRemove={handleDeleteEntry}
+						onClose={closePopover}
+						onDismiss={dismissPopover}
+					/>
+				)}
+				{popover?.kind === 'picker' && (
+					<FixturePickerPopover
+						draft={popover.draft}
+						schedule={schedule}
+						fixtures={filteredUnscheduledFixtures}
+						divisions={divisionList}
+						getAnchor={() => getPickerAnchor(popover.draft)}
+						onAssign={(fixture) => handleAssignFixtureToSlot(fixture, popover.draft)}
+						onClose={closePopover}
+						onDismiss={dismissPopover}
+					/>
+				)}
 			</div>
 		</div>,
 		document.body
@@ -1503,33 +1557,32 @@ function locateEntry(entry, axis, courts) {
 	};
 }
 
-// The board's axis in pixels. One grid row is GRID_ROW_HEIGHT tall and the rows
-// sit flush against one another, so a minute is a fixed number of pixels and an
-// entry can be drawn at its own start for its own length. The row track is set
-// from this constant below, so it is the one place the number lives; the 1px is
-// the padding schedule-maker.css gives .schedule-grid-cells, which the pointer
-// arithmetic has to step over because it measures from the element's own edge.
-//
-// Row lines used to be a 1px gap between the tracks. They are a border on the
-// cells now: a gap makes the pixel position of a minute depend on how many row
-// boundaries precede it, so every entry drifts further from the time column the
-// later in the day it starts.
-const GRID_ROW_HEIGHT = 84;
+// The board's scale. A minute is the same number of pixels whatever the grid lines are
+// set to, so changing them redraws the lines and moves nothing. The 1px is the padding
+// schedule-maker.css gives .schedule-grid-cells, which the pointer arithmetic has to step
+// over because it measures from the element's own edge.
+const PX_PER_MINUTE = 1.6;
+
+// How long a new break starts out. Change one by dragging its edge.
+const NEW_BREAK_MINUTES = 30;
 const GRID_EDGE_PADDING = 1;
 
-// A block shorter than this cannot hold its own subtitle and officials line, so
-// they are dropped rather than clipped mid-word. Two lines of text plus padding.
-const COMPACT_ENTRY_HEIGHT = 62;
+// The closest two time labels may sit before some are skipped, on a fine grid.
+const TIME_LABEL_MIN_GAP_PX = 18;
+
+// What a block has room to say. Below COMPACT it drops its subtitle and officials, and
+// below TINY its times as well, rather than clip them mid-word.
+const COMPACT_ENTRY_HEIGHT = 70;
+const TINY_ENTRY_HEIGHT = 36;
 
 // How far the pointer must travel before a press becomes a drag rather than the
-// tap that opens the slot picker or the click that opens the inspector.
+// tap that opens the fixture picker or the click that opens a match.
 const DRAG_THRESHOLD_PX = 4;
 
 // Auto-scrolling the board while a drag is in progress.
 //
-// Without it the board has a hard ceiling: a 09:00-17:00 day on a 30-minute grid
-// is sixteen rows at GRID_ROW_HEIGHT, taller than the panel it is read in, so
-// anything past the bottom of the window cannot be dragged to at all — not to
+// Without it the board has a hard ceiling: a 09:00-17:00 day at PX_PER_MINUTE is
+// taller than the panel it is read in, so anything past the bottom of the window cannot be dragged to at all — not to
 // create, not to resize, and not to move an entry to.
 //
 // EDGE_PX is how deep the band at each edge is, and MAX_PX_PER_FRAME the speed
@@ -1565,7 +1618,7 @@ function edgeScrollVelocity(position, min, max) {
 // over. Pure, so the rule is readable on its own and the listener above stays
 // about pointers.
 //
-// A create is anchored at the row it began on and grows in whichever direction
+// A create is anchored at the time it began on and grows in whichever direction
 // the pointer went; a resize holds the edge that was not grabbed. Both keep at
 // least one snap increment, because a zero-length entry is not a thing the
 // organiser can have meant and the validator would refuse it anyway.
@@ -1615,20 +1668,22 @@ function ScheduleGridView({
 	fixturesById,
 	canEdit,
 	draggingEntryId,
+	draggingFixtureId,
+	draggingBreak,
 	onSelectEntry,
 	onOpenSlot,
 	onOpenCourtConfig,
-	onDropOnSlot,
+	onOpenSetUp,
+	onDropOnBoard,
 	onDragEntry,
 	onResizeEntry,
 	divisions,
 	highlightEntryIds = [],
 }) {
-	// The axis is a function of the settings alone. Nothing an entry does can
-	// change how many rows there are, where they start, or how long each one is.
-	// What has changed is that an entry is no longer drawn ON the rows: they rule
-	// the board so that a time can be read off it, and the entry is drawn at its
-	// own time over the top of them.
+	// The axis is a function of the settings alone. Nothing an entry does can change
+	// where the day starts or how long it is. The grid lines rule the board so that a
+	// time can be read off it, and everything else is positioned in minutes over the
+	// top of them: an entry at its own time, and a press, drop or tap at the pointer's.
 	const dayBounds = getDayBounds(schedule);
 	const timeSlots = buildGridRowTimes(schedule, dayBounds);
 	const axis = { start: dayBounds.start, slotMinutes: getSlotMinutes(schedule), rowCount: timeSlots.length };
@@ -1640,37 +1695,6 @@ function ScheduleGridView({
 	const located = dayEntries.map((entry) => locateEntry(entry, axis, schedule.courts));
 	const placedEntries = located.filter((item) => item.placeable);
 	const unplaceableEntries = located.filter((item) => !item.placeable);
-	const occupiedSlots = new Set();
-	// The same set minus the entry being dragged. A drop must respect occupancy,
-	// but an entry does not block itself — otherwise a placed entry could only
-	// ever be moved somewhere it does not already overlap.
-	const dropBlockedSlots = new Set();
-
-	// A cell is occupied when an entry overlaps the minutes that cell covers,
-	// which is a different question from where the entry is drawn now that the
-	// two have come apart. A 25-minute match starting at 09:10 fills no whole row
-	// on an hourly grid and still leaves nowhere to drop anything in the 09:00
-	// one.
-	//
-	// The cells stay the drop target for a moved entry and the tap target for the
-	// slot picker, and they stay whole rows, because a whole row is what a tap can
-	// mean. Saying "09:10 to 09:35 exactly" is what the drag below is for.
-	placedEntries.forEach(({ entry, startOffset, endOffset }) => {
-		if (entry.courtId === null) {
-			return;
-		}
-
-		timeSlots.forEach((slot, rowIndex) => {
-			const rowStart = rowIndex * axis.slotMinutes;
-			if (startOffset >= rowStart + axis.slotMinutes || endOffset <= rowStart) return;
-
-			occupiedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
-			if (entry.id !== draggingEntryId) {
-				dropBlockedSlots.add(getSlotKey(activeDay, entry.courtId, slot));
-			}
-		});
-	});
-
 	// --- the drag gestures ---------------------------------------------------
 	//
 	// Dragging out a range on an empty column creates an entry of exactly that
@@ -1712,14 +1736,18 @@ function ScheduleGridView({
 	// refs rather than taking the axis as an argument, because both callers — the
 	// window listener and the auto-scroll frame — outlive the render they were
 	// created in.
-	const readPointerMinutes = (clientY) => {
+	const readPointerOffset = (clientY) => {
 		const node = cellsRef.current;
-		const current = axisRef.current;
-		if (!node || !current) return 0;
+		if (!node) return 0;
 
-		const rect = node.getBoundingClientRect();
-		const rows = (clientY - rect.top - GRID_EDGE_PADDING) / GRID_ROW_HEIGHT;
-		const minutes = snapToIncrement(rows * current.slotMinutes, current.snapMinutes);
+		return (clientY - node.getBoundingClientRect().top - GRID_EDGE_PADDING) / PX_PER_MINUTE;
+	};
+
+	const readPointerMinutes = (clientY) => {
+		const current = axisRef.current;
+		if (!current) return 0;
+
+		const minutes = snapToIncrement(readPointerOffset(clientY), current.snapMinutes);
 
 		return Math.min(Math.max(minutes, 0), current.axisMinutes);
 	};
@@ -1844,8 +1872,8 @@ function ScheduleGridView({
 
 			commitRef.current?.(finished);
 
-			// The click that follows this pointerup would otherwise open the slot
-			// picker or the inspector on top of whatever the drag just did. Cleared
+			// The click that follows this pointerup would otherwise open the fixture
+			// picker or the match's popover on top of whatever the drag just did. Cleared
 			// on the next task, which is after that click has been dispatched.
 			if (finished.moved) {
 				suppressClickRef.current = true;
@@ -1907,11 +1935,9 @@ function ScheduleGridView({
 		setGesture(started);
 	};
 
-	// Anchored to the top of the row pressed rather than to the pointer, so a
-	// press near the bottom of a row still drags a range out from the time that
-	// row is labelled with.
-	const beginCreate = (event, courtId, rowIndex) => {
-		const anchor = rowIndex * axis.slotMinutes;
+	// Anchored at the pointer, so a range can begin anywhere there is room for one.
+	const beginCreate = (event, courtId) => {
+		const anchor = readPointerMinutes(event.clientY);
 
 		beginGesture(event, {
 			kind: 'create',
@@ -1952,18 +1978,155 @@ function ScheduleGridView({
 		});
 	};
 
+	// --- dropping onto the board ---------------------------------------------
+	//
+	// What is being dragged, from state rather than the drag's payload, which can't be
+	// read until the drop. A move keeps its length; a new placement takes its round's.
+	const draggedEntry = draggingEntryId ? schedule.entries.find((entry) => entry.id === draggingEntryId) ?? null : null;
+	const draggedFixture = !draggedEntry && draggingFixtureId ? fixturesById[draggingFixtureId] ?? null : null;
+	const isDraggingOntoBoard = canEdit && isActiveDayEnabled && Boolean(draggedEntry || draggedFixture || draggingBreak);
+
+	const [dropPreview, setDropPreview] = useState(null);
+	const dropChipRef = useRef(null);
+	const dropGrabRef = useRef(0);
+	const dropPointRef = useRef({ x: 0, y: 0 });
+
+	// Where this pointer position would put the dragged item, and what is wrong with
+	// that if anything. The same answer drives the preview, the chip and the drop, so
+	// what is released is what was shown.
+	const locateDrop = (event) => {
+		const columns = cellsRef.current ? [...cellsRef.current.querySelectorAll('[data-court-id]')] : [];
+		const column = columns.find((node) => {
+			const rect = node.getBoundingClientRect();
+			return event.clientX >= rect.left && event.clientX < rect.right;
+		});
+		if (!column) return null;
+
+		// A break spanning every court, or a new one, isn't dropped on any one of them.
+		const courtId = draggingBreak || draggedEntry?.courtId === null ? null : column.dataset.courtId;
+		let length = NEW_BREAK_MINUTES;
+		if (draggedEntry) length = timeToMinutes(draggedEntry.endTime) - timeToMinutes(draggedEntry.startTime);
+		else if (draggedFixture) length = getFixtureDefaultLength(draggedFixture, schedule.settings);
+		const latestStart = Math.max(0, axisMinutes - length);
+		const clampOffset = (offset) => Math.min(Math.max(offset, 0), latestStart);
+		// A moved match stays where it was picked up. A new one hangs from the pointer.
+		const grab = draggedEntry ? dropGrabRef.current : 0;
+		const pointerOffset = clampOffset(snapToIncrement(readPointerOffset(event.clientY) - grab, SNAP_MINUTES));
+		const start = snapToNeighbour(schedule.entries, {
+			day: activeDay,
+			courtId,
+			start: dayStartMinutes + pointerOffset,
+			length,
+			ignoreEntryId: draggedEntry?.id ?? null,
+		});
+		const startOffset = clampOffset(start - dayStartMinutes);
+		const startTime = minutesToTime(dayStartMinutes + startOffset);
+		const endTime = minutesToTime(dayStartMinutes + startOffset + length);
+		let candidate = { type: 'break', title: 'Break', day: activeDay, courtId, startTime, endTime };
+		if (draggedEntry) candidate = { ...draggedEntry, day: activeDay, courtId, startTime, endTime };
+		else if (draggedFixture) candidate = { type: 'fixture', fixtureId: draggedFixture.id, day: activeDay, courtId, startTime, endTime };
+
+		return {
+			columnCourtId: column.dataset.courtId,
+			courtId,
+			startOffset,
+			endOffset: startOffset + length,
+			startTime,
+			endTime,
+			problem: getPlacementProblem(schedule, candidate, fixturesById, draggedEntry?.id ?? null),
+		};
+	};
+
+	// Set on the element rather than through state, because this follows the pointer on
+	// every event and the board is expensive to redraw. Kept in the window, clear of the
+	// pointer.
+	const placeDropChip = () => {
+		const chip = dropChipRef.current;
+		if (!chip) return;
+
+		const { x, y } = dropPointRef.current;
+		chip.style.left = `${Math.min(x + 16, window.innerWidth - chip.offsetWidth - 8)}px`;
+		chip.style.top = `${Math.min(y + 16, window.innerHeight - chip.offsetHeight - 8)}px`;
+	};
+
+	// Again whenever it changes, which is also the frame it first exists and has a size.
+	useLayoutEffect(placeDropChip, [dropPreview]);
+
+	const handleCellsDragOver = (event) => {
+		if (!isDraggingOntoBoard) return;
+
+		const next = locateDrop(event);
+		if (!next) {
+			setDropPreview(null);
+			return;
+		}
+
+		// What marks this as a place that can be dropped on. A refused drop is allowed
+		// through too, so that releasing it says why rather than nothing.
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		dropPointRef.current = { x: event.clientX, y: event.clientY };
+		placeDropChip();
+
+		// Dragover fires continuously, and the board is expensive to redraw, so only a
+		// change of time or court causes one.
+		setDropPreview((current) =>
+			current &&
+			current.startOffset === next.startOffset &&
+			current.columnCourtId === next.columnCourtId
+				? current
+				: next,
+		);
+	};
+
+	const handleCellsDrop = (event) => {
+		if (!isDraggingOntoBoard) return;
+
+		const target = locateDrop(event);
+		setDropPreview(null);
+		if (!target) return;
+
+		onDropOnBoard(event, activeDay, target.columnCourtId, target.startTime, target.endTime);
+	};
+
+	const handleCellsDragLeave = (event) => {
+		if (!event.currentTarget.contains(event.relatedTarget)) setDropPreview(null);
+	};
+
+	// A drag that ends anywhere else leaves no drop to clear this.
+	if (!isDraggingOntoBoard && dropPreview) setDropPreview(null);
+
+	// The other matches of the teams being dragged, so that clashes and rest can be seen
+	// while the decision is being made. The dragged entry's own block is excluded.
+	const linkedFixture = draggedEntry ? fixturesById[draggedEntry.fixtureId] : draggedFixture;
+	const linkedKeys = isDraggingOntoBoard && linkedFixture ? getTeams(linkedFixture).map((team) => team.key) : [];
+	const linkedEntryIds = new Set(
+		dayEntries
+			.filter((entry) => {
+				const other = entry.type === 'fixture' && entry.id !== draggedEntry?.id ? fixturesById[entry.fixtureId] : null;
+				return other && getTeams(other).some((team) => linkedKeys.includes(team.key));
+			})
+			.map((entry) => entry.id),
+	);
+
 	// True when a click is the organiser's own and not the tail of a drag.
 	const takeClick = () => !suppressClickRef.current;
 
-	const topFor = (startOffset) => (startOffset / axis.slotMinutes) * GRID_ROW_HEIGHT;
-	const heightFor = (startOffset, endOffset) => ((endOffset - startOffset) / axis.slotMinutes) * GRID_ROW_HEIGHT;
+	const topFor = (startOffset) => startOffset * PX_PER_MINUTE;
+	const heightFor = (startOffset, endOffset) => (endOffset - startOffset) * PX_PER_MINUTE;
 	const resizingEntryId = gesture?.kind === 'resize' ? gesture.entryId : null;
+	const labelEvery = Math.max(1, Math.ceil(TIME_LABEL_MIN_GAP_PX / (axis.slotMinutes * PX_PER_MINUTE)));
 
 	if (schedule.courts.length === 0) {
 		return (
 			<div className="schedule-board-empty">
 				<h3>Add courts or fields to begin</h3>
-				<p>The schedule days have been created from your tournament dates. Add at least one court or generate a schedule.</p>
+				<p>The schedule days have been created from your tournament dates. Add at least one court in Set up, then place fixtures here or use Auto-schedule.</p>
+				{canEdit && (
+					<button type="button" className="schedule-board-empty-action" onClick={onOpenSetUp}>
+						Open Set up
+					</button>
+				)}
 			</div>
 		);
 	}
@@ -1999,7 +2162,7 @@ function ScheduleGridView({
 								type="button"
 								className="schedule-grid-header-court"
 								onClick={() => onOpenCourtConfig(court.id)}
-								title="Set which divisions play on this court">
+								title="Set which divisions play on this court in Set up">
 								<span>{court.name}</span>
 								{label && <small className="schedule-grid-header-court-divisions">{label}</small>}
 							</button>
@@ -2012,42 +2175,43 @@ function ScheduleGridView({
 					})}
 				</div>
 
+				{/* The whole board is the drop target, not the columns under it: a drop near a
+				    match lands on the match's block, which sits on top of the column. */}
 				<div
 					ref={cellsRef}
 					className="schedule-grid-cells"
+					onDragOver={handleCellsDragOver}
+					onDrop={handleCellsDrop}
+					onDragLeave={handleCellsDragLeave}
 					style={{
 						gridTemplateColumns: gridColumns,
-						// A fixed height, not minmax(84px, auto). Every row is the same
-						// span, so every row is the same height; a row that grew to its
-						// content drew rows of unequal length at unequal heights and made
-						// the time column impossible to count down. It is also the pixel
-						// the entry positions below are measured in, so it cannot be a
-						// number only the browser knows.
-						gridTemplateRows: `repeat(${timeSlots.length}, ${GRID_ROW_HEIGHT}px)`,
+						// One row, the height of the day. It is also the pixel the entry positions
+						// below are measured in, so it can't be a number only the browser knows.
+						gridTemplateRows: `${axisMinutes * PX_PER_MINUTE}px`,
+						'--schedule-grid-line-gap': `${axis.slotMinutes * PX_PER_MINUTE}px`,
 					}}>
-					{timeSlots.map((time, rowIndex) => (
-						<React.Fragment key={time}>
-							<div className="schedule-grid-time" style={{ gridColumn: 1, gridRow: rowIndex + 1 }}>{time}</div>
-							{schedule.courts.map((court, columnIndex) => {
-								const slotKey = getSlotKey(activeDay, court.id, time);
-								const isOccupied = occupiedSlots.has(slotKey);
-								const acceptsDrop = canEdit && isActiveDayEnabled && !dropBlockedSlots.has(slotKey);
+					<div className="schedule-grid-time" style={{ gridColumn: 1, gridRow: 1 }}>
+						{timeSlots.map((time, rowIndex) =>
+							rowIndex % labelEvery === 0 ? (
+								<span key={time} className="schedule-grid-time-label" style={{ top: `${rowIndex * axis.slotMinutes * PX_PER_MINUTE}px` }}>
+									{time}
+								</span>
+							) : null,
+						)}
+					</div>
+					{schedule.courts.map((court, columnIndex) => (
+						<div
+							key={court.id}
+							data-court-id={court.id}
+							className={`schedule-grid-column${canEdit && isActiveDayEnabled ? ' is-open' : ''}`}
+							style={{ gridColumn: columnIndex + 2, gridRow: 1 }}
+							onClick={(event) => {
+								if (!takeClick() || !canEdit || !isActiveDayEnabled) return;
 
-								return (
-									<div
-										key={slotKey}
-										className={`schedule-grid-cell ${isOccupied ? 'occupied' : 'open'}`}
-										onClick={() =>
-											takeClick() && !isOccupied && canEdit && isActiveDayEnabled && onOpenSlot(activeDay, court.id, time)
-										}
-										onPointerDown={(event) => !isOccupied && beginCreate(event, court.id, rowIndex)}
-										onDragOver={(event) => acceptsDrop && event.preventDefault()}
-										onDrop={(event) => acceptsDrop && onDropOnSlot(event, activeDay, court.id, time)}
-										style={{ gridColumn: columnIndex + 2, gridRow: rowIndex + 1 }}
-									/>
-								);
-							})}
-						</React.Fragment>
+								onOpenSlot(activeDay, court.id, minutesToTime(dayStartMinutes + readPointerMinutes(event.clientY)));
+							}}
+							onPointerDown={(event) => beginCreate(event, court.id)}
+						/>
 					))}
 
 					{placedEntries.map((item) => {
@@ -2057,18 +2221,21 @@ function ScheduleGridView({
 						// the validator. Until then this is a preview and nothing more.
 						const preview = resizingEntryId === entry.id ? gesture : item;
 						const height = heightFor(preview.startOffset, preview.endOffset);
+						const sizeClass = height < TINY_ENTRY_HEIGHT ? ' compact tiny' : height < COMPACT_ENTRY_HEIGHT ? ' compact' : '';
 
 						return (
 							// Draggable and clickable at once: dragging moves the entry, clicking
-							// opens the inspector. The payload is the entry id rather than the
+							// opens its popover. The payload is the entry id rather than the
 							// fixture id, which is how the cell tells a move from a placement.
 							<button
 								key={entry.id}
 								type="button"
 								data-entry-id={entry.id}
-								className={`schedule-grid-entry ${entry.type}${height < COMPACT_ENTRY_HEIGHT ? ' compact' : ''}${
+								className={`schedule-grid-entry ${entry.type}${sizeClass}${
 									resizingEntryId === entry.id ? ' resizing' : ''
-								}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}`}
+								}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}${
+									linkedEntryIds.has(entry.id) ? ' linked' : ''
+								}${draggingEntryId === entry.id ? ' is-being-dragged' : ''}`}
 								draggable={canEdit}
 								onDragStart={(event) => {
 									// A resize begins with a press on the entry's own edge, and the
@@ -2085,6 +2252,8 @@ function ScheduleGridView({
 									// silently fail to survive to drop in Chrome.
 									event.dataTransfer.effectAllowed = 'move';
 									event.dataTransfer.setData('text/plain', `${ENTRY_DRAG}${entry.id}`);
+									// Where on the block it was picked up, so it doesn't jump to the pointer.
+									dropGrabRef.current = (event.clientY - event.currentTarget.getBoundingClientRect().top) / PX_PER_MINUTE;
 									onDragEntry(entry.id);
 								}}
 								onDragEnd={() => onDragEntry(null)}
@@ -2160,14 +2329,49 @@ function ScheduleGridView({
 							</span>
 						</div>
 					)}
+
+					{/* Where the thing being dragged would land, at its true time and length. */}
+					{dropPreview && (
+						<div
+							className={`schedule-grid-draft${
+								dropPreview.problem?.severity === 'error' ? ' is-refused' : dropPreview.problem ? ' is-warned' : ''
+							}`}
+							style={{
+								gridColumn:
+									dropPreview.courtId === null
+										? `2 / span ${schedule.courts.length}`
+										: `${schedule.courts.findIndex((court) => court.id === dropPreview.courtId) + 2} / span 1`,
+								gridRow: '1 / -1',
+								top: `${topFor(dropPreview.startOffset)}px`,
+								height: `${heightFor(dropPreview.startOffset, dropPreview.endOffset)}px`,
+							}}
+						/>
+					)}
 				</div>
 			</div>
+
+			{/* Beside the pointer, because that is where the organiser is looking. On the
+			    document body so that nothing in the modal can clip it. */}
+			{dropPreview &&
+				createPortal(
+					<div
+						ref={dropChipRef}
+						className={`schedule-drop-chip${
+							dropPreview.problem?.severity === 'error' ? ' is-refused' : dropPreview.problem ? ' is-warned' : ''
+						}`}>
+						<strong>
+							{dropPreview.startTime} - {dropPreview.endTime}
+						</strong>
+						{dropPreview.problem && <span>{dropPreview.problem.message}</span>}
+					</div>,
+					document.body,
+				)}
 
 			{unplaceableEntries.length > 0 && (
 				<div className="schedule-grid-unplaceable">
 					<h4>Not shown on the grid</h4>
 					<p>
-						{unplaceableEntries.length === 1 ? 'This entry has' : 'These entries have'} nowhere on the grid to be
+						{unplaceableEntries.length === 1 ? 'This match has' : 'These matches have'} nowhere on the grid to be
 						drawn. Open {unplaceableEntries.length === 1 ? 'it' : 'each one'} to move or remove{' '}
 						{unplaceableEntries.length === 1 ? 'it' : 'them'}, or widen the day&apos;s hours.
 					</p>
@@ -2199,8 +2403,8 @@ function ScheduleListView({ schedule, activeDay, fixturesById, divisions = [], o
 	if (dayEntries.length === 0) {
 		return (
 			<div className="schedule-board-empty">
-				<h3>No schedule entries yet</h3>
-				<p>This day is empty. Schedule fixtures manually, add a break, or generate the schedule automatically.</p>
+				<h3>Nothing scheduled on this day yet</h3>
+				<p>Place fixtures on the board, add a break, or use Auto-schedule.</p>
 			</div>
 		);
 	}
@@ -2211,6 +2415,7 @@ function ScheduleListView({ schedule, activeDay, fixturesById, divisions = [], o
 				<button
 					key={entry.id}
 					type="button"
+					data-entry-id={entry.id}
 					className={`schedule-list-entry ${entry.type}`}
 					style={getEntryDivisionStyle(entry, fixturesById, divisions)}
 					onClick={() => onSelectEntry(entry)}>
@@ -2232,122 +2437,259 @@ function ScheduleListView({ schedule, activeDay, fixturesById, divisions = [], o
 	);
 }
 
-// A way back to the overview from any inspector sub-panel, without saving or
-// deleting anything. Every draft panel is otherwise a one-way door.
-function PanelBackButton({ onBack }) {
-	if (!onBack) return null;
+// The shell of anything that opens on the board: beside what it is about, kept on screen,
+// and following it if the board scrolls. A bottom sheet on a phone, which the stylesheet
+// decides. A press outside it is the caller's to answer, since an edit may be refused.
+function BoardPopover({ title, getAnchor, onClose, onDismiss, autoFocusRef, children }) {
+	const popoverRef = useRef(null);
+	const closeRef = useRef(null);
+
+	useLayoutEffect(() => {
+		const place = () => {
+			const popoverNode = popoverRef.current;
+			const anchor = getAnchor();
+			if (!popoverNode || !anchor) return;
+
+			const margin = 8;
+			const { offsetWidth: width, offsetHeight: height } = popoverNode;
+			let left = anchor.right + margin;
+
+			if (left + width > window.innerWidth - margin) left = anchor.left - width - margin;
+			if (left < margin) left = Math.max(margin, window.innerWidth - width - margin);
+
+			popoverNode.style.left = `${left}px`;
+			popoverNode.style.top = `${Math.max(margin, Math.min(anchor.top, window.innerHeight - height - margin))}px`;
+		};
+
+		place();
+		window.addEventListener('scroll', place, true);
+		window.addEventListener('resize', place);
+
+		return () => {
+			window.removeEventListener('scroll', place, true);
+			window.removeEventListener('resize', place);
+		};
+	});
+
+	// Subscribed once. onDismiss reads the latest form through the commit ref.
+	const dismissRef = useRef(onDismiss);
+	useEffect(() => {
+		dismissRef.current = onDismiss;
+	});
+
+	useEffect(() => {
+		(autoFocusRef?.current ?? closeRef.current)?.focus();
+
+		const onPointerDown = (event) => {
+			if (popoverRef.current?.contains(event.target)) return;
+			// A confirmation or message floating over the modal is not "outside".
+			if (!event.target.closest?.('.schedule-maker-modal')) return;
+
+			dismissRef.current();
+		};
+
+		document.addEventListener('pointerdown', onPointerDown, true);
+		return () => document.removeEventListener('pointerdown', onPointerDown, true);
+		// Focus moves in once, on opening.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	return (
-		<button type="button" className="schedule-panel-back" onClick={onBack}>
-			← Back to overview
-		</button>
+		<section ref={popoverRef} className="schedule-popover" role="dialog" aria-label={title}>
+			<div className="schedule-popover-head">
+				<h3>{title}</h3>
+				<button type="button" ref={closeRef} className="schedule-sheet-close" onClick={onClose} aria-label={`Close ${title}`}>
+					<Icon name="exit" />
+				</button>
+			</div>
+			<div className="schedule-panel schedule-popover-body">{children}</div>
+		</section>
 	);
 }
 
-function ScheduleOverviewPanel({
-	stats,
-	schedule,
-	courtDraft,
-	onCourtDraftChange,
-	onAddCourt,
-	onRemoveCourt,
-	onEditSettings,
-	canEdit,
-	report,
-	onShowReportEntries,
-	onDismissReport,
-}) {
-	return (
-		<div className="schedule-panel">
-			<h3>Schedule Overview</h3>
-			{report && <GenerationReport report={report} multiDay={schedule.days.length > 1} onShowEntries={onShowReportEntries} onDismiss={onDismissReport} />}
-			<div className="schedule-stat-grid">
-				<div>
-					<strong>{stats.scheduledFixtures}</strong>
-					<span>Scheduled Fixtures</span>
-				</div>
-				<div>
-					<strong>{stats.unscheduledFixtures}</strong>
-					<span>Unscheduled</span>
-				</div>
-				<div>
-					<strong>{stats.courts}</strong>
-					<span>Courts / Fields</span>
-				</div>
-				<div>
-					<strong>{schedule.days.length}</strong>
-					<span>Tournament Days</span>
-				</div>
-			</div>
+function entryToForm(entry) {
+	return {
+		day: entry.day,
+		courtId: entry.courtId ?? '',
+		startTime: entry.startTime,
+		length: String(timeToMinutes(entry.endTime) - timeToMinutes(entry.startTime)),
+		title: entry.title || '',
+		officials: entry.officials || '',
+		notes: entry.notes || '',
+	};
+}
 
-			<div className="schedule-panel-section">
-				<div className="schedule-panel-section-head">
-					<h4>Day Settings</h4>
-					{canEdit && (
-						<button type="button" className="schedule-panel-section-action" onClick={onEditSettings}>
-							Edit
-						</button>
-					)}
-				</div>
+// Edits a match or break where it sits. Each field applies as it is left, and a select as
+// it is changed. A refusal gives its reason here and leaves the entry alone, with what was
+// typed still in the field to correct.
+function EntryPopover({ entry, schedule, fixturesById, canEdit, commitRef, getAnchor, onApply, onRemove, onClose, onDismiss }) {
+	const isBreak = entry.type === 'break';
+	const fixture = isBreak ? null : fixturesById[entry.fixtureId];
+	const [form, setForm] = useState(() => entryToForm(entry));
+	const [problem, setProblem] = useState(null);
+	// Times can change underneath this, through a resize or a move on the board.
+	const [syncedEntry, setSyncedEntry] = useState(entry);
+	const firstFieldRef = useRef(null);
+
+	if (entry !== syncedEntry) {
+		setSyncedEntry(entry);
+		setForm(entryToForm(entry));
+	}
+
+	const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+	// True unless the edit was refused. A form with nothing changed has nothing to apply.
+	const commit = (next = form) => {
+		if (!canEdit) return true;
+
+		const current = entryToForm(entry);
+		if (Object.keys(next).every((key) => String(next[key]) === String(current[key]))) {
+			setProblem(null);
+			return true;
+		}
+
+		const length = Number(next.length);
+		if (!(length >= MIN_MATCH_MINUTES)) {
+			setProblem({ severity: 'error', message: `Enter a length of at least ${MIN_MATCH_MINUTES} minutes` });
+			return false;
+		}
+		if (!next.startTime) {
+			setProblem({ severity: 'error', message: 'Enter a start time' });
+			return false;
+		}
+		if (timeToMinutes(next.startTime) + length >= 24 * 60) {
+			setProblem({ severity: 'error', message: 'That runs past midnight' });
+			return false;
+		}
+
+		const result = onApply(entry, {
+			...entry,
+			day: next.day,
+			courtId: next.courtId === '' ? null : next.courtId,
+			startTime: next.startTime,
+			endTime: minutesToTime(timeToMinutes(next.startTime) + length),
+			title: next.title,
+			officials: next.officials,
+			notes: next.notes,
+		});
+
+		setProblem(result);
+
+		return result?.severity !== 'error';
+	};
+
+	useEffect(() => {
+		commitRef.current = commit;
+	});
+
+	// A select has no half-finished state, so it applies straight away.
+	const changeNow = (key, value) => {
+		const next = { ...form, [key]: value };
+
+		setForm(next);
+		commit(next);
+	};
+
+	const fieldProps = (key) => ({
+		value: form[key],
+		onChange: (event) => set(key, event.target.value),
+		onBlur: () => commit(),
+		onKeyDown: (event) => {
+			if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
+				event.preventDefault();
+				commit();
+			}
+		},
+	});
+
+	const title = isBreak ? form.title || 'Break' : fixture ? `${fixture.team1} vs ${fixture.team2}` : 'Match';
+
+	if (!canEdit) {
+		return (
+			<BoardPopover title={title} getAnchor={getAnchor} onClose={onClose} onDismiss={onDismiss}>
 				<p>
-					{schedule.settings.dayStartTime} - {schedule.settings.dayEndTime} - {schedule.settings.slotMinutes} minute slots
+					{entry.startTime} - {entry.endTime}, {getCourtName(schedule, entry.courtId)}
 				</p>
-			</div>
+				{fixture && <p>{getEntrySecondary(entry, fixturesById)}</p>}
+				{getEntryOfficials(entry) && <p>{getEntryOfficials(entry)}</p>}
+				{entry.notes && <p>{entry.notes}</p>}
+			</BoardPopover>
+		);
+	}
 
-			<div className="schedule-panel-section">
-				<h4>Courts & Fields</h4>
-				<div className="schedule-court-list">
-					{schedule.courts.length > 0 ? (
-						schedule.courts.map((court) => {
-							const placedOnCourt = schedule.entries.filter((entry) => entry.courtId === court.id).length;
-
-							return (
-								<div key={court.id} className="schedule-court-row">
-									<span>{court.name}</span>
-									{canEdit && (
-										<button
-											type="button"
-											className="schedule-court-remove"
-											onClick={() => onRemoveCourt(court.id)}
-											aria-label={`Remove ${court.name}`}
-											title={placedOnCourt > 0 ? `${placedOnCourt} scheduled here` : 'Remove'}>
-											Remove
-										</button>
-									)}
-								</div>
-							);
-						})
-					) : (
-						<p>No courts added yet.</p>
-					)}
-				</div>
-				{canEdit && (
-					<div className="schedule-inline-form">
-						<input
-							type="text"
-							value={courtDraft}
-							onChange={(event) => onCourtDraftChange(event.target.value)}
-							placeholder="Add a court or field"
-						/>
-						<button type="button" onClick={onAddCourt}>
-							Add
-						</button>
-					</div>
+	return (
+		<BoardPopover title={title} getAnchor={getAnchor} onClose={onClose} onDismiss={onDismiss} autoFocusRef={isBreak ? firstFieldRef : undefined}>
+			{fixture && <small className="schedule-generator-note">{getEntrySecondary(entry, fixturesById)}</small>}
+			<div className="schedule-form-grid">
+				{isBreak && (
+					<label className="full">
+						<span>Title</span>
+						<input type="text" ref={firstFieldRef} {...fieldProps('title')} />
+					</label>
 				)}
+				<label>
+					<span>Start</span>
+					<input type="time" {...fieldProps('startTime')} />
+				</label>
+				<label>
+					<span>Length (min)</span>
+					<input type="number" min={MIN_MATCH_MINUTES} step="5" {...fieldProps('length')} />
+				</label>
+				<label>
+					<span>{isBreak ? 'Courts' : 'Court'}</span>
+					<select value={form.courtId} onChange={(event) => changeNow('courtId', event.target.value)}>
+						{isBreak && <option value="">All courts</option>}
+						{schedule.courts.map((court) => (
+							<option key={court.id} value={court.id}>
+								{court.name}
+							</option>
+						))}
+					</select>
+				</label>
+				{schedule.days.length > 1 && (
+					<label>
+						<span>Day</span>
+						<select value={form.day} onChange={(event) => changeNow('day', event.target.value)}>
+							{schedule.days.map((day) => (
+								<option key={day.id} value={day.date} disabled={day.enabled === false}>
+									{day.label}
+									{day.enabled === false ? ' (off)' : ''}
+								</option>
+							))}
+						</select>
+					</label>
+				)}
+				{!isBreak && (
+					<label className="full">
+						<span>Officials</span>
+						<input type="text" placeholder="Assign referee or officiating crew" {...fieldProps('officials')} />
+					</label>
+				)}
+				<label className="full">
+					<span>Notes</span>
+					<textarea rows="2" {...fieldProps('notes')} />
+				</label>
 			</div>
-		</div>
+			{problem && (
+				<small className={problem.severity === 'error' ? 'schedule-setup-error' : 'schedule-setup-warning'} role="alert">
+					{problem.message}.
+				</small>
+			)}
+			<button type="button" className="schedule-popover-remove" onClick={() => onRemove(entry)}>
+				Remove from schedule
+			</button>
+		</BoardPopover>
 	);
 }
 
-function SlotAssignmentPanel({ draft, schedule, fixtures, divisions = [], onAssign, onBack }) {
+// Choosing what goes in an empty time. The fixture brings its own length, unless a range
+// was dragged out on the board, which keeps its drawn one.
+function FixturePickerPopover({ draft, schedule, fixtures, divisions, getAnchor, onAssign, onClose, onDismiss }) {
 	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>Assign Fixture</h3>
-			<p>
-				{formatDateLabel(draft.day)} - {draft.startTime} - {draft.endTime}
-			</p>
-			<p>{getCourtName(schedule, draft.courtId)}</p>
+		<BoardPopover title="Place a fixture" getAnchor={getAnchor} onClose={onClose} onDismiss={onDismiss}>
+			<small className="schedule-generator-note">
+				{getCourtName(schedule, draft.courtId)}, {draft.endTime ? `${draft.startTime} - ${draft.endTime}` : draft.startTime}
+			</small>
 			<div className="schedule-maker-fixture-list compact">
 				{fixtures.length > 0 ? (
 					fixtures.map((fixture) => (
@@ -2368,205 +2710,321 @@ function SlotAssignmentPanel({ draft, schedule, fixtures, divisions = [], onAssi
 					))
 				) : (
 					<div className="schedule-empty-panel">
-						<p>No matching fixtures available for this slot.</p>
+						<p>No unscheduled fixtures match your filters.</p>
 					</div>
 				)}
 			</div>
-		</div>
+		</BoardPopover>
 	);
 }
 
-// The division picker for one court. Multi-select over every division in the
-// tournament; the restriction is written straight to schedule.courts as it is
-// toggled. An empty selection means the court takes any division, which is stated
-// in the panel because "no divisions allowed" is the natural misreading.
-function CourtConfigPanel({ court, divisions, onSave, onBack }) {
-	const selected = Array.isArray(court.divisions) ? court.divisions : [];
+// What Auto-schedule is going to work from, in a line.
+function describeSetUp(schedule) {
+	const { dayStartTime, dayEndTime } = schedule.settings;
+	const courts = schedule.courts.length;
 
-	const toggle = (divisionId) => {
-		const next = selected.includes(divisionId)
-			? selected.filter((id) => id !== divisionId)
-			: [...selected, divisionId];
-		onSave(next);
+	return `${courts} court${courts === 1 ? '' : 's'}, ${dayStartTime} - ${dayEndTime}, ${getFixtureDefaultLength(null, schedule.settings)}-minute matches`;
+}
+
+// Over the right of the board, and the whole of it below 900px or when wide. Inside the modal's own
+// focus trap. Its close button takes focus on opening, so that Tab moves through what is
+// in the sheet and Escape closes it first.
+function ScheduleSheet({ title, wide = false, onClose, children }) {
+	const closeRef = useRef(null);
+
+	useEffect(() => {
+		closeRef.current?.focus();
+	}, []);
+
+	return (
+		<section className={`schedule-sheet${wide ? ' is-wide' : ''}`} aria-label={title}>
+			<div className="schedule-sheet-head">
+				<h3>{title}</h3>
+				<button type="button" ref={closeRef} className="schedule-sheet-close" onClick={onClose} aria-label={`Close ${title}`}>
+					<Icon name="exit" />
+				</button>
+			</div>
+			<div className="schedule-panel schedule-sheet-body">{children}</div>
+		</section>
+	);
+}
+
+const GRID_LINE_CHOICES = [15, 30, 60];
+const MIN_MATCH_MINUTES = 5;
+
+// A saved spacing outside the choices, such as a grid set to a 50-minute match length,
+// stays selectable until it is changed.
+function GridLinesControl({ value, onChange }) {
+	const choices = GRID_LINE_CHOICES.includes(value) ? GRID_LINE_CHOICES : [...GRID_LINE_CHOICES, value].sort((a, b) => a - b);
+
+	return (
+		<label className="schedule-grid-lines">
+			<span>Grid lines every</span>
+			<select value={value} onChange={(event) => onChange(Number(event.target.value))}>
+				{choices.map((minutes) => (
+					<option key={minutes} value={minutes}>
+						{minutes} min
+					</option>
+				))}
+			</select>
+		</label>
+	);
+}
+
+// What the organiser has to work with. Both ways of filling the board read it, so it
+// lives here once. Fields keep what is being typed and only send what makes sense, so
+// half-typed hours never reach the board.
+function SetUpSheet({
+	schedule,
+	rounds,
+	divisions,
+	focusCourtId,
+	courtDraft,
+	onCourtDraftChange,
+	onAddCourt,
+	onRemoveCourt,
+	onSetCourtDivisions,
+	onToggleDay,
+	onSetHours,
+	onSetMatchLengths,
+	onClose,
+}) {
+	const [hours, setHours] = useState({ start: schedule.settings.dayStartTime, end: schedule.settings.dayEndTime });
+	const [matchLength, setMatchLength] = useState(String(getFixtureDefaultLength(null, schedule.settings)));
+	const roundDurations = schedule.settings.generator?.roundDurations ?? {};
+	const bodyRef = useRef(null);
+
+	const hoursValid = isTimeRangeValid(hours.start, hours.end);
+	const matchLengthValid = Number(matchLength) >= MIN_MATCH_MINUTES;
+
+	const changeHours = (next) => {
+		setHours(next);
+		if (isTimeRangeValid(next.start, next.end)) onSetHours(next.start, next.end);
 	};
 
+	const changeMatchLength = (value) => {
+		setMatchLength(value);
+		if (Number(value) >= MIN_MATCH_MINUTES) onSetMatchLengths({ fixtureDurationMinutes: Number(value) });
+	};
+
+	// Blank gives the round back to the main match length.
+	const changeRoundLength = (round, value) => {
+		const next = { ...roundDurations };
+
+		if (Number(value) >= MIN_MATCH_MINUTES) next[round] = Number(value);
+		else delete next[round];
+
+		onSetMatchLengths({ roundDurations: next });
+	};
+
+	const toggleDivision = (court, divisionId) => {
+		const selected = Array.isArray(court.divisions) ? court.divisions : [];
+
+		onSetCourtDivisions(court.id, selected.includes(divisionId) ? selected.filter((id) => id !== divisionId) : [...selected, divisionId]);
+	};
+
+	useEffect(() => {
+		if (focusCourtId) bodyRef.current?.querySelector(`[data-setup-court="${focusCourtId}"]`)?.scrollIntoView({ block: 'center' });
+	}, [focusCourtId]);
+
 	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>{court.name} Divisions</h3>
-			<p>
-				Choose which divisions can be scheduled on this court. Selecting nothing means the court takes{' '}
-				<strong>any</strong> division.
-			</p>
-			{divisions.length > 0 ? (
-				<div className="schedule-court-division-list">
-					{divisions.map((division) => (
-						<label key={division.id} className="schedule-court-division-option">
-							<input
-								type="checkbox"
-								checked={selected.includes(division.id)}
-								onChange={() => toggle(division.id)}
-							/>
-							<span>{division.name}</span>
+		<ScheduleSheet title="Set up" onClose={onClose}>
+			<div ref={bodyRef} className="schedule-setup">
+				<div className="schedule-form-grid">
+					<label>
+						<span>Day starts</span>
+						<input type="time" value={hours.start} onChange={(event) => changeHours({ ...hours, start: event.target.value })} />
+					</label>
+					<label>
+						<span>Day ends</span>
+						<input type="time" value={hours.end} onChange={(event) => changeHours({ ...hours, end: event.target.value })} />
+					</label>
+				</div>
+				{hoursValid ? (
+					<small className="schedule-generator-note">These hours apply to every day.</small>
+				) : (
+					<small className="schedule-setup-error" role="alert">
+						The day must end after it starts. The board keeps its last valid hours until then.
+					</small>
+				)}
+
+				<div className="schedule-panel-section">
+					<h4>Match length</h4>
+					<label className="schedule-generator-option">
+						<span className="schedule-generator-round-name">Default</span>
+						<input
+							type="number"
+							className="schedule-generator-value"
+							min={MIN_MATCH_MINUTES}
+							step="5"
+							aria-label="Default match length in minutes"
+							value={matchLength}
+							onChange={(event) => changeMatchLength(event.target.value)}
+						/>
+						<span className="schedule-generator-unit">min</span>
+					</label>
+					{!matchLengthValid && (
+						<small className="schedule-setup-error" role="alert">
+							Enter at least {MIN_MATCH_MINUTES} minutes.
+						</small>
+					)}
+					{rounds.length > 1 && (
+						<details className="schedule-generator-rounds" open={Object.keys(roundDurations).length > 0}>
+							<summary>By round</summary>
+							{rounds.map((round) => (
+								<label key={round} className="schedule-generator-option">
+									<span className="schedule-generator-round-name">{round}</span>
+									<input
+										type="number"
+										className="schedule-generator-value"
+										min={MIN_MATCH_MINUTES}
+										step="5"
+										aria-label={`${round} match length in minutes`}
+										placeholder={matchLength}
+										defaultValue={roundDurations[round] ?? ''}
+										onChange={(event) => changeRoundLength(round, event.target.value)}
+									/>
+									<span className="schedule-generator-unit">min</span>
+								</label>
+							))}
+							<small className="schedule-generator-note">Blank uses the default.</small>
+						</details>
+					)}
+					<small className="schedule-generator-note">
+						New matches take this length, whether placed by hand or by Auto-schedule. Drag a match&apos;s edge to change just that match.
+					</small>
+				</div>
+
+				<div className="schedule-panel-section">
+					<h4>Courts &amp; Fields</h4>
+					<div className="schedule-court-list">
+						{schedule.courts.length === 0 && <p>No courts added yet.</p>}
+						{schedule.courts.map((court) => {
+							const selected = Array.isArray(court.divisions) ? court.divisions : [];
+							const placedOnCourt = schedule.entries.filter((entry) => entry.courtId === court.id).length;
+
+							return (
+								<div key={court.id} className="schedule-setup-court" data-setup-court={court.id}>
+									<div className="schedule-court-row">
+										<span>{court.name}</span>
+										<button
+											type="button"
+											className="schedule-court-remove"
+											onClick={() => onRemoveCourt(court.id)}
+											aria-label={`Remove ${court.name}`}
+											title={placedOnCourt > 0 ? `${placedOnCourt} scheduled here` : 'Remove'}>
+											Remove
+										</button>
+									</div>
+									{divisions.length > 1 && (
+										<details open={court.id === focusCourtId}>
+											<summary>{courtDivisionLabel(court, divisions) || 'Any division'}</summary>
+											<div className="schedule-court-division-list">
+												{divisions.map((division) => (
+													<label key={division.id} className="schedule-court-division-option">
+														<input
+															type="checkbox"
+															checked={selected.includes(division.id)}
+															onChange={() => toggleDivision(court, division.id)}
+														/>
+														<span>{division.name}</span>
+													</label>
+												))}
+											</div>
+											<small className="schedule-generator-note">Selecting nothing means the court takes any division.</small>
+										</details>
+									)}
+								</div>
+							);
+						})}
+					</div>
+					<div className="schedule-inline-form">
+						<input
+							type="text"
+							value={courtDraft}
+							onChange={(event) => onCourtDraftChange(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key !== 'Enter') return;
+								event.preventDefault();
+								onAddCourt();
+							}}
+							placeholder="Add a court or field"
+							aria-label="Add a court or field"
+						/>
+						<button type="button" onClick={onAddCourt}>
+							Add
+						</button>
+					</div>
+				</div>
+
+				<div className="schedule-panel-section">
+					<h4>Days</h4>
+					{schedule.days.map((day) => (
+						<label key={day.id} className="schedule-generator-toggle">
+							<input type="checkbox" checked={day.enabled !== false} onChange={() => onToggleDay(day.id)} />
+							<span>
+								{day.label}, {formatDateLabel(day.date)}
+							</span>
 						</label>
 					))}
+					<small className="schedule-generator-note">A day that is off stays in the tournament, but nothing can be scheduled on it.</small>
 				</div>
-			) : (
-				<p>This tournament has no divisions to restrict to.</p>
-			)}
-		</div>
-	);
-}
-
-// Editing the day settings by hand — the grid's start, end and slot length —
-// rather than only through automatic generation. Writes to schedule.settings.
-function SettingsPanel({ draft, onChange, onSave, onBack }) {
-	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>Day Settings</h3>
-			<p>
-				These rule the grid every day is drawn on. They do not change any entry: a match is drawn at its own start
-				time for its own length, whether or not that lands on a line. Generating a schedule no longer changes them
-				either.
-			</p>
-			<div className="schedule-form-grid">
-				<label>
-					<span>Day Start</span>
-					<input type="time" value={draft.dayStartTime} onChange={(event) => onChange({ ...draft, dayStartTime: event.target.value })} />
-				</label>
-				<label>
-					<span>Day End</span>
-					<input type="time" value={draft.dayEndTime} onChange={(event) => onChange({ ...draft, dayEndTime: event.target.value })} />
-				</label>
-				<label>
-					<span>Slot Length (min)</span>
-					<input
-						type="number"
-						min="5"
-						step="5"
-						value={draft.slotMinutes}
-						onChange={(event) => onChange({ ...draft, slotMinutes: event.target.value })}
-					/>
-				</label>
 			</div>
-			<button type="button" className="primary full-width" onClick={onSave}>
-				Save Settings
-			</button>
-		</div>
+		</ScheduleSheet>
 	);
 }
 
-// Where the printed pages break, edited while the schedule is still a draft.
-// The editor itself is the same component the live print route uses — see
-// SchedulePrintLayoutEditor — so what an organiser arranges here is already the
-// tournament's saved layout once the schedule is committed, with no second
-// step and no second definition of what a break means.
+// Where the printed pages break, edited while the schedule is still a draft. Full size,
+// because the editor is a table of courts across time. It is the same component the live
+// print route uses — see SchedulePrintLayoutEditor — so what an organiser arranges here
+// is already the tournament's saved layout once the schedule is committed.
 //
-// No save button: this stages into the modal's own schedule.print, and the
-// modal's existing save flow commits it along with everything else. Print
-// still pops out to a standalone document, because the modal is an overlay
-// over the app rather than a clean sheet of paper.
-function PrintLayoutPanel({ schedule, fixturesById, onChange, onPrint, onBack }) {
+// No save button: this stages into the modal's own schedule.print, and the modal's existing
+// save flow commits it along with everything else. Print still pops out to a standalone
+// document, because the modal is an overlay over the app rather than a clean sheet of paper.
+function PrintSheet({ schedule, fixturesById, canEdit, onChange, onPrint, onClose }) {
 	const [type, setType] = useState('grid');
 
 	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>Edit Print Layout</h3>
-
-			{/* This panel has no Save of its own, and an organiser who has just
-			    moved a page break has no way to know that without being told —
-			    an editor with no save button reads as one that has lost the
-			    change, not one that is staging it. */}
-			<p className="schedule-print-staged-note">
-				Page breaks are staged with the rest of your changes. Use <strong>Save Schedule</strong> to keep them.
-			</p>
-
-			{/* is-on-light: this toggle sits on the inspector panel, not on the
-			    print route's --main-color toolbar, so it takes the app's normal
-			    polarity — selected is blue. See schedule-print.css. */}
-			<div className="schedule-print-types is-on-light" role="group" aria-label="Schedule layout">
-				{['grid', 'list'].map((option) => (
-					<button
-						key={option}
-						type="button"
-						className="schedule-print-choice"
-						aria-pressed={type === option}
-						onClick={() => setType(option)}>
-						{option === 'grid' ? 'Grid' : 'List'}
-					</button>
-				))}
+		<ScheduleSheet title="Print" wide onClose={onClose}>
+			{/* is-on-light: this toggle sits on the sheet, not on the print route's
+			    --main-color toolbar, so it takes the app's normal polarity: selected is blue. */}
+			<div className="schedule-print-sheet-bar">
+				<div className="schedule-print-types is-on-light" role="group" aria-label="Schedule layout">
+					{['grid', 'list'].map((option) => (
+						<button
+							key={option}
+							type="button"
+							className="schedule-print-choice"
+							aria-pressed={type === option}
+							onClick={() => setType(option)}>
+							{option === 'grid' ? 'Grid' : 'List'}
+						</button>
+					))}
+				</div>
+				<button type="button" className="schedule-print-action is-primary" onClick={() => onPrint(type)}>
+					Print this layout
+				</button>
 			</div>
 
-			<SchedulePrintLayoutEditor
-				type={type}
-				schedule={schedule}
-				fixturesById={fixturesById}
-				layout={schedule.print?.[type] ?? null}
-				onChange={(nextLayout) => onChange(type, nextLayout)}
-			/>
+			{canEdit && (
+				<>
+					{/* This sheet has no Save of its own, and an organiser who has just moved
+					    a page break has no way to know that without being told. */}
+					<p className="schedule-print-staged-note">
+						Page breaks are staged with the rest of your changes. Use <strong>Save Schedule</strong> to keep them.
+					</p>
 
-			<button type="button" className="schedule-print-action is-primary" onClick={() => onPrint(type)}>
-				Print this layout
-			</button>
-		</div>
-	);
-}
-
-function BreakPanel({ draft, schedule, onChange, onSave, onBack }) {
-	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>Add Break</h3>
-			<div className="schedule-form-grid">
-				<label>
-					<span>Title</span>
-					<input type="text" value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} />
-				</label>
-				<label>
-					<span>Day</span>
-					<select value={draft.day} onChange={(event) => onChange({ ...draft, day: event.target.value })}>
-						{schedule.days.map((day) => (
-							<option key={day.id} value={day.date} disabled={day.enabled === false}>
-								{day.label} - {formatDateLabel(day.date)}
-								{day.enabled === false ? ' (not scheduling)' : ''}
-							</option>
-						))}
-					</select>
-				</label>
-				<label>
-					<span>Starts</span>
-					<input
-						type="time"
-						value={draft.startTime}
-						onChange={(event) => onChange({ ...draft, startTime: event.target.value })}
+					<SchedulePrintLayoutEditor
+						type={type}
+						schedule={schedule}
+						fixturesById={fixturesById}
+						layout={schedule.print?.[type] ?? null}
+						onChange={(nextLayout) => onChange(type, nextLayout)}
 					/>
-				</label>
-				<label>
-					<span>Ends</span>
-					<input type="time" value={draft.endTime} onChange={(event) => onChange({ ...draft, endTime: event.target.value })} />
-				</label>
-				<label>
-					<span>Court Scope</span>
-					<select value={draft.courtId} onChange={(event) => onChange({ ...draft, courtId: event.target.value })}>
-						<option value="">All courts</option>
-						{schedule.courts.map((court) => (
-							<option key={court.id} value={court.id}>
-								{court.name}
-							</option>
-						))}
-					</select>
-				</label>
-				<label className="full">
-					<span>Notes</span>
-					<textarea value={draft.notes} onChange={(event) => onChange({ ...draft, notes: event.target.value })} rows="3" />
-				</label>
-			</div>
-			<button type="button" className="primary full-width" onClick={onSave}>
-				Add Break
-			</button>
-		</div>
+				</>
+			)}
+		</ScheduleSheet>
 	);
 }
 
@@ -2586,85 +3044,30 @@ function GeneratorOption({ label, checked, onToggle, hint, children }) {
 	);
 }
 
-function GeneratorPanel({ draft, rounds, onChange, onGenerate, onBack }) {
+// Only rules for filling the board. What it has to work with comes from Set up.
+function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp, onClose }) {
 	const set = (key) => (value) => onChange({ ...draft, [key]: value });
-	const roundDurations = draft.roundDurations || {};
-	// Blank removes the round's own length, so it takes the default again.
-	const setRoundDuration = (round, value) => {
-		const next = { ...roundDurations };
-		if (value === '') delete next[round];
-		else next[round] = value;
-		onChange({ ...draft, roundDurations: next });
-	};
-	const customised = Object.keys(roundDurations).filter((round) => rounds.includes(round)).length;
+	const matchLength = getFixtureDefaultLength(null, schedule.settings);
+	const hasCourts = schedule.courts.length > 0;
 
 	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>Generate Schedule</h3>
-			<p>Fills the board from scratch. Breaks are kept; every placed fixture is replaced.</p>
-			<div className="schedule-form-grid">
-				<label>
-					<span>Courts</span>
-					<input
-						type="number"
-						min="1"
-						value={draft.courtCount}
-						onChange={(event) => onChange({ ...draft, courtCount: event.target.value })}
-					/>
-				</label>
-				<label>
-					<span>Day Start</span>
-					<input
-						type="time"
-						value={draft.dailyStartTime}
-						onChange={(event) => onChange({ ...draft, dailyStartTime: event.target.value })}
-					/>
-				</label>
-				<label>
-					<span>Day End</span>
-					<input type="time" value={draft.dailyEndTime} onChange={(event) => onChange({ ...draft, dailyEndTime: event.target.value })} />
-				</label>
-				<label>
-					<span>Match Length (min)</span>
-					<input
-						type="number"
-						min="10"
-						step="5"
-						value={draft.fixtureDurationMinutes}
-						onChange={(event) => onChange({ ...draft, fixtureDurationMinutes: event.target.value })}
-					/>
-				</label>
+		<ScheduleSheet title="Auto-schedule" onClose={onClose}>
+			<p>Fills the board using your set up. Breaks are kept. Fixtures already on the board are replaced.</p>
+			<div className="schedule-panel-section">
+				<div className="schedule-panel-section-head">
+					<p>{describeSetUp(schedule)}</p>
+					<button type="button" className="schedule-panel-section-action" onClick={onOpenSetUp}>
+						Edit
+					</button>
+				</div>
+				{!hasCourts && (
+					<small className="schedule-setup-error" role="alert">
+						Add at least one court in Set up first.
+					</small>
+				)}
 			</div>
 
-			{rounds.length > 1 && (
-				<details className="schedule-generator-rounds">
-					<summary>
-						Match length by round
-						{customised > 0 && <span className="schedule-generator-unit"> · {customised} set</span>}
-					</summary>
-					{rounds.map((round) => (
-						<label key={round} className="schedule-generator-option">
-							<span className="schedule-generator-round-name">{round}</span>
-							<input
-								type="number"
-								className="schedule-generator-value"
-								min="5"
-								step="5"
-								aria-label={`${round} match length in minutes`}
-								placeholder={String(draft.fixtureDurationMinutes || '')}
-								value={roundDurations[round] ?? ''}
-								onChange={(event) => setRoundDuration(round, event.target.value)}
-							/>
-							<span className="schedule-generator-unit">min</span>
-						</label>
-					))}
-					<small className="schedule-generator-note">Blank uses the match length above.</small>
-				</details>
-			)}
-
 			<div className="schedule-panel-section">
-				<h4>Rules</h4>
 				<GeneratorOption
 					label="Minimum rest"
 					checked={draft.restEnabled}
@@ -2677,11 +3080,44 @@ function GeneratorPanel({ draft, rounds, onChange, onGenerate, onBack }) {
 						step="5"
 						aria-label="Minimum rest in minutes"
 						disabled={!draft.restEnabled}
-						value={draft.restMinutes}
+						value={draft.restMinutes ?? matchLength}
 						onChange={(event) => set('restMinutes')(event.target.value)}
 					/>
 					<span className="schedule-generator-unit">min</span>
 				</GeneratorOption>
+				<GeneratorOption
+					label="Break before knockout rounds"
+					checked={draft.knockoutGapEnabled}
+					onToggle={set('knockoutGapEnabled')}
+					hint="Time between the end of one round and the start of each knockout round. Knockout teams aren't known in advance, so minimum rest can't cover this.">
+					<input
+						type="number"
+						className="schedule-generator-value"
+						min="0"
+						step="5"
+						aria-label="Break before knockout rounds in minutes"
+						disabled={!draft.knockoutGapEnabled}
+						value={draft.knockoutGapMinutes ?? matchLength}
+						onChange={(event) => set('knockoutGapMinutes')(event.target.value)}
+					/>
+					<span className="schedule-generator-unit">min</span>
+				</GeneratorOption>
+				<GeneratorOption
+					label="Bend rules to fit every fixture"
+					checked={draft.fitAll}
+					onToggle={set('fitAll')}
+					hint="Shortens rest or a knockout break, or exceeds the daily limit, only where a fixture has nowhere else to go, as few times as possible. Every bend is listed afterwards."
+				/>
+				<GeneratorOption
+					label="Assign officials automatically"
+					checked={draft.assignOfficials}
+					onToggle={set('assignOfficials')}
+					hint="One team per match from the same division, never while it is playing. Off keeps any officials already entered."
+				/>
+			</div>
+
+			<details className="schedule-panel-section schedule-generator-rounds">
+				<summary>More rules (6)</summary>
 				<GeneratorOption
 					label="Max matches per team per day"
 					checked={draft.maxPerDayEnabled}
@@ -2716,73 +3152,25 @@ function GeneratorPanel({ draft, rounds, onChange, onGenerate, onBack }) {
 					<span className="schedule-generator-unit">min</span>
 				</GeneratorOption>
 				<GeneratorOption
-					label="Break before knockout rounds"
-					checked={draft.knockoutGapEnabled}
-					onToggle={set('knockoutGapEnabled')}
-					hint="Time between the end of one round and the start of each knockout round. Knockout teams aren't known in advance, so minimum rest can't cover this.">
-					<input
-						type="number"
-						className="schedule-generator-value"
-						min="0"
-						step="5"
-						aria-label="Break before knockout rounds in minutes"
-						disabled={!draft.knockoutGapEnabled}
-						value={draft.knockoutGapMinutes}
-						onChange={(event) => set('knockoutGapMinutes')(event.target.value)}
-					/>
-					<span className="schedule-generator-unit">min</span>
-				</GeneratorOption>
-				<small className="schedule-generator-note">
-					Always applied: rounds in order, no team or court double-booked, court division limits.
-				</small>
-			</div>
-
-			<div className="schedule-panel-section">
-				<h4>When fixtures won't fit</h4>
-				<GeneratorOption
-					label="Bend rules to fit every fixture"
-					checked={draft.fitAll}
-					onToggle={set('fitAll')}
-					hint="Shortens rest or a knockout break, or exceeds the daily limit, only where a fixture has nowhere else to go, as few times as possible. Every bend is listed after generating."
-				/>
-				<GeneratorOption
 					label="Run past the day's end time"
 					checked={draft.allowOverrun}
 					onToggle={set('allowOverrun')}
 					hint="Last resort: adds time after the end of the final day, only as much as needed."
 				/>
-			</div>
-
-			<div className="schedule-panel-section">
-				<h4>Preferences</h4>
-				<GeneratorOption
-					label="Keep each pool on one court"
-					checked={draft.courtAffinity}
-					onToggle={set('courtAffinity')}
-				/>
-				<GeneratorOption
-					label="Keep each court on one division"
-					checked={draft.groupDivisions}
-					onToggle={set('groupDivisions')}
-				/>
+				<GeneratorOption label="Keep each pool on one court" checked={draft.courtAffinity} onToggle={set('courtAffinity')} />
+				<GeneratorOption label="Keep each court on one division" checked={draft.groupDivisions} onToggle={set('groupDivisions')} />
 				<GeneratorOption
 					label="Spread matches evenly across days"
 					checked={draft.spreadDays}
 					onToggle={set('spreadDays')}
 					hint="Off finishes as early as possible, filling the first day first."
 				/>
-				<GeneratorOption
-					label="Assign officials automatically"
-					checked={draft.assignOfficials}
-					onToggle={set('assignOfficials')}
-					hint="One team per match from the same division, never while it is playing. Off keeps any officials already entered."
-				/>
-			</div>
+			</details>
 
-			<button type="button" className="primary full-width" onClick={onGenerate}>
-				Generate Schedule
+			<button type="button" className="primary full-width" onClick={onGenerate} disabled={!hasCourts}>
+				Auto-schedule
 			</button>
-		</div>
+		</ScheduleSheet>
 	);
 }
 
@@ -2832,91 +3220,6 @@ function GenerationReport({ report, multiDay, onShowEntries, onDismiss }) {
 					))}
 				</ul>
 			)}
-		</div>
-	);
-}
-
-function EntryEditorPanel({ entry, fixturesById, schedule, onChange, onSave, onDelete, onBack }) {
-	const fixture = entry.type === 'fixture' ? fixturesById[entry.fixtureId] : null;
-
-	return (
-		<div className="schedule-panel">
-			<PanelBackButton onBack={onBack} />
-			<h3>{entry.type === 'break' ? 'Edit Break' : 'Edit Scheduled Fixture'}</h3>
-			{fixture && (
-				<div className="schedule-panel-section">
-					<strong>
-						{fixture.team1} vs {fixture.team2}
-					</strong>
-					<p>
-						{fixture.divisionName ? `${fixture.divisionName} - ` : ''}
-						{fixture.round} - Match {fixture.matchNo}
-					</p>
-				</div>
-			)}
-			<div className="schedule-form-grid">
-				{entry.type === 'break' && (
-					<label className="full">
-						<span>Title</span>
-						<input type="text" value={entry.title} onChange={(event) => onChange({ ...entry, title: event.target.value })} />
-					</label>
-				)}
-				<label>
-					<span>Day</span>
-					<select value={entry.day} onChange={(event) => onChange({ ...entry, day: event.target.value })}>
-						{schedule.days.map((day) => (
-							<option key={day.id} value={day.date} disabled={day.enabled === false}>
-								{day.label} - {formatDateLabel(day.date)}
-								{day.enabled === false ? ' (not scheduling)' : ''}
-							</option>
-						))}
-					</select>
-				</label>
-				<label>
-					<span>Start Time</span>
-					<input type="time" value={entry.startTime} onChange={(event) => onChange({ ...entry, startTime: event.target.value })} />
-				</label>
-				<label>
-					<span>End Time</span>
-					<input type="time" value={entry.endTime} onChange={(event) => onChange({ ...entry, endTime: event.target.value })} />
-				</label>
-				<label>
-					<span>{entry.type === 'break' ? 'Court Scope' : 'Court / Field'}</span>
-					<select
-						value={entry.courtId || ''}
-						onChange={(event) => onChange({ ...entry, courtId: event.target.value || null })}>
-						{entry.type === 'break' && <option value="">All courts</option>}
-						{schedule.courts.map((court) => (
-							<option key={court.id} value={court.id}>
-								{court.name}
-							</option>
-						))}
-					</select>
-				</label>
-				{entry.type === 'fixture' && (
-					<label className="full">
-						<span>Officials</span>
-						<input
-							type="text"
-							value={entry.officials}
-							onChange={(event) => onChange({ ...entry, officials: event.target.value })}
-							placeholder="Assign referee or officiating crew"
-						/>
-					</label>
-				)}
-				<label className="full">
-					<span>Notes</span>
-					<textarea value={entry.notes} onChange={(event) => onChange({ ...entry, notes: event.target.value })} rows="3" />
-				</label>
-			</div>
-			<div className="schedule-panel-actions">
-				<button type="button" onClick={onDelete} className="danger">
-					Delete Entry
-				</button>
-				<button type="button" className="primary" onClick={onSave}>
-					Save Entry
-				</button>
-			</div>
 		</div>
 	);
 }

@@ -29,7 +29,14 @@ import {
 	createFixtureEntry,
 	createBreakEntry,
 	findEntryConflict,
+	findNextFreeStart,
+	getFixtureDefaultLength,
+	getPlacementProblem,
+	getTeams,
+	snapToNeighbour,
 	validateScheduleEntry,
+	withMatchLengths,
+	DEFAULT_GENERATOR_SETTINGS,
 	upsertScheduleEntry,
 	removeScheduleEntry,
 	getCourtName,
@@ -826,7 +833,7 @@ describe('validateScheduleEntry', () => {
 		const occupied = schedule({ entries: [entry({ id: 'existing' })] });
 
 		expect(validateScheduleEntry(occupied, entry({ id: 'new', startTime: '09:30', endTime: '10:30' }))).toBe(
-			'That timeslot overlaps an existing schedule entry.'
+			'Court 1 is in use until 10:00.'
 		);
 	});
 
@@ -1499,5 +1506,219 @@ describe('sortScheduleEntries with a schedule', () => {
 		];
 
 		expect(sortScheduleEntries(entries, schedule).map((e) => e.id)).toEqual(['early', 'late', 'nextDay']);
+	});
+});
+
+describe('getTeams', () => {
+	it('keys named teams by division, so two divisions may share a name', () => {
+		const [one] = getTeams({ division_id: 'a', team1: 'DSJ', team2: 'TBD' });
+		const [other] = getTeams({ division_id: 'b', team1: 'DSJ', team2: 'TBD' });
+
+		expect(one.name).toBe('DSJ');
+		expect(one.key).not.toBe(other.key);
+	});
+
+	it('prefers team ids to names', () => {
+		const [team] = getTeams({ division_id: 'a', team1: 'DSJ', team_1_id: 't1' });
+
+		expect(team.key).toBe('a:t1');
+	});
+
+	it('leaves out unbound knockout slots', () => {
+		expect(getTeams({ division_id: 'a', team1: 'TBD', team2: 'Rank 1', team_2_placeholder: true })).toEqual([]);
+	});
+});
+
+describe('getFixtureDefaultLength', () => {
+	const settings = {
+		slotMinutes: 60,
+		generator: { fixtureDurationMinutes: 50, roundDurations: { Semifinals: 75, Finals: 90 } },
+	};
+
+	it("uses the round's own length", () => {
+		expect(getFixtureDefaultLength({ round: 'Semifinals' }, settings)).toBe(75);
+	});
+
+	it('shares the Finals length with the 3rd place playoff', () => {
+		expect(getFixtureDefaultLength({ round: '3rd Place Playoff' }, settings)).toBe(90);
+	});
+
+	it('falls back to the match length', () => {
+		expect(getFixtureDefaultLength({ round: 'Pool Play' }, settings)).toBe(50);
+	});
+
+	it('falls back to the grid when nothing has been chosen', () => {
+		expect(getFixtureDefaultLength({ round: 'Pool Play' }, { slotMinutes: 45, generator: null })).toBe(45);
+	});
+
+	it('falls back to the default with nothing at all', () => {
+		expect(getFixtureDefaultLength(null)).toBe(DEFAULT_SLOT_MINUTES);
+	});
+});
+
+describe('snapToNeighbour', () => {
+	const entries = [entry({ id: 'a', startTime: '09:00', endTime: '09:50' }), entry({ id: 'b', startTime: '10:40', endTime: '11:30' })];
+	const place = (start, overrides = {}) =>
+		snapToNeighbour(entries, { day: '2026-08-01', courtId: 'court-1', start, length: 25, ...overrides });
+
+	it('butts against the end of the match before', () => {
+		expect(place(595)).toBe(590);
+	});
+
+	it('butts against the start of the match after', () => {
+		expect(place(610)).toBe(615);
+	});
+
+	it('leaves a start alone when nothing is within reach', () => {
+		expect(place(600)).toBe(600);
+	});
+
+	it('ignores other courts and the entry being moved', () => {
+		expect(place(595, { courtId: 'court-2' })).toBe(595);
+		expect(place(595, { ignoreEntryId: 'a' })).toBe(595);
+	});
+
+	it('takes a venue-wide break as a neighbour on every court', () => {
+		const withBreak = [entry({ id: 'lunch', type: 'break', courtId: null, startTime: '12:00', endTime: '13:00' })];
+
+		expect(snapToNeighbour(withBreak, { day: '2026-08-01', courtId: 'court-9', start: 785, length: 25 })).toBe(780);
+	});
+});
+
+describe('findNextFreeStart', () => {
+	const entries = [
+		entry({ id: 'a', startTime: '09:00', endTime: '09:50' }),
+		entry({ id: 'b', startTime: '10:00', endTime: '11:00' }),
+		entry({ id: 'other', courtId: 'court-2', startTime: '11:00', endTime: '12:00' }),
+	];
+	const find = (from, length, overrides = {}) =>
+		findNextFreeStart(entries, { day: '2026-08-01', courtId: 'court-1', from, length, latestEnd: 1020, ...overrides });
+
+	it('returns the time asked for when it is free', () => {
+		expect(find(480, 50)).toBe(480);
+	});
+
+	it('moves past a busy time', () => {
+		expect(find(555, 25)).toBe(660);
+	});
+
+	it('uses a gap that is long enough', () => {
+		expect(find(590, 10)).toBe(590);
+	});
+
+	it('skips a gap that is too short', () => {
+		expect(find(590, 25)).toBe(660);
+	});
+
+	it('returns null past the end of the day', () => {
+		expect(find(555, 25, { latestEnd: 680 })).toBeNull();
+	});
+});
+
+describe('getPlacementProblem', () => {
+	const fixturesById = {
+		f1: { id: 'f1', division_id: 'a', team1: 'DSJ', team2: 'Crawford' },
+		f2: { id: 'f2', division_id: 'a', team1: 'DSJ', team2: 'Gresswold' },
+		f3: { id: 'f3', division_id: 'b', team1: 'DSJ', team2: 'Elspark' },
+		f4: { id: 'f4', division_id: 'a', team1: 'TBD', team2: 'TBD' },
+		f5: { id: 'f5', division_id: 'a', team1: 'TBD', team2: 'TBD' },
+	};
+	const courts = [
+		{ id: 'court-1', name: 'Court 1' },
+		{ id: 'court-3', name: 'Court 3' },
+	];
+	const placed = entry({ id: 'placed', fixtureId: 'f1', startTime: '09:00', endTime: '09:50' });
+	const board = schedule({ courts, entries: [placed] });
+	const elsewhere = (overrides) => entry({ id: 'new', courtId: 'court-3', fixtureId: 'f2', ...overrides });
+
+	it('passes a free placement', () => {
+		expect(getPlacementProblem(board, elsewhere({ startTime: '11:00', endTime: '11:50' }), fixturesById)).toBeNull();
+	});
+
+	it('names the court and when it comes free', () => {
+		const candidate = entry({ id: 'new', fixtureId: 'f3', startTime: '09:30', endTime: '10:00' });
+
+		expect(getPlacementProblem(board, candidate, fixturesById)).toEqual({ severity: 'error', message: 'Court 1 is in use until 09:50' });
+	});
+
+	it('names a break', () => {
+		const lunch = entry({ id: 'lunch', type: 'break', title: 'Lunch', courtId: null, fixtureId: null, startTime: '12:10', endTime: '13:00' });
+		const withLunch = schedule({ courts, entries: [lunch] });
+
+		expect(getPlacementProblem(withLunch, elsewhere({ startTime: '12:00', endTime: '12:30' }), fixturesById).message).toBe('Lunch runs until 13:00');
+	});
+
+	it('refuses a team playing on another court at once', () => {
+		expect(getPlacementProblem(board, elsewhere({ startTime: '09:30', endTime: '10:20' }), fixturesById)).toEqual({
+			severity: 'error',
+			message: 'DSJ is playing on Court 1 until 09:50',
+		});
+	});
+
+	it('does not confuse teams of the same name in two divisions', () => {
+		const candidate = elsewhere({ fixtureId: 'f3', startTime: '09:30', endTime: '10:20' });
+
+		expect(getPlacementProblem(board, candidate, fixturesById)).toBeNull();
+	});
+
+	it('never clashes on unbound knockout slots', () => {
+		const semi = entry({ id: 'semi', fixtureId: 'f4', startTime: '14:00', endTime: '15:00' });
+		const withSemi = schedule({ courts, entries: [semi] });
+
+		expect(getPlacementProblem(withSemi, elsewhere({ fixtureId: 'f5', startTime: '14:00', endTime: '15:00' }), fixturesById)).toBeNull();
+	});
+
+	it('warns on a short gap, and allows it', () => {
+		expect(getPlacementProblem(board, elsewhere({ startTime: '09:50', endTime: '10:40' }), fixturesById)).toEqual({
+			severity: 'warning',
+			message: 'Back to back for DSJ',
+		});
+	});
+
+	it('does not warn once the gap is long enough', () => {
+		expect(getPlacementProblem(board, elsewhere({ startTime: '10:05', endTime: '10:55' }), fixturesById)).toBeNull();
+	});
+
+	it('ignores the entry being moved', () => {
+		const moved = entry({ id: 'placed', fixtureId: 'f1', courtId: 'court-3', startTime: '09:30', endTime: '10:20' });
+
+		expect(getPlacementProblem(board, moved, fixturesById, 'placed')).toBeNull();
+	});
+
+	it('ignores other days', () => {
+		expect(getPlacementProblem(board, elsewhere({ day: '2026-08-02', startTime: '09:30', endTime: '10:20' }), fixturesById)).toBeNull();
+	});
+
+	it('still checks the court without fixtures to look teams up in', () => {
+		expect(getPlacementProblem(board, elsewhere({ courtId: 'court-1', startTime: '09:30', endTime: '10:00' })).severity).toBe('error');
+		expect(getPlacementProblem(board, elsewhere({ startTime: '09:30', endTime: '10:00' }))).toBeNull();
+	});
+});
+
+describe('withMatchLengths', () => {
+	it('starts from the defaults on a schedule never generated', () => {
+		const { generator } = withMatchLengths({ slotMinutes: 60, generator: null }, { fixtureDurationMinutes: 50 });
+
+		expect(generator).toEqual({ ...DEFAULT_GENERATOR_SETTINGS, fixtureDurationMinutes: 50 });
+	});
+
+	it('keeps the rules already chosen', () => {
+		const { generator } = withMatchLengths({ generator: { restMinutes: 30, fitAll: false, fixtureDurationMinutes: 40 } }, { fixtureDurationMinutes: 50 });
+
+		expect(generator).toEqual({ restMinutes: 30, fitAll: false, fixtureDurationMinutes: 50 });
+	});
+
+	it('writes round lengths without touching the match length', () => {
+		const { generator } = withMatchLengths({ generator: { fixtureDurationMinutes: 40 } }, { roundDurations: { Finals: 90 } });
+
+		expect(generator).toEqual({ fixtureDurationMinutes: 40, roundDurations: { Finals: 90 } });
+	});
+
+	it('is what a new placement then reads', () => {
+		const settings = { slotMinutes: 60, generator: null };
+		const next = { ...settings, ...withMatchLengths(settings, { fixtureDurationMinutes: 50, roundDurations: { Finals: 90 } }) };
+
+		expect(getFixtureDefaultLength({ round: 'Pool Play' }, next)).toBe(50);
+		expect(getFixtureDefaultLength({ round: 'Finals' }, next)).toBe(90);
 	});
 });

@@ -777,5 +777,29 @@ line in the generator and gives the organiser a granularity they can read the da
 independent of what is on it.
 
 Given up: an organiser who liked the grid snapping to whatever was last generated now sets
-it themselves. The printed grid is deliberately not given continuous positioning — see
-`docs/schedule.md` — so a fine-grained schedule reads differently on screen and on paper.
+it themselves. The printed grid was deliberately not given continuous positioning at the time;
+that was reversed on 2026-11-04, below.
+
+## The Printed Grid Draws Time To Scale
+
+Decided 2026-11-04. Reverses the printed half of the decision above.
+
+The printed grid wrote each match into the one cell of the row it started in, on the reasoning
+that paper can't draw a block at an arbitrary offset and keep the row legible. It can: a
+positioned block measured in millimetres prints exactly where it is drawn. Keeping whole rows
+cost more than it saved. A match crossing a grid line printed in its first row and the next row
+looked free, so a printed schedule could show a busy court as empty, and the grid only read
+correctly when it was set to the match length, which is the coupling the decision above removed.
+It also repeated a break's title in every cell it touched.
+
+The board and the page now agree: an entry is drawn at its own start for its own length, and
+grid lines are a reading aid on both.
+
+Row indices stay the unit of a page break, so saved layouts keep their meaning and the page-break
+editor still works in rows. Scale is calculated per day rather than stored, so nothing was added
+to the `print` key.
+
+Given up: rows no longer grow to fit their content, so a very short match or a very long day on
+one page says less. Long round names are shortened on a block, and the printed list still gives
+them in full. Sizes are in millimetres, so a block keeps its height on screen rather than filling
+the window.

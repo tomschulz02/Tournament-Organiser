@@ -263,17 +263,19 @@ function describeRow(type, row, schedule) {
 	return row ? `${row.startTime} ${getCourtName(schedule, row.courtId)}` : 'this row';
 }
 
-// The same placement arithmetic the printed page uses (getEntryRowPlacement,
-// resolved once per day in getPrintRowsForDay), read here only to show what a
-// slot holds — a break's consequence is what the organiser is judging.
+// What a row holds, which is what the organiser is judging a break against. A court is
+// in use for the whole of a match, so a row a match only continues through counts too,
+// and says so rather than reading as free.
 function GridPreviewRow({ schedule, slot, rowIndex, entries, fixturesById }) {
+	const row = rowIndex + 1;
+	const crossesRow = (item) => item.rowStart <= row && item.rowStart + item.rowSpan > row;
 	const cells = schedule.courts.map((court) => {
-		const placed = entries.find((item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1);
-		const spanning = entries.find(
-			(item) => item.entry.courtId === null && item.rowStart <= rowIndex + 1 && item.rowStart + item.rowSpan > rowIndex + 1,
-		);
+		const here = entries.filter((item) => item.entry.courtId === court.id && crossesRow(item));
+		const starting = here.filter((item) => item.rowStart === row);
+		const spanning = entries.find((item) => item.entry.courtId === null && crossesRow(item));
+		const shown = starting[0] ?? here[0] ?? spanning;
 
-		return { court, shown: placed ?? spanning };
+		return { court, shown, label: previewLabel({ shown, starting, fixturesById }) };
 	});
 
 	const inUse = cells.filter((cell) => cell.shown).length;
@@ -282,12 +284,12 @@ function GridPreviewRow({ schedule, slot, rowIndex, entries, fixturesById }) {
 		<div className="print-layout-grid-row">
 			<span className="print-layout-grid-time">{slot}</span>
 
-			{cells.map(({ court, shown }) => (
+			{cells.map(({ court, shown, label }) => (
 				<span
 					key={court.id}
 					className="print-layout-grid-cell"
 					style={shown ? getEntryDivisionStyle(shown.entry, fixturesById) : undefined}>
-					{shown ? getEntryLabel(shown.entry, fixturesById) : ''}
+					{label}
 				</span>
 			))}
 
@@ -313,6 +315,14 @@ function GridPreviewRow({ schedule, slot, rowIndex, entries, fixturesById }) {
 			</span>
 		</div>
 	);
+}
+
+function previewLabel({ shown, starting, fixturesById }) {
+	if (!shown) return '';
+	if (starting.length > 1) return `${getEntryLabel(starting[0].entry, fixturesById)} +${starting.length - 1} more`;
+	if (starting.length === 1 || shown.entry.courtId === null) return getEntryLabel(shown.entry, fixturesById);
+
+	return 'Continues';
 }
 
 function ListPreviewRow({ entry, schedule, fixturesById }) {

@@ -464,20 +464,19 @@ here. What is left:
   the save over it would strand the organiser, but it does mean the rule has a hole that
   bad data can fall through.
 - **`getEntrySlotSpan` and `buildTimeSlots` in `scheduleUtils.js` are called by nothing.**
-  The fixed-axis work of 2026-08-13 left both behind: the printed grid derives a span from
-  `getEntryRowPlacement`, which floors the start and ceils the end so an unaligned entry
-  covers the rows it actually overlaps — `getEntrySlotSpan` counts duration alone and
-  would draw it a row short. `buildTimeSlots` was the old row builder. Both left in place
+  The fixed-axis work of 2026-08-13 left both behind: the page-break editor's preview derives
+  a span from `getEntryRowPlacement`, which floors the start and ceils the end so an unaligned
+  entry covers the rows it actually overlaps — `getEntrySlotSpan` counts duration alone and
+  would come up a row short. `buildTimeSlots` was the old row builder. Both left in place
   rather than deleted — deleting code is High Risk under `CLAUDE.md` — and both still
   carry tests. `getEntryRowPlacement`'s `snapped` flag joined them on 2026-09-10, when the
-  board stopped drawing approximate blocks; the field is still returned and still tested,
-  and print is the caller that would want it if the printed grid ever marks the same thing.
+  board stopped drawing approximate blocks; the field is still returned and still tested.
 - ~~**An entry that does not begin and end on a slot boundary is drawn across the slots it
   covers, not at its exact time.**~~ — **done 2026-09-10.** The board positions an entry
   from its own start time in minutes and draws it at its own length, so a 25-minute match
   on a 60-minute grid is a quarter-row block and two entries of different lengths sit flush
   against one another. The grid lines are a reading aid, not a placement constraint. The
-  *printed* grid still snaps to whole rows, deliberately — see `docs/schedule.md`.
+  printed grid has done the same since 2026-11-04 — see `docs/schedule.md`.
 - **The rest minimum cannot reach across the pool-to-knockout boundary.** A semifinal's
   teams are unbound at generation time — the fixture carries `Rank 1` and a null
   `team_1` — so the generator has nobody to give rest to and will place it in the slot
@@ -519,11 +518,13 @@ here. What is left:
   The column exists, `trg_tournaments_last_updated` stamps it, and the ETag change key
   reads it.
 - Schedule maker, from the 2026-10-22 review:
-  - every toolbar button shares one style, so Reset and Discard look as safe as Save;
-  - Enter does not add a court (it does add a team);
-  - unsaved draft actions announce themselves as if saved ("Court 1 added to the
-    tournament schedule");
-  - the generator's Courts number duplicates the Courts & Fields list.
+  - ~~every toolbar button shares one style, so Reset and Discard look as safe as Save;~~ fixed
+    2026-11-04: only Save is filled, and the other two moved to the More menu in red;
+  - ~~Enter does not add a court (it does add a team);~~ fixed 2026-11-04;
+  - ~~unsaved draft actions announce themselves as if saved ("Court 1 added to the
+    tournament schedule");~~ fixed for courts 2026-11-04;
+  - ~~the generator's Courts number duplicates the Courts & Fields list.~~ fixed 2026-11-04,
+    when courts moved to Set up.
 
 ## Overlays and stacking
 

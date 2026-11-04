@@ -58,7 +58,7 @@ assume a stored `days` array was the one it last wrote.
 Courts are positional: `buildCourtList` regenerates the list from a count and reuses the
 existing entry at each index. Reducing the court count therefore drops courts from the
 end, and any entry pointing at a dropped court keeps a `courtId` that no longer resolves.
-A court can also be removed from the overview panel directly, which never regenerates the
+A court can also be removed from Set up directly, which never regenerates the
 list — the removed court's own entries are dropped, so the fixtures among them return to
 the unscheduled list rather than being orphaned.
 
@@ -122,13 +122,15 @@ server validates on write rather than relying on the client to have sent somethi
 |---|---|---|---|
 | `dayStartTime` | string | `'09:00'` | `HH:MM`. First slot of the grid. |
 | `dayEndTime` | string | `'18:00'` | `HH:MM`. The grid stops before this. |
-| `slotMinutes` | integer | `30` | Row height of the grid, in minutes. **How the board is ruled, never how long a match is.** |
-| `generator` | generator object \| `null` | `null` | The rules and preferences the schedule was last generated with. Added 2026-09-24. `null` or absent means never generated; the panel shows the defaults. |
+| `slotMinutes` | integer | `30` | The spacing of the grid lines, in minutes. **How the board is ruled, never how long a match is**, except as the last fallback for a new placement when no match length has been chosen. |
+| `generator` | generator object \| `null` | `null` | Match lengths, and the rules and preferences the schedule was last generated with. Added 2026-09-24. `null` or absent means neither has been chosen yet, so Set up and Auto-schedule show the defaults. Being non-null does not mean the schedule was generated. |
 
 #### Generator
 
-Written by the generator on every run and read back so the panel opens on the same
-rules. Stored as given, like the rest of `settings`. `normaliseGeneratorSettings` in
+Written by the generator on every run, and read back so its sheet opens on the same rules.
+Set up writes `fixtureDurationMinutes` and `roundDurations` here too, since 2026-11-04,
+because hand placement and the generator share them (`withMatchLengths` in `scheduleUtils.js`).
+Hours and courts live at `settings` and `courts`, and the generator is given those. Stored as given, like the rest of `settings`. `normaliseGeneratorSettings` in
 `scheduleUtils.js` reads it key by key, so a missing key takes its default.
 
 | Key | Type | Default | Description |
@@ -167,21 +169,37 @@ nothing at all. Two entries on one court may have two different lengths, and nei
 begin or end on a grid line.
 
 - **The schedule maker's board** draws an entry at its own start for its own length, over
-  grid lines that are a reading aid rather than a placement constraint. An organiser can
-  drag a range out on an empty column to create an entry, and drag a placed entry's edge to
-  change its length; both snap to five minutes, on every grid — the increment is not a
-  fraction of a row, because a length an organiser can draw should not depend on how the
-  board happens to be ruled.
+  grid lines that are a reading aid rather than a placement constraint. Its scale is fixed at
+  `PX_PER_MINUTE`, so changing `slotMinutes` redraws the lines and moves nothing. Any empty
+  time on a court is usable, including the gap after a short match inside one grid row.
+
+  Everything on the board works from the pointer, in five-minute steps on every grid: a drop,
+  a tap, dragging a range out on an empty column to create an entry, and dragging a placed
+  entry's edge to change its length. A drop or tap also butts against a neighbour within seven
+  minutes (`NEIGHBOUR_SNAP_MINUTES`). During a drag the board previews the entry at its true time
+  and length, gives any reason beside the pointer, and outlines the other matches of its teams.
+
+  **A new entry takes its round's length** (`getFixtureDefaultLength`): `roundDurations`, then
+  `fixtureDurationMinutes`, then `slotMinutes`. This is a default for new placements, never a
+  constraint, and a range drawn on the board keeps its drawn length. A tap that lands on a busy
+  time uses the next free start on that court.
+
+  **The client checks court, break and team clashes as an entry is placed**
+  (`getPlacementProblem`), with the same outcome the server would reach on save, plus a warning
+  for a team's gap under `BACK_TO_BACK_MINUTES`, which is allowed. Round order and court division
+  limits are still only checked on save.
+
   Drag-create is mouse and pen only: a touch drag on an empty part of the board is a
   scroll, and taking it would cost a phone the only way it has of moving around the day.
   The resize handles do take touch — they are 10px strips that scroll nothing worth
   keeping. Dragging near the top or bottom of the board scrolls it, so a day taller than
   the panel can still be reached; the same is true of dragging an entry to another court
   or time, which scrolls sideways as well.
-- **The printed grid** still snaps an entry to the whole rows that contain it, because a
-  sheet of paper has no way to draw a block at an arbitrary offset and keep the row legible.
-  Where a row holds more than one entry on a court, every one of them is printed, and any
-  entry whose start is not the row's own time carries its real times.
+- **The printed grid** draws an entry the same way, in millimetres, since 2026-11-04. Time
+  runs to scale down the page, so a match crosses grid lines where it needs to and two matches
+  can share one hour. A venue-wide break is one band across the courts. A match crossing a page
+  break prints on both pages and is marked as continued. An entry outside the day's hours has
+  nowhere to be drawn, so it is listed beneath the grid on the day's last page.
 
 Changing `slotMinutes` or `dayStartTime` after entries exist re-rules the board and moves
 nothing.
@@ -224,10 +242,22 @@ are shown nothing. What is stored only changes when the organiser saves. A row i
 the end of a day is ignored the same way, silently — a day getting shorter is not something
 worth interrupting anyone about.
 
-**The smart default reproduces the fixed page sizes it replaced**, then looks up to two rows
-earlier for a natural place to break: an empty slot row on the grid, the start of a new time
-on the list. It never looks *later*, so a page is never longer than the estimate — a short
-page prints with blank space at the foot, a long one silently overflows.
+**The smart default fills each sheet**, then looks up to two rows earlier for a natural place
+to break: a grid line that no match crosses, or the start of a new time on the list. It never
+looks *later*. The list's page size is a count of rows per orientation, measured with every row
+at its tallest (`PRINT_LIST_ROWS_PER_PAGE`), so a page of short rows leaves blank paper at its
+foot. List rows have a known height for that reason: two lines of team names at most, and one
+line each for the match's context and its officials. The grid's page size comes from the
+sheet's height and a minimum scale, raised if the day's shortest match needs more room for two
+lines of text (`getGridRowsPerPage` in `schedulePrintLayout.js`). About nine hours fits one
+landscape sheet.
+
+**A saved grid layout always fits its sheet.** All of a day's pages share one scale, set by the
+longest page (`getGridPrintScale`), so a match is the same height throughout. A layout that
+asks for a long day on one page gets shorter blocks, and they say less (`getBlockTier`).
+
+A row index in a saved break is only a time for a given `slotMinutes`. Changing the grid moves
+any saved breaks with it.
 
 **The generator is stricter than the payload.** Everything it places starts when its
 court comes free: at the day's start, when the court's previous match ends, when a break

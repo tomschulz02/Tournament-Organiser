@@ -1,9 +1,9 @@
-import React from 'react';
 import TournamentPattern from './TournamentPattern';
 import { tournamentAccentStyle } from '../utils/tournamentIdentity';
 import {
 	chunkAtBreaks,
 	courtBreakIndices,
+	DEFAULT_PRINT_ORIENTATION,
 	formatDateLabel,
 	getCourtName,
 	getEntryDivisionStyle,
@@ -12,6 +12,9 @@ import {
 	getEntrySecondary,
 } from '../utils/scheduleUtils';
 import {
+	getBlockTier,
+	getGridPrintScale,
+	getPageBlocks,
 	getPageStartRows,
 	getPrintableDays,
 	getPrintRowsForDay,
@@ -122,21 +125,19 @@ export function ScheduleExportPages({
 	);
 }
 
-// One `.schedule-export-page` per chunk of time-slot rows that fits one
-// sheet, not one per day — each chunk is a full grid table (head row plus
-// only that chunk's slots) with its own header, so a day spilling onto a
-// second or third sheet still names itself on every one.
+// Formatted once, so the scale can't pick up floating-point noise in the markup.
+const mm = (value) => `${value.toFixed(2)}mm`;
+
+// One `.schedule-export-page` per run of grid rows that fits one sheet, not one per
+// day. Each carries its own header, so a day spilling onto a second sheet still names
+// itself on every one.
 //
-// Entries are placed once against the whole day's axis, exactly as before
-// chunking existed; only which rows get rendered on a given page changes.
-// getEntryRowPlacement's rowStart is a global row number, and slicing the
-// slot list preserves order, so `pageRowOffset + localIndex` reconstructs the
-// same global row index a chunk's slots always had — placement itself is
-// untouched.
+// Time runs to scale down the page, in millimetres, so a match is exactly as tall as
+// the time it takes: it crosses grid lines where it needs to, and two matches can share
+// one hour. The rows only decide where the lines fall and where a page may break.
 //
-// `courts` is one court group (courtRangeLabel above), not the whole
-// schedule — an entry on a court outside this group simply matches no cell
-// in this table, which is correct: it belongs to a different group's pages.
+// `courts` is one court group (courtRangeLabel above), not the whole schedule. An entry
+// on a court outside this group belongs to a different group's pages.
 function ScheduleExportGridPages({
 	schedule,
 	day,
@@ -148,23 +149,40 @@ function ScheduleExportGridPages({
 	divisions = [],
 	layout,
 }) {
-	// The same fixed axis and the same row arithmetic the screen uses, so the
-	// printed page puts an entry in the row the organiser saw it in. Matching on
-	// startTime alone dropped every entry that did not begin exactly on a slot.
-	const { rows: allSlots, entries, rowsPerPage, isNaturalBreak } = getPrintRowsForDay('grid', schedule, day);
+	const orientation = layout?.orientation || DEFAULT_PRINT_ORIENTATION.grid;
+	const {
+		rows: allSlots,
+		slotMinutes,
+		entries,
+		outsideEntries,
+		rowsPerPage,
+		isNaturalBreak,
+	} = getPrintRowsForDay('grid', schedule, day, orientation);
 
 	const slotChunks = chunkAtBreaks(allSlots, resolveRowBreaks({ layout, day, rows: allSlots, rowsPerPage, isNaturalBreak }));
-	// The row a page starts at is no longer pageIndex * a fixed size — with
-	// arbitrary breaks it has to be summed, and getEntryRowPlacement's rowStart
-	// is a global row number, so getting this wrong misplaces every entry on
-	// every page after the first.
 	const pageStarts = getPageStartRows(slotChunks);
 
+	const courtIds = new Set(courts.map((court) => court.id));
+	const groupEntries = entries.filter((item) => item.entry.courtId === null || courtIds.has(item.entry.courtId));
+	const groupOutside = outsideEntries.filter((entry) => entry.courtId === null || courtIds.has(entry.courtId));
+	const scale = getGridPrintScale({
+		pages: slotChunks,
+		slotMinutes,
+		orientation,
+		// Its heading and one line per entry, so the list stays on the same sheet.
+		reservedMm: groupOutside.length > 0 ? 9 + groupOutside.length * 4.5 : 0,
+	});
+
 	return slotChunks.map((slots, pageIndex) => {
-		const pageRowOffset = pageStarts[pageIndex];
+		const startOffset = pageStarts[pageIndex] * slotMinutes;
+		const pageMinutes = slots.length * slotMinutes;
+		const blocks = getPageBlocks(groupEntries, { startOffset, endOffset: startOffset + pageMinutes });
+		const height = mm(pageMinutes * scale);
+		const lines = slots.map((slot, index) => ({ slot, top: mm(index * slotMinutes * scale) }));
+		const venueBreaks = blocks.filter((block) => block.entry.courtId === null);
 
 		return (
-			<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
+			<div key={`${day.id}-${pageIndex}`} className="schedule-export-page schedule-export-grid-page" data-export-page="true">
 				<ScheduleExportHeader
 					tournamentId={tournamentId}
 					tournamentName={tournamentName}
@@ -174,83 +192,129 @@ function ScheduleExportGridPages({
 				/>
 				<div className="schedule-export-grid">
 					{/* The court count travels as a custom property rather than as a
-					    finished grid-template-columns string. The track sizes
-					    themselves belong in the stylesheet, where the print route
-					    can give the columns a real minimum width on a narrow screen
-					    and let the grid scroll — an inline template would outrank
-					    any rule that tried. The default values in
-					    schedule-export.css reproduce what this used to compute, so
-					    paper and the standalone document are unchanged. */}
-					<div
-						className="schedule-export-grid-table"
-						style={{ '--schedule-grid-courts': courts.length }}>
+					    finished grid-template-columns string. The track sizes themselves
+					    belong in the stylesheet, where the print route can give the columns
+					    a real minimum width on a narrow screen and let the grid scroll. */}
+					<div className="schedule-export-grid-table" style={{ '--schedule-grid-courts': courts.length }}>
 						<div className="schedule-export-grid-head">Time</div>
 						{courts.map((court) => (
 							<div key={court.id} className="schedule-export-grid-head">
 								{court.name}
 							</div>
 						))}
-						{slots.map((slot, localIndex) => {
-							const rowIndex = pageRowOffset + localIndex;
 
-							return (
-								<React.Fragment key={slot}>
-									<div className="schedule-export-grid-time">{slot}</div>
-									{courts.map((court) => {
-										// Every entry that starts in this row, not the first of them.
-										// The printed grid still snaps an entry to the row that
-										// contains it — a sheet of paper has no way to draw a block
-										// at an arbitrary offset and keep the row legible — but two
-										// matches can now start in one row, and finding one of them
-										// left the other off the page altogether.
-										const placed = entries.filter(
-											(item) => item.entry.courtId === court.id && item.rowStart === rowIndex + 1,
-										);
-										const spanningBreak = entries.find(
-											(item) =>
-												item.entry.courtId === null &&
-												item.rowStart <= rowIndex + 1 &&
-												item.rowStart + item.rowSpan > rowIndex + 1,
-										);
+						<div className="schedule-export-grid-time" style={{ height }}>
+							{lines.map(({ slot, top }) => (
+								<span key={slot} className="schedule-export-grid-time-label" style={{ top }}>
+									{slot}
+								</span>
+							))}
+						</div>
 
-										return (
-											<div key={`${court.id}-${slot}`} className="schedule-export-grid-cell">
-												{spanningBreak ? (
-													<strong>{spanningBreak.entry.title}</strong>
-												) : (
-													placed.map((item) => (
-														<div
-															key={item.entry.id}
-															className="schedule-export-grid-entry"
-															style={getEntryDivisionStyle(item.entry, fixturesById, divisions)}>
-															{/* The row is labelled with the time it starts, which is
-															    the entry's own time only when the two agree. Where
-															    they do not — a 25-minute match on a 45-minute grid —
-															    the entry has to say when it actually is. */}
-															{item.entry.startTime !== slot && (
-																<span className="schedule-export-grid-entry-time">
-																	{item.entry.startTime} - {item.entry.endTime}
-																</span>
-															)}
-															<span>{getEntrySecondary(item.entry, fixturesById)}</span>
-															<strong>{getEntryLabel(item.entry, fixturesById)}</strong>
-															{getEntryOfficials(item.entry) && (
-																<span style={{ color: 'dodgerblue' }}>{getEntryOfficials(item.entry)}</span>
-															)}
-														</div>
-													))
-												)}
-											</div>
-										);
-									})}
-								</React.Fragment>
-							);
-						})}
+						{courts.map((court, courtIndex) => (
+							<div
+								key={court.id}
+								className="schedule-export-grid-court"
+								// Every placement explicit, because the band of venue-wide breaks
+								// below shares this row, and auto-placement would move these
+								// columns aside to avoid overlapping it.
+								style={{ height, gridColumn: courtIndex + 2, gridRow: 2 }}>
+								{/* Real elements rather than a background: a browser may leave
+								    backgrounds off the printed page unless asked. */}
+								{lines.map(({ slot, top }) => (
+									<span key={slot} className="schedule-export-grid-line" style={{ top }} />
+								))}
+								{blocks
+									.filter((block) => block.entry.courtId === court.id)
+									.map((block) => (
+										<ScheduleExportGridBlock
+											key={block.entry.id}
+											block={block}
+											scale={scale}
+											fixturesById={fixturesById}
+											divisions={divisions}
+										/>
+									))}
+							</div>
+						))}
+
+						{venueBreaks.length > 0 && (
+							<div className="schedule-export-grid-breaks" style={{ gridRow: 2, gridColumn: `2 / span ${courts.length}` }}>
+								{venueBreaks.map(({ entry, top, length }) => (
+									<div
+										key={entry.id}
+										className="schedule-export-grid-break"
+										style={{ top: mm(top * scale), height: mm(length * scale) }}>
+										<strong>{entry.title || 'Break'}</strong> {entry.startTime} - {entry.endTime}
+									</div>
+								))}
+							</div>
+						)}
 					</div>
 				</div>
+
+				{pageIndex === slotChunks.length - 1 && groupOutside.length > 0 && (
+					<div className="schedule-export-grid-outside">
+						<h4>Outside the day&apos;s hours</h4>
+						{groupOutside.map((entry) => (
+							<p key={entry.id}>
+								<strong>
+									{entry.startTime} - {entry.endTime}
+								</strong>{' '}
+								{getCourtName(schedule, entry.courtId)}: {getEntryLabel(entry, fixturesById)}
+							</p>
+						))}
+					</div>
+				)}
 			</div>
 		);
 	});
+}
+
+// A match's small print, with the match number first, so that a line too long for its
+// column loses the round name rather than the number an organiser looks a match up by.
+function getMatchContext(entry, fixturesById) {
+	const fixture = fixturesById[entry.fixtureId];
+	if (entry.type === 'break' || !fixture) return getEntrySecondary(entry, fixturesById);
+
+	const round = fixture.divisionName ? `${fixture.divisionName} - ${fixture.round}` : fixture.round;
+
+	return `Match ${fixture.matchNo} - ${round}`;
+}
+
+// One match, or a break on a single court, at its true height. What it says depends on
+// how tall that is, most important first, so a block that runs short loses the least.
+function ScheduleExportGridBlock({ block, scale, fixturesById, divisions }) {
+	const { entry, top, length, continuesFromPrevious, continuesToNext } = block;
+	const height = length * scale;
+	const tier = getBlockTier(height);
+	const officials = getEntryOfficials(entry);
+	const saysEverything = tier === 'tall' || tier === 'full';
+	// The last few minutes of a match named on the page before: too short to hold a line.
+	const isSliver = continuesFromPrevious && height < 2.6;
+	const classes = [
+		'schedule-export-grid-entry',
+		`is-${tier}`,
+		entry.type === 'break' ? 'is-break' : '',
+		continuesFromPrevious ? 'continues-from-previous' : '',
+		continuesToNext ? 'continues-to-next' : '',
+	];
+
+	return (
+		<div
+			className={classes.filter(Boolean).join(' ')}
+			style={{ top: mm(top * scale), height: mm(height), ...getEntryDivisionStyle(entry, fixturesById, divisions) }}>
+			{tier !== 'minimal' && !isSliver && (
+				<span className="schedule-export-grid-entry-time">
+					{continuesFromPrevious && 'Continued · '}
+					{entry.startTime} - {entry.endTime}
+				</span>
+			)}
+			{!isSliver && <strong>{getEntryLabel(entry, fixturesById)}</strong>}
+			{saysEverything && officials && <span className="schedule-export-grid-entry-officials">{officials}</span>}
+			{saysEverything && <span className="schedule-export-grid-entry-secondary">{getMatchContext(entry, fixturesById)}</span>}
+		</div>
+	);
 }
 
 // Same reasoning as the grid version: one page per chunk of rows, each with
@@ -258,11 +322,11 @@ function ScheduleExportGridPages({
 // list uses, so chunking it is a straight array split. Unaffected by court
 // chunking — it already prints one row per fixture regardless of court count.
 function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, tournamentId, divisions = [], layout }) {
-	const { rows: entries, rowsPerPage, isNaturalBreak } = getPrintRowsForDay('list', schedule, day);
+	const { rows: entries, rowsPerPage, isNaturalBreak } = getPrintRowsForDay('list', schedule, day, layout?.orientation);
 	const pages = chunkAtBreaks(entries, resolveRowBreaks({ layout, day, rows: entries, rowsPerPage, isNaturalBreak }));
 
 	return pages.map((pageEntries, pageIndex) => (
-		<div key={`${day.id}-${pageIndex}`} className="schedule-export-page" data-export-page="true">
+		<div key={`${day.id}-${pageIndex}`} className="schedule-export-page schedule-export-list-page" data-export-page="true">
 			<ScheduleExportHeader tournamentId={tournamentId} tournamentName={tournamentName} dayLabel={day.label} date={day.date} />
 			<div className="schedule-export-list">
 				{pageEntries.map((entry) => (
@@ -276,8 +340,14 @@ function ScheduleExportListPages({ schedule, day, fixturesById, tournamentName, 
 						<div>
 							<strong>{getEntryLabel(entry, fixturesById)}</strong>
 						</div>
-						{getEntryOfficials(entry) && <div style={{ color: 'dodgerblue' }}>{getEntryOfficials(entry)}</div>}
-						<div>{getEntrySecondary(entry, fixturesById)}</div>
+						{/* One cell, so that officials sit under the round and can't push the
+						    row onto a second line of columns. */}
+						<div className="schedule-export-list-context">
+							<span>{getMatchContext(entry, fixturesById)}</span>
+							{getEntryOfficials(entry) && (
+								<span className="schedule-export-list-officials">{getEntryOfficials(entry)}</span>
+							)}
+						</div>
 					</div>
 				))}
 			</div>

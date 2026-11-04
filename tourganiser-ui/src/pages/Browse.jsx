@@ -8,6 +8,9 @@ import '../App.css';
 import Icon from '../components/Icons';
 import TournamentPattern from '../components/TournamentPattern';
 import { tournamentAccentStyle } from '../utils/tournamentIdentity';
+import { formatStartCountdown, getDateTile } from '../utils/tournamentDates';
+
+const UNDATED_TILE = { month: 'Date', day: 'TBC', year: '', isRange: true, spansMonths: false };
 
 const TOURNAMENT_GROUPS = [
 	{ key: 'ongoing', label: 'Ongoing', emptyMessage: 'There are currently no ongoing tournaments' },
@@ -35,18 +38,6 @@ function getTournamentFormat(details) {
 	return details.type || details.format || details.classification || '';
 }
 
-function formatTournamentType(type) {
-	if (!type) {
-		return '';
-	}
-
-	return type
-		.split(/[_-\s]+/)
-		.filter(Boolean)
-		.map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-		.join(' ');
-}
-
 function getTournamentStatus(details) {
 	return details.status || '';
 }
@@ -65,42 +56,9 @@ function getTournamentStatusVariant(details) {
 	return 'upcoming';
 }
 
-function formatTournamentDate(value) {
-	if (!value) {
-		return '';
-	}
-
-	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-		const [year, month, day] = value.split('-').map(Number);
-		const utcDate = new Date(Date.UTC(year, month - 1, day));
-		return new Intl.DateTimeFormat('en-GB', {
-			day: '2-digit',
-			month: 'short',
-			year: 'numeric',
-			timeZone: 'UTC',
-		}).format(utcDate);
-	}
-
-	const parsedDate = new Date(value);
-	if (!Number.isNaN(parsedDate.getTime())) {
-		return new Intl.DateTimeFormat('en-GB', {
-			day: '2-digit',
-			month: 'short',
-			year: 'numeric',
-		}).format(parsedDate);
-	}
-
-	return value;
-}
-
-function getTournamentDateRange(details) {
-	const startDate = formatTournamentDate(details.start_date || details.startDate || details.date || '');
-	const endDate = formatTournamentDate(details.end_date || details.endDate || '');
-
-	return {
-		startDate,
-		endDate,
-	};
+// The status as the card says it: "Not started" rather than the stored "Not Started".
+function formatStatusLabel(status) {
+	return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 }
 
 // Browsing only. Creation moved to its own route, /tournaments/create — it was
@@ -331,12 +289,14 @@ export function TeamNameChangePopup({ onClose, onSubmit, currName, rank }) {
 	);
 }
 
-export function TournamentCard({ details, action, onRemove }) {
+export function TournamentCard({ details, action, onRemove, roleName }) {
 	const tournamentStatus = getTournamentStatus(details);
-	const tournamentType = formatTournamentType(getTournamentFormat(details));
-	const { startDate, endDate } = getTournamentDateRange(details);
+	const startDate = details.start_date || details.startDate || details.date || '';
+	const endDate = details.end_date || details.endDate || '';
+	const tile = getDateTile(startDate, endDate) ?? UNDATED_TILE;
 	const location = details.location || 'Location to be confirmed';
 	const statusVariant = getTournamentStatusVariant(details);
+	const countdown = statusVariant === 'upcoming' ? formatStartCountdown(startDate) : '';
 
 	const handleRemove = (e) => {
 		e.stopPropagation();
@@ -346,60 +306,48 @@ export function TournamentCard({ details, action, onRemove }) {
 	return (
 		<button
 			type="button"
-			className={`tournament-card tournament-card-${statusVariant}`}
+			className="tournament-card"
 			style={tournamentAccentStyle(details.id)}
 			onClick={action}>
-			<div className="tournament-card-identity" aria-hidden="true">
+			{/* The date is what tells two tournaments apart at a glance, so it leads,
+			    on the tournament's own colour and pattern. A grid item, so it always
+			    fills the card's height however the text beside it wraps. */}
+			<div className="tournament-card-tile">
 				<TournamentPattern tournamentId={details.id} />
+				<div className={`tournament-card-month${tile.spansMonths ? ' spans-months' : ''}`}>{tile.month}</div>
+				<div className={`tournament-card-day${tile.isRange ? ' is-range' : ''}`}>{tile.day}</div>
+				{tile.year && <div className="tournament-card-year">{tile.year}</div>}
 			</div>
-			<div className="tournament-card-accent" aria-hidden="true" />
-			{/* .tournament-card-body itself stays transparent — it is the frame that
-			    keeps the pattern always visible around the edges of the card, not
-			    just on hover. The text lives in .tournament-card-content, which has
-			    its own near-opaque backing (white in light mode, grey in dark, via
-			    --background-color) so the pattern never fights readability. */}
-			<div className="tournament-card-body">
-				<div className="tournament-card-content">
-					{onRemove && (
-						<button
-							type="button"
-							className="tournament-card-remove"
-							onClick={handleRemove}
-							aria-label="Remove from saved tournaments">
-							<Icon name={'delete'} size={16} fill='var(--error-color)' />
-						</button>
-					)}
-					<div className="tournament-card-topline">
-						<div className="tournament-card-name">{details.name}</div>
-						{tournamentStatus && <div className={`tournament-card-status ${statusVariant}`}>{tournamentStatus}</div>}
-					</div>
-					<div className="tournament-card-subline">
-						{tournamentType ? (
-							<div className="tournament-card-type">
-								<Icon name={'structure'} className="tournament-card-meta-icon" size={18} />
-								<span>{tournamentType}</span>
-							</div>
-						) : (
-							<div className="tournament-card-type tournament-card-type-empty">Tournament</div>
-						)}
-					</div>
-					<div className="tournament-card-meta">
-						<div className="tournament-card-location">
-							<Icon name={'location'} className="tournament-card-meta-icon" size={18} />
-							<span>{location}</span>
-						</div>
-					</div>
-					<div className="tournament-card-dates">
-						<div className="tournament-card-date">
-							<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
-							<span>{startDate ? `Starts: ${startDate}` : 'Start date to be confirmed'}</span>
-						</div>
-						<div className="tournament-card-date">
-							<Icon name={'calendar'} className="tournament-card-meta-icon" size={18} />
-							<span>{endDate ? `Ends: ${endDate}` : 'End date to be confirmed'}</span>
-						</div>
-					</div>
+			<div className={`tournament-card-body${onRemove ? ' has-remove' : ''}`}>
+				{onRemove && (
+					<button
+						type="button"
+						className="tournament-card-remove"
+						onClick={handleRemove}
+						aria-label="Remove from saved tournaments">
+						<Icon name={'delete'} size={16} fill='var(--error-color)' />
+					</button>
+				)}
+				<div className="tournament-card-name">{details.name}</div>
+				<div className="tournament-card-meta">
+					<Icon name={'location'} className="tournament-card-meta-icon" size={18} />
+					<span>{location}</span>
 				</div>
+				{roleName && (
+					<div className="tournament-card-meta">
+						<Icon name={'teams'} className="tournament-card-meta-icon" size={18} />
+						<span>{roleName}</span>
+					</div>
+				)}
+				{/* Kept even inside a status group: Profile reuses this card in lists
+				    that mix statuses. */}
+				{tournamentStatus && (
+					<div className="tournament-card-status">
+						<span className={`tournament-card-status-dot ${statusVariant}`} aria-hidden="true" />
+						<span>{formatStatusLabel(tournamentStatus)}</span>
+						{countdown && <span className="tournament-card-countdown">{countdown}</span>}
+					</div>
+				)}
 			</div>
 			<Icon name={'arrowRight'} className="tournament-card-action" label={`View ${details.name}`} />
 		</button>

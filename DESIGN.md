@@ -234,10 +234,11 @@ The neutral set is one system. Today it is declared three times under area prefi
 
 - **Container:** content is centred at a maximum of 1200px with `--space-4` side padding (`--space-3` on phones).
 - **Chrome:** a fixed 80px blue header on every page. At 769px and above it carries the desktop nav on the right. At 768px and below the nav moves to a fixed 64px blue bottom bar with Home, Discover, a raised circular Create button, Profile and Info.
-- **Breakpoints:** 768px is the main switch (27 rules); 480px and 1024px exist as tokens; 900px and 1200px appear once each.
+- **Breakpoints:** 768px is the main switch; 1024px adds side columns in the tournament view; 480px exists as a token; 900px and 1200px appear once each.
 - **Spacing:** a seven-step 4px-based scale (`--space-1` … `--space-7`, numbered by position). At 768px and below, steps 4–7 each drop one place (16→12, 24→16, 32→24, 40→32) so content gets the room margins were taking. Spacing tokens are for whitespace only; grid columns, tap targets, borders and 1px gaps keep literal values.
 - **Stacking:** z-index uses named roles in steps of 100: below, base, raised, chrome, menu, modal, confirm, toast, tooltip, loading.
-- **Overflow:** the page itself never scrolls sideways. The tab row, standings tables and the bracket each get their own horizontal scroll.
+- **Overflow:** the page itself never scrolls sideways. The tab row, standings tables and the bracket each get their own horizontal scroll. The tournament view's shell uses `overflow-x: clip`, not `hidden`: `hidden` makes it a scroll container, and nothing inside it can then be sticky.
+- **Wide layouts:** from 1024px the Fixtures filters and the Standings next-round preview move into a sticky side column (sticking at 96px, below the header).
 
 ## Elevation & Depth
 
@@ -278,7 +279,7 @@ Known drift: a completed fixture uses the error red. Reconcile when the status c
 ### Cards / Containers
 - **Panel:** surface, 1px border, 14px radius, 24px padding, no shadow. The base container of the tournament view.
 - **Division card:** a panel with a 3px left edge in the division's identity colour, a small stat grid (TEAMS, FIXTURES, ROUND) and a progress bar in the same colour.
-- **Fixture row:** surface, 1px border, 10px radius, a 3px left edge in the division colour when the tournament has several divisions. A three-column grid: meta (match number, court chip, division chip, stage), the two teams with sets won and per-set scores aligned under each other, then actions.
+- **Fixture row:** surface, 1px border, 10px radius. A three-column grid: meta (match number, court chip, the division as a dot in its identity colour plus its name, stage), the two teams with sets won and per-set scores aligned under each other, then actions. A live row takes a light green tint. There is no coloured left edge.
 - **Tournament card (Discover):** surface, 1px border, 12px radius. A full-height date tile on the left (76px, 64px on a phone) carries the month, day or day range and year on a flat identity-colour tint with the generated pattern. Beside it: the name, location, and a status dot with its label. An upcoming tournament adds how long until it starts.
 
 ### Inputs / Fields
@@ -290,6 +291,15 @@ Known drift: a completed fixture uses the error red. Reconcile when the status c
 - **Header:** fixed 80px Tourganiser Blue bar, wordmark left. Desktop links in white at 500, turning Aqua on hover; circular theme and profile buttons on the right.
 - **Bottom nav (≤768px):** fixed 64px blue bar, five items with icon over label, the centre Create button a raised Aqua circle.
 - **Tournament tabs:** one row that scrolls sideways, never wraps. Inactive tabs are muted; the active tab is blue at 600 with a 2px blue underline.
+
+### Tournament view
+One set of tabs for everyone. The viewer's role changes the order and prominence of what is on them, never which tabs exist.
+- **Overview:** a status line (status pill, location, progress), then sections in an order set per role. Spectators get On court now, Up next and division progress. Organiser roles get a queue first (results missing from finished slots, rounds ready to start, scoresheets for the next slot), then court cards, a day timeline (slots across, courts down, cells coloured played, live, no result, upcoming) and divisions. On desktop the court cards sit in the main column with the timeline, progress and recent results beside them.
+- **Court card:** court name, the two teams, sets so far and "Set N in progress". Spectators see six, then "Show all N courts".
+- **Fixtures time rail:** slots whose matches are all finished fold into one summary line that expands. A "Now" line sits above the first slot that has not started, today only. "Jump to now" floats bottom left on a phone, above the bottom nav. The division filter is chips with the division dot. From 1024px the filters and actions sit in a sticky left sidebar.
+- **Standings:** stage cards (Pools or League, Knockout, Final rankings) each carry a status line, and a stage still to come is shown disabled. Rows going through take a light success tint, and a 2px success line sits under the places every pool is guaranteed. Best runners-up are said in words, not drawn. Below 768px each pool is a card whose rows expand to points, ratios, scoreline counts and recent form (W/L chips). When a round can start, a next-round preview panel shows the matchups and its Start button, beside the tables from 1024px and above them below.
+- **Teams:** a segmented Pools / Full list switch, the chosen half filled blue. Pools view: a heading per pool (a neutral letter tile, the name, a rule) over team cards with a seed badge. Full list: the seed list with a neutral pool tile per row. A row whose pool would change is tinted and its tile ringed in blue.
+- **Settings:** sections stack, and nothing sits side by side inside one. From 768px a sticky list on the left jumps between sections and follows the scroll. Below 768px each section is an accordion row (56px) showing its current value. Collaborators has a role grid (capabilities down, roles across, ticks in success green). Scoresheets are cards, the one in use ringed blue with an "In use" badge, plus a dashed upload card. Tournament status is three numbered steps, the current one filled blue.
 
 ### Schedule maker
 A dense tool: the fixtures list on the left and the board filling the rest, with nothing else on screen until it is asked for.

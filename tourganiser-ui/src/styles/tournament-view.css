@@ -55,8 +55,13 @@ body.dark {
 	padding: var(--space-4) var(--space-4) 48px;
 	color: var(--secondary-text-color);
 	/* The page itself must never scroll sideways. Only the nav and, later, the
-	   standings tables and the bracket are allowed their own axis. */
+	   standings tables and the bracket are allowed their own axis.
+	   clip rather than hidden: hidden makes the shell a scroll container, and
+	   every position: sticky inside it (the Fixtures sidebar, the Standings
+	   preview, the Settings list) then sticks to a box that never scrolls.
+	   hidden stays first as the fallback for browsers without clip. */
 	overflow-x: hidden;
+	overflow-x: clip;
 }
 
 /* --- subheader ---------------------------------------------------------- */
@@ -892,6 +897,637 @@ body.dark .tv-division-badge {
 	color: var(--tv-muted);
 }
 
+/* --- overview: happening now -------------------------------------------- */
+
+/* One list of sections, ordered per role by an inline `order`. On a phone the
+   three area wrappers dissolve (display: contents) so every section stacks in
+   that one order. From 1024px the wrappers come back as a main column, a
+   narrower side column and a full-width run underneath. */
+.tv-ov {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-6);
+}
+
+.tv-ov-main,
+.tv-ov-side,
+.tv-ov-full {
+	display: contents;
+}
+
+.tv-ov-item {
+	min-width: 0;
+}
+
+@media (min-width: 1024px) {
+	.tv-ov {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+		align-items: start;
+	}
+
+	.tv-ov:has(.tv-ov-side:empty) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.tv-ov-main,
+	.tv-ov-side,
+	.tv-ov-full {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-6);
+		min-width: 0;
+	}
+
+	.tv-ov-side:empty {
+		display: none;
+	}
+
+	.tv-ov-full {
+		grid-column: 1 / -1;
+	}
+}
+
+.tv-ov-status {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-1) var(--space-3);
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-status-part {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	white-space: nowrap;
+}
+
+.tv-ov-status-part svg {
+	fill: var(--tv-muted);
+}
+
+.tv-ov-court-select {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin-bottom: var(--space-3);
+	font-size: 0.84rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-court-select select {
+	min-height: 44px;
+	min-width: 0;
+	max-width: 220px;
+	padding: var(--space-2);
+	border: 1px solid var(--tv-border);
+	border-radius: 9px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.9rem;
+}
+
+.tv-ov-meta {
+	font-size: 0.82rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-link {
+	padding: var(--space-1) 0;
+	border: none;
+	background: none;
+	color: var(--main-color);
+	font-size: 0.86rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.tv-ov-link:hover {
+	text-decoration: underline;
+}
+
+/* The small action on a card or a list row. Outlined in the action blue; the
+   primary variant fills, for the one thing a row is there to do. */
+.tv-ov-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-1);
+	flex: 0 0 auto;
+	min-height: 36px;
+	padding: var(--space-1) var(--space-3);
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--main-color);
+	font-size: 0.84rem;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-ov-action svg {
+	fill: currentColor;
+}
+
+.tv-ov-action:hover:not(:disabled) {
+	border-color: var(--main-color);
+}
+
+.tv-ov-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tv-ov-action--primary {
+	border-color: var(--main-color);
+	background: var(--main-color);
+	/* Filled surface, so the white token is the right one. */
+	color: var(--text-color);
+}
+
+.tv-ov-action--primary:hover:not(:disabled) {
+	background: var(--quarternary-color);
+	border-color: var(--quarternary-color);
+}
+
+.tv-ov-panel {
+	margin: 0;
+	padding: var(--space-3);
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+}
+
+/* Court cards. A live court's border picks up the live green; nothing else on
+   the card is coloured except the division badge. */
+.tv-ov-courts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+	gap: var(--space-3);
+}
+
+.tv-ov-court {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+}
+
+.tv-ov-court--live {
+	border-color: rgb(from var(--success-color) r g b / 0.55);
+}
+
+.tv-ov-more {
+	display: block;
+	width: 100%;
+	margin-top: var(--space-3);
+	padding: var(--space-2);
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+	color: var(--main-color);
+	font-size: 0.88rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.tv-ov-more:hover {
+	border-color: var(--main-color);
+}
+
+.tv-ov-court-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.tv-ov-court-name {
+	font-size: 0.82rem;
+	font-weight: 700;
+	color: var(--tv-muted);
+}
+
+.tv-ov-court-teams {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.tv-ov-team {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 1.5em auto;
+	align-items: baseline;
+	gap: var(--space-2);
+	font-size: 0.95rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-ov-team-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tv-ov-team.is-leading .tv-ov-team-name,
+.tv-ov-team.is-leading .tv-ov-team-sets {
+	font-weight: 700;
+}
+
+.tv-ov-team-sets {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-ov-team-points {
+	font-size: 0.82rem;
+	color: var(--tv-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.tv-ov-court-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	min-height: 36px;
+}
+
+.tv-ov-court-note {
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-court-next {
+	display: flex;
+	gap: var(--space-2);
+	margin: 0;
+	padding-top: var(--space-2);
+	border-top: 1px dashed var(--tv-border);
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+	min-width: 0;
+}
+
+.tv-ov-court-next b {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+/* Fixture lines: lead (court or match number), teams over division and round,
+   then an optional action. */
+.tv-ov-list {
+	list-style: none;
+	margin: 0;
+	padding: 0 var(--space-3);
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+}
+
+.tv-ov-list--nested {
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: none;
+}
+
+.tv-ov-line {
+	display: grid;
+	grid-template-columns: 72px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-ov-line:first-child {
+	border-top: none;
+}
+
+.tv-ov-line-lead {
+	display: flex;
+	flex-direction: column;
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: var(--tv-muted);
+}
+
+.tv-ov-late {
+	font-weight: 600;
+	color: var(--warning-color);
+}
+
+.tv-ov-line-body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.tv-ov-line-teams {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.92rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-ov-line-meta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+/* The queue: a count, what needs doing, and the button that does it. */
+.tv-ov-queue {
+	background: var(--tv-surface);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+}
+
+.tv-ov-queue > * + * {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-ov-queue-item {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3);
+}
+
+.tv-ov-queue-group .tv-ov-list {
+	margin: 0 var(--space-3) var(--space-2) calc(var(--space-3) + 26px + var(--space-3));
+}
+
+.tv-ov-count {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	min-width: 26px;
+	height: 26px;
+	padding: 0 7px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface-alt);
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: var(--secondary-text-color);
+}
+
+.tv-ov-count.is-warn {
+	border-color: rgb(from var(--warning-color) r g b / 0.45);
+	background: rgb(from var(--warning-color) r g b / 0.14);
+	color: var(--warning-color);
+}
+
+.tv-ov-queue-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.tv-ov-queue-title {
+	font-size: 0.92rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.tv-ov-queue-detail {
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+}
+
+/* The scorer's court filter. A chosen chip is in the action blue. */
+.tv-ov-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-bottom: var(--space-3);
+}
+
+.tv-ov-chip {
+	min-height: 36px;
+	padding: var(--space-1) var(--space-3);
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.84rem;
+	cursor: pointer;
+}
+
+.tv-ov-chip.is-on {
+	border-color: var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+	font-weight: 600;
+}
+
+/* The day timeline: slots down, courts across. */
+.tv-ov-timeline {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin: 0;
+	padding: 0;
+}
+
+.tv-ov-slot {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr);
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.tv-ov-slot-time {
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-ov-slot.is-past .tv-ov-slot-time {
+	color: var(--secondary-text-color);
+	font-weight: 600;
+}
+
+/* One row per slot whatever the court count: cells share the width, up to
+   18px each, and narrow rather than wrap when a venue has many courts. */
+.tv-ov-cells {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(4px, 18px);
+	gap: 3px;
+}
+
+.tv-ov-cell {
+	display: inline-block;
+	width: 18px;
+	height: 12px;
+	border-radius: 3px;
+	background: rgb(from var(--secondary-text-color) r g b / 0.07);
+}
+
+.tv-ov-cell--done {
+	background: rgb(from var(--secondary-text-color) r g b / 0.3);
+}
+
+.tv-ov-cell--live {
+	background: var(--success-color);
+}
+
+.tv-ov-cell--upcoming {
+	background: rgb(from var(--main-color) r g b / 0.55);
+}
+
+.tv-ov-cell--missing {
+	background: none;
+	border: 1.5px dashed var(--warning-color);
+}
+
+.tv-ov-cells .tv-ov-cell {
+	width: auto;
+}
+
+.tv-ov-legend {
+	list-style: none;
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1) var(--space-3);
+	margin: var(--space-3) 0 0;
+	padding: 0;
+	font-size: 0.75rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-legend li {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+.tv-ov-panel > .tv-subtle-action {
+	margin-top: var(--space-3);
+}
+
+/* Division progress, one row per division. The dot is the division's identity
+   colour; the row opens its standings. */
+.tv-ov-divisions {
+	list-style: none;
+	padding: 0 var(--space-3);
+}
+
+.tv-ov-divisions li + li {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-ov-division {
+	display: grid;
+	grid-template-columns: 10px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--space-1) var(--space-3);
+	width: 100%;
+	min-height: 44px;
+	padding: var(--space-2) 0;
+	border: none;
+	background: none;
+	color: var(--secondary-text-color);
+	text-align: left;
+	cursor: pointer;
+}
+
+.tv-ov-division:hover .tv-ov-division-name {
+	color: var(--main-color);
+}
+
+.tv-ov-division-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--tv-division-color, var(--tv-muted));
+}
+
+.tv-ov-division-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.tv-ov-division-name {
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.tv-ov-division-round {
+	font-size: 0.76rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-division-count {
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-ov-division-bar {
+	grid-column: 2 / -1;
+	height: 4px;
+}
+
+@media (max-width: 768px) {
+	.tv-ov,
+	.tv-ov-main,
+	.tv-ov-side,
+	.tv-ov-full {
+		gap: var(--space-5);
+	}
+
+	/* Touch targets. The card footer only grows with the button in it. */
+	.tv-ov-action,
+	.tv-ov-chip,
+	.tv-ov-more {
+		min-height: 44px;
+	}
+
+	.tv-ov-court-foot {
+		min-height: 0;
+	}
+
+	.tv-ov-line {
+		grid-template-columns: 60px minmax(0, 1fr) auto;
+		gap: var(--space-2);
+	}
+
+	/* Two short lines read better than one truncated one at phone width. */
+	.tv-ov-line-teams {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+
+	.tv-ov-queue-group .tv-ov-list {
+		margin-left: var(--space-3);
+	}
+}
+
 /* --- fixtures ----------------------------------------------------------- */
 
 .tv-fixtures-toolbar {
@@ -1049,17 +1685,210 @@ body.dark .tv-division-badge {
 	column-gap: var(--space-4);
 	padding: var(--space-4) var(--space-3);
 	background: var(--tv-surface);
+	/* Neutral on every side. The division is the dot in the meta line
+	   (.tv-division-inline), which replaced a 3px left edge in its colour. */
 	border: 1px solid var(--tv-border);
-	/* --tv-division-color is set inline by FixtureRow only in a multi-division
-	   tournament (showDivision); a single-division tournament has nothing to
-	   differentiate and keeps the plain border, matching doc §6's "same component
-	   structure" — the accent is additive, not a restyle. */
-	border-left: 3px solid var(--tv-division-color, var(--tv-border));
 	border-radius: 10px;
 }
 
 .tv-fixture-row--cancelled {
 	opacity: 0.65;
+}
+
+/* A match being played reads apart from the rest of its slot: a light green
+   wash and a green border, the live status colour. */
+.tv-fixture-row--live {
+	border-color: rgb(from var(--success-color) r g b / 0.5);
+	background: rgb(from var(--success-color) r g b / 0.07);
+}
+
+.tv-division-inline {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+	white-space: nowrap;
+}
+
+.tv-division-inline-dot,
+.tv-division-chip-dot {
+	flex: none;
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--tv-division-color, var(--tv-muted));
+}
+
+/* The division filter: one chip per division with its dot, "All" first. The
+   chosen chip is in the action blue; the dot keeps the division's colour. */
+.tv-filter--chips {
+	flex-basis: 100%;
+}
+
+.tv-division-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.tv-division-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 36px;
+	padding: var(--space-1) var(--space-3);
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.84rem;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-division-chip:hover {
+	border-color: var(--main-color);
+}
+
+.tv-division-chip[aria-pressed='true'] {
+	border-color: var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+	font-weight: 600;
+}
+
+/* A run of finished slots, folded to one line that opens it. Dashed, like a
+   break, because it stands for rows rather than being one. */
+.tv-fold {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	min-height: 44px;
+	margin: var(--space-2) 0;
+	padding: 0 var(--space-3);
+	border: 1px dashed var(--tv-border);
+	border-radius: 10px;
+	background: none;
+	color: var(--tv-muted);
+	font: inherit;
+	font-size: 0.88rem;
+	text-align: left;
+	cursor: pointer;
+}
+
+.tv-fold:hover {
+	border-color: var(--main-color);
+	color: var(--secondary-text-color);
+}
+
+.tv-fold-chevron {
+	flex: none;
+	fill: currentColor;
+	transform: rotate(-90deg);
+	transition: transform 0.15s ease;
+}
+
+.tv-fold.is-open .tv-fold-chevron {
+	transform: rotate(0deg);
+}
+
+/* Between the slots that have started and those that have not, today only. */
+.tv-now-line {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin: var(--space-2) 0;
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: var(--main-color);
+	font-variant-numeric: tabular-nums;
+	scroll-margin: 120px;
+}
+
+.tv-now-line::after {
+	content: '';
+	flex: 1;
+	height: 2px;
+	border-radius: 2px;
+	background: var(--main-color);
+}
+
+/* Phones only: floats above the bottom navigation, opposite the help button. */
+.tv-jump-now {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.tv-jump-now {
+		display: inline-flex;
+		align-items: center;
+		position: fixed;
+		left: var(--space-4);
+		bottom: calc(64px + var(--space-3) + env(safe-area-inset-bottom, 0px));
+		z-index: var(--z-chrome);
+		min-height: 44px;
+		padding: 0 var(--space-4);
+		border: none;
+		border-radius: 999px;
+		background: var(--main-color);
+		color: var(--text-color);
+		font-size: 0.88rem;
+		font-weight: 600;
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+		cursor: pointer;
+	}
+
+	.tv-division-chip {
+		min-height: 44px;
+	}
+}
+
+/* From 1024px the filters and actions leave the top of the list for a sticky
+   sidebar on its left: actions first, then the filters stacked. */
+@media (min-width: 1024px) {
+	.tv-fixtures--sided {
+		display: grid;
+		grid-template-columns: 240px minmax(0, 1fr);
+		gap: var(--space-6);
+		align-items: start;
+	}
+
+	.tv-fixtures--sided .tv-fixtures-toolbar {
+		position: sticky;
+		top: 96px;
+		flex-direction: column;
+		align-items: stretch;
+		gap: var(--space-4);
+		margin-bottom: 0;
+	}
+
+	.tv-fixtures--sided .tv-toolbar-actions {
+		order: -1;
+		flex-direction: column;
+	}
+
+	.tv-fixtures--sided .tv-toolbar-actions > * {
+		justify-content: center;
+		text-align: center;
+	}
+
+	.tv-fixtures--sided .tv-filters {
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+
+	.tv-fixtures--sided .tv-filter select,
+	.tv-fixtures--sided .tv-filter input {
+		width: 100%;
+		max-width: none;
+	}
+
+	.tv-fixtures-main {
+		min-width: 0;
+	}
 }
 
 /* The left column: status and match number, then court, division and round, then
@@ -1348,43 +2177,106 @@ body.dark .tv-division-badge {
 	margin-bottom: var(--space-1);
 }
 
-/* auto margin, not just position in the flex row: DivisionSelector renders
-   nothing for a single-division tournament, which can leave this as the
-   toolbar's only child. justify-content: space-between only pins it right
-   when there is something on the other side to space *from*. */
-.tv-standings-progress-action {
-	margin-left: auto;
-}
-
 .tv-standings-groups-toolbar {
 	display: flex;
 	justify-content: flex-end;
 	margin-bottom: var(--space-3);
 }
 
-.tv-stage-tabs {
-	display: flex;
-	gap: var(--space-1);
+/* One card per stage, in playing order, each with its status. A stage still to
+   come is shown but disabled, so the reader sees what is left. */
+.tv-stage-cards {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr);
+	gap: var(--space-2);
 	margin-bottom: var(--space-4);
 }
 
-.tv-stage-tab {
-	padding: var(--space-2) var(--space-4);
+.tv-stage-card {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	min-width: 0;
+	min-height: 56px;
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--tv-border);
-	border-radius: 999px;
+	border-radius: 12px;
 	background: var(--tv-surface);
-	color: var(--tv-muted);
-	font-size: 0.85rem;
-	font-weight: 600;
-	white-space: nowrap;
+	color: var(--secondary-text-color);
+	text-align: left;
 	cursor: pointer;
 }
 
-.tv-stage-tab.active {
-	border-color: transparent;
+.tv-stage-card:disabled {
+	cursor: default;
+	opacity: 0.6;
+}
+
+.tv-stage-card--active {
+	border-color: var(--main-color);
+	box-shadow: inset 0 0 0 1px var(--main-color);
+}
+
+.tv-stage-card-label {
+	font-size: 0.9rem;
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+
+.tv-stage-card--active .tv-stage-card-label {
+	color: var(--main-color);
+}
+
+.tv-stage-card-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+.tv-stage-card-status::before {
+	content: '';
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--tv-border);
+}
+
+.tv-stage-card-status--done::before {
+	background: var(--tv-muted);
+}
+
+.tv-stage-card-status--live::before {
+	background: var(--success-color);
+}
+
+.tv-stage-card-status--ready {
+	color: var(--main-color);
+	font-weight: 600;
+}
+
+.tv-stage-card-status--ready::before {
 	background: var(--main-color);
-	/* Filled surface, so the white token is the right one here. */
-	color: var(--text-color);
+}
+
+/* The tables, with the next-round preview beside them from 1024px and above
+   them below that. */
+.tv-standings-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.tv-standings-main {
+	min-width: 0;
+}
+
+.tv-standings-body > .tv-next-round {
+	order: -1;
 }
 
 .tv-standings-round + .tv-standings-round {
@@ -1564,6 +2456,270 @@ body.dark .tv-division-badge {
 	flex: 0 0 auto;
 	font-size: 0.78rem;
 	color: var(--tv-muted);
+}
+
+/* Qualification. Rows going through get a light success tint; the line sits
+   under the places every pool is guaranteed. The tint is layered over the
+   surface rather than replacing it, so the sticky rank and team cells stay
+   opaque while the figures scroll under them. */
+.tv-standings-cut-note {
+	margin: 0 0 var(--space-3);
+	font-size: 0.84rem;
+	color: var(--tv-muted);
+}
+
+.tv-standings-table .tv-standings-row--through th,
+.tv-standings-table .tv-standings-row--through td {
+	background:
+		linear-gradient(rgb(from var(--success-color) r g b / 0.1), rgb(from var(--success-color) r g b / 0.1)),
+		var(--tv-surface);
+}
+
+.tv-standings-table .tv-standings-row--cut th,
+.tv-standings-table .tv-standings-row--cut td {
+	border-bottom: 2px solid var(--success-color);
+}
+
+/* Phones: one card per pool. Five figures a row; a tap opens the rest. */
+.tv-pool-card {
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+	overflow: hidden;
+}
+
+.tv-pool-card-head,
+.tv-pool-card-summary {
+	display: grid;
+	grid-template-columns: 22px minmax(0, 1fr) 22px 40px 44px 16px;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 0 var(--space-3);
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-pool-card-head {
+	min-height: 32px;
+	border-bottom: 1px solid var(--tv-border);
+	font-size: 0.72rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+	text-align: right;
+}
+
+.tv-pool-card-rows {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tv-pool-card-row + .tv-pool-card-row {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-pool-card-row--through {
+	background: rgb(from var(--success-color) r g b / 0.1);
+}
+
+.tv-pool-card-row--cut {
+	border-bottom: 2px solid var(--success-color);
+}
+
+.tv-pool-card-row--cut + .tv-pool-card-row {
+	border-top: none;
+}
+
+.tv-pool-card-summary {
+	width: 100%;
+	min-height: 48px;
+	border: none;
+	background: transparent;
+	color: var(--secondary-text-color);
+	font: inherit;
+	font-size: 0.9rem;
+	text-align: right;
+	cursor: pointer;
+}
+
+.tv-pool-card-rank {
+	text-align: center;
+	color: var(--tv-muted);
+}
+
+.tv-pool-card-team {
+	min-width: 0;
+	text-align: left;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.tv-pool-card-chevron {
+	transform: rotate(-90deg);
+	color: var(--tv-muted);
+	transition: transform 160ms ease-out;
+}
+
+.tv-pool-card-chevron--open {
+	transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.tv-pool-card-chevron {
+		transition: none;
+	}
+}
+
+.tv-pool-card-detail {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--space-3) var(--space-2);
+	margin: 0;
+	padding: var(--space-1) var(--space-3) var(--space-3) calc(var(--space-3) + 22px + var(--space-2));
+	font-size: 0.82rem;
+}
+
+.tv-pool-card-detail dt {
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+}
+
+.tv-pool-card-detail dd {
+	margin: 0;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--secondary-text-color);
+}
+
+.tv-pool-card-form {
+	grid-column: 1 / -1;
+}
+
+.tv-form {
+	display: inline-flex;
+	gap: 4px;
+}
+
+.tv-form-chip {
+	display: inline-grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	font-size: 0.72rem;
+	font-weight: 700;
+}
+
+.tv-form-chip--won {
+	background: rgb(from var(--success-color) r g b / 0.16);
+	color: var(--success-color);
+}
+
+.tv-form-chip--lost {
+	background: var(--tv-surface-alt);
+	color: var(--tv-muted);
+}
+
+.tv-form-empty {
+	font-weight: 400;
+	color: var(--tv-muted);
+}
+
+/* Next-round preview. */
+.tv-next-round {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-4);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+}
+
+.tv-next-round-eyebrow {
+	margin: 0;
+	font-size: 0.74rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tv-muted);
+}
+
+.tv-next-round-name {
+	margin: 0;
+	font-size: 1.05rem;
+}
+
+.tv-next-round-sub,
+.tv-next-round-note {
+	margin: 0;
+	font-size: 0.84rem;
+	color: var(--tv-muted);
+}
+
+.tv-next-round-matchups {
+	list-style: none;
+	margin: var(--space-1) 0;
+	padding: 0;
+}
+
+.tv-next-round-matchup {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-1) var(--space-2);
+	padding: var(--space-2) 0;
+}
+
+.tv-next-round-matchup + .tv-next-round-matchup {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-next-round-vs {
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+.tv-next-round-tag {
+	padding: 1px 8px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	font-size: 0.72rem;
+	color: var(--tv-muted);
+}
+
+.tv-next-round-start {
+	justify-content: center;
+	margin-top: var(--space-1);
+}
+
+@media (max-width: 767.98px) {
+	.tv-standings-group .tv-table-scroll,
+	.tv-standings-groups-toolbar {
+		display: none;
+	}
+}
+
+@media (min-width: 768px) {
+	.tv-pool-card {
+		display: none;
+	}
+}
+
+@media (min-width: 1024px) {
+	.tv-standings-body--sided {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 300px;
+		gap: var(--space-5);
+		align-items: start;
+	}
+
+	.tv-standings-body > .tv-next-round {
+		order: 0;
+		position: sticky;
+		top: 96px;
+	}
 }
 
 /* --- knockout bracket --------------------------------------------------- */
@@ -1770,54 +2926,95 @@ body.dark .tv-division-badge {
 	gap: var(--space-2);
 }
 
-/* One card per pool, two per row once there's room. Single column below
-   768px, matching the mobile toggle showing one pane at a time. */
-.tv-teams-groups {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: var(--space-4);
+/* Pools view: a heading per pool (neutral letter tile, name, rule) with its
+   team cards under it, two to a row from 768px. */
+.tv-pools {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-5);
 }
 
-/* Mirrors .tv-bracket-match / .tv-bracket-match-head / .tv-bracket-participant
-   (the knockout MatchCard) rather than reusing those selectors — a pool card
-   has no match outcome or winner to show, and the two stay free to change
-   independently. */
-.tv-teams-group-card {
-	border: 1px solid var(--tv-border);
-	border-radius: 10px;
-	background: var(--tv-surface);
-	overflow: hidden;
-}
-
-.tv-teams-group-card-head {
-	padding: var(--space-2) var(--space-3);
-	background: var(--tv-surface-alt);
-	font-size: 0.72rem;
-	color: var(--tv-muted);
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-}
-
-.tv-teams-group-card-row {
+.tv-pool-head {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
-	padding: var(--space-2) var(--space-3);
-	font-size: 0.85rem;
+	margin-bottom: var(--space-2);
+}
+
+.tv-pool-name {
+	margin: 0;
+	font-size: 0.95rem;
 	color: var(--secondary-text-color);
-	overflow-wrap: anywhere;
 }
 
-.tv-teams-group-card-row + .tv-teams-group-card-row {
-	border-top: 1px solid var(--tv-border);
+.tv-pool-rule {
+	flex: 1;
+	height: 1px;
+	background: var(--tv-border);
 }
 
-.tv-teams-group-card-seed {
-	flex: 0 0 auto;
-	min-width: 1.5em;
-	color: var(--tv-muted);
+.tv-pool-teams {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--space-2);
+}
+
+.tv-pool-team {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-width: 0;
+	min-height: 56px;
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+}
+
+.tv-pool-team .tv-team {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.tv-pool-seed {
+	flex: none;
+	display: grid;
+	place-items: center;
+	min-width: 30px;
+	height: 24px;
+	padding: 0 7px;
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface-alt);
 	font-size: 0.75rem;
+	font-weight: 700;
 	font-variant-numeric: tabular-nums;
+	color: var(--tv-muted);
+}
+
+/* A pool letter. Neutral: identity colours belong to divisions. */
+.tv-pool-tile {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border: 1px solid var(--tv-border);
+	border-radius: 7px;
+	background: var(--tv-surface-alt);
+	font-size: 0.8rem;
+	font-weight: 800;
+	color: var(--secondary-text-color);
+}
+
+/* The pool this seed moves to when saved: ringed in the action blue. */
+.tv-pool-tile--changed {
+	border-color: var(--main-color);
+	box-shadow: 0 0 0 2px rgb(from var(--main-color) r g b / 0.35);
+	color: var(--main-color);
 }
 
 .tv-team-row {
@@ -1885,6 +3082,27 @@ body.dark .tv-division-badge {
    it costs no layout. */
 .tv-team-row--over {
 	border-color: var(--main-color);
+}
+
+/* A team whose pool changes with the pending seeding. */
+.tv-team-row--moved {
+	border-color: rgb(from var(--main-color) r g b / 0.6);
+	background: rgb(from var(--main-color) r g b / 0.08);
+}
+
+.tv-teams-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2) var(--space-4);
+	margin: var(--space-3) 0 0;
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+}
+
+.tv-teams-legend span {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
 }
 
 /* The order is the seeding, and nothing else in this tab says so. Shown in both
@@ -2098,69 +3316,56 @@ body.dark .tv-division-badge {
 	min-width: 0;
 }
 
-/* Classic divisions: Generated Groups beside the Team List, split by a
-   vertical rule so the two read as separate sections rather than one
-   continuous area. Below 768px there's no room for both, so the icon toggle
-   above switches between them instead of stacking. */
+/* A Classic division's count and its Pools / Full list switch, at every
+   width. A segmented control: the chosen half fills with the action blue. */
+.tv-teams-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: var(--space-2) var(--space-3);
+	margin-bottom: var(--space-3);
+}
+
+.tv-teams-bar .tv-fixtures-count {
+	margin: 0;
+}
+
 .tv-teams-view-toggle {
 	display: inline-flex;
-	padding: var(--space-1);
-	margin-bottom: var(--space-3);
-	border-radius: 14px;
-	background: var(--tv-surface);
+	padding: 3px;
 	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
 }
 
 .tv-teams-view-toggle button {
+	min-height: 36px;
+	padding: 0 var(--space-4);
+	border: none;
+	border-radius: 999px;
 	background: transparent;
-	color: var(--tv-muted);
-	padding: var(--space-2) var(--space-3);
-	border-radius: 10px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	border: var(--background-color);
+	color: var(--secondary-text-color);
+	font-size: 0.86rem;
+	font-weight: 600;
+	cursor: pointer;
 }
 
-.tv-teams-view-toggle button.active {
+.tv-teams-view-toggle button[aria-pressed='true'] {
 	background: var(--main-color);
+	/* Filled surface, so the white token is the right one. */
+	color: var(--text-color);
 }
 
-.tv-teams-columns-groups,
-.tv-teams-columns-list {
-	display: none;
-}
-
-.tv-teams-columns-groups--active,
-.tv-teams-columns-list--active {
-	display: block;
+@media (max-width: 768px) {
+	.tv-teams-view-toggle button {
+		min-height: 44px;
+	}
 }
 
 @media (min-width: 768px) {
-	.tv-teams-view-toggle {
-		display: none;
-	}
-
-	/* Unequal on purpose: two group cards per row need more width than the
-	   team list does. */
-	.tv-teams-columns {
-		display: grid;
-		grid-template-columns: 1.15fr 1fr;
-		gap: var(--space-5);
-	}
-
-	.tv-teams-groups {
-		grid-template-columns: 1fr 1fr;
-	}
-
-	.tv-teams-columns-groups,
-	.tv-teams-columns-list {
-		display: block;
-	}
-
-	.tv-teams-columns-groups {
-		padding-right: var(--space-5);
-		border-right: 4px solid var(--tv-border);
+	.tv-pool-teams {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
 	/* Non-Classic divisions: the flat team list splits into two columns,
@@ -2276,20 +3481,6 @@ body.dark .tv-division-badge {
 	gap: var(--space-2);
 }
 
-.tv-role-list {
-	display: grid;
-	gap: var(--space-1);
-	margin: 0 0 var(--space-3);
-	padding: 0;
-	list-style: none;
-	font-size: 0.86rem;
-	color: var(--tv-muted);
-}
-
-.tv-role-list strong {
-	color: var(--secondary-text-color);
-}
-
 .tv-settings-row-name {
 	margin: 0;
 	font-weight: 600;
@@ -2338,6 +3529,365 @@ body.dark .tv-division-badge {
 .tv-danger-action:disabled {
 	opacity: 0.5;
 	cursor: default;
+}
+
+/* The frame: sections stacked, with a list on the left from 768px that jumps
+   between them. Below that, each section is an accordion whose closed row
+   shows its current value. */
+.tv-settings-sections {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-6);
+	min-width: 0;
+}
+
+.tv-settings-section {
+	/* Clears the sticky site header when the list scrolls a section into view. */
+	scroll-margin-top: 96px;
+}
+
+.tv-settings-section-head .tv-band-heading {
+	margin-bottom: var(--space-1);
+}
+
+.tv-settings-section-sub {
+	margin: 0 0 var(--space-3);
+	font-size: 0.86rem;
+	color: var(--tv-muted);
+}
+
+.tv-settings-nav ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.tv-settings-nav-item {
+	width: 100%;
+	min-height: 40px;
+	padding: var(--space-2) var(--space-3);
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--tv-muted);
+	font-size: 0.9rem;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+}
+
+.tv-settings-nav-item:hover {
+	background: var(--tv-surface-alt);
+	color: var(--secondary-text-color);
+}
+
+.tv-settings-nav-item[aria-current='true'] {
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+}
+
+.tv-settings-nav-item--danger {
+	color: var(--error-color);
+}
+
+@media (min-width: 768px) {
+	.tv-settings {
+		display: grid;
+		grid-template-columns: 200px minmax(0, 1fr);
+		gap: var(--space-6);
+		align-items: start;
+	}
+
+	.tv-settings-nav {
+		position: sticky;
+		top: 96px;
+	}
+}
+
+/* Phone accordions. Flat rows in one bordered list. */
+@media (max-width: 767.98px) {
+	.tv-settings-sections {
+		gap: 0;
+		border: 1px solid var(--tv-border);
+		border-radius: 14px;
+		background: var(--tv-surface);
+		overflow: visible;
+	}
+
+	.tv-settings-section + .tv-settings-section {
+		border-top: 1px solid var(--tv-border);
+	}
+
+	.tv-settings-section-body {
+		padding: 0 var(--space-3) var(--space-4);
+	}
+}
+
+.tv-settings-acc-heading {
+	margin: 0;
+	font-size: inherit;
+}
+
+.tv-settings-acc {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	width: 100%;
+	min-height: 56px;
+	padding: var(--space-2) var(--space-3);
+	border: none;
+	background: none;
+	color: var(--secondary-text-color);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.tv-settings-acc-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.98rem;
+	font-weight: 700;
+}
+
+.tv-settings-section--danger .tv-settings-acc-title {
+	color: var(--error-color);
+}
+
+.tv-settings-acc-summary {
+	flex: 0 1 auto;
+	min-width: 0;
+	font-size: 0.84rem;
+	color: var(--tv-muted);
+	text-align: right;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tv-settings-acc-chevron {
+	flex: none;
+	color: var(--tv-muted);
+	transform: rotate(-90deg);
+	transition: transform 160ms ease-out;
+}
+
+.tv-settings-acc-chevron--open {
+	transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.tv-settings-acc-chevron {
+		transition: none;
+	}
+}
+
+/* Collaborators: what each role can do. */
+.tv-role-grid-wrap {
+	margin-bottom: var(--space-4);
+}
+
+.tv-role-grid {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.86rem;
+}
+
+.tv-role-grid th,
+.tv-role-grid td {
+	padding: var(--space-2);
+	border-bottom: 1px solid var(--tv-border);
+	text-align: center;
+	color: var(--secondary-text-color);
+}
+
+.tv-role-grid thead th {
+	font-size: 0.74rem;
+	font-weight: 600;
+	color: var(--tv-muted);
+	vertical-align: bottom;
+}
+
+.tv-role-grid .tv-role-grid-what {
+	text-align: left;
+	font-weight: 400;
+}
+
+.tv-role-grid tbody th.tv-role-grid-what {
+	width: 50%;
+}
+
+.tv-role-grid td.tv-role-grid-yes {
+	font-weight: 700;
+	color: var(--success-color);
+}
+
+.tv-role-grid td.tv-role-grid-no {
+	color: var(--tv-muted);
+}
+
+.tv-role-grid-wrap .tv-settings-note {
+	margin: var(--space-2) 0 0;
+}
+
+/* Scoresheets: one card per template, the one in use ringed. */
+.tv-template-cards {
+	display: grid;
+	gap: var(--space-2);
+	margin: 0 0 var(--space-3);
+	padding: 0;
+	list-style: none;
+}
+
+.tv-template-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: var(--space-2) var(--space-3);
+	padding: var(--space-3);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+}
+
+.tv-template-card--in-use {
+	border-color: var(--main-color);
+	box-shadow: inset 0 0 0 1px var(--main-color);
+}
+
+.tv-template-card--upload {
+	border-style: dashed;
+	background: transparent;
+}
+
+.tv-template-card--loading {
+	justify-content: flex-start;
+	font-size: 0.86rem;
+	color: var(--tv-muted);
+}
+
+.tv-template-card-body {
+	flex: 1 1 220px;
+	min-width: 0;
+}
+
+.tv-template-card-name {
+	margin: 0;
+	font-weight: 700;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-template-card-meta,
+.tv-template-card-warning {
+	margin: 2px 0 0;
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+}
+
+.tv-template-card-warning {
+	color: var(--warning-color);
+}
+
+.tv-template-card-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.tv-template-card-actions .tv-subtle-action {
+	min-height: 36px;
+	padding-inline: var(--space-3);
+	border-color: var(--tv-border);
+	color: var(--secondary-text-color);
+	font-weight: 600;
+}
+
+.tv-template-card-badge {
+	padding: 2px 10px;
+	border-radius: 999px;
+	background: rgb(from var(--main-color) r g b / 0.14);
+	color: var(--main-color);
+	font-size: 0.76rem;
+	font-weight: 700;
+}
+
+/* Tournament status: three steps, the current one marked. */
+.tv-status-steps {
+	display: grid;
+	gap: var(--space-3);
+	margin: 0 0 var(--space-4);
+	padding: 0;
+	list-style: none;
+}
+
+.tv-status-step {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-3);
+}
+
+.tv-status-step-marker {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border: 1px solid var(--tv-border);
+	border-radius: 50%;
+	font-size: 0.78rem;
+	font-weight: 700;
+	color: var(--tv-muted);
+}
+
+.tv-status-step--done .tv-status-step-marker {
+	background: var(--tv-surface-alt);
+}
+
+.tv-status-step--current .tv-status-step-marker {
+	border-color: var(--main-color);
+	background: var(--main-color);
+	/* Filled surface, so the white token is the right one. */
+	color: var(--text-color);
+}
+
+.tv-status-step-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 3px;
+}
+
+.tv-status-step-label {
+	font-weight: 700;
+	color: var(--secondary-text-color);
+}
+
+.tv-status-step--upcoming .tv-status-step-label {
+	color: var(--tv-muted);
+}
+
+.tv-status-step-note {
+	font-size: 0.82rem;
+	color: var(--tv-muted);
+}
+
+@media (min-width: 768px) {
+	.tv-status-steps {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 767.98px) {
+	.tv-template-card-actions .tv-subtle-action,
+	.tv-settings-section-body .tv-primary-action {
+		min-height: 44px;
+	}
 }
 
 @media (max-width: 768px) {
@@ -2567,16 +4117,11 @@ body.dark .tv-division-badge {
 		color: var(--tv-muted);
 	}
 
-	/* The round button drops below the selector rather than competing with it
-	   for the row. Both stay full width so neither is a small target. */
+	/* The division selector takes the full row, so it is never a small target. */
 	.tv-standings-toolbar {
 		align-items: stretch;
 		flex-direction: column;
 		gap: var(--space-2);
-	}
-
-	.tv-standings-progress-action {
-		margin-left: 0;
 	}
 
 	.tv-standings-table th,
@@ -2608,11 +4153,36 @@ body.dark .tv-division-badge {
 	.tv-division-dropdown select,
 	.tv-division-pill,
 	.tv-primary-action,
-	.tv-stage-tab,
 	.tv-subtle-action,
 	.tv-retry,
 	.tv-division-card-actions button {
 		min-height: 44px;
+	}
+
+	/* Found by the redesign's final validation: text-sized buttons that were
+	   tappable at 21-26px. The group heading and the Overview link grow in
+	   place; the colour swatch keeps its look and grows its hit area instead,
+	   since a 44px ring would dwarf the division name beside it. */
+	.tv-fixture-group-heading {
+		align-items: center;
+		min-height: 44px;
+		margin-bottom: var(--space-1);
+	}
+
+	.tv-ov-link {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+	}
+
+	.tv-division-colour-toggle {
+		position: relative;
+	}
+
+	.tv-division-colour-toggle::after {
+		content: '';
+		position: absolute;
+		inset: -9px;
 	}
 
 	.tv-subtle-action {

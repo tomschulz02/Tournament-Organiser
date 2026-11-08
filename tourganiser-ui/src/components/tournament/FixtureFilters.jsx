@@ -1,4 +1,6 @@
+import { useId } from 'react';
 import { ALL } from './fixtureUtils';
+import { divisionColorStyle } from '../../utils/divisionColors';
 
 // The filter bar for both states of the Fixtures & Schedule tab.
 //
@@ -11,20 +13,38 @@ import { ALL } from './fixtureUtils';
 // than absent scheduling.
 export default function FixtureFilters({ value, onChange, divisions = [], rounds = [], statuses = [], days = null, courts = null }) {
 	const set = (key) => (event) => onChange({ ...value, [key]: event.target.value });
+	const divisionLabelId = useId();
 
 	return (
 		<div className="tv-filters">
+			{/* Chips rather than a select: divisions are few, and seeing them all
+			    with their colour dots is faster than opening a list. One at a time,
+			    like the select it replaces. */}
 			{divisions.length > 1 && (
-				<Field label="Division">
-					<select value={value.divisionId} onChange={set('divisionId')}>
-						<option value={ALL}>All divisions</option>
+				<div className="tv-filter tv-filter--chips" role="group" aria-labelledby={divisionLabelId}>
+					<span id={divisionLabelId}>Division</span>
+					<div className="tv-division-chips">
+						<button
+							type="button"
+							className="tv-division-chip"
+							aria-pressed={value.divisionId === ALL}
+							onClick={() => onChange({ ...value, divisionId: ALL })}>
+							All
+						</button>
 						{divisions.map((division) => (
-							<option key={division.id} value={division.id}>
+							<button
+								key={division.id}
+								type="button"
+								className="tv-division-chip"
+								style={divisionColorStyle(division.id, divisions)}
+								aria-pressed={value.divisionId === division.id}
+								onClick={() => onChange({ ...value, divisionId: division.id })}>
+								<span className="tv-division-chip-dot" aria-hidden="true" />
 								{division.name}
-							</option>
+							</button>
 						))}
-					</select>
-				</Field>
+					</div>
+				</div>
 			)}
 
 			{days && days.length > 1 && (

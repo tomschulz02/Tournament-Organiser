@@ -836,3 +836,28 @@ the time it takes, and each option lives in one place.
 
 Given up: HTML5 drag-and-drop stays for moving matches and placing them from the list, so a phone
 still places by tapping. Create and resize use pointer events, so they work by touch.
+
+## One Overview For Every Role
+
+Decided 2026-11-08.
+
+Spectators, scorers, match managers, co-organisers and organisers all open the same tabs. There
+are no role-specific tabs or dashboards. The viewer's role changes only the order and prominence
+of the Overview's sections: a spectator gets a feel for the whole tournament (who is on court,
+what is next, how far each division has got), while organiser roles get a queue of what needs
+doing first.
+
+- **The role is read from `data.can`.** `viewerRole(can)` in `collaboratorRoles.js` returns the
+  highest flag present. It orders sections only. Every action is still offered by its own flag
+  and refused by the server, so a wrong guess shows things in the wrong order and never grants
+  anything.
+- **Section order is one table** (`ROLE_SECTIONS` in `OverviewTab.jsx`), so adding a section or
+  changing a role's order is a one-line change.
+- **Time-based sections read one clock** (`useScheduleClock`), the device's, against the
+  schedule's own dates. With no schedule, or when no scheduled day is today, they fall back to
+  live fixtures by match number or hide.
+- **Settings stays the one exception**, as before: it appears only for `manageSetup`, and each
+  section inside it keeps its own capability.
+
+Given up: a role cannot rearrange its own Overview. Not wanted yet, and every arrangement would
+need checking at phone width.

@@ -11,7 +11,6 @@ import FixturesTab from '../components/tournament/FixturesTab';
 import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
 import TeamsTab from '../components/tournament/TeamsTab';
-import SettingsTab from '../components/tournament/SettingsTab';
 import RoundCompleteBanner from '../components/tournament/RoundCompleteBanner';
 import LoadingScreen from '../components/LoadingScreen';
 import Icon from '../components/Icons';
@@ -33,6 +32,10 @@ const loadScoresheetPrefill = () => import('../utils/scoresheetPrefill');
 // through the browser removed that, so the chunk is much smaller than it was,
 // but the component is still worth deferring.
 const ScheduleMakerModal = lazy(() => import('../components/ScheduleMakerModal'));
+
+// Also split out: only a role that can manage setup ever opens Settings, and it
+// carries the scoresheet template list and its own section frame.
+const SettingsTab = lazy(() => import('../components/tournament/SettingsTab'));
 
 // How often an open Ongoing tournament checks for new results. See the live
 // updates effect in ViewPage.
@@ -245,11 +248,19 @@ export default function ViewPage() {
 	const currentRoundFixtureIds =
 		can.enterCurrentRoundResults && !can.enterAnyRoundResults ? editableFixtureIds(data.divisions ?? []) : null;
 
+	//
+	// A predicate of its own because the Overview offers the same action from its
+	// queue and court cards, and must offer it on exactly the same fixtures.
+	const canScoreFixture = (fixture) => {
+		if (!can.enterCurrentRoundResults) return false;
+		if (!can.enterAnyRoundResults && !currentRoundFixtureIds?.has(fixture.id)) return false;
+		if (!fixture.team_1_id || !fixture.team_2_id) return false;
+		if ((data?.tournament?.status ?? 'Not Started') === 'Not Started') return false;
+		return !fixture.locked;
+	};
+
 	const renderScoreAction = (fixture) => {
-		if (!can.enterAnyRoundResults && !currentRoundFixtureIds?.has(fixture.id)) return null;
-		if (!fixture.team_1_id || !fixture.team_2_id) return null;
-		if ((data?.tournament?.status ?? 'Not Started') === 'Not Started') return null;
-		if (fixture.locked) return null;
+		if (!canScoreFixture(fixture)) return null;
 
 		// An icon on the row, where the word would be the widest thing in its
 		// column. aria-label rather than title alone, so the control is named for a
@@ -369,13 +380,15 @@ export default function ViewPage() {
 		);
 	};
 
-	const handlePrintAllScoresheets = async () => {
+	// Every fixture in the tournament, or the ones given — the Overview prints
+	// just the next slot's.
+	const handlePrintScoresheets = async (only = null) => {
 		if (!resolvedScoresheetTemplate) return;
 
 		setGeneratingScoresheet(true);
 		try {
 			const { buildFieldValues, generateScoresheet, mergeScoresheets } = await loadScoresheetPrefill();
-			const fixtures = flattenFixtures(data?.divisions ?? []);
+			const fixtures = only ?? flattenFixtures(data?.divisions ?? []);
 			const pdfBytesList = [];
 
 			for (const fixture of fixtures) {
@@ -576,7 +589,12 @@ export default function ViewPage() {
 						// else's rows carry no action slot.
 						renderFixtureAction={can.enterCurrentRoundResults ? renderFixtureAction : undefined}
 						onProgressRound={setProgressingDivisionId}
-						onPrintAllScoresheets={handlePrintAllScoresheets}
+						// Wrapped: the toolbar button would otherwise pass its click
+						// event in as the fixture list.
+						onPrintAllScoresheets={() => handlePrintScoresheets()}
+						onPrintScoresheets={handlePrintScoresheets}
+						canScoreFixture={canScoreFixture}
+						onScoreFixture={setScoringFixtureId}
 						scoresheetTemplateSelected={Boolean(scoresheetTemplateKey)}
 						scoresheetTemplateReady={Boolean(resolvedScoresheetTemplate)}
 					/>
@@ -598,6 +616,9 @@ function TabPanel({
 	renderFixtureAction,
 	onProgressRound,
 	onPrintAllScoresheets,
+	onPrintScoresheets,
+	canScoreFixture,
+	onScoreFixture,
 	scoresheetTemplateSelected,
 	scoresheetTemplateReady,
 }) {
@@ -608,13 +629,15 @@ function TabPanel({
 	// the server's check on every endpoint below it is the real gate.
 	if (tab === 'settings' && can.manageSetup) {
 		return (
-			<SettingsTab
-				tournament={data.tournament}
-				divisions={data.divisions ?? []}
-				can={can}
-				onChanged={onReload}
-				onDeleted={onDeleted}
-			/>
+			<Suspense fallback={<LoadingScreen />}>
+				<SettingsTab
+					tournament={data.tournament}
+					divisions={data.divisions ?? []}
+					can={can}
+					onChanged={onReload}
+					onDeleted={onDeleted}
+				/>
+			</Suspense>
 		);
 	}
 
@@ -623,9 +646,17 @@ function TabPanel({
 			<OverviewTab
 				tournament={data.tournament}
 				dashboard={data.dashboard}
+				divisions={data.divisions ?? []}
+				can={can}
 				onOpenDivision={onOpenDivision}
-				canManageSetup={can.manageSetup}
 				onChanged={onReload}
+				canScoreFixture={canScoreFixture}
+				onScoreFixture={onScoreFixture}
+				onProgressRound={onProgressRound}
+				onOpenSchedule={onOpenSchedule}
+				onPrintScoresheets={onPrintScoresheets}
+				scoresheetTemplateSelected={scoresheetTemplateSelected}
+				scoresheetTemplateReady={scoresheetTemplateReady}
 			/>
 		);
 	}

@@ -122,41 +122,87 @@ so a team's counts sum to its played total minus any level matches.
 
 Applied in sequence. Move to the next criterion only when the current one ties.
 
-1. **The division's ranking basis**, descending — `divisions.ranking_basis`, one of:
-   - **Matches won** (`MATCHES_WON`, the default).
-   - **FIVB match points** (`FIVB_POINTS`) — 3 for a win outright, 2 for a win in the
-     deciding set, 1 for a loss in the deciding set, 0 otherwise. A deciding set is one
-     where the loser took at least one set and the margin is one (3-2, 2-1); a single-set
-     match is won outright.
-   - **Simplified match points** (`SIMPLIFIED_POINTS`) — 2 for any win, 1 for a loss in
-     the deciding set, 0 otherwise.
-   - **Sets won** (`SETS_WON`), in total.
+1. **The division's ranking method**, descending. The organiser chooses one:
+   - **Wins** — match wins (the default) or set wins, in total.
+   - **Points** — a number of match points for each of the four ways a match can end:
+     a win in straight sets, a win in the deciding set, a loss in the deciding set, a
+     loss in straight sets. A deciding set is one where the loser took at least one set
+     and the margin is one (3-2, 2-1). Everything else is "straight", including 3-1 and
+     a single-set match. Each number is a whole number from 0 to 10. FIVB (3·2·1·0) and
+     Simple (2·2·1·0) are presets that fill the numbers in and nothing more.
+2. **The division's tiebreak deciders**, an ordered list the organiser chooses, each
+   applied only when everything above it ties. The default is set ratio, point ratio,
+   head-to-head.
+3. **Seeding** — position in `state.teams`, ascending. The top seed wins the tie. It is
+   always last. It is not in the stored list and cannot be removed or moved.
 
-   Only this first criterion is configurable. Everything below it is fixed.
-2. **Set ratio**, descending.
-3. **Point ratio**, descending.
-4. **Head-to-head**, if the tied teams have played each other.
-5. **Seeding** — position in `state.teams`, ascending. The top seed wins the tie.
-
-Because seeding is a total order over the division, step 5 always resolves. Standings
+Because seeding is a total order over the division, step 3 always resolves. Standings
 are never ambiguous and never depend on team names.
+
+### Tiebreak deciders
+
+| Key | Definition | Better is |
+|---|---|---|
+| `SET_RATIO` | sets won ÷ sets lost | higher |
+| `POINT_RATIO` | points won ÷ points lost | higher |
+| `HEAD_TO_HEAD` | the result between the tied teams | the winner |
+| `SET_DIFFERENCE` | sets won − sets lost | higher |
+| `POINT_DIFFERENCE` | points won − points lost | higher |
+| `POINTS_SCORED` | total rally points won | higher |
+| `SETS_WON` | total sets won | higher |
+
+A decider appears at most once. The list may be empty, which leaves seeding to settle
+every tie.
+
+### Where the rules are stored
+
+The method and the deciders are `state.rankingRules` — see `docs/division-state.md`. A
+division whose state has no such key has never had its rules edited, and its rules are
+derived from the older `divisions.ranking_basis` column:
+
+| `ranking_basis` | Method | Values |
+|---|---|---|
+| `MATCHES_WON` | Wins | match wins |
+| `SETS_WON` | Wins | set wins |
+| `FIVB_POINTS` | Points | straight win 3, deciding win 2, deciding loss 1, straight loss 0 |
+| `SIMPLIFIED_POINTS` | Points | straight win 2, deciding win 2, deciding loss 1, straight loss 0 |
+
+All four use the default deciders: set ratio, point ratio, head-to-head. Once rules are
+saved for a division, `state.rankingRules` is authoritative and the column is no longer
+read for it.
 
 ### Undefined ratios
 
 A team that has won sets but lost none has an undefined set ratio (division by zero).
-Treat it as tied with any other undefined set ratio and fall through to point ratio. The
-same applies to an undefined point ratio, which falls through to head-to-head.
+Treat it as tied with any other undefined set ratio and fall through to the next decider.
+The same applies to an undefined point ratio.
 
 A team with no completed matches has both ratios at zero, not undefined.
 
 ### Head-to-head
 
-Only applied between teams still tied after both ratios. Compare the results of the
-matches those teams played against each other.
+Only applied between the teams still level on the ranking method and on every decider
+above head-to-head in the list. Compare the results of the matches those teams played
+against each other. Two teams that never met, or that are level in the matches they
+played, are not separated by it and go on to the next decider.
 
-If three or more teams are tied and their head-to-head results form a loop — A beat B,
+If three or more teams are level and their head-to-head results form a loop — A beat B,
 B beat C, C beat A — head-to-head cannot resolve it. Do not attempt a mini-league.
-Abandon head-to-head for that group of teams and fall straight through to seeding.
+Skip head-to-head **for that group of teams** and carry on with the deciders below it,
+then seeding. With the default order nothing is below it, so the group falls straight
+through to seeding.
+
+**Worked example.** Wins by matches, deciders in the order head-to-head, point
+difference. Seeded A, B, C, D. A, B and C each won two matches and D none. A beat B,
+B beat C and C beat A. Point differences: A +9, B +3, C +12.
+
+1. Match wins put A, B and C level, above D.
+2. Head-to-head is first in the list, so the level group is A, B, C. Their results loop,
+   so head-to-head is skipped for the three of them.
+3. Point difference is next: C (+12), A (+9), B (+3).
+
+The table reads C, A, B, D. Seeding was never reached. Had C lost to A instead, there
+would be no loop: A beat both, B beat C, and head-to-head alone gives A, B, C.
 
 ### Forfeits
 
@@ -189,9 +235,10 @@ position first, then by ratios**:
    out inside — is compared across pools, and only the places that remain are taken
    from it.
 
-Cross-pool comparison uses the same chain as in-pool standings: set ratio, then point
-ratio, then seeding. Head-to-head is skipped across pools, since teams from different
-pools have usually not played each other.
+Cross-pool comparison uses the same chain as in-pool standings: the ranking method, then
+the division's deciders in order, then seeding. Head-to-head is skipped across pools,
+wherever it sits in the list, since teams from different pools have usually not played
+each other.
 
 **Worked example.** Four pools, ten qualifiers. The first eight places are the pool
 winners and the runners-up, in pool order: A1, B1, C1, D1, A2, B2, C2, D2. Places nine
@@ -257,7 +304,8 @@ anything matching fixtures to that round must accept it.
 
 ### A two-team knockout still consumes four ranks
 
-A knockout stage of two teams generates a bronze match as well as a final, so the Finals
+Unless the division is set to final only (see "Placement matches"), a knockout stage of
+two teams generates a bronze match as well as a final, so the Finals
 round holds `groups: [[2, 3], [0, 1]]` — the playoff first, as `createClassicState`
 unshifts it onto the front. It therefore needs **four ranks, not two**, for a division
 configured with `knockout_teams: 2`.
@@ -297,6 +345,19 @@ means the match for `N` and `N + 1` is played, and so is everything needed to re
   later rounds reference.
 
 Nothing about places 1 to 4 changes. With no depth set the draw is exactly what it was.
+
+**Final only.** A `placement_depth` of 1 removes the 3rd-place playoff: the Finals round
+holds the final alone, `groups: [[0, 1]]`, and needs two ranks. The semifinal losers are
+then ranked 3rd and 4th by the tiebreak for the round they went out in, like any other
+unplayed place. The settings offer the place each match is played for — 1st (final
+only), 3rd (the default, stored as null), 5th, 7th and so on up to the knockout's size.
+A two-team knockout has no semifinal losers, so final only is not offered for it and the
+server refuses it (`INVALID_PLACEMENT_DEPTH`).
+
+The 3rd-place playoff is recognised by what it holds, never by its position in the round:
+the final is always `[0, 1]`, the two semifinal winners, so the Finals round's other own
+match is the playoff. That match is `[2, 3]` by default and holds higher indices when the
+semifinal round also carries placement groups.
 
 ### Qualification
 
@@ -405,8 +466,6 @@ Details of the endpoints and their validation are in `docs/api.md`.
 
 - Round objects have no match format key, so the per-round best-of rule cannot be
   expressed yet. See `docs/division-state.md`.
-- Ranking basis is fixed at matches won. Making it configurable per division is in
-  `docs/future-features.md`.
 - `tourganiser-ui/src/components/NextRoundModal.jsx` still computes qualifiers in the
   frontend, with the two bugs recorded in `docs/known-limitations.md`. It should be
   replaced by calls to the progression endpoints.

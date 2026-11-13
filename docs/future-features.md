@@ -152,7 +152,6 @@ entry has to be moved by hand.
 ### More formats
 
 - pool-aware crossovers, so each pool's 1st and 2nd are in opposite halves;
-- an optional 3rd-place match;
 - single elimination (stubbed in `generateDivisionDetails`);
 - double elimination;
 - a second pool phase (gold and silver pools), common in volleyball;

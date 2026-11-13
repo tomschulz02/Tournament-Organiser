@@ -128,9 +128,12 @@ are unaffected by that guard, because assigning the column is itself a change.
   the whole membership: adding inserts, removing deletes. There is no pending state.
 - `divisions.ranking_basis` is the primary standings criterion ahead of the fixed
   tiebreaker chain: `MATCHES_WON` (default), `FIVB_POINTS`, `SIMPLIFIED_POINTS` or
-  `SETS_WON`.
+  `SETS_WON`. Since 2026-11-13 it is a fallback only: a division whose
+  `state.rankingRules` is present ignores it, and nothing writes it any more. See
+  `docs/division-state.md`.
 - `divisions.placement_depth` is the lowest rank decided by a played match. Null keeps
-  the final and 3rd-place match only; otherwise an odd number from 5 upwards.
+  the final and 3rd-place match only; 1 means the final only, with no 3rd-place match;
+  otherwise an odd number from 5 upwards.
 - `fixtures.entered_by` names the user who last wrote the fixture's result. Results
   from before 2026-09-24 are null and are not backfilled.
 

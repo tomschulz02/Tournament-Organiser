@@ -36,26 +36,36 @@ beforeEach(() => {
 
 describe("PUT /api/divisions/:divisionId/settings", () => {
     const SETTINGS_URL = "/api/divisions/div-1/settings";
+    const RULES = { method: "wins", wins: "sets", tiebreakers: ["HEAD_TO_HEAD"] };
 
     it("requires a session", async () => {
-        const response = await request(app).put(SETTINGS_URL).send({ rankingBasis: "SETS_WON" });
+        const response = await request(app).put(SETTINGS_URL).send({ rankingRules: RULES });
 
         expect(response.status).toBe(401);
         expect(divisionService.updateDivisionSettings).not.toHaveBeenCalled();
     });
 
     it("updates the settings for the organiser", async () => {
-        const result = { divisionId: "div-1", rankingBasis: "SETS_WON", placementDepth: null };
+        const result = { divisionId: "div-1", rankingRules: RULES, placementDepth: null };
         divisionService.updateDivisionSettings.mockResolvedValue(result);
 
         const response = await request(app)
             .put(SETTINGS_URL)
             .set("Cookie", authCookie({ id: "user-1" }))
-            .send({ rankingBasis: "SETS_WON" });
+            .send({ rankingRules: RULES });
 
         expect(response.status).toBe(200);
         expect(response.body).toEqual({ success: true, message: "Division settings updated", data: result });
-        expect(divisionService.updateDivisionSettings).toHaveBeenCalledWith("div-1", "user-1", { rankingBasis: "SETS_WON" });
+        expect(divisionService.updateDivisionSettings).toHaveBeenCalledWith("div-1", "user-1", { rankingRules: RULES });
+    });
+
+    it("answers 400 for rules that are not valid", async () => {
+        divisionService.updateDivisionSettings.mockRejectedValue(new AppError("INVALID_RANKING_RULES"));
+
+        const response = await request(app).put(SETTINGS_URL).set("Cookie", authCookie()).send({ rankingRules: {} });
+
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe("Those ranking rules are not valid");
     });
 
     it("answers 409 once the knockout has started", async () => {

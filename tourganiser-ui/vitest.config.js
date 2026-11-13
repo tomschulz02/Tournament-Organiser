@@ -33,6 +33,10 @@ export default defineConfig({
                 "src/utils/schedulePrintLayout.js",
                 // The Discover card's date tile and start countdown.
                 "src/utils/tournamentDates.js",
+                // Ranking rules as the Settings and Standings tabs present them:
+                // a row's match points, and which knockout places a placement
+                // depth has a match for. The match counts mirror the server's.
+                "src/utils/rankingRules.js",
                 "src/components/tournament/fixtureUtils.js",
                 // The viewer's role read back from data.can, and where the
                 // schedule stands at an injected "now". They decide what the

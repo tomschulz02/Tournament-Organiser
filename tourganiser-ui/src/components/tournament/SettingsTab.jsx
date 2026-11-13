@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { Suspense, lazy, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import SectionState from './SectionState';
 import LoadingScreen from '../LoadingScreen';
 import Icon from '../Icons';
@@ -9,6 +9,20 @@ import { DEFAULT_ROLE, ROLES, roleLabel } from './collaboratorRoles';
 import { useTournamentLifecycle } from './useTournamentLifecycle';
 import { SCORESHEET_FIELDS, SYSTEM_TEMPLATES } from '../../utils/scoresheetTemplates';
 import { listTemplates } from '../../utils/scoresheetStorage';
+import { divisionColorStyle } from '../../utils/divisionColors';
+import {
+	MAX_MATCH_POINTS,
+	POINT_PRESETS,
+	POINT_RESULTS,
+	TIEBREAKERS,
+	knockoutOf,
+	moveTiebreaker,
+	placementLadder,
+	placementOptions,
+	rulesOf,
+	samePoints,
+	withMethod,
+} from '../../utils/rankingRules';
 import {
 	addTournamentEditor,
 	deleteTournament,
@@ -588,153 +602,454 @@ function RoleOptions() {
 // per keystroke, short enough that the list keeps up.
 const SUGGEST_DELAY_MS = 250;
 
-// The four primary criteria from docs/tournament-rules.md. Only the first link
-// of the ranking chain changes; the tiebreakers behind it do not.
-const RANKING_BASES = [
-	{ value: 'MATCHES_WON', label: 'Matches won' },
-	{ value: 'FIVB_POINTS', label: 'FIVB match points (3 / 2 / 1 / 0)' },
-	{ value: 'SIMPLIFIED_POINTS', label: 'Match points (2 / 1 / 0)' },
-	{ value: 'SETS_WON', label: 'Sets won' },
-];
-
+// The Divisions section: one division's rules at a time, in three panels that
+// stack at every width — Ranking, Tiebreak deciders, Placement matches. Every
+// control saves as it is changed. See docs/tournament-rules.md.
 function DivisionSettingsBand({ divisions, onChanged }) {
 	const { showMessage } = useMessage();
+	const confirm = useConfirm();
+	const [selectedId, setSelectedId] = useState(null);
 	// Placement depth regenerates knockout fixtures, which takes long enough to
-	// look like nothing happened; the ranking basis does not.
+	// look like nothing happened; the ranking rules do not.
 	const [regenerating, setRegenerating] = useState(false);
-	// What was chosen and not yet confirmed by a refetch, so a select does not
+	const [copying, setCopying] = useState(false);
+	// What was chosen and not yet confirmed by a refetch, so a control does not
 	// snap back to its old value for the round trip. Dropped on failure.
 	const [pending, setPending] = useState({});
+	// One request at a time per division. A change made while one is in flight
+	// waits and is sent after it, merged with any made since, so a run of taps
+	// on a stepper is a couple of requests and the last value always wins.
+	const queue = useRef(new Map());
+
+	const dropPending = (divisionId) =>
+		setPending((current) => {
+			const remaining = { ...current };
+			delete remaining[divisionId];
+			return remaining;
+		});
 
 	const save = async (division, settings) => {
 		setPending((current) => ({ ...current, [division.id]: { ...current[division.id], ...settings } }));
+
+		const entry = queue.current.get(division.id) ?? { sending: false, next: null };
+		queue.current.set(division.id, entry);
+		if (entry.sending) {
+			entry.next = { ...entry.next, ...settings };
+			return;
+		}
+
+		entry.sending = true;
 		if ('placementDepth' in settings) setRegenerating(true);
 
 		try {
-			await updateDivisionSettings(division.id, settings);
+			let sending = settings;
+			while (sending) {
+				await updateDivisionSettings(division.id, sending);
+				sending = entry.next;
+				entry.next = null;
+			}
 			showMessage(`${division.name} updated.`, 'success');
 			onChanged?.();
 		} catch (apiError) {
-			setPending((current) => {
-				const remaining = { ...current };
-				delete remaining[division.id];
-				return remaining;
-			});
+			entry.next = null;
+			dropPending(division.id);
 			showMessage(apiError.message, 'error');
 		} finally {
+			entry.sending = false;
 			setRegenerating(false);
 		}
 	};
 
+	if (divisions.length === 0) {
+		return <SectionState variant="empty" title="This tournament has no divisions" />;
+	}
+
+	const division = divisions.find((entry) => entry.id === selectedId) ?? divisions[0];
+	const waiting = pending[division.id] ?? {};
+	const rules = waiting.rankingRules ?? rulesOf(division);
+	const placementDepth = 'placementDepth' in waiting ? waiting.placementDepth : division.placement_depth ?? null;
+	const knockout = knockoutOf(division);
+	const disabled = regenerating || copying;
+	const others = divisions.filter((entry) => entry.id !== division.id);
+
+	const saveRules = (next) => save(division, { rankingRules: next });
+
+	// Ranking and deciders only. Placement depends on each division's own
+	// knockout, and may already be locked in some of them.
+	const copyToAll = async () => {
+		const confirmed = await confirm(
+			`The ranking and tiebreak deciders of ${division.name} replace those of ${
+				others.length === 1 ? others[0].name : `the other ${others.length} divisions`
+			}. Their tables re-sort straight away. Placement matches are not copied.`,
+			{ title: 'Copy to all divisions?', confirmLabel: 'Copy rules', cancelLabel: 'Cancel' },
+		);
+		if (!confirmed) return;
+
+		setCopying(true);
+		try {
+			for (const other of others) {
+				await updateDivisionSettings(other.id, { rankingRules: rules });
+			}
+			setPending((current) => {
+				const next = { ...current };
+				others.forEach((other) => {
+					next[other.id] = { ...next[other.id], rankingRules: rules };
+				});
+				return next;
+			});
+			showMessage(`Rules copied to ${others.length === 1 ? others[0].name : `${others.length} divisions`}.`, 'success');
+		} catch (apiError) {
+			showMessage(apiError.message, 'error');
+		} finally {
+			setCopying(false);
+			onChanged?.();
+		}
+	};
+
 	return (
-		<>
-			{divisions.length === 0 ? (
-				<SectionState variant="empty" title="This tournament has no divisions" />
-			) : (
-				<ul className="tv-settings-list tv-settings-list--cards">
-					{divisions.map((division) => (
-						<DivisionSettingsRow
-							key={division.id}
-							division={division}
-							pending={pending[division.id] ?? {}}
-							disabled={regenerating}
-							onSave={(settings) => save(division, settings)}
-						/>
-					))}
-				</ul>
+		<div className="tv-rules">
+			{divisions.length > 1 && (
+				<div className="tv-rules-head">
+					<div className="tv-division-chips" role="group" aria-label="Division">
+						{divisions.map((entry) => (
+							<button
+								key={entry.id}
+								type="button"
+								className="tv-division-chip"
+								style={divisionColorStyle(entry.id, divisions)}
+								aria-pressed={entry.id === division.id}
+								onClick={() => setSelectedId(entry.id)}>
+								<span className="tv-division-chip-dot" aria-hidden="true" />
+								{entry.name}
+							</button>
+						))}
+					</div>
+
+					<button type="button" className="tv-subtle-action tv-rules-copy" disabled={disabled} onClick={copyToAll}>
+						Copy to all divisions
+					</button>
+				</div>
+			)}
+
+			<p className="tv-rules-division">
+				<strong>{division.name}</strong>
+				{division.type ? ` · ${division.type}` : ''} · {division.num_teams ?? division.teams?.length ?? 0} teams
+			</p>
+
+			<RankingPanel rules={rules} disabled={disabled} onChange={saveRules} />
+			<DecidersPanel rules={rules} disabled={disabled} onChange={saveRules} />
+
+			{/* Only where there are semifinal losers to play, or not play, for 3rd.
+			    A League has no knockout stage at all. */}
+			{knockout?.hasSemifinals && (
+				<PlacementPanel
+					knockout={knockout}
+					depth={placementDepth}
+					divisionTeams={division.num_teams ?? division.teams?.length ?? 0}
+					disabled={disabled}
+					onChange={(depth) => save(division, { placementDepth: depth })}
+				/>
 			)}
 
 			{regenerating && <LoadingScreen context="divisionSave" />}
-		</>
+		</div>
 	);
 }
 
-function DivisionSettingsRow({ division, pending, disabled, onSave }) {
-	const rankingBasis = pending.rankingBasis ?? division.ranking_basis ?? 'MATCHES_WON';
-	const placementDepth = 'placementDepth' in pending ? pending.placementDepth : division.placement_depth ?? null;
-	const knockout = knockoutOf(division);
+function RulesPanel({ title, subtitle, aside, children }) {
+	return (
+		<section className="tv-info-card tv-rules-panel">
+			<div className="tv-rules-panel-head">
+				<div>
+					<h3>{title}</h3>
+					<p>{subtitle}</p>
+				</div>
+				{aside}
+			</div>
+			{children}
+		</section>
+	);
+}
+
+function RankingPanel({ rules, disabled, onChange }) {
+	const name = useId();
+	const setPoints = (points) => onChange({ ...rules, points });
 
 	return (
-		<li className="tv-info-card tv-settings-division">
-			<div className="tv-division-card-header">
-				<h3>{division.name}</h3>
-				{division.type && <span className="tv-info-format">{division.type}</span>}
-			</div>
-
-			<div className="tv-filters">
-				<label className="tv-filter">
-					<span>Rank teams by</span>
-					<select
-						value={rankingBasis}
-						disabled={disabled}
-						onChange={(event) => onSave({ rankingBasis: event.target.value })}>
-						{RANKING_BASES.map((basis) => (
-							<option key={basis.value} value={basis.value}>
-								{basis.label}
-							</option>
+		<RulesPanel
+			title="Ranking"
+			subtitle="How teams are ordered in pool and league tables."
+			aside={
+				<div className="tv-seg" role="group" aria-label="Ranking method">
+					{[
+						['points', 'Points'],
+						['wins', 'Wins'],
+					].map(([method, label]) => (
+						<button
+							key={method}
+							type="button"
+							aria-pressed={rules.method === method}
+							disabled={disabled}
+							onClick={() => onChange(withMethod(rules, method))}>
+							{label}
+						</button>
+					))}
+				</div>
+			}>
+			{rules.method === 'points' ? (
+				<>
+					<div className="tv-presets" role="group" aria-label="Point presets">
+						{POINT_PRESETS.map((preset) => (
+							<button
+								key={preset.label}
+								type="button"
+								className="tv-preset"
+								aria-pressed={samePoints(preset.points, rules.points)}
+								disabled={disabled}
+								onClick={() => setPoints({ ...preset.points })}>
+								{preset.label}
+							</button>
 						))}
-					</select>
-				</label>
+					</div>
 
-				{/* Only where there is a knockout with ranks below 4th to play for.
-				    A League has no knockout stage at all. */}
-				{knockout && knockout.teams >= 5 && (
-					<label className="tv-filter">
-						<span>Play for places down to</span>
-						<select
-							value={placementDepth ?? ''}
-							disabled={disabled || knockout.started}
-							onChange={(event) =>
-								onSave({ placementDepth: event.target.value === '' ? null : Number(event.target.value) })
-							}>
-							<option value="">4th (final and 3rd place only)</option>
-							{placementOptions(knockout.teams).map((depth) => (
-								<option key={depth} value={depth}>
-									{ordinal(depth)}
-								</option>
-							))}
-						</select>
-					</label>
-				)}
-			</div>
+					<ul className="tv-points">
+						{POINT_RESULTS.map(({ key, label, hint }) => {
+							const value = rules.points[key];
+							const step = (by) => setPoints({ ...rules.points, [key]: value + by });
 
-			{knockout?.started && knockout.teams >= 5 && (
-				<p className="tv-settings-note">The knockout stage has started, so its placement matches are fixed.</p>
+							return (
+								<li key={key} className="tv-points-row">
+									<span>
+										<span className="tv-points-label">{label}</span>
+										<span className="tv-points-hint">{hint}</span>
+									</span>
+									<span className="tv-stepper" role="group" aria-label={`Points for a ${label.toLowerCase()}`}>
+										<button type="button" aria-label="One point fewer" disabled={disabled || value <= 0} onClick={() => step(-1)}>
+											−
+										</button>
+										<output aria-live="polite">{value}</output>
+										<button
+											type="button"
+											aria-label="One point more"
+											disabled={disabled || value >= MAX_MATCH_POINTS}
+											onClick={() => step(1)}>
+											+
+										</button>
+									</span>
+								</li>
+							);
+						})}
+					</ul>
+				</>
+			) : (
+				<div className="tv-rules-radios" role="radiogroup" aria-label="Wins counted">
+					{[
+						['matches', 'Match wins', 'The team with more matches won ranks higher.'],
+						['sets', 'Set wins', 'The team with more sets won ranks higher, whoever won the matches.'],
+					].map(([wins, label, hint]) => (
+						<label key={wins} className="tv-rules-radio">
+							<input
+								type="radio"
+								name={name}
+								checked={rules.wins === wins}
+								disabled={disabled}
+								onChange={() => onChange({ ...rules, wins })}
+							/>
+							<span>
+								<span className="tv-points-label">{label}</span>
+								<span className="tv-points-hint">{hint}</span>
+							</span>
+						</label>
+					))}
+				</div>
 			)}
-		</li>
+		</RulesPanel>
 	);
 }
 
-// The knockout stage's size and whether it has begun, read from state the way
-// the server's readPlacementDepth reads it. Null for a division without one.
-function knockoutOf(division) {
-	if (division.type !== 'Classic') return null;
+const DECIDER_DRAG = 'tv-decider:';
 
-	const rounds = Array.isArray(division.state?.rounds) ? division.state.rounds : [];
-	const first = rounds.findIndex((round) => round.type === 'knockout');
-	if (first < 1) return null;
+function DecidersPanel({ rules, disabled, onChange }) {
+	const [draggingIndex, setDraggingIndex] = useState(null);
+	const [overIndex, setOverIndex] = useState(null);
+	const used = rules.tiebreakers;
+	const unused = TIEBREAKERS.filter((entry) => !used.includes(entry.key));
 
-	const indices = (rounds[first].groups ?? []).flat().filter(Number.isInteger);
-
-	return {
-		teams: indices.length === 0 ? 0 : Math.max(...indices) + 1,
-		started: (Number(division.state?.currentRound) || 0) >= first,
+	const setOrder = (tiebreakers) => {
+		if (tiebreakers !== used) onChange({ ...rules, tiebreakers });
 	};
+	const move = (from, to) => setOrder(moveTiebreaker(used, from, to));
+	const endDrag = () => {
+		setDraggingIndex(null);
+		setOverIndex(null);
+	};
+
+	const handleDrop = (event, index) => {
+		event.preventDefault();
+		const payload = event.dataTransfer.getData('text/plain') || '';
+		endDrag();
+		if (!payload.startsWith(DECIDER_DRAG)) return;
+
+		const from = Number(payload.slice(DECIDER_DRAG.length));
+		if (Number.isInteger(from)) move(from, index);
+	};
+
+	const handleGripKeyDown = (event, index) => {
+		const step = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+		if (step === 0) return;
+
+		event.preventDefault();
+		move(index, index + step);
+	};
+
+	return (
+		<RulesPanel title="Tiebreak deciders" subtitle="Applied in this order when teams are level on ranking.">
+			<ol className="tv-deciders">
+				{used.map((key, index) => {
+					const entry = TIEBREAKERS.find((candidate) => candidate.key === key);
+					const label = entry?.label ?? key;
+
+					return (
+						<li
+							key={key}
+							className={`tv-decider${draggingIndex === index ? ' tv-decider--dragging' : ''}${
+								overIndex === index && draggingIndex !== index ? ' tv-decider--over' : ''
+							}`}
+							onDragOver={(event) => {
+								// Only a row from this list is a valid drop.
+								if (draggingIndex === null) return;
+								event.preventDefault();
+								event.dataTransfer.dropEffect = 'move';
+								setOverIndex(index);
+							}}
+							onDrop={(event) => handleDrop(event, index)}>
+							<button
+								type="button"
+								className="tv-team-grip tv-decider-grip"
+								draggable
+								disabled={disabled}
+								onDragStart={(event) => {
+									event.dataTransfer.effectAllowed = 'move';
+									event.dataTransfer.setData('text/plain', `${DECIDER_DRAG}${index}`);
+									setDraggingIndex(index);
+								}}
+								onDragEnd={endDrag}
+								onKeyDown={(event) => handleGripKeyDown(event, index)}
+								aria-label={`Move ${label} from position ${index + 1}. Drag, or use the up and down arrow keys.`}>
+								<Icon name="grip" size={16} fill="currentColor" />
+							</button>
+							<span className="tv-decider-number">{index + 1}</span>
+							<span className="tv-decider-text">
+								<span className="tv-points-label">{label}</span>
+								{entry?.hint && <span className="tv-points-hint">{entry.hint}</span>}
+							</span>
+							<span className="tv-decider-actions">
+								<button
+									type="button"
+									className="tv-decider-button"
+									aria-label={`Move ${label} up`}
+									disabled={disabled || index === 0}
+									onClick={() => move(index, index - 1)}>
+									<StrokeIcon path="m6 15 6-6 6 6" />
+								</button>
+								<button
+									type="button"
+									className="tv-decider-button"
+									aria-label={`Move ${label} down`}
+									disabled={disabled || index === used.length - 1}
+									onClick={() => move(index, index + 1)}>
+									<StrokeIcon path="m6 9 6 6 6-6" />
+								</button>
+								<button
+									type="button"
+									className="tv-decider-button"
+									aria-label={`Stop using ${label}`}
+									disabled={disabled}
+									onClick={() => setOrder(used.filter((candidate) => candidate !== key))}>
+									<StrokeIcon path="M6 6l12 12M18 6 6 18" />
+								</button>
+							</span>
+						</li>
+					);
+				})}
+
+				<li className="tv-decider tv-decider--pinned">
+					<span className="tv-decider-lock" aria-hidden="true">
+						<StrokeIcon path="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" />
+					</span>
+					<span className="tv-decider-number">{used.length + 1}</span>
+					<span className="tv-decider-text">
+						<span className="tv-points-label">Seeding</span>
+						<span className="tv-points-hint">Always last, so every tie is settled</span>
+					</span>
+				</li>
+			</ol>
+
+			{unused.length > 0 && (
+				<div className="tv-presets" role="group" aria-label="Add a decider">
+					<span className="tv-points-hint">Add a decider:</span>
+					{unused.map((entry) => (
+						<button
+							key={entry.key}
+							type="button"
+							className="tv-preset"
+							disabled={disabled}
+							onClick={() => setOrder([...used, entry.key])}>
+							+ {entry.label}
+						</button>
+					))}
+				</div>
+			)}
+		</RulesPanel>
+	);
 }
 
-// Odd places from 5th down to the knockout's size: each is the place a match
-// decides, alongside the one below it.
-function placementOptions(knockoutTeams) {
-	const options = [];
-	for (let depth = 5; depth <= knockoutTeams; depth += 2) options.push(depth);
-	return options;
+function PlacementPanel({ knockout, depth, divisionTeams, disabled, onChange }) {
+	const locked = disabled || knockout.started;
+
+	return (
+		<RulesPanel title="Placement matches" subtitle="Which knockout places are decided by a match.">
+			<div className="tv-placement-pick">
+				<span className="tv-points-label">Play for places down to</span>
+				<div className="tv-seg tv-seg--wrap" role="group" aria-label="Play for places down to">
+					{placementOptions(knockout).map((option) => (
+						<button
+							key={option.label}
+							type="button"
+							aria-pressed={option.depth === depth}
+							disabled={locked}
+							onClick={() => option.depth !== depth && onChange(option.depth)}>
+							{option.label}
+						</button>
+					))}
+				</div>
+			</div>
+
+			<ul className="tv-ladder">
+				{placementLadder(knockout, depth, divisionTeams).map((row) => (
+					<li key={row.place} className={`tv-ladder-row tv-ladder-row--${row.state}`}>
+						<b>{row.place}</b>
+						<span>{row.label}</span>
+						{row.badge && <span className={`tv-ladder-badge${row.isDefault ? ' tv-ladder-badge--default' : ''}`}>{row.badge}</span>}
+					</li>
+				))}
+			</ul>
+
+			<p className="tv-settings-note">
+				{knockout.started
+					? 'The knockout stage has started, so its placement matches are fixed.'
+					: '1st plays the final only, with no 3rd-place match. Changing this rebuilds the knockout fixtures.'}
+			</p>
+		</RulesPanel>
+	);
 }
 
-function ordinal(value) {
-	const lastTwo = value % 100;
-	if (lastTwo >= 11 && lastTwo <= 13) return `${value}th`;
-
-	return `${value}${{ 1: 'st', 2: 'nd', 3: 'rd' }[value % 10] ?? 'th'}`;
+function StrokeIcon({ path }) {
+	return (
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+			<path d={path} />
+		</svg>
+	);
 }
 
 // Delete Tournament, moved here from Overview's lifecycle actions unchanged: the

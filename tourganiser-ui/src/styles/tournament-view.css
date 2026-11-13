@@ -3331,7 +3331,8 @@ body.dark .tv-division-badge {
 	margin: 0;
 }
 
-.tv-teams-view-toggle {
+.tv-teams-view-toggle,
+.tv-seg {
 	display: inline-flex;
 	padding: 3px;
 	border: 1px solid var(--tv-border);
@@ -3339,7 +3340,8 @@ body.dark .tv-division-badge {
 	background: var(--tv-surface);
 }
 
-.tv-teams-view-toggle button {
+.tv-teams-view-toggle button,
+.tv-seg button {
 	min-height: 36px;
 	padding: 0 var(--space-4);
 	border: none;
@@ -3351,14 +3353,16 @@ body.dark .tv-division-badge {
 	cursor: pointer;
 }
 
-.tv-teams-view-toggle button[aria-pressed='true'] {
+.tv-teams-view-toggle button[aria-pressed='true'],
+.tv-seg button[aria-pressed='true'] {
 	background: var(--main-color);
 	/* Filled surface, so the white token is the right one. */
 	color: var(--text-color);
 }
 
 @media (max-width: 768px) {
-	.tv-teams-view-toggle button {
+	.tv-teams-view-toggle button,
+	.tv-seg button {
 		min-height: 44px;
 	}
 }
@@ -4236,4 +4240,390 @@ body.dark .tv-division-badge {
 	.tv-toolbar-actions {
 		margin: 0 auto;
 	}
+}
+
+/* --- settings: division rules -------------------------------------------- */
+
+/* One division's rules: Ranking, Tiebreak deciders and Placement matches, each a
+   panel, stacked at every width. Nothing here sits side by side. */
+.tv-rules {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	max-width: 760px;
+}
+
+.tv-rules-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+}
+
+.tv-rules-copy {
+	min-height: 44px;
+}
+
+.tv-rules-division {
+	margin: 0;
+	font-size: 0.86rem;
+	color: var(--tv-muted);
+}
+
+.tv-rules-division strong {
+	color: var(--secondary-text-color);
+}
+
+.tv-rules-panel {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	overflow: visible;
+}
+
+.tv-rules-panel-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-3);
+}
+
+.tv-rules-panel-head > div:first-child {
+	flex: 1 1 220px;
+	min-width: 0;
+}
+
+.tv-rules-panel-head h3 {
+	margin: 0;
+	font-size: 1rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-rules-panel-head p {
+	margin: 2px 0 0;
+	font-size: 0.86rem;
+	color: var(--tv-muted);
+}
+
+.tv-rules-panel .tv-settings-note {
+	margin: 0;
+}
+
+.tv-seg button:disabled,
+.tv-preset:disabled,
+.tv-stepper button:disabled,
+.tv-decider-button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+/* The placement options can run to eight; they wrap rather than scroll. */
+.tv-seg--wrap {
+	flex-wrap: wrap;
+	border-radius: 22px;
+}
+
+.tv-presets {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.tv-preset {
+	display: inline-flex;
+	align-items: center;
+	min-height: 36px;
+	padding: 0 var(--space-3);
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	color: var(--secondary-text-color);
+	font-size: 0.82rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+@media (max-width: 768px) {
+	.tv-preset {
+		min-height: 44px;
+	}
+}
+
+.tv-preset:hover:not(:disabled) {
+	border-color: var(--main-color);
+}
+
+.tv-preset[aria-pressed='true'] {
+	border-color: var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.12);
+	color: var(--main-color);
+}
+
+.tv-points,
+.tv-deciders,
+.tv-ladder {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tv-points-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--space-3);
+	min-height: 56px;
+	padding: var(--space-1) 0;
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-points-row:first-child {
+	border-top: none;
+}
+
+.tv-points-label {
+	display: block;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+}
+
+.tv-points-hint {
+	display: block;
+	font-size: 0.8rem;
+	color: var(--tv-muted);
+}
+
+.tv-stepper {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	overflow: hidden;
+	background: var(--tv-surface);
+}
+
+.tv-stepper button {
+	width: 44px;
+	height: 44px;
+	border: none;
+	background: var(--tv-surface-alt);
+	color: var(--secondary-text-color);
+	font-size: 1.15rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.tv-stepper output {
+	min-width: 40px;
+	text-align: center;
+	font-size: 0.95rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--secondary-text-color);
+}
+
+.tv-rules-radios {
+	display: flex;
+	flex-direction: column;
+}
+
+.tv-rules-radio {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-height: 56px;
+	padding: var(--space-1) 0;
+	border-top: 1px solid var(--tv-border);
+	cursor: pointer;
+}
+
+.tv-rules-radio:first-child {
+	border-top: none;
+}
+
+.tv-rules-radio input {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	margin: 0;
+	accent-color: var(--main-color);
+}
+
+.tv-deciders {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.tv-decider {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
+	min-height: 56px;
+	padding: var(--space-1) var(--space-2);
+	border: 1px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+}
+
+.tv-decider--dragging {
+	opacity: 0.45;
+}
+
+.tv-decider--over {
+	border-color: var(--main-color);
+}
+
+.tv-decider--pinned {
+	border-style: dashed;
+	background: var(--tv-surface-alt);
+}
+
+/* Touch has no HTML5 drag, so the handle is offered to a fine pointer only.
+   The up and down buttons are on every row either way. */
+.tv-decider-grip {
+	display: none;
+}
+
+@media (pointer: fine) {
+	.tv-decider-grip {
+		display: inline-flex;
+	}
+}
+
+.tv-decider-lock {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	color: var(--tv-muted);
+}
+
+@media not (pointer: fine) {
+	.tv-decider-lock {
+		display: none;
+	}
+}
+
+.tv-decider-number {
+	flex: none;
+	width: 22px;
+	text-align: center;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--main-color);
+}
+
+.tv-decider--pinned .tv-decider-number {
+	color: var(--tv-muted);
+}
+
+.tv-decider-text {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.tv-decider-actions {
+	flex: none;
+	display: inline-flex;
+	gap: var(--space-1);
+}
+
+.tv-decider-button {
+	display: inline-grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 1px solid var(--tv-border);
+	border-radius: 8px;
+	background: var(--tv-surface);
+	color: var(--tv-muted);
+	cursor: pointer;
+}
+
+/* Stroke icons. The app's own icons are filled, and a rule for those reaches
+   every svg inside a button. */
+.tv-decider-button svg,
+.tv-decider-lock svg {
+	fill: none;
+}
+
+.tv-decider-button:hover:not(:disabled) {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+.tv-placement-pick {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2) var(--space-3);
+}
+
+.tv-ladder {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.tv-ladder-row {
+	display: grid;
+	grid-template-columns: 48px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 40px;
+	padding: var(--space-1) var(--space-3);
+	border: 1px solid transparent;
+	border-radius: 8px;
+	font-size: 0.88rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-ladder-row b {
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-ladder-row--played {
+	border-color: rgb(from var(--main-color) r g b / 0.3);
+	background: rgb(from var(--main-color) r g b / 0.09);
+	font-weight: 600;
+}
+
+.tv-ladder-row--ranked {
+	border: 1px dashed var(--tv-border);
+	color: var(--tv-muted);
+}
+
+.tv-ladder-row--pool {
+	background: var(--tv-surface-alt);
+	color: var(--tv-muted);
+}
+
+.tv-ladder-badge {
+	padding: 2px var(--space-2);
+	border: 1px solid var(--tv-border);
+	border-radius: 999px;
+	background: var(--tv-surface);
+	font-size: 0.74rem;
+	font-weight: 700;
+	color: var(--tv-muted);
+	white-space: nowrap;
+}
+
+.tv-ladder-badge--default {
+	border-color: rgb(from var(--main-color) r g b / 0.35);
+	color: var(--main-color);
+}
+
+/* How a standings table is ranked, said once under the round's tables. */
+.tv-standings-rules {
+	margin: var(--space-3) 0 0;
+	font-size: 0.8rem;
+	color: var(--tv-muted);
 }

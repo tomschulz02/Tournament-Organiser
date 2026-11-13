@@ -234,9 +234,24 @@ async function updateStateColor(divisionId, color, client = db) {
     }
 }
 
-// Sets the division's primary ranking criterion. A column rather than a state
-// key: it describes how standings are read, not what was played. The division
-// trigger stamps last_update, so the tournament view's ETag moves with it.
+// Writes the division's ranking rules into state.rankingRules.
+//
+// A patch on one key, like the colour above: result entry locks the row and
+// writes `rounds` only, so saving rules mid-event cannot overwrite a result and
+// a result cannot overwrite the rules. Stamps last_update so the tournament
+// view's ETag moves and every reader re-sorts their tables.
+async function updateStateRankingRules(divisionId, rules, client = db) {
+    try {
+        const sql = "UPDATE divisions SET state = jsonb_set(state, '{rankingRules}', $2::jsonb), last_update = now() WHERE id = $1::uuid";
+        await client.query(sql, [divisionId, JSON.stringify(rules)]);
+    } catch (error) {
+        throw new Error("Failed to update ranking rules", { cause: error });
+    }
+}
+
+// Sets the division's ranking_basis column. No longer called: ranking rules are
+// kept in state (updateStateRankingRules) and the column is only the fallback
+// for divisions never edited. Left in place rather than removed with that work.
 async function updateRankingBasis(divisionId, basis, client = db) {
     try {
         const sql = "UPDATE divisions SET ranking_basis = $1 WHERE id = $2::uuid";
@@ -334,6 +349,7 @@ export const divisionsRepository = {
     getStateForUpdate,
     updateStateRounds,
     updateStateColor,
+    updateStateRankingRules,
     updateRankingBasis,
     updatePlacementDepth,
     getDivisionWithOwner,

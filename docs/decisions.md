@@ -861,3 +861,33 @@ doing first.
 
 Given up: a role cannot rearrange its own Overview. Not wanted yet, and every arrangement would
 need checking at phone width.
+
+## Ranking Rules Live In Division State
+
+Decided 2026-11-08, built 2026-11-13.
+
+An organiser has full control of how a table is ranked: a method (match points with a number
+for each of the four ways a match ends, or wins by matches or sets) and an ordered list of
+tiebreak deciders, with seeding always last. The 3rd-place playoff became optional.
+
+- **The rules are `state.rankingRules`, not a column.** The shape is a method plus an ordered
+  list, which a column would hold as JSON anyway, and `divisions.state` already carries one
+  setting (`color`) with the same "absent means default" rule. No schema change was needed.
+- **Absent means derived.** A division with no `rankingRules` key takes its rules from
+  `ranking_basis` by a fixed mapping, so no production row was migrated and every existing
+  table ranks as it did. `rankingRulesOf(division)` is the one place that fallback lives.
+- **Once saved, state wins.** `ranking_basis` is not read for that division again and nothing
+  writes the column. Dropping it is a separate, later schema change.
+- **Head-to-head works anywhere in the list.** It applies to the teams still level on
+  everything above it. A loop of three or more skips it for that group and carries on with the
+  deciders below it, then seeding. With the default order that is the old rule exactly.
+- **Final only is `placement_depth = 1`.** The column is an unconstrained integer and null
+  keeps meaning "final and 3rd place", so no existing row changed. The 3rd-place playoff is
+  now found by content, the Finals round's own match that is not the final `[0, 1]`, because
+  a Finals round without it would otherwise have its final labelled as the playoff. A
+  two-team knockout cannot be final only: it has no semifinal losers to leave unplayed.
+- **Settings in state are carried across a regenerated state** by `carryStateSettings`. This
+  also fixed a chosen colour being lost on a seed reorder or a rebuild.
+
+Given up: a preview of how a table would reorder, and a "Draw" points row. Volleyball has no
+draws.

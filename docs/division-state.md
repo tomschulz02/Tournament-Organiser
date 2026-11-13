@@ -13,6 +13,7 @@ with it, the code is wrong.
 | `rounds` | array of round objects | Ordered. Index 0 is the first round played. |
 | `currentRound` | integer | Index into `rounds`. The round currently in progress. |
 | `color` | string, optional | The accent the organiser chose for this division: `"accent-1"` … `"accent-12"`. Absent means no choice. |
+| `rankingRules` | object, optional | How this division's tables are ranked. Absent means the rules are derived from `divisions.ranking_basis`. See "rankingRules" below. |
 
 `color` is the only key here that is presentation rather than structure, and the only one
 an organiser can change at any point in the tournament's life — it bears on neither teams
@@ -50,6 +51,30 @@ back in no particular order. `getTeamsByDivisionIds` is deliberately not restore
 The two can drift: a `teams` row whose `division_id` points at a division that does not
 list it in `state.teams` is invisible, and an id in `state.teams` with no row resolves to
 nothing. Nothing enforces agreement. Write both together, inside the same transaction.
+
+### rankingRules
+
+| Key | Type | Description |
+|---|---|---|
+| `method` | string | `"points"` or `"wins"`. |
+| `points` | object | Only when `method` is `"points"`. Whole numbers 0 to 10 under `straightWin`, `decidingWin`, `decidingLoss`, `straightLoss`. |
+| `wins` | string | Only when `method` is `"wins"`. `"matches"` or `"sets"`. |
+| `tiebreakers` | array of strings | Deciders in the order they apply, each at most once: `SET_RATIO`, `POINT_RATIO`, `HEAD_TO_HEAD`, `SET_DIFFERENCE`, `POINT_DIFFERENCE`, `POINTS_SCORED`, `SETS_WON`. Seeding is always last and is never stored. |
+
+The key is absent until an organiser saves rules for the division. While it is absent the
+rules are derived from `divisions.ranking_basis` by the table in
+`docs/tournament-rules.md`, "Where the rules are stored", so no existing division needed
+migrating. Once present it is authoritative and the column is no longer read. Read rules
+only through `rankingRulesOf(division)` in `api/src/utils/standings.js`, which applies
+that fallback.
+
+It is written by its own `jsonb_set`, `divisionsRepository.updateStateRankingRules`, so
+saving rules mid-event cannot overwrite a result and a result cannot overwrite the rules.
+
+**Settings survive a regenerated state.** A seed reorder and a team rebuild write a
+freshly generated state over the old one. `carryStateSettings` in `divisions.service.js`
+copies the setting keys, `color` and `rankingRules`, from the old state to the new one
+first. A new setting key kept in state must be added to its list.
 
 ## Round Object
 

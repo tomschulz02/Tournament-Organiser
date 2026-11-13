@@ -16,6 +16,7 @@ import {
 	defaultStage,
 } from './standingsView';
 import { fetchRoundProgression } from '../../requests';
+import { describeRules, matchPoints, rulesOf } from '../../utils/rankingRules';
 import { useHelpTopic } from '../../HelpContext';
 
 const STATUS_LABELS = {
@@ -28,15 +29,15 @@ const STATUS_LABELS = {
 // Standings for one division at a time.
 //
 // Everything here is rendered as the server computed it. rankGroup has already
-// applied the full ranking chain — matches won, then set ratio, then point
-// ratio, then head-to-head, then seed — and re-sorting in the client would put a
-// second, competing definition of the ranking in the codebase, which
+// applied the full ranking chain — the division's method, then its tiebreak
+// deciders, then seed — and re-sorting in the client would put a second,
+// competing definition of the ranking in the codebase, which
 // docs/tournament-rules.md exists to prevent.
 //
-// There is no league-points column. Tourganiser ranks by matches won; no points
-// system exists to have a column for. Points for and against are a different
-// thing — points scored in play, which is what the point-ratio tiebreak is built
-// from — and those do have columns.
+// A "Pts" column appears only when the division ranks by match points. The
+// figure is worked out here from the row's scorelines purely for display; the
+// order is still the server's. Points for and against are a different thing —
+// points scored in play — and always have columns.
 //
 // Two presentations of the same rows: full tables from 768px, and below that a
 // card per pool whose rows expand, so a phone never scrolls sideways. Both are
@@ -66,6 +67,7 @@ export default function StandingsTab({
 		(round.groups ?? []).some((group) => (group.standings ?? []).length > 0),
 	) : [];
 	const bracketRounds = division?.bracket?.rounds ?? [];
+	const rules = rulesOf(division);
 
 	// One column set for the whole division rather than one per group, so two
 	// tables sitting above each other have the same columns in the same order
@@ -189,8 +191,11 @@ export default function StandingsTab({
 												showName={round.groups.length > 1}
 												cut={cut}
 												fixtures={division.fixtures}
+												rules={rules}
 											/>
 										))}
+
+										<p className="tv-standings-rules">{describeRules(rules)}</p>
 									</div>
 								);
 							})}
@@ -333,19 +338,22 @@ function deriveOutcomeColumns(rounds) {
 
 // One group, as a table from 768px and as a card below. A league is a round
 // with a single group, which is why there is no separate league presentation.
-function StandingsGroup({ group, advanced, outcomeColumns, showName, cut, fixtures }) {
+function StandingsGroup({ group, advanced, outcomeColumns, showName, cut, fixtures, rules }) {
 	return (
 		<div className="tv-standings-group">
 			{showName && <h4 className="tv-standings-group-name">{group.name}</h4>}
 
-			<StandingsTable group={group} advanced={advanced} outcomeColumns={outcomeColumns} cut={cut} />
-			<PoolCard group={group} outcomeColumns={outcomeColumns} cut={cut} fixtures={fixtures} />
+			<StandingsTable group={group} advanced={advanced} outcomeColumns={outcomeColumns} cut={cut} rules={rules} />
+			<PoolCard group={group} outcomeColumns={outcomeColumns} cut={cut} fixtures={fixtures} rules={rules} />
 		</div>
 	);
 }
 
-function StandingsTable({ group, advanced, outcomeColumns, cut }) {
+function StandingsTable({ group, advanced, outcomeColumns, cut, rules }) {
 	const rowCount = group.standings.length;
+	// Match points are what the table is ranked on when the division ranks by
+	// points, so they get a column of their own, first among the figures.
+	const byPoints = rules.method === 'points';
 
 	return (
 		// The scroll lives on this wrapper, not the page. Turning the advanced
@@ -361,6 +369,11 @@ function StandingsTable({ group, advanced, outcomeColumns, cut }) {
 						<th scope="col" className="tv-col-team">
 							Team
 						</th>
+						{byPoints && (
+							<th scope="col">
+								<abbr title="Match points">Pts</abbr>
+							</th>
+						)}
 						<th scope="col">
 							<abbr title="Played">P</abbr>
 						</th>
@@ -414,6 +427,11 @@ function StandingsTable({ group, advanced, outcomeColumns, cut }) {
 									{row.name}
 									{qualifies && <span className="tv-visually-hidden"> (through)</span>}
 								</th>
+								{byPoints && (
+									<td>
+										<strong>{matchPoints(row, rules.points)}</strong>
+									</td>
+								)}
 								<td>{row.played}</td>
 								<td>{row.won}</td>
 								<td>{row.lost}</td>
@@ -447,7 +465,7 @@ function StandingsTable({ group, advanced, outcomeColumns, cut }) {
 // The phone presentation: five figures per row, and a tap opens the rest —
 // points, ratios, scoreline counts and recent form — under that row. Which rows
 // are open is local, so a 20-second refresh keeps them open.
-function PoolCard({ group, outcomeColumns, cut, fixtures }) {
+function PoolCard({ group, outcomeColumns, cut, fixtures, rules }) {
 	const [open, setOpen] = useState(() => new Set());
 	const baseId = useId();
 	const rowCount = group.standings.length;
@@ -507,6 +525,12 @@ function PoolCard({ group, outcomeColumns, cut, fixtures }) {
 
 							{isOpen && (
 								<dl id={detailId} className="tv-pool-card-detail">
+									{rules.method === 'points' && (
+										<div>
+											<dt>Match points</dt>
+											<dd>{matchPoints(row, rules.points)}</dd>
+										</div>
+									)}
 									<div>
 										<dt>Points</dt>
 										<dd>

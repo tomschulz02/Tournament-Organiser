@@ -442,6 +442,15 @@ export function generatePartialRoundRobinPairs(teamIds, gamesPerTeam){
     return pairs;
 }
 
+// The 3rd-place playoff, told by what the group holds rather than where it sits:
+// the final is always the two semifinal winners, places 0 and 1 of the round
+// before, so the Finals round's other match is the playoff. Its position cannot
+// say so, because a division playing the final only has no playoff and its final
+// is then the round's first group.
+function isThirdPlaceGroup(round, group) {
+    return round.name === FINALS && !(group[0] === 0 && group[1] === 1);
+}
+
 function generateKnockoutFixtures(matchNo, round){
     const fixtures = [];
     // A placement group's fixture carries the name addPlacementMatches gave it.
@@ -459,7 +468,7 @@ function generateKnockoutFixtures(matchNo, round){
             matchNo: matchNo++,
             team1: group[0],
             team2: group[1],
-            round: placementNames.get(index) ?? ((round.name === "Finals" && index === 0) ? "3rd Place Playoff" : round.name),
+            round: placementNames.get(index) ?? (isThirdPlaceGroup(round, group) ? THIRD_PLACE : round.name),
             placeholder1: Number.isInteger(group[0]),
             placeholder2: Number.isInteger(group[1]),
         })

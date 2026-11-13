@@ -8,6 +8,7 @@ import {
     createStandingsRow,
     isCountableFixture,
     rankGroup,
+    rankingRulesOf,
     seedAcrossGroups,
     seedKnockoutResults
 } from "../utils/standings.js";
@@ -39,7 +40,7 @@ async function getProposal(divisionId, userId) {
     const computed = computeRoundResults(round, state, fixtures, {
         nextRound,
         previousResults: rounds[roundIndex - 1]?.results,
-        basis: division.ranking_basis
+        rules: rankingRulesOf(division)
     }).map((row) => ({
         ...row,
         // A null id is a place left empty by a cancelled knockout match, not a
@@ -107,7 +108,7 @@ async function commit(divisionId, userId, confirmedTeamIds) {
     const computed = computeRoundResults(round, state, fixtures, {
         nextRound,
         previousResults: rounds[roundIndex - 1]?.results,
-        basis: division.ranking_basis
+        rules: rankingRulesOf(division)
     });
     const confirmed = validateConfirmedTeams(confirmedTeamIds, computed, nextRound);
 
@@ -256,9 +257,9 @@ function sameOrder(a, b) {
 //
 // The tail is an options object rather than two more positional parameters:
 // nextRound gives the qualifier count, previousResults are the results a knockout
-// round's groups index into, which is the only way to name a bye team. basis is
-// the division's ranking_basis, which only a pool round's ranking reads.
-function computeRoundResults(round, state, fixtures, { nextRound = null, previousResults = [], basis } = {}) {
+// round's groups index into, which is the only way to name a bye team. rules are
+// the division's ranking rules, which only a pool round's ranking reads.
+function computeRoundResults(round, state, fixtures, { nextRound = null, previousResults = [], rules } = {}) {
     const seedIndex = buildSeedIndex(state.teams);
 
     if (round.type === "knockout") {
@@ -289,10 +290,10 @@ function computeRoundResults(round, state, fixtures, { nextRound = null, previou
         });
 
         rows.forEach(computeRatios);
-        return rankGroup(rows, { headToHead, seedIndex, basis });
+        return rankGroup(rows, { headToHead, seedIndex, rules });
     });
 
-    return seedAcrossGroups(rankedGroups, seedIndex, qualifierCount(nextRound), basis);
+    return seedAcrossGroups(rankedGroups, seedIndex, qualifierCount(nextRound), rules);
 }
 
 // The next round's groups hold indices into this round's results, so the number

@@ -20,6 +20,21 @@
         ],
         "createdAt": "2026-11-04T12:15:25.012Z",
         "reason": "DESIGN.md documents the 3px division edge as a system component; these rules draw a match's division colour, not a decorative accent"
+      },
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-11-08T08:35:02.598Z",
+        "reason": "Claude: App.css L3368 is the printed A4 page (210mm x 297mm); Arial is a print-safe face there, not the UI font"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/tournament-view.css"
+        ],
+        "createdAt": "2026-11-08T09:00:35.503Z",
+        "reason": "Claude: DESIGN.md (Shape, Components) sanctions the 3px division-colour edge on .tv-division-card (L592) and .tv-fixture-row (L1688); L2794 is a neutral 4px column divider in Teams, not an accent"
       }
     ]
   }

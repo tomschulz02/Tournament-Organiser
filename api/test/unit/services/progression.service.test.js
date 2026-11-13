@@ -696,6 +696,69 @@ describe("validateConfirmedTeams", () => {
     });
 });
 
+// --- ranking rules ---------------------------------------------------------
+
+// One pool of three in which everybody won once: t1 beat t2 2-1, t2 beat t3 2-0
+// and t3 beat t1 2-0. The default deciders separate them on set ratio — t2 3:2,
+// t3 2:2, t1 2:3. Rules with no deciders leave it to seeding.
+describe("ranking by the division's rules", () => {
+    const pool = () => makeRound({ name: "Pool Play", type: "roundRobin", groups: [["t1", "t2", "t3"]] });
+    const semis = () => makeRound({ name: "Semifinals", type: "knockout", groups: [[0, 1]] });
+    const played = () => [
+        makeFixture({ id: "f1", match_no: 1, round: "Pool Play", status: "COMPLETED", team_1: "t1", team_2: "t2", team_1_result: [21, 15, 15], team_2_result: [15, 21, 10] }),
+        makeFixture({ id: "f2", match_no: 2, round: "Pool Play", status: "COMPLETED", team_1: "t2", team_2: "t3", team_1_result: [21, 21], team_2_result: [15, 15] }),
+        makeFixture({ id: "f3", match_no: 3, round: "Pool Play", status: "COMPLETED", team_1: "t3", team_2: "t1", team_1_result: [21, 21], team_2_result: [15, 15] })
+    ];
+    const seedingOnly = { method: "wins", wins: "matches", tiebreakers: [] };
+    const state = makeState({ teams: ["t1", "t2", "t3"] });
+
+    it("ranks a pool round by the rules it is given, and by match wins with none", () => {
+        const fixtures = played().map(normalizeFixtureResult);
+        const ids = (options) => computeRoundResults(pool(), state, fixtures, options).map((row) => row.id);
+
+        expect(ids()).toEqual(["t2", "t3", "t1"]);
+        expect(ids({ rules: seedingOnly })).toEqual(["t1", "t2", "t3"]);
+    });
+
+    function stored(extraState = {}, extraDivision = {}) {
+        divisionsRepository.getDivisionWithOwner.mockResolvedValue({
+            id: "div-1",
+            name: "Division A",
+            created_by: "user-1",
+            state: makeState({ teams: ["t1", "t2", "t3"], rounds: [pool(), semis()], currentRound: 0, ...extraState }),
+            ...extraDivision
+        });
+        divisionsRepository.getFixturesByDivisionId.mockResolvedValue(played());
+        divisionsRepository.getTeamsByIds.mockResolvedValue([
+            { id: "t1", name: "Aces" }, { id: "t2", name: "Bears" }, { id: "t3", name: "Cubs" }
+        ]);
+    }
+
+    it("proposes qualifiers by the default rules for a division never edited", async () => {
+        stored();
+
+        const proposal = await progressionService.getProposal("div-1", "user-1");
+
+        expect(proposal.qualifiers.map((row) => row.id)).toEqual(["t2", "t3"]);
+    });
+
+    it("proposes qualifiers by the rules saved in state", async () => {
+        stored({ rankingRules: seedingOnly });
+
+        const proposal = await progressionService.getProposal("div-1", "user-1");
+
+        expect(proposal.qualifiers.map((row) => row.id)).toEqual(["t1", "t2"]);
+    });
+
+    it("commits against the same rules it proposed with", async () => {
+        stored({ rankingRules: seedingOnly });
+
+        const result = await progressionService.commit("div-1", "user-1", ["t1", "t2"]);
+
+        expect(result.amended).toBe(false);
+    });
+});
+
 // --- getProposal ----------------------------------------------------------
 
 describe("progressionService.getProposal", () => {

@@ -382,8 +382,9 @@ export const updateDivisionColour = (divisionId, color) =>
 	request(`divisions/${divisionId}/colour`, { method: 'PUT', body: { color } });
 
 // The Settings page's per-division controls. `settings` holds either or both of
-// `rankingBasis` (MATCHES_WON, FIVB_POINTS, SIMPLIFIED_POINTS, SETS_WON) and
-// `placementDepth` (null, or an odd place from 5). The basis can change at any
+// `rankingRules` (the method, its values and the ordered tiebreak deciders — see
+// utils/rankingRules.js) and `placementDepth` (1 for the final only, null for the
+// final and 3rd place, or an odd place from 5). The rules can change at any
 // time; the depth is refused with a 409 once the knockout stage has started,
 // because it adds and removes fixtures.
 export const updateDivisionSettings = (divisionId, settings) =>

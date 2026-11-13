@@ -678,6 +678,15 @@ describe("normalizeDivisionState", () => {
 
     // A value outside the palette would resolve to no colour at all in the
     // stylesheet, so the read path falls back rather than passing it on.
+    // Saved ranking rules, named for the same reason as the colour.
+    it("carries valid ranking rules through and omits them otherwise", () => {
+        const rankingRules = { method: "wins", wins: "sets", tiebreakers: ["HEAD_TO_HEAD"] };
+
+        expect(normalizeDivisionState({ rankingRules }).rankingRules).toEqual(rankingRules);
+        expect(normalizeDivisionState({ teams: [] })).not.toHaveProperty("rankingRules");
+        expect(normalizeDivisionState({ rankingRules: { method: "draws" } })).not.toHaveProperty("rankingRules");
+    });
+
     it.each(["accent-0", "accent-13", "red", "", 3, null])("omits an unusable colour %p", (value) => {
         expect(normalizeDivisionState({ color: value })).not.toHaveProperty("color");
     });
@@ -2596,6 +2605,57 @@ describe("formatDivisionPayload", () => {
         expect(payload.fixtures.map((fixture) => fixture.id)).toEqual(["f1", "f2"]);
         expect(payload.results.map((fixture) => fixture.id)).toEqual(["f1"]);
         expect(payload.num_teams).toBe(2);
+    });
+
+    describe("ranking rules", () => {
+        // Level on match wins. t1 has the better set ratio, t2 scored more points.
+        const teams = [makeTeam({ id: "t1", name: "Aces" }), makeTeam({ id: "t2", name: "Bears" }), makeTeam({ id: "t3", name: "Cubs" })];
+        const fixtures = () => [
+            makeFixture({ id: "f1", match_no: 1, status: "COMPLETED", team_1: "t1", team_2: "t3", team_1_result: [21, 21], team_2_result: [10, 10] }),
+            makeFixture({ id: "f2", match_no: 2, status: "COMPLETED", team_1: "t2", team_2: "t3", team_1_result: [25, 20, 15], team_2_result: [10, 25, 5] })
+        ];
+        const division = (stateExtra = {}, extra = {}) => makeDivision({
+            state: makeState({ teams: ["t1", "t2", "t3"], rounds: [makeRound({ groups: [["t1", "t2", "t3"]] })], ...stateExtra }),
+            ...extra
+        });
+        const table = (payload) => payload.standings[0].groups[0].standings.map((row) => row.id);
+        const pointsScored = { method: "wins", wins: "matches", tiebreakers: ["POINTS_SCORED"] };
+
+        it("sends the rules the basis stands for when none are saved, and ranks by them", () => {
+            const payload = formatDivisionPayload({
+                division: division({}, { ranking_basis: "FIVB_POINTS" }),
+                teams,
+                fixtures: fixtures()
+            });
+
+            expect(payload.ranking_basis).toBe("FIVB_POINTS");
+            expect(payload.ranking_rules).toEqual({
+                method: "points",
+                points: { straightWin: 3, decidingWin: 2, decidingLoss: 1, straightLoss: 0 },
+                tiebreakers: ["SET_RATIO", "POINT_RATIO", "HEAD_TO_HEAD"]
+            });
+            expect(payload.state).not.toHaveProperty("rankingRules");
+            // t1 took 3 points for its straight win, t2 took 2 for a deciding set.
+            expect(table(payload)).toEqual(["t1", "t2", "t3"]);
+        });
+
+        it("ranks by the rules saved in state, and sends them", () => {
+            const payload = formatDivisionPayload({ division: division({ rankingRules: pointsScored }), teams, fixtures: fixtures() });
+
+            expect(payload.ranking_rules).toEqual(pointsScored);
+            expect(payload.state.rankingRules).toEqual(pointsScored);
+            expect(table(payload)).toEqual(["t2", "t1", "t3"]);
+        });
+
+        it("reads saved rules out of a state stored as a string", () => {
+            const stored = division({ rankingRules: pointsScored });
+            stored.state = JSON.stringify(stored.state);
+
+            const payload = formatDivisionPayload({ division: stored, teams, fixtures: fixtures() });
+
+            expect(payload.ranking_rules).toEqual(pointsScored);
+            expect(table(payload)).toEqual(["t2", "t1", "t3"]);
+        });
     });
 
     // A division no longer carries a schedule at all, however one arrives.

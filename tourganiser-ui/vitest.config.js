@@ -33,7 +33,20 @@ export default defineConfig({
                 "src/utils/schedulePrintLayout.js",
                 // The Discover card's date tile and start countdown.
                 "src/utils/tournamentDates.js",
+                // Ranking rules as the Settings and Standings tabs present them:
+                // a row's match points, and which knockout places a placement
+                // depth has a match for. The match counts mirror the server's.
+                "src/utils/rankingRules.js",
                 "src/components/tournament/fixtureUtils.js",
+                // The viewer's role read back from data.can, and where the
+                // schedule stands at an injected "now". They decide what the
+                // Overview puts first and where the Now line falls.
+                "src/components/tournament/collaboratorRoles.js",
+                "src/components/tournament/scheduleNow.js",
+                // The next round's pairings, shared by NextRoundModal and the
+                // Standings preview.
+                "src/components/tournament/nextRound.js",
+                "src/components/tournament/standingsView.js",
                 // The port of server generation the creation review computes its
                 // pools and bracket from. Pinned to the server's arithmetic by
                 // shared/division-structure.json — see docs/decisions.md.

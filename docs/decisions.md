@@ -803,3 +803,91 @@ Given up: rows no longer grow to fit their content, so a very short match or a v
 one page says less. Long round names are shortened on a block, and the printed list still gives
 them in full. Sizes are in millimetres, so a block keeps its height on screen rather than filling
 the window.
+
+## The Schedule Maker Works Like A Calendar
+
+Decided 2026-11-04.
+
+The maker was built around slots, and organisers had to learn its panels before they could place
+a match. It now behaves like a calendar: grid lines are a reading aid, a match occupies exactly
+the time it takes, and each option lives in one place.
+
+- **Two matches may not overlap on one court.** A court hosts one match at a time, so the server
+  rule stays and no side-by-side layout exists.
+- **The board's scale is fixed at 1.6px a minute** (`PX_PER_MINUTE`). A 50-minute match is 80px on
+  any grid, which is what lets changing the grid move nothing.
+- **Placement snaps to 5 minutes, and to a neighbouring entry within 7.**
+- **Grid line choices are 15, 30 and 60 minutes.** A saved value outside these, such as 50, stays
+  selectable until it is changed, so an older schedule opens as it was saved.
+- **A team's gap under 15 minutes warns and never refuses.** It is unrelated to the generator's
+  minimum rest. The client refuses only what the server would refuse on save.
+- **Match length is a default for new placements, stored in `settings.generator`.** Nothing new
+  was added to the JSONB. Editing a length moves nothing on the board, so this doesn't repeat the
+  coupling rejected above.
+- **Four rules stay in view on Auto-schedule:** minimum rest, a break before knockout rounds,
+  bending rules to fit every fixture, and assigning officials. The other six sit under More rules.
+- **The names changed.** Generate is Auto-schedule, Slot Length is Grid lines every, and Grid and
+  List are Board and List. Inspector, entry and slot are gone from the interface.
+- **A saved print layout always fits its sheet.** The scale shrinks and text drops a tier, which
+  only affects layouts an organiser chose. Default page breaks use a minimum scale instead.
+- **Undo is one stack of schedule snapshots, capped at 50, with no redo.** It is cleared on save
+  and on discard and isn't stored. A run of edits to one Set up field counts as one step, because
+  those fields write as they are typed in.
+
+Given up: HTML5 drag-and-drop stays for moving matches and placing them from the list, so a phone
+still places by tapping. Create and resize use pointer events, so they work by touch.
+
+## One Overview For Every Role
+
+Decided 2026-11-08.
+
+Spectators, scorers, match managers, co-organisers and organisers all open the same tabs. There
+are no role-specific tabs or dashboards. The viewer's role changes only the order and prominence
+of the Overview's sections: a spectator gets a feel for the whole tournament (who is on court,
+what is next, how far each division has got), while organiser roles get a queue of what needs
+doing first.
+
+- **The role is read from `data.can`.** `viewerRole(can)` in `collaboratorRoles.js` returns the
+  highest flag present. It orders sections only. Every action is still offered by its own flag
+  and refused by the server, so a wrong guess shows things in the wrong order and never grants
+  anything.
+- **Section order is one table** (`ROLE_SECTIONS` in `OverviewTab.jsx`), so adding a section or
+  changing a role's order is a one-line change.
+- **Time-based sections read one clock** (`useScheduleClock`), the device's, against the
+  schedule's own dates. With no schedule, or when no scheduled day is today, they fall back to
+  live fixtures by match number or hide.
+- **Settings stays the one exception**, as before: it appears only for `manageSetup`, and each
+  section inside it keeps its own capability.
+
+Given up: a role cannot rearrange its own Overview. Not wanted yet, and every arrangement would
+need checking at phone width.
+
+## Ranking Rules Live In Division State
+
+Decided 2026-11-08, built 2026-11-13.
+
+An organiser has full control of how a table is ranked: a method (match points with a number
+for each of the four ways a match ends, or wins by matches or sets) and an ordered list of
+tiebreak deciders, with seeding always last. The 3rd-place playoff became optional.
+
+- **The rules are `state.rankingRules`, not a column.** The shape is a method plus an ordered
+  list, which a column would hold as JSON anyway, and `divisions.state` already carries one
+  setting (`color`) with the same "absent means default" rule. No schema change was needed.
+- **Absent means derived.** A division with no `rankingRules` key takes its rules from
+  `ranking_basis` by a fixed mapping, so no production row was migrated and every existing
+  table ranks as it did. `rankingRulesOf(division)` is the one place that fallback lives.
+- **Once saved, state wins.** `ranking_basis` is not read for that division again and nothing
+  writes the column. Dropping it is a separate, later schema change.
+- **Head-to-head works anywhere in the list.** It applies to the teams still level on
+  everything above it. A loop of three or more skips it for that group and carries on with the
+  deciders below it, then seeding. With the default order that is the old rule exactly.
+- **Final only is `placement_depth = 1`.** The column is an unconstrained integer and null
+  keeps meaning "final and 3rd place", so no existing row changed. The 3rd-place playoff is
+  now found by content, the Finals round's own match that is not the final `[0, 1]`, because
+  a Finals round without it would otherwise have its final labelled as the playoff. A
+  two-team knockout cannot be final only: it has no semifinal losers to leave unplayed.
+- **Settings in state are carried across a regenerated state** by `carryStateSettings`. This
+  also fixed a chosen colour being lost on a seed reorder or a rebuild.
+
+Given up: a preview of how a table would reorder, and a "Draw" points row. Volleyball has no
+draws.

@@ -447,6 +447,38 @@ describe("updateStateColor", () => {
     });
 });
 
+describe("updateStateRankingRules", () => {
+    const rules = { method: "wins", wins: "sets", tiebreakers: ["HEAD_TO_HEAD"] };
+
+    it("patches state.rankingRules and stamps last_update, leaving the rest of state alone", async () => {
+        await divisionsRepository.updateStateRankingRules("div-1", rules);
+
+        const [sql, params] = db.query.mock.calls[0];
+        expect(squash(sql)).toBe(
+            "UPDATE divisions SET state = jsonb_set(state, '{rankingRules}', $2::jsonb), last_update = now() WHERE id = $1::uuid"
+        );
+        expect(params).toEqual(["div-1", JSON.stringify(rules)]);
+    });
+
+    it("joins the caller's transaction when given a client", async () => {
+        await divisionsRepository.updateStateRankingRules("div-1", rules, client);
+
+        expect(client.query).toHaveBeenCalledOnce();
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it("throws, keeping the underlying error as cause", async () => {
+        const underlying = new Error("connection lost");
+        db.query.mockRejectedValueOnce(underlying);
+
+        await expectWrapped(
+            divisionsRepository.updateStateRankingRules("div-1", rules),
+            "Failed to update ranking rules",
+            underlying
+        );
+    });
+});
+
 describe("getTeamsByIds", () => {
     // By id rather than by division_id, even though the column now exists:
     // state.teams is authoritative for seed order and a query by division would

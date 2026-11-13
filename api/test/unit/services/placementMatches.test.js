@@ -149,6 +149,48 @@ describe.each([
     });
 });
 
+describe.each([
+    // teams, pools, knockout teams
+    [16, 2, 8],
+    [16, 2, 6],
+    [16, 2, 4]
+])("%i teams, %i pools, %i in the knockout, final only", (teamCount, pools, knockoutTeams) => {
+    const { rows, view, teamIds, state } = playDivision({ teamCount, pools, knockoutTeams, depth: 1 });
+
+    it("generates the final alone in its round, with no playoff and no placement match", () => {
+        const finals = state.rounds.at(-1);
+
+        expect(finals).toMatchObject({ name: "Finals", groups: [[0, 1]], totalGames: 1 });
+        expect(rows.filter((row) => row.round === "Finals")).toHaveLength(1);
+        expect(rows.some((row) => row.round === "3rd Place Playoff")).toBe(false);
+        expect(rows.some((row) => row.round.includes(" · "))).toBe(false);
+        expect(state.rounds.some((round) => "placement" in round)).toBe(false);
+    });
+
+    it("leaves every other round exactly as the default draws it", () => {
+        const teams = Array.from({ length: teamCount }, (_, index) => `t${index}`);
+        const groups = (depth) => createClassicState(teams, teamCount, pools, knockoutTeams, depth).rounds
+            .map((round) => round.groups);
+
+        expect(groups(1).slice(0, -1)).toEqual(groups(null).slice(0, -1));
+        expect(groups(null).at(-1)).toEqual([[2, 3], [0, 1]]);
+    });
+
+    it("draws the final as the final, not as a placement match", () => {
+        const finals = view.bracket.rounds.at(-1);
+
+        expect(finals.matches).toHaveLength(1);
+        expect(finals.matches[0]).toMatchObject({ round: "Finals", isPlacementMatch: false });
+    });
+
+    it("ranks every team, with 3rd and 4th from the semifinals rather than a match", () => {
+        expect(view.finalStandings.map((entry) => entry.team_id)).toEqual(teamIds);
+        expect(view.finalStandings.map((entry) => entry.rank)).toEqual(teamIds.map((_, index) => index + 1));
+        expect(view.finalStandings.slice(0, 4).map((entry) => entry.note))
+            .toEqual(["Champion", "Runner-up", "Semifinals", "Semifinals"]);
+    });
+});
+
 describe("addPlacementMatches", () => {
     it("leaves a division with no knockout, or a knockout of one round, alone", () => {
         const pool = { name: "Pool Play", type: "roundRobin", groups: [["a", "b"]] };

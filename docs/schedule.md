@@ -204,6 +204,9 @@ begin or end on a grid line.
 Changing `slotMinutes` or `dayStartTime` after entries exist re-rules the board and moves
 nothing.
 
+Undo in the schedule maker holds up to 50 earlier versions of the draft in memory. None of it
+is stored: saving, discarding and closing all clear it, and there is no redo.
+
 ### Print
 
 Added 2026-09-08. Two saved layouts, one per printed view, edited and saved independently

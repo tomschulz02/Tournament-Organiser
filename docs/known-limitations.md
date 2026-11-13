@@ -221,9 +221,21 @@ From the 2026-10-22 review (`docs/review-2026-10-22.md`, section 4):
   purpose (`View.jsx` keeps score entry open so mistakes can be corrected); the End
   Tournament confirmation and the help text were reworded to say so on 2026-10-23.
   Before Start, it is still unchecked server-side.
-- **The ranking basis can change after progression.** The pool table re-sorts on the new
-  basis while the bracket keeps the qualifiers committed under the old one, so a viewer
-  can see a table that contradicts who advanced.
+- **The ranking rules can change after progression.** The pool table re-sorts on the new
+  rules while the bracket keeps the qualifiers committed under the old ones, so a viewer
+  can see a table that contradicts who advanced. The same goes for "Copy to all
+  divisions", which writes one division's rules to every other.
+- **Unplayed knockout places do not use the division's deciders.** Teams knocked out in
+  the same round with no match to separate them, 3rd and 4th under "final only" included,
+  are ordered by the fixed chain in `compareEliminatedTeams` (the match they lost, then
+  earlier matches, then seeding). The Settings ladder says "ranked by the tiebreak
+  deciders", which is looser than what happens.
+- **Final only is not offered for a two-team knockout.** Its Finals round still holds a
+  3rd-place match and so still takes four ranks.
+- **`divisions.ranking_basis` is dead weight for an edited division.** Nothing writes the
+  column, `updateRankingBasis` and `INVALID_RANKING_BASIS` are unused, and a request that
+  still sends `rankingBasis` is ignored without an error. Dropping the column is a
+  separate schema change.
 - Scores are only checked as whole numbers from 0 to 999. A level set (25-25) is accepted
   and counts for nobody.
 - `formatTournamentDates` returns `start_date` as "24 September 2026" and `end_date` as
@@ -353,10 +365,10 @@ its file references and a suggested direction). Spectator side first:
   and the saved-tournament card nests a `<button>` inside its `<button>`.
 - **"Recent results" is sorted by `match_no`**, which restarts in each division, so it
   shows the highest-numbered matches rather than the most recent ones.
-- **Standings show no qualification markers, and no points column** when the ranking
-  basis is FIVB or simplified points. The comment in `StandingsTab.jsx` saying no points
-  system exists is out of date. Finished divisions open on the pool tab rather than final
-  rankings, and tied placings (four quarterfinal losers) are shown as 5, 6, 7, 8.
+- **Finished divisions open on the pool tab** rather than final rankings, and tied
+  placings (four quarterfinal losers) are shown as 5, 6, 7, 8. Standings gained a "Pts"
+  column and a line naming the ranking rules on 2026-11-13; on a phone the match points
+  are in the expanded row, not the summary line.
 - **No team page.** There is no single place to see one team's fixtures, results and
   next match.
 - On a phone, the site header, tournament header and five filters take about 600px before
@@ -525,6 +537,26 @@ here. What is left:
     tournament schedule");~~ fixed for courts 2026-11-04;
   - ~~the generator's Courts number duplicates the Courts & Fields list.~~ fixed 2026-11-04,
     when courts moved to Set up.
+- Schedule maker, after the 2026-11-04 calendar rework:
+  - **Hours apply to every day.** There is one `dayStartTime` and `dayEndTime`, not one per day.
+  - **A fixture doesn't remember its length once unscheduled.** Length lives on the entry, which
+    is deleted, so it returns to its round's length when placed again.
+  - **Round order can't be checked as a match is placed.** Only the generator and the server
+    implement it, so it stays a save-time error that highlights the entry. A court's division
+    limit is the same.
+  - **Unbound knockout fixtures get no back-to-back warning**, because their teams aren't known
+    until the round before is played.
+  - **A printed day fitting one page is a target, not a promise.** It depends on hours, courts,
+    the shortest match and text wrapping. The default page breaks add a page before clipping,
+    and a saved layout shrinks to fit its sheet.
+  - **Auto-schedule still replaces hand-placed fixtures.** Only breaks are kept.
+  - **A dismissed generation report can come back.** Each undo step restores the report that was
+    showing when that step was taken, so undoing a change made before a dismissal shows it again.
+  - **The maker's read-only branch can't be reached.** `View.jsx` only mounts it with `canEdit`
+    set, so the `canEdit` false paths aren't exercised.
+  - **`schedule-print.css` and `SchedulePrintLayoutEditor.jsx` still say "inspector"** in comments.
+    The page-break editor now sits in the Print sheet. Its narrow rules key off the editor's own
+    width, so they still apply on a phone.
 
 ## Overlays and stacking
 
@@ -579,7 +611,8 @@ here. What is left:
   database the public site reads, so anything created while developing or testing appears
   on the live Discover page. A Neon branch for development would separate the two at no
   cost. The 2026-10-22 review left one test account behind: `uxtest-4d633236`, which
-  cannot be deleted from the app.
+  cannot be deleted from the app. The 2026-11-13 ranking-rules work left another,
+  `ranktest_2e70da`, and its tournament "ZZ Ranking Rules Test".
 - `docs/` and `CLAUDE.md` are untracked by git.
 - Claude's sandbox can create but not delete files under `.git/`, so any git command it
   runs can leave a stale `.git/index.lock` that blocks the developer's commits. Claude

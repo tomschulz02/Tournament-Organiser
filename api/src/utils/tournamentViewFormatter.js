@@ -8,7 +8,9 @@ import {
     createStandingsRow,
     describeQualifierSlot,
     isCountableFixture,
-    rankGroup
+    rankGroup,
+    rankingRulesOf,
+    readRankingRules
 } from "./standings.js";
 import { qualifierCount } from "../services/progression.service.js";
 import { roundHolding } from "../services/fixtures.service.js";
@@ -82,7 +84,9 @@ function formatDivisionPayload({ division, teams, fixtures, attribution = null }
         .map((fixture) => normalizeFixture(fixture, teamLookup, lockedRoundNames, attribution));
 
     const results = normalizedFixtures.filter((fixture) => isResultFixture(fixture));
-    const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup, division.ranking_basis);
+    // From the normalised state, so a state stored as a string is read too.
+    const rankingRules = rankingRulesOf({ ...division, state });
+    const standings = buildDivisionStandings(state, normalizedFixtures, teamLookup, rankingRules);
     const bracket = buildDivisionBracket(state, normalizedFixtures, teamLookup);
     labelFedSlots(normalizedFixtures, bracket);
     const finalStandings = buildFinalStandings({
@@ -117,6 +121,8 @@ function formatDivisionPayload({ division, teams, fixtures, attribution = null }
         // state keys, so they are read off the row. A row the default never
         // reached is matches won, the same as everywhere else that reads it.
         ranking_basis: division.ranking_basis ?? "MATCHES_WON",
+        // The rules in force: the saved ones, or those ranking_basis stands for.
+        ranking_rules: rankingRules,
         placement_depth: division.placement_depth ?? null,
         state,
         teams: orderedTeams.map((team) => ({
@@ -217,7 +223,7 @@ function buildDivisionOverview({ division, teams, fixtures, results, state }) {
 // against itself, so this produces the same single-table output as before this
 // change — the combination is additive, not a special case that could regress
 // Classic.
-function buildDivisionStandings(state, fixtures, teamLookup, basis) {
+function buildDivisionStandings(state, fixtures, teamLookup, rules) {
     const rounds = Array.isArray(state.rounds) ? state.rounds : [];
     const seedIndex = buildSeedIndex(state.teams);
     const headToHead = buildHeadToHeadMap(fixtures);
@@ -235,7 +241,7 @@ function buildDivisionStandings(state, fixtures, teamLookup, basis) {
 
     if (!isRepeatedCycle) {
         return roundRobinRounds.map((entry) =>
-            buildRoundRobinStandingsEntry(entry.round, entry.roundIndex, [entry.round], fixtures, teamLookup, seedIndex, headToHead, basis)
+            buildRoundRobinStandingsEntry(entry.round, entry.roundIndex, [entry.round], fixtures, teamLookup, seedIndex, headToHead, rules)
         );
     }
 
@@ -249,7 +255,7 @@ function buildDivisionStandings(state, fixtures, teamLookup, basis) {
             teamLookup,
             seedIndex,
             headToHead,
-            basis
+            rules
         )
     ];
 }
@@ -278,7 +284,7 @@ function sameGroupsShape(groupsA, groupsB) {
 // entry — more than one only for a combined multi-leg table, where every round
 // shares `primaryRound.groups`, so grouping by `primaryRound`'s groups is valid
 // for all of them.
-function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, fixtures, teamLookup, seedIndex, headToHead, basis) {
+function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, fixtures, teamLookup, seedIndex, headToHead, rules) {
     const roundStandings = {
         round: primaryRound.name || `Round ${roundIndex + 1}`,
         roundIndex,
@@ -312,7 +318,7 @@ function buildRoundRobinStandingsEntry(primaryRound, roundIndex, sourceRounds, f
         roundStandings.groups.push({
             name: getGroupLabel(groupIndex),
             groupIndex,
-            standings: rankGroup(rows, { headToHead, seedIndex, basis })
+            standings: rankGroup(rows, { headToHead, seedIndex, rules })
         });
     });
 
@@ -946,6 +952,7 @@ function normalizeDivisionState(state) {
     }
 
     const colour = divisionColourOf(state);
+    const rankingRules = readRankingRules(state.rankingRules);
 
     return {
         teams: Array.isArray(state.teams) ? state.teams : [],
@@ -957,7 +964,10 @@ function normalizeDivisionState(state) {
         // appear not to have saved. Spread conditionally: absent means "no
         // choice", which is what the client's automatic accent falls back to,
         // and a key holding null would be a second way to say the same thing.
-        ...(colour ? { color: colour } : {})
+        ...(colour ? { color: colour } : {}),
+        // The same for saved ranking rules: absent means "derived from
+        // ranking_basis", and a value that does not validate is treated as absent.
+        ...(rankingRules ? { rankingRules } : {})
     };
 }
 

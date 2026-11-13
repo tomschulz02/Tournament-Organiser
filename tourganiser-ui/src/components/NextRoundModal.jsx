@@ -4,6 +4,7 @@ import Icon from './Icons';
 import LoadingScreen from './LoadingScreen';
 import CreateModal from './create/CreateModal';
 import TeamIdentity from './tournament/TeamIdentity';
+import { nextRoundFixtures } from './tournament/nextRound';
 import { useHelpTopic } from '../HelpContext';
 import '../App.css';
 // The shell and its buttons are styled here; imported rather than relied on
@@ -13,45 +14,6 @@ import '../styles/create-tournament.css';
 // Prefixed for the same reason TeamsTab.jsx's TEAM_DRAG is: a bare index could
 // have come from anywhere on the page.
 const QUALIFIER_DRAG = 'qualifier:';
-
-// The client mirror of bindFixturesToResults in progression.service.js: a
-// knockout group holds either one index (a bye, the team named there advances
-// unplayed) or two (a match between the teams at those positions). Read here
-// against the organiser's current, possibly-reordered `selectedIds` rather than
-// the server's confirmed list, so the preview updates before anything is saved.
-// Ported rather than shared for the same reason divisionPreview.js is: there is
-// no frontend/backend module boundary to import a server file across.
-//
-// A group the round lists under `placement` is a match for places below the
-// title, labelled with its fixture round's own text ("Places 5-8", "5th Place"),
-// and a one-team placement group is a team waiting for its placement final
-// rather than a bye into the next round of the bracket.
-function nextRoundFixtures(groups, selectedIds, placement = []) {
-	if (!Array.isArray(groups)) return [];
-
-	const placementByGroup = new Map((placement ?? []).map((entry) => [entry.group, entry]));
-
-	return groups
-		.map((group, groupIndex) => {
-			if (!Array.isArray(group) || group.length === 0) return null;
-
-			const entry = placementByGroup.get(groupIndex);
-			const label = entry?.name ? entry.name.split(' · ').pop() : null;
-
-			if (group.length < 2) {
-				const index = group[0];
-				if (!Number.isInteger(index)) return null;
-
-				return { type: entry ? 'waiting' : 'bye', teamId: selectedIds[index] ?? null };
-			}
-
-			const [one, two] = group;
-			if (!Number.isInteger(one) || !Number.isInteger(two)) return null;
-
-			return { type: 'match', team1Id: selectedIds[one] ?? null, team2Id: selectedIds[two] ?? null, label };
-		})
-		.filter(Boolean);
-}
 
 // A null place is one a cancelled knockout match left empty: both its teams are
 // out, so whoever the place is drawn against gets a walkover. See

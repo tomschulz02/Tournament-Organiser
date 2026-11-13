@@ -1,7 +1,22 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
+import { viewerRole } from './collaboratorRoles';
+import { canProgress, flattenFixtures } from './fixtureUtils';
+import { dayTimeline, nextSlot, onCourtNow, slotsMissingResults } from './scheduleNow';
+import { useScheduleClock } from './useScheduleClock';
+import {
+	CourtsBand,
+	DivisionProgressBand,
+	QueueBand,
+	StatusLine,
+	TimelineBand,
+	ToScoreBand,
+	UpNextBand,
+} from './OverviewNow';
+import { useTournamentTab } from './tournamentTabs';
+import { getScheduleForTournament } from '../../utils/scheduleUtils';
 import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
 import { useConfirm } from '../ConfirmContext';
@@ -19,52 +34,238 @@ import { createEmptyDivision } from '../create/divisionFormats';
 import {
 	addDivision,
 	deleteDivision,
-	endTournament,
-	startTournament,
 	updateDivisionColour,
-	updateTournamentScoresheetTemplate,
 } from '../../requests';
+import { useTournamentLifecycle } from './useTournamentLifecycle';
 import { DIVISION_ACCENTS, divisionColorStyle, getAutomaticAccent } from '../../utils/divisionColors';
 
-// Split out of the main bundle for the same reason ScheduleMakerModal is
-// (see pages/View.jsx): it pulls in pdfjs-dist for the marker-placement
-// preview, which only an organiser opens, and only deliberately.
-const ScoresheetTemplateModal = lazy(() => import('./ScoresheetTemplateModal'));
+const RESOLVED = new Set(['COMPLETED', 'CANCELLED']);
 
-// The tournament dashboard. Three bands: what this tournament is, what its
-// divisions are, and what has just happened or is about to.
+// Court cards a spectator or scorer sees before "Show all".
+const COURTS_BEFORE_MORE = 6;
+
+// The scorer's court choice, remembered per tournament on this device. A
+// convenience only: storage can be missing or refuse, and then the choice simply
+// is not remembered.
+const courtKey = (tournamentId) => `tourganiser:overview-court:${tournamentId}`;
+
+function readStoredCourt(tournamentId) {
+	try {
+		return window.localStorage.getItem(courtKey(tournamentId)) ?? '';
+	} catch {
+		return '';
+	}
+}
+
+function storeCourt(tournamentId, courtId) {
+	try {
+		if (courtId) window.localStorage.setItem(courtKey(tournamentId), courtId);
+		else window.localStorage.removeItem(courtKey(tournamentId));
+	} catch {
+		// Not remembered; the choice still applies for this visit.
+	}
+}
+
+// Which sections each role gets, in order. One Overview for everyone: a role
+// changes what comes first, never what it may do — every action is still
+// offered by its own capability flag and refused by the server.
 //
-// Deliberately not a list of everything. Fixture lists, standings tables and
-// team lists each have their own tab; reproducing them here would make Overview
-// the only page anyone uses and the other three redundant.
+// On a phone the sections stack in exactly this order. On a desktop the "main"
+// sections fill the left column, the "side" ones a narrower right column, and
+// the "full" ones run the full width underneath, each group in this order.
+const ROLE_SECTIONS = {
+	spectator: ['status', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
+	scorer: ['status', 'toScore', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
+	'match-manager': ['status', 'queue', 'timeline', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
+	'co-organiser': ['status', 'queue', 'divisions', 'courts', 'timeline', 'upNext', 'recent', 'about'],
+	organiser: ['status', 'queue', 'divisions', 'courts', 'timeline', 'upNext', 'recent', 'about'],
+};
+
+const SECTION_AREA = {
+	status: 'main',
+	toScore: 'main',
+	queue: 'main',
+	courts: 'main',
+	upNext: 'main',
+	timeline: 'side',
+	divisionProgress: 'side',
+	// The side column, not the full width: a result line stretched across the
+	// whole page puts the two team names too far apart to read as one match.
+	recent: 'side',
+	divisions: 'full',
+	about: 'full',
+};
+
+// The tournament dashboard: what is happening now, what needs doing, and what
+// this tournament is. Fixture lists, standings tables and team lists each have
+// their own tab; this points into them rather than reproducing them.
 export default function OverviewTab({
 	tournament = {},
 	dashboard = {},
+	divisions: fullDivisions = [],
+	can = {},
 	onOpenDivision,
-	canManageSetup = false,
 	onChanged,
+	canScoreFixture,
+	onScoreFixture,
+	onProgressRound,
+	onOpenSchedule,
+	onPrintScoresheets,
+	scoresheetTemplateSelected = false,
+	scoresheetTemplateReady = false,
 }) {
 	useHelpTopic('tournament-overview');
+	const { selectTab } = useTournamentTab();
 
 	const divisions = dashboard.divisions ?? [];
+	const role = viewerRole(can);
+	const organising = role === 'match-manager' || role === 'co-organiser' || role === 'organiser';
+	const status = tournament.status || 'Not Started';
+	const live = status === 'Ongoing';
 
-	return (
-		<div className="tv-overview">
-			<TournamentInformation
-				tournament={tournament}
-				dashboard={dashboard}
-				canManageSetup={canManageSetup}
-				onChanged={onChanged}
+	// One clock read for every time-based section, so they agree about "now".
+	const now = useScheduleClock();
+
+	const [court, setCourt] = useState(() => readStoredCourt(tournament.id));
+	const chooseCourt = (courtId) => {
+		setCourt(courtId);
+		storeCourt(tournament.id, courtId);
+	};
+
+	const schedule = useMemo(() => getScheduleForTournament(tournament), [tournament]);
+	const fixtures = useMemo(() => flattenFixtures(fullDivisions), [fullDivisions]);
+
+	const cards = onCourtNow(schedule, fixtures, now);
+	const next = nextSlot(schedule, fixtures, now);
+	const missing = organising || role === 'scorer' ? slotsMissingResults(schedule, fixtures, now) : [];
+	const timeline = organising ? dayTimeline(schedule, fixtures, now) : [];
+
+	// What each court plays next, for the organiser roles' court cards.
+	const nextByCourt =
+		organising && next ? new Map(next.matches.map(({ entry, fixture }) => [entry.courtId, fixture])) : null;
+
+	const readyDivisions = organising
+		? fullDivisions.filter(canProgress).map((division) => ({
+				id: division.id,
+				name: division.name,
+				currentRoundName: divisions.find((entry) => entry.id === division.id)?.currentRoundName ?? null,
+			}))
+		: [];
+	const scoresheetSlot = organising && can.printScoresheets && scoresheetTemplateSelected && next ? next : null;
+	const queueCount = missing.length + readyDivisions.length + (scoresheetSlot ? 1 : 0);
+
+	// The scorer's list: late results first, then what is on court, on the chosen
+	// court. A stored court the schedule no longer has means all courts.
+	const courtChoice = schedule.courts.some((entry) => entry.id === court) ? court : '';
+	const toScore = [
+		...missing.flatMap((slot) =>
+			slot.matches.filter(({ fixture }) => slot.missing.includes(fixture)).map((match) => ({ ...match, late: true })),
+		),
+		...cards.filter(({ fixture }) => !RESOLVED.has(fixture.status)),
+	]
+		.filter(({ fixture }) => canScoreFixture?.(fixture))
+		.filter(({ entry }) => !courtChoice || entry?.courtId === courtChoice)
+		.filter(({ fixture }, index, list) => list.findIndex((item) => item.fixture.id === fixture.id) === index);
+
+	const sections = {
+		status: <StatusLine tournament={tournament} dashboard={dashboard} />,
+		toScore: live && (
+			<ToScoreBand
+				items={toScore}
+				schedule={schedule}
+				divisions={fullDivisions}
+				courts={schedule.courts}
+				court={courtChoice}
+				onCourtChange={chooseCourt}
+				onScoreFixture={onScoreFixture}
 			/>
+		),
+		// Before the start and after the end only when there is something in it:
+		// an empty queue then says nothing useful.
+		queue: (live || queueCount > 0) && (
+			<QueueBand
+				missing={missing}
+				readyDivisions={readyDivisions}
+				scoresheetSlot={scoresheetSlot}
+				schedule={schedule}
+				divisions={fullDivisions}
+				canScoreFixture={canScoreFixture}
+				onScoreFixture={onScoreFixture}
+				canProgressRounds={can.progressRounds}
+				onProgressRound={onProgressRound}
+				scoresheetTemplateReady={scoresheetTemplateReady}
+				onPrintScoresheets={onPrintScoresheets}
+			/>
+		),
+		courts: live && (
+			<CourtsBand
+				cards={cards}
+				schedule={schedule}
+				divisions={fullDivisions}
+				nextByCourt={nextByCourt}
+				canScoreFixture={canScoreFixture}
+				onScoreFixture={onScoreFixture}
+				collapseAfter={organising ? null : COURTS_BEFORE_MORE}
+			/>
+		),
+		upNext: status !== 'Finished' && (
+			<UpNextBand
+				slot={next}
+				schedule={schedule}
+				upcoming={dashboard.upcomingFixtures ?? []}
+				divisions={fullDivisions}
+				onOpenFixtures={() => selectTab('fixtures')}
+			/>
+		),
+		timeline: status !== 'Finished' && timeline.length > 0 && (
+			<TimelineBand
+				rows={timeline}
+				schedule={schedule}
+				nowTime={now.time}
+				played={dashboard.completedFixtureCount ?? 0}
+				total={dashboard.totalFixtures ?? 0}
+				canEditSchedule={can.editSchedule}
+				onOpenSchedule={onOpenSchedule}
+			/>
+		),
+		divisionProgress: <DivisionProgressBand divisions={divisions} onOpenDivision={onOpenDivision} />,
+		divisions: (
 			<DivisionsBand
 				divisions={divisions}
 				onOpenDivision={onOpenDivision}
 				tournamentId={tournament.id}
 				status={tournament.status}
-				canManageSetup={canManageSetup}
+				canManageSetup={can.manageSetup}
 				onChanged={onChanged}
 			/>
-			<ActivityBand dashboard={dashboard} divisions={divisions} />
+		),
+		recent: <RecentBand dashboard={dashboard} divisions={divisions} />,
+		about: (
+			<TournamentInformation
+				tournament={tournament}
+				dashboard={dashboard}
+				canManageSetup={can.manageSetup}
+				onChanged={onChanged}
+			/>
+		),
+	};
+
+	const order = ROLE_SECTIONS[role];
+	const area = (name) =>
+		order
+			.map((key, index) => ({ key, index }))
+			.filter(({ key }) => SECTION_AREA[key] === name && sections[key])
+			.map(({ key, index }) => (
+				<div key={key} className={`tv-ov-item tv-ov-item--${key}`} style={{ order: index }}>
+					{sections[key]}
+				</div>
+			));
+
+	return (
+		<div className={`tv-overview tv-ov tv-ov--${role}`}>
+			<div className="tv-ov-main">{area('main')}</div>
+			<div className="tv-ov-side">{area('side')}</div>
+			<div className="tv-ov-full">{area('full')}</div>
 		</div>
 	);
 }
@@ -80,12 +281,16 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, onChange
 	const dates = start && end ? `${start} — ${end}` : start || end || null;
 
 	return (
-		<section className="tv-band">
+		<section className="tv-band" aria-labelledby="tv-ov-about">
+			<h2 id="tv-ov-about" className="tv-band-heading">
+				About
+			</h2>
 			<div className="tv-info-card">
-				<div className="tv-info-header">
-					<StatusPill status={tournament.status} />
-					{tournament.type && <span className="tv-info-format">{tournament.type}</span>}
-				</div>
+				{tournament.type && (
+					<div className="tv-info-header">
+						<span className="tv-info-format">{tournament.type}</span>
+					</div>
+				)}
 
 				{tournament.description && <p className="tv-info-description">{tournament.description}</p>}
 
@@ -97,113 +302,36 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, onChange
 				</dl>
 
 				{canManageSetup && (
-					<LifecycleActions
-						tournamentId={tournament.id}
-						status={tournament.status}
-						scoresheetTemplate={tournament.scoresheet_template}
-						onChanged={onChanged}
-					/>
+					<LifecycleActions tournamentId={tournament.id} status={tournament.status} onChanged={onChanged} />
 				)}
 			</div>
 		</section>
 	);
 }
 
-// The organiser's control over the tournament as a whole. Absent entirely for a
-// viewer, rather than shown disabled.
-//
-// Only the transition the tournament is actually in is offered: a finished
-// tournament has neither. The server refuses the others with a 409 regardless —
-// this is presentation, not enforcement.
-//
-// Delete Tournament moved to the Settings tab's Danger Zone — see SettingsTab.jsx.
-function LifecycleActions({ tournamentId, status, scoresheetTemplate, onChanged }) {
-	const confirm = useConfirm();
-	const { showMessage } = useMessage();
-	const [busy, setBusy] = useState(false);
-	const [templateModalOpen, setTemplateModalOpen] = useState(false);
-
+// Start and End, for whoever can manage setup. Absent entirely for anyone else,
+// rather than shown disabled, and only the transition the tournament is in is
+// offered: a finished tournament has neither. The questions and messages live in
+// useTournamentLifecycle, shared with the Settings tab's Tournament status
+// section, which also holds the scoresheet template and Delete.
+function LifecycleActions({ tournamentId, status, onChanged }) {
+	const { busy, start, end } = useTournamentLifecycle(tournamentId, onChanged);
 	const current = status || 'Not Started';
 
-	const run = async (action, successMessage, after) => {
-		setBusy(true);
-		try {
-			await action();
-			showMessage(successMessage, 'success');
-			after?.();
-		} catch (apiError) {
-			// Display-ready by contract, including the 409s.
-			showMessage(apiError.message, 'error');
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	// Starting looks like the least consequential of the three and is the most:
-	// it closes team and division editing for good. The message says both halves
-	// — an organiser who believes the schedule locks too will put off starting,
-	// and the schedule is the tool they most need once things overrun.
-	const handleStart = async () => {
-		const confirmed = await confirm(
-			'Teams and divisions can no longer be added, removed or reordered. The schedule can still be edited, and results can be entered once it has started.',
-			{ title: 'Start this tournament?', confirmLabel: 'Start tournament', cancelLabel: 'Not yet' },
-		);
-		if (!confirmed) return;
-
-		await run(() => startTournament(tournamentId), 'Tournament started.', () => onChanged?.());
-	};
-
-	const handleEnd = async () => {
-		// Results stay editable after End on purpose — see renderScoreAction in
-		// pages/View.jsx — so this must not promise that they are frozen.
-		const confirmed = await confirm('It will be marked as finished. Results can still be corrected afterwards.', {
-			title: 'End this tournament?',
-			confirmLabel: 'End tournament',
-			cancelLabel: 'Not yet',
-		});
-		if (!confirmed) return;
-
-		await run(() => endTournament(tournamentId), 'Tournament finished.', () => onChanged?.());
-	};
-
-	// The picker hands back the key it wants selected, or null to clear it.
-	// The endpoint is the only source of truth for the selection, so the modal
-	// closes and the page refetches rather than the button holding its own copy.
-	const handleSaveTemplate = async (templateKey) => {
-		setTemplateModalOpen(false);
-		await run(
-			() => updateTournamentScoresheetTemplate(tournamentId, templateKey),
-			'Scoresheet template updated.',
-			() => onChanged?.(),
-		);
-	};
+	if (current !== 'Not Started' && current !== 'Ongoing') return null;
 
 	return (
 		<div className="tv-info-actions">
 			{current === 'Not Started' && (
-				<button type="button" className="tv-primary-action" disabled={busy} onClick={handleStart}>
+				<button type="button" className="tv-primary-action" disabled={busy} onClick={start}>
 					Start Tournament
 				</button>
 			)}
 
 			{current === 'Ongoing' && (
-				<button type="button" className="tv-primary-action" disabled={busy} onClick={handleEnd}>
+				<button type="button" className="tv-primary-action" disabled={busy} onClick={end}>
 					End Tournament
 				</button>
-			)}
-
-			<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => setTemplateModalOpen(true)}>
-				Scoresheet Template
-			</button>
-
-			{templateModalOpen && (
-				<Suspense fallback={<LoadingScreen />}>
-					<ScoresheetTemplateModal
-						initialTemplateKey={scoresheetTemplate}
-						onCancel={() => setTemplateModalOpen(false)}
-						onSave={handleSaveTemplate}
-					/>
-				</Suspense>
 			)}
 		</div>
 	);
@@ -219,13 +347,6 @@ function InfoItem({ label, value, icon = null, stat = false }) {
 			<dd>{value}</dd>
 		</div>
 	);
-}
-
-function StatusPill({ status }) {
-	const value = status || 'Not Started';
-	const modifier = value.toLowerCase().replace(/\s+/g, '-');
-
-	return <span className={`tv-status-pill tv-status-pill--${modifier}`}>{value}</span>;
 }
 
 // One card per division, summarising it and offering a way into the tab that
@@ -610,31 +731,19 @@ function DivisionColourPicker({ division, divisions, onChoose }) {
 	);
 }
 
-// Both lists are already sorted and already capped at eight by the backend.
-// Rendering them as given is the point: re-sorting or re-slicing here would put
-// a second, competing definition of "recent" in the client.
-function ActivityBand({ dashboard, divisions = [] }) {
-	const upcoming = dashboard.upcomingFixtures ?? [];
-	const recent = dashboard.recentResults ?? [];
-
+// Already sorted and capped at eight by the backend. Rendering it as given is
+// the point: re-sorting or re-slicing here would put a second, competing
+// definition of "recent" in the client. "Up next" moved to UpNextBand
+// (OverviewNow.jsx), which reads the schedule.
+function RecentBand({ dashboard, divisions = [] }) {
 	return (
 		<section className="tv-band">
-			<h2 className="tv-band-heading">Activity</h2>
-
-			<div className="tv-activity">
-				<FixturePreviewList
-					title="Up next"
-					fixtures={upcoming}
-					emptyMessage="Nothing is scheduled to play next."
-					divisions={divisions}
-				/>
-				<FixturePreviewList
-					title="Recent results"
-					fixtures={recent}
-					emptyMessage="No matches have finished yet."
-					divisions={divisions}
-				/>
-			</div>
+			<FixturePreviewList
+				title="Recent results"
+				fixtures={dashboard.recentResults ?? []}
+				emptyMessage="No matches have finished yet."
+				divisions={divisions}
+			/>
 		</section>
 	);
 }
@@ -642,7 +751,7 @@ function ActivityBand({ dashboard, divisions = [] }) {
 function FixturePreviewList({ title, fixtures, emptyMessage, divisions = [] }) {
 	return (
 		<div className="tv-activity-column">
-			<h3 className="tv-activity-heading">{title}</h3>
+			<h2 className="tv-band-heading">{title}</h2>
 
 			{fixtures.length === 0 ? (
 				<p className="tv-activity-empty">{emptyMessage}</p>

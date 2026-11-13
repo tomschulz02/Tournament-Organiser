@@ -43,6 +43,7 @@ vi.mock("../../../src/repositories/tournament.repository.js", () => ({
 
 const {
     divisionService,
+    carryStateSettings,
     generateDivisionDetails,
     createLeagueState,
     createClassicState,
@@ -997,6 +998,29 @@ describe("divisionService.updateDivision", () => {
             expect(result.fixtures).toBeGreaterThan(0);
         });
 
+        // Generation knows nothing of the settings kept in state, so a reorder
+        // used to drop the chosen colour. They are carried across.
+        it("keeps the colour and the ranking rules the old state held", async () => {
+            const stored = division();
+            const rankingRules = { method: "wins", wins: "sets", tiebreakers: ["HEAD_TO_HEAD"] };
+            stored.state = { ...stored.state, color: "accent-7", rankingRules };
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(stored);
+
+            await divisionService.updateDivision("div-1", "user-1", body(reordered()));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.color).toBe("accent-7");
+            expect(state.rankingRules).toEqual(rankingRules);
+            expect(state.teams).toEqual(["t3", "t1", "t2", "t4"]);
+        });
+
+        it("adds no setting keys when the old state held none", async () => {
+            await divisionService.updateDivision("div-1", "user-1", body(reordered()));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(Object.keys(state).sort()).toEqual(["currentRound", "rounds", "teams"]);
+        });
+
         // replaceState writes to `divisions`, which does carry last_update, so
         // the stamp rides on that statement rather than on touchDivision.
         it("moves the division's stamp through the state write itself", async () => {
@@ -1124,6 +1148,20 @@ describe("divisionService.updateDivision", () => {
     });
 
     describe("the rebuild path", () => {
+        it("keeps the colour and the ranking rules the old state held", async () => {
+            const stored = division();
+            const rankingRules = { method: "wins", wins: "sets", tiebreakers: ["HEAD_TO_HEAD"] };
+            stored.state = { ...stored.state, color: "accent-7", rankingRules };
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(stored);
+
+            await divisionService.updateDivision("div-1", "user-1", body(unchanged().slice(0, 3), { num_groups: 1 }));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.color).toBe("accent-7");
+            expect(state.rankingRules).toEqual(rankingRules);
+            expect(state.teams).toEqual(["t1", "t2", "t3"]);
+        });
+
         it("removes a team and regenerates the division around the rest", async () => {
             const teams = unchanged().slice(0, 3);
             fixturesRepository.deleteByDivisionId.mockResolvedValue(["f1", "f2"]);
@@ -1598,4 +1636,18 @@ describe("divisionService.updateDivisionColour", () => {
             expect(divisionsRepository.updateStateColor).not.toHaveBeenCalled();
         }
     );
+});
+
+describe("carryStateSettings", () => {
+    it("copies the setting keys and nothing else", () => {
+        const old = { teams: ["a"], rounds: [1], currentRound: 3, color: "accent-2", rankingRules: { method: "wins" } };
+        const fresh = { teams: ["b"], rounds: [], currentRound: 0 };
+
+        expect(carryStateSettings(old, fresh)).toEqual({ ...fresh, color: "accent-2", rankingRules: { method: "wins" } });
+        expect(fresh).toEqual({ teams: ["b"], rounds: [], currentRound: 0 });
+    });
+
+    it("returns the new state as it is when there was no old one", () => {
+        expect(carryStateSettings(null, { teams: [] })).toEqual({ teams: [] });
+    });
 });

@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
     RATIO_UNDEFINED,
     RANKING_BASES,
+    TIEBREAKERS,
     primaryScore,
+    rankingRulesOf,
+    readRankingRules,
+    rulesFromBasis,
     applyFixtureToStandings,
     buildHeadToHeadMap,
     buildSeedIndex,
@@ -606,33 +610,33 @@ describe("primaryScore and the ranking basis", () => {
 
     it("is matches won by default and for an unrecognised basis", () => {
         expect(primaryScore(row({}, { won: 3 }))).toBe(3);
-        expect(primaryScore(row({}, { won: 3 }), "MATCHES_WON")).toBe(3);
-        expect(primaryScore(row({}, { won: 3 }), "SOMETHING_ELSE")).toBe(3);
+        expect(primaryScore(row({}, { won: 3 }), rulesFromBasis("MATCHES_WON"))).toBe(3);
+        expect(primaryScore(row({}, { won: 3 }), rulesFromBasis("SOMETHING_ELSE"))).toBe(3);
     });
 
     it("is total sets won for SETS_WON", () => {
-        expect(primaryScore(row({}, { setsWon: 7 }), "SETS_WON")).toBe(7);
+        expect(primaryScore(row({}, { setsWon: 7 }), rulesFromBasis("SETS_WON"))).toBe(7);
     });
 
     it("scores FIVB points: 3 for a clear win, 2 for a deciding-set win, 1 for a deciding-set loss", () => {
         const outcomes = { "3-0": 1, "3-1": 1, "3-2": 1, "2-3": 1, "1-3": 1, "0-3": 1 };
 
-        expect(primaryScore(row(outcomes), "FIVB_POINTS")).toBe(3 + 3 + 2 + 1);
+        expect(primaryScore(row(outcomes), rulesFromBasis("FIVB_POINTS"))).toBe(3 + 3 + 2 + 1);
     });
 
     it("scores simplified points: 2 for any win, 1 for a deciding-set loss", () => {
         const outcomes = { "2-0": 2, "2-1": 1, "1-2": 1, "0-2": 1 };
 
-        expect(primaryScore(row(outcomes), "SIMPLIFIED_POINTS")).toBe(2 * 2 + 2 + 1);
+        expect(primaryScore(row(outcomes), rulesFromBasis("SIMPLIFIED_POINTS"))).toBe(2 * 2 + 2 + 1);
     });
 
     it("treats a single-set match as won outright, not in a deciding set", () => {
-        expect(primaryScore(row({ "1-0": 1 }), "FIVB_POINTS")).toBe(3);
-        expect(primaryScore(row({ "0-1": 1 }), "SIMPLIFIED_POINTS")).toBe(0);
+        expect(primaryScore(row({ "1-0": 1 }), rulesFromBasis("FIVB_POINTS"))).toBe(3);
+        expect(primaryScore(row({ "0-1": 1 }), rulesFromBasis("SIMPLIFIED_POINTS"))).toBe(0);
     });
 
     it("reads a row with no setOutcomes as no points", () => {
-        expect(primaryScore(row(undefined), "FIVB_POINTS")).toBe(0);
+        expect(primaryScore(row(undefined), rulesFromBasis("FIVB_POINTS"))).toBe(0);
     });
 
     it("lists the four bases the Settings page offers", () => {
@@ -645,7 +649,7 @@ describe("primaryScore and the ranking basis", () => {
     const p = makeStandingsRow({ id: "p", won: 3, lost: 1, setsWon: 9, setsLost: 9, setOutcomes: { "3-2": 3, "0-3": 1 } });
     const q = makeStandingsRow({ id: "q", won: 2, lost: 2, setsWon: 10, setsLost: 6, setOutcomes: { "3-0": 2, "2-3": 2 } });
     [p, q].forEach(computeRatios);
-    const order = (basis) => rankGroup([p, q], { basis }).map((team) => team.id);
+    const order = (basis) => rankGroup([p, q], { rules: rulesFromBasis(basis) }).map((team) => team.id);
 
     it.each([
         [undefined, ["p", "q"]],
@@ -667,6 +671,220 @@ describe("primaryScore and the ranking basis", () => {
         [e, f].forEach(computeRatios);
 
         expect(seedAcrossGroups([[e], [f]], new Map()).map((row) => row.id)).toEqual(["e", "f"]);
-        expect(seedAcrossGroups([[e], [f]], new Map(), 0, "SETS_WON").map((row) => row.id)).toEqual(["f", "e"]);
+        expect(seedAcrossGroups([[e], [f]], new Map(), 0, rulesFromBasis("SETS_WON")).map((row) => row.id)).toEqual(["f", "e"]);
+    });
+});
+
+describe("ranking rules", () => {
+    const defaults = ["SET_RATIO", "POINT_RATIO", "HEAD_TO_HEAD"];
+
+    it("maps each ranking basis onto rules", () => {
+        expect(rulesFromBasis("MATCHES_WON")).toEqual({ method: "wins", wins: "matches", tiebreakers: defaults });
+        expect(rulesFromBasis("SETS_WON")).toEqual({ method: "wins", wins: "sets", tiebreakers: defaults });
+        expect(rulesFromBasis("FIVB_POINTS")).toEqual({
+            method: "points",
+            points: { straightWin: 3, decidingWin: 2, decidingLoss: 1, straightLoss: 0 },
+            tiebreakers: defaults
+        });
+        expect(rulesFromBasis("SIMPLIFIED_POINTS")).toEqual({
+            method: "points",
+            points: { straightWin: 2, decidingWin: 2, decidingLoss: 1, straightLoss: 0 },
+            tiebreakers: defaults
+        });
+        expect(rulesFromBasis()).toEqual(rulesFromBasis("MATCHES_WON"));
+    });
+
+    it("hands out a fresh decider list each time", () => {
+        rulesFromBasis().tiebreakers.push("SETS_WON");
+
+        expect(rulesFromBasis().tiebreakers).toEqual(defaults);
+    });
+
+    it("lists the deciders an organiser may choose, without seeding", () => {
+        expect(TIEBREAKERS).toEqual([
+            "SET_RATIO", "POINT_RATIO", "HEAD_TO_HEAD", "SET_DIFFERENCE", "POINT_DIFFERENCE", "POINTS_SCORED", "SETS_WON"
+        ]);
+    });
+
+    describe("readRankingRules", () => {
+        const points = { straightWin: 3, decidingWin: 2, decidingLoss: 1, straightLoss: 0 };
+
+        it("accepts wins rules and drops anything extra", () => {
+            expect(readRankingRules({ method: "wins", wins: "sets", points, tiebreakers: ["SETS_WON"], other: 1 }))
+                .toEqual({ method: "wins", wins: "sets", tiebreakers: ["SETS_WON"] });
+            expect(readRankingRules({ method: "wins", wins: "matches", tiebreakers: [] }))
+                .toEqual({ method: "wins", wins: "matches", tiebreakers: [] });
+        });
+
+        it("accepts points rules and drops anything extra", () => {
+            expect(readRankingRules({ method: "points", wins: "sets", points: { ...points, draw: 1 }, tiebreakers: defaults }))
+                .toEqual({ method: "points", points, tiebreakers: defaults });
+        });
+
+        it.each([
+            ["nothing", undefined],
+            ["null", null],
+            ["a string", "wins"],
+            ["no deciders", { method: "wins", wins: "matches" }],
+            ["an unknown method", { method: "draws", tiebreakers: [] }],
+            ["an unknown kind of win", { method: "wins", wins: "points", tiebreakers: [] }],
+            ["an unknown decider", { method: "wins", wins: "matches", tiebreakers: ["COIN_TOSS"] }],
+            ["seeding in the list", { method: "wins", wins: "matches", tiebreakers: ["SEEDING"] }],
+            ["a repeated decider", { method: "wins", wins: "matches", tiebreakers: ["SETS_WON", "SETS_WON"] }],
+            ["points with no numbers", { method: "points", tiebreakers: [] }],
+            ["points that are not an object", { method: "points", points: 3, tiebreakers: [] }],
+            ["a missing number", { method: "points", points: { straightWin: 3, decidingWin: 2, decidingLoss: 1 }, tiebreakers: [] }],
+            ["a fraction", { method: "points", points: { ...points, decidingWin: 1.5 }, tiebreakers: [] }],
+            ["a negative number", { method: "points", points: { ...points, straightLoss: -1 }, tiebreakers: [] }],
+            ["a number above ten", { method: "points", points: { ...points, straightWin: 11 }, tiebreakers: [] }]
+        ])("refuses %s", (_, value) => {
+            expect(readRankingRules(value)).toBeNull();
+        });
+    });
+
+    describe("rankingRulesOf", () => {
+        it.each(RANKING_BASES)("derives the rules from %s when none are stored", (basis) => {
+            expect(rankingRulesOf({ ranking_basis: basis, state: { teams: [] } })).toEqual(rulesFromBasis(basis));
+        });
+
+        it("is match wins for a division with no basis, no state, or nothing at all", () => {
+            expect(rankingRulesOf({ ranking_basis: null })).toEqual(rulesFromBasis("MATCHES_WON"));
+            expect(rankingRulesOf(undefined)).toEqual(rulesFromBasis("MATCHES_WON"));
+        });
+
+        it("returns the stored rules ahead of the basis", () => {
+            const stored = { method: "wins", wins: "sets", tiebreakers: ["POINTS_SCORED"] };
+
+            expect(rankingRulesOf({ ranking_basis: "FIVB_POINTS", state: { rankingRules: stored } })).toEqual(stored);
+        });
+
+        it("falls back to the basis when the stored rules are not valid", () => {
+            expect(rankingRulesOf({ ranking_basis: "SETS_WON", state: { rankingRules: { method: "x" } } }))
+                .toEqual(rulesFromBasis("SETS_WON"));
+        });
+    });
+
+    it("scores custom points, including a number for a straight loss", () => {
+        const rules = { method: "points", points: { straightWin: 5, decidingWin: 4, decidingLoss: 2, straightLoss: 1 }, tiebreakers: [] };
+        const outcomes = { "2-0": 1, "2-1": 1, "1-2": 1, "0-2": 2 };
+
+        expect(primaryScore(makeStandingsRow({ setOutcomes: outcomes }), rules)).toBe(5 + 4 + 2 + 1 * 2);
+    });
+
+    describe("each decider", () => {
+        const wins = (tiebreakers) => ({ method: "wins", wins: "matches", tiebreakers });
+        // Seeded low first, so a decider that separated nobody would leave "low"
+        // on top.
+        const seedIndex = buildSeedIndex(["low", "high"]);
+        const order = (tiebreakers, low, high) => rankGroup(
+            [makeStandingsRow({ id: "low", ...low }), makeStandingsRow({ id: "high", ...high })].map(computeRatios),
+            { seedIndex, rules: wins(tiebreakers) }
+        ).map((team) => team.id);
+
+        it.each([
+            ["SET_RATIO", { setsWon: 4, setsLost: 4 }, { setsWon: 3, setsLost: 2 }],
+            ["POINT_RATIO", { pointsFor: 50, pointsAgainst: 50 }, { pointsFor: 30, pointsAgainst: 20 }],
+            ["SET_DIFFERENCE", { setsWon: 6, setsLost: 5 }, { setsWon: 4, setsLost: 2 }],
+            ["POINT_DIFFERENCE", { pointsFor: 100, pointsAgainst: 95 }, { pointsFor: 60, pointsAgainst: 40 }],
+            ["POINTS_SCORED", { pointsFor: 60 }, { pointsFor: 61 }],
+            ["SETS_WON", { setsWon: 3 }, { setsWon: 4 }]
+        ])("%s puts the better team first", (key, low, high) => {
+            expect(order([key], low, high)).toEqual(["high", "low"]);
+            // Without it nothing separates them and seeding decides.
+            expect(order([], low, high)).toEqual(["low", "high"]);
+        });
+
+        it("applies the deciders in the order given", () => {
+            // "low" scored more points; "high" won more sets.
+            const low = { pointsFor: 90, setsWon: 3 };
+            const high = { pointsFor: 80, setsWon: 5 };
+
+            expect(order(["POINTS_SCORED", "SETS_WON"], low, high)).toEqual(["low", "high"]);
+            expect(order(["SETS_WON", "POINTS_SCORED"], low, high)).toEqual(["high", "low"]);
+        });
+    });
+
+    describe("head-to-head anywhere in the list", () => {
+        const wins = (tiebreakers) => ({ method: "wins", wins: "matches", tiebreakers });
+        const ids = (rows) => rows.map((row) => row.id);
+
+        // A pair level on wins. "a" has more points scored, "b" won their match.
+        const pair = () => [
+            makeStandingsRow({ id: "a", won: 1, pointsFor: 60, setsWon: 2 }),
+            makeStandingsRow({ id: "b", won: 1, pointsFor: 50, setsWon: 2 })
+        ];
+        const bBeatA = new Map([["b|a", 1]]);
+        const seedIndex = buildSeedIndex(["a", "b", "c", "d"]);
+
+        it("first: decides before anything below it", () => {
+            const rules = wins(["HEAD_TO_HEAD", "POINTS_SCORED"]);
+
+            expect(ids(rankGroup(pair(), { headToHead: bBeatA, seedIndex, rules }))).toEqual(["b", "a"]);
+        });
+
+        it("last: only reached when everything above it ties", () => {
+            const rules = wins(["POINTS_SCORED", "HEAD_TO_HEAD"]);
+
+            expect(ids(rankGroup(pair(), { headToHead: bBeatA, seedIndex, rules }))).toEqual(["a", "b"]);
+        });
+
+        it("middle: applies to the teams level above it and hands on to the one below", () => {
+            const rules = wins(["SETS_WON", "HEAD_TO_HEAD", "POINTS_SCORED"]);
+
+            // Level on sets won, so head-to-head decides ahead of points scored.
+            expect(ids(rankGroup(pair(), { headToHead: bBeatA, seedIndex, rules }))).toEqual(["b", "a"]);
+            // They never met: head-to-head separates nobody and points scored does.
+            expect(ids(rankGroup(pair(), { seedIndex, rules }))).toEqual(["a", "b"]);
+        });
+
+        it("is not used at all when it is not in the list", () => {
+            expect(ids(rankGroup(pair(), { headToHead: bBeatA, seedIndex, rules: wins([]) }))).toEqual(["a", "b"]);
+        });
+
+        // The worked example in docs/tournament-rules.md.
+        const loop = new Map([["a|b", 1], ["b|c", 1], ["c|a", 1], ["a|d", 1], ["b|d", 1], ["c|d", 1]]);
+        const pool = () => [
+            makeStandingsRow({ id: "a", won: 2, pointsFor: 109, pointsAgainst: 100 }),
+            makeStandingsRow({ id: "b", won: 2, pointsFor: 103, pointsAgainst: 100 }),
+            makeStandingsRow({ id: "c", won: 2, pointsFor: 112, pointsAgainst: 100 }),
+            makeStandingsRow({ id: "d", won: 0, pointsFor: 76, pointsAgainst: 100 })
+        ];
+
+        it("skips a loop for that group and carries on with the deciders below it", () => {
+            const rules = wins(["HEAD_TO_HEAD", "POINT_DIFFERENCE"]);
+
+            expect(ids(rankGroup(pool(), { headToHead: loop, seedIndex, rules }))).toEqual(["c", "a", "b", "d"]);
+        });
+
+        it("uses head-to-head alone when the same three do not loop", () => {
+            const rules = wins(["HEAD_TO_HEAD", "POINT_DIFFERENCE"]);
+            const noLoop = new Map([["a|b", 1], ["b|c", 1], ["a|c", 1]]);
+
+            expect(ids(rankGroup(pool(), { headToHead: noLoop, seedIndex, rules }))).toEqual(["a", "b", "c", "d"]);
+        });
+
+        it("falls to seeding when a loop has nothing below it, as the default order does", () => {
+            const rules = wins(["POINT_DIFFERENCE", "HEAD_TO_HEAD"]);
+            const level = pool().map((row) => ({ ...row, pointsFor: 100 }));
+            const reversed = buildSeedIndex(["d", "c", "b", "a"]);
+
+            expect(ids(rankGroup(level.slice(0, 3), { headToHead: loop, seedIndex: reversed, rules }))).toEqual(["c", "b", "a"]);
+        });
+
+        it("only loops among the teams level above it", () => {
+            // Sets won splits "c" off first, leaving a pair that cannot loop.
+            const rules = wins(["SETS_WON", "HEAD_TO_HEAD"]);
+            const rows = pool().slice(0, 3).map((row) => ({ ...row, setsWon: row.id === "c" ? 6 : 4 }));
+
+            expect(ids(rankGroup(rows, { headToHead: loop, seedIndex, rules }))).toEqual(["c", "a", "b"]);
+        });
+
+        it("is skipped across pools wherever it sits", () => {
+            const rules = wins(["HEAD_TO_HEAD", "POINTS_SCORED"]);
+            const [a, b] = pair();
+
+            // No map reaches the cross-pool comparison, so points scored decides.
+            expect(ids(seedAcrossGroups([[b], [a]], seedIndex, 0, rules))).toEqual(["a", "b"]);
+        });
     });
 });

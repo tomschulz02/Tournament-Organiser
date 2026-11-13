@@ -14,6 +14,7 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
     divisionsRepository: {
         getDivisionWithOwner: vi.fn(),
         updateRankingBasis: vi.fn(),
+        updateStateRankingRules: vi.fn(),
         updatePlacementDepth: vi.fn(),
         getFixturesByDivisionId: vi.fn(),
         updateStateRounds: vi.fn()
@@ -41,7 +42,16 @@ const { generateFixtures } = await import("../../../src/services/fixtures.servic
 const { divisionsRepository } = await import("../../../src/repositories/divisions.repository.js");
 const { fixturesRepository } = await import("../../../src/repositories/fixtures.repository.js");
 const { tournamentRepository } = await import("../../../src/repositories/tournament.repository.js");
+const { rulesFromBasis } = await import("../../../src/utils/standings.js");
 const { dbMock, resetDbMock, clientSql } = await import("../../helpers/dbMock.js");
+
+const MATCH_WINS = rulesFromBasis("MATCHES_WON");
+const SET_WINS = { method: "wins", wins: "sets", tiebreakers: ["POINT_DIFFERENCE", "HEAD_TO_HEAD"] };
+const CUSTOM_POINTS = {
+    method: "points",
+    points: { straightWin: 4, decidingWin: 3, decidingLoss: 1, straightLoss: 0 },
+    tiebreakers: []
+};
 
 const TEAMS = Array.from({ length: 12 }, (_, index) => `t${index}`);
 
@@ -93,55 +103,104 @@ describe("access", () => {
     it("reports a division that does not exist", async () => {
         divisionsRepository.getDivisionWithOwner.mockResolvedValue(null);
 
-        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: "SETS_WON" }))
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: SET_WINS }))
             .rejects.toMatchObject({ code: "DIVISION_NOT_FOUND" });
     });
 
     it("refuses anyone but the organiser", async () => {
-        await expect(divisionService.updateDivisionSettings("div-1", "user-2", { rankingBasis: "SETS_WON" }))
+        await expect(divisionService.updateDivisionSettings("div-1", "user-2", { rankingRules: SET_WINS }))
             .rejects.toMatchObject({ code: "NOT_TOURNAMENT_OWNER", status: 403 });
-        expect(divisionsRepository.updateRankingBasis).not.toHaveBeenCalled();
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
     });
 });
 
-describe("ranking basis", () => {
-    it.each(["FIVB_POINTS", "SIMPLIFIED_POINTS", "SETS_WON"])("stores %s with no rebuild", async (basis) => {
-        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: basis }))
-            .resolves.toEqual({ divisionId: "div-1", rankingBasis: basis, placementDepth: null });
+describe("ranking rules", () => {
+    it.each([
+        ["wins", SET_WINS],
+        ["points", CUSTOM_POINTS]
+    ])("stores %s rules in state with no rebuild", async (_, rules) => {
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: rules }))
+            .resolves.toEqual({ divisionId: "div-1", rankingRules: rules, placementDepth: null });
 
-        expect(divisionsRepository.updateRankingBasis).toHaveBeenCalledWith("div-1", basis);
+        expect(divisionsRepository.updateStateRankingRules).toHaveBeenCalledWith("div-1", rules);
         expect(divisionsRepository.updateStateRounds).not.toHaveBeenCalled();
         expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
+    });
+
+    it("stores the validated shape, not whatever else was sent", async () => {
+        await divisionService.updateDivisionSettings("div-1", "user-1", {
+            rankingRules: { ...SET_WINS, points: CUSTOM_POINTS.points, extra: true }
+        });
+
+        expect(divisionsRepository.updateStateRankingRules).toHaveBeenCalledWith("div-1", SET_WINS);
     });
 
     // Not gated like the knockout: it changes how standings are read, nothing more.
     it("is changeable once the tournament is well under way", async () => {
         use(storedDivision({ currentRound: 2 }));
 
-        await divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: "SETS_WON" });
+        await divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: SET_WINS });
 
-        expect(divisionsRepository.updateRankingBasis).toHaveBeenCalledWith("div-1", "SETS_WON");
+        expect(divisionsRepository.updateStateRankingRules).toHaveBeenCalledWith("div-1", SET_WINS);
     });
 
-    it.each(["POINTS", "", null, 3])("refuses %p", async (basis) => {
-        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: basis }))
-            .rejects.toMatchObject({ code: "INVALID_RANKING_BASIS", status: 400 });
-        expect(divisionsRepository.updateRankingBasis).not.toHaveBeenCalled();
+    it.each([
+        ["a basis name", "SETS_WON"],
+        ["null", null],
+        ["an unknown method", { method: "draws", tiebreakers: [] }],
+        ["seeding as a decider", { ...SET_WINS, tiebreakers: ["SEEDING"] }],
+        ["points above ten", { ...CUSTOM_POINTS, points: { ...CUSTOM_POINTS.points, straightWin: 11 } }]
+    ])("refuses %s", async (_, rules) => {
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: rules }))
+            .rejects.toMatchObject({ code: "INVALID_RANKING_RULES", status: 400 });
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
     });
 
-    it("writes nothing when the value is unchanged or absent", async () => {
-        await divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: "MATCHES_WON" });
+    // Saving is what makes state authoritative, so rules equal to the ones the
+    // basis stands for are still written the first time.
+    it("writes rules that match the derived ones when none are stored yet", async () => {
+        await divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: MATCH_WINS });
+
+        expect(divisionsRepository.updateStateRankingRules).toHaveBeenCalledWith("div-1", MATCH_WINS);
+    });
+
+    it("writes nothing when the rules are unchanged or absent", async () => {
+        const stored = storedDivision();
+        stored.division.state.rankingRules = SET_WINS;
+        use(stored);
+
+        await divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: SET_WINS });
         await divisionService.updateDivisionSettings("div-1", "user-1", {});
         await divisionService.updateDivisionSettings("div-1", "user-1");
 
-        expect(divisionsRepository.updateRankingBasis).not.toHaveBeenCalled();
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
     });
 
-    it("reads a row the default never reached as matches won", async () => {
+    it("no longer accepts a ranking basis, and never writes the column", async () => {
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: "SETS_WON" }))
+            .resolves.toEqual({ divisionId: "div-1", rankingRules: MATCH_WINS, placementDepth: null });
+
+        expect(divisionsRepository.updateRankingBasis).not.toHaveBeenCalled();
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
+    });
+
+    it("returns the rules in force: stored ones, else those the basis stands for", async () => {
+        use(storedDivision({ overrides: { ranking_basis: "FIVB_POINTS" } }));
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", {}))
+            .resolves.toEqual({ divisionId: "div-1", rankingRules: rulesFromBasis("FIVB_POINTS"), placementDepth: null });
+
+        const stored = storedDivision({ overrides: { ranking_basis: "FIVB_POINTS" } });
+        stored.division.state.rankingRules = SET_WINS;
+        use(stored);
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", {}))
+            .resolves.toEqual({ divisionId: "div-1", rankingRules: SET_WINS, placementDepth: null });
+    });
+
+    it("reads a row the default never reached as match wins", async () => {
         use(storedDivision({ overrides: { ranking_basis: null, placement_depth: undefined } }));
 
         await expect(divisionService.updateDivisionSettings("div-1", "user-1", {}))
-            .resolves.toEqual({ divisionId: "div-1", rankingBasis: "MATCHES_WON", placementDepth: null });
+            .resolves.toEqual({ divisionId: "div-1", rankingRules: MATCH_WINS, placementDepth: null });
     });
 });
 
@@ -152,7 +211,7 @@ describe("placement depth", () => {
         const knockoutIds = stored.rows.filter((row) => row.round !== "Pool Play").map((row) => row.id);
 
         await expect(divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: 7 }))
-            .resolves.toEqual({ divisionId: "div-1", rankingBasis: "MATCHES_WON", placementDepth: 7 });
+            .resolves.toEqual({ divisionId: "div-1", rankingRules: MATCH_WINS, placementDepth: 7 });
 
         // Quarterfinals, semifinals, bronze and final: moved, never recreated.
         expect(fixturesRepository.updateFixtureSlot.mock.calls.map((call) => call[0])).toEqual(knockoutIds);
@@ -230,11 +289,82 @@ describe("placement depth", () => {
         expect(divisionsRepository.updatePlacementDepth).toHaveBeenCalledWith("div-1", null, dbMock.client);
     });
 
-    it("writes a ranking basis sent alongside it in the same transaction", async () => {
-        await divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: "5", rankingBasis: "SETS_WON" });
+    it("writes ranking rules sent alongside it in the same transaction", async () => {
+        await divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: "5", rankingRules: SET_WINS });
 
-        expect(divisionsRepository.updateRankingBasis).toHaveBeenCalledWith("div-1", "SETS_WON", dbMock.client);
+        expect(divisionsRepository.updateStateRankingRules).toHaveBeenCalledWith("div-1", SET_WINS, dbMock.client);
         expect(divisionsRepository.updatePlacementDepth).toHaveBeenCalledWith("div-1", 5, dbMock.client);
+    });
+
+    describe("final only", () => {
+        it("removes the 3rd-place playoff and leaves the final alone in its round", async () => {
+            const stored = storedDivision();
+            use(stored);
+            const playoff = stored.rows.find((row) => row.round === "3rd Place Playoff");
+            const kept = stored.rows.filter((row) => row.round !== "Pool Play" && row !== playoff).map((row) => row.id);
+
+            await expect(divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: 1 }))
+                .resolves.toEqual({ divisionId: "div-1", rankingRules: MATCH_WINS, placementDepth: 1 });
+
+            // Every other knockout fixture keeps its id, the final included.
+            expect(fixturesRepository.updateFixtureSlot.mock.calls.map((call) => call[0])).toEqual(kept);
+            expect(fixturesRepository.updateFixtureSlot.mock.calls.at(-1).slice(2, 5)).toEqual(["Finals", "Rank 1", "Rank 2"]);
+            expect(fixturesRepository.createFixture).not.toHaveBeenCalled();
+            expect(fixturesRepository.deleteByIds).toHaveBeenCalledWith([playoff.id], dbMock.client);
+
+            const rounds = divisionsRepository.updateStateRounds.mock.calls[0][1];
+            expect(rounds.at(-1)).toMatchObject({ name: "Finals", groups: [[0, 1]], totalGames: 1 });
+            expect(rounds.at(-1).fixtures).toEqual([kept.at(-1)]);
+            expect(divisionsRepository.updatePlacementDepth).toHaveBeenCalledWith("div-1", 1, dbMock.client);
+        });
+
+        it("takes the playoff's slot out of the schedule", async () => {
+            const stored = storedDivision();
+            use(stored);
+            const playoff = stored.rows.find((row) => row.round === "3rd Place Playoff");
+            const final = stored.rows.find((row) => row.round === "Finals");
+            tournamentRepository.getScheduleForUpdate.mockResolvedValue({
+                entries: [{ fixtureId: playoff.id }, { fixtureId: final.id }]
+            });
+
+            await divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: 1 });
+
+            const [, schedule] = tournamentRepository.updateSchedule.mock.calls[0];
+            expect(schedule.entries).toEqual([{ fixtureId: final.id }]);
+        });
+
+        it("brings the playoff back when cleared, keeping the final's id", async () => {
+            const stored = storedDivision({ depth: 1 });
+            use(stored);
+            expect(stored.rows.some((row) => row.round === "3rd Place Playoff")).toBe(false);
+            const final = stored.rows.find((row) => row.round === "Finals");
+
+            await divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: null });
+
+            expect(fixturesRepository.createFixture.mock.calls.map((call) => call[7])).toEqual(["3rd Place Playoff"]);
+            expect(fixturesRepository.updateFixtureSlot.mock.calls.at(-1)[0]).toBe(final.id);
+            expect(divisionsRepository.updateStateRounds.mock.calls[0][1].at(-1).groups).toEqual([[2, 3], [0, 1]]);
+        });
+
+        it("moves straight to a played-for depth, which always has the playoff", async () => {
+            use(storedDivision({ depth: 1 }));
+
+            await divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: 5 });
+
+            expect(fixturesRepository.createFixture.mock.calls.map((call) => call[7])).toEqual([
+                "Semifinals · Places 5-8",
+                "Semifinals · Places 5-8",
+                "3rd Place Playoff",
+                "Finals · 5th Place"
+            ]);
+        });
+
+        it("is refused once the knockout stage has started", async () => {
+            use(storedDivision({ currentRound: 1 }));
+
+            await expect(divisionService.updateDivisionSettings("div-1", "user-1", { placementDepth: 1 }))
+                .rejects.toMatchObject({ code: "KNOCKOUT_ALREADY_STARTED" });
+        });
     });
 
     it("does nothing when the depth is unchanged", async () => {
@@ -269,9 +399,12 @@ describe("placement depth", () => {
     });
 
     it("validates both settings before writing either", async () => {
-        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingBasis: "SETS_WON", placementDepth: 4 }))
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: SET_WINS, placementDepth: 4 }))
             .rejects.toMatchObject({ code: "INVALID_PLACEMENT_DEPTH" });
-        expect(divisionsRepository.updateRankingBasis).not.toHaveBeenCalled();
+        await expect(divisionService.updateDivisionSettings("div-1", "user-1", { rankingRules: "x", placementDepth: 5 }))
+            .rejects.toMatchObject({ code: "INVALID_RANKING_RULES" });
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
+        expect(dbMock.instance.withTransaction).not.toHaveBeenCalled();
     });
 });
 
@@ -294,6 +427,21 @@ describe("readPlacementDepth", () => {
         const seven = { type: "Classic", state: createClassicState(TEAMS, TEAMS.length, 2, 7) };
 
         expect(readPlacementDepth(seven, 7)).toBe(7);
+    });
+
+    it("accepts final only for a knockout with semifinals, as a number or a string", () => {
+        const four = { type: "Classic", state: createClassicState(TEAMS, TEAMS.length, 2, 4) };
+
+        expect(readPlacementDepth(four, 1)).toBe(1);
+        expect(readPlacementDepth(four, "1")).toBe(1);
+    });
+
+    // Two teams go straight into the Finals round: there are no semifinal
+    // losers to leave unplayed, so there is nothing for "final only" to remove.
+    it("refuses final only for a two-team knockout", () => {
+        const two = { type: "Classic", state: createClassicState(TEAMS, TEAMS.length, 2, 2) };
+
+        expect(() => readPlacementDepth(two, 1)).toThrow(expect.objectContaining({ code: "INVALID_PLACEMENT_DEPTH" }));
     });
 
     it("reads a missing currentRound as the first round", () => {

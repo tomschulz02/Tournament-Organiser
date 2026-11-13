@@ -82,11 +82,14 @@ export const ERRORS = {
 	// The Settings page's per-division controls. The basis is one of the four in
 	// utils/standings.js's RANKING_BASES.
 	INVALID_RANKING_BASIS: [400, "That is not one of the available ranking options"],
+	// Ranking rules as kept in state.rankingRules: a known method, whole points
+	// from 0 to 10, and known deciders listed once each. See readRankingRules.
+	INVALID_RANKING_RULES: [400, "Those ranking rules are not valid"],
 	// Placement depth: Classic only, an odd rank from 5 to the knockout's team
 	// count, and fixed once the knockout stage is under way, because changing it
 	// adds and removes fixtures.
 	PLACEMENT_NOT_AVAILABLE: [400, "Placement matches need a division with a knockout stage"],
-	INVALID_PLACEMENT_DEPTH: [400, "Placement matches must go down to an odd place from 5th to the number of knockout teams"],
+	INVALID_PLACEMENT_DEPTH: [400, "Placement matches must be the final only, or go down to an odd place from 5th to the number of knockout teams"],
 	KNOCKOUT_ALREADY_STARTED: [409, "The knockout stage has already started"],
 	FORMAT_NOT_IMPLEMENTED: [400, "This format is not available yet"],
 	UNSUPPORTED_FORMAT: [400, "This format is not supported"],

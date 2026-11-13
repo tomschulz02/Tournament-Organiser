@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
 import FixtureRow from './FixtureRow';
@@ -13,6 +13,8 @@ import {
 	indexById,
 	matchesFixtureFilters,
 } from './fixtureUtils';
+import { foldFinishedGroups } from './scheduleNow';
+import { useScheduleClock } from './useScheduleClock';
 import {
 	buildTournamentSchedule,
 	calculateScheduledStats,
@@ -49,6 +51,12 @@ export default function ScheduleTab({
 	const fixtureIndex = useMemo(() => indexById(fixtures), [fixtures]);
 
 	const [filters, setFilters] = useState(EMPTY_FILTERS);
+	const now = useScheduleClock();
+	// Folded runs the reader has opened, by day and first slot. Local view state:
+	// it survives the 20 s refresh because this component stays mounted, and a
+	// run that grows as another slot finishes keeps its key.
+	const [openFolds, setOpenFolds] = useState(() => new Set());
+	const nowRef = useRef(null);
 
 	const rounds = useMemo(() => orderedStages(fixtures), [fixtures]);
 	const statuses = useMemo(() => distinctStatuses(fixtures), [fixtures]);
@@ -94,8 +102,53 @@ export default function ScheduleTab({
 	const scheduledShown = sections.reduce((total, day) => total + day.groups.reduce((n, g) => n + g.entries.length, 0), 0);
 	const showDivision = divisions.length > 1;
 
+	// Folding hides results, so it stops while the reader is searching for a team
+	// or narrowing by status: those are questions about particular matches.
+	// Division, stage, day and court only narrow the timetable, and fold as normal.
+	const folding = !filters.team.trim() && !filters.status;
+	const showsToday = sections.some((day) => day.date === now.date);
+
+	const toggleFold = (key) =>
+		setOpenFolds((current) => {
+			const next = new Set(current);
+			if (next.has(key)) next.delete(key);
+			else next.add(key);
+			return next;
+		});
+
+	const jumpToNow = () => {
+		const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		nowRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+	};
+
+	const renderGroup = (group) => (
+		<div key={group.startTime} className="tv-time-group">
+			<div className="tv-time-group-time">
+				<span>{group.startTime}</span>
+			</div>
+
+			<ul className="tv-fixture-rows tv-time-group-entries">
+				{group.entries.map((entry) =>
+					entry.type === 'break' ? (
+						<BreakRow key={entry.id} entry={entry} schedule={schedule} />
+					) : (
+						<FixtureRow
+							key={entry.id}
+							fixture={entry.fixture}
+							showDivision={showDivision}
+							court={getCourtName(schedule, entry.courtId)}
+							officials={entry.officials}
+							action={renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
+							divisions={divisions}
+						/>
+					),
+				)}
+			</ul>
+		</div>
+	);
+
 	return (
-		<div className="tv-fixtures">
+		<div className="tv-fixtures tv-fixtures--sided">
 			<div className="tv-fixtures-toolbar">
 				<FixtureFilters
 					value={filters}
@@ -146,72 +199,112 @@ export default function ScheduleTab({
 				</div>
 			</div>
 
-			<p className="tv-fixtures-count">
-				{placed.size} of {stats.totalFixtures} fixtures scheduled
-				{stats.courts > 0 && ` · ${stats.courts} court${stats.courts === 1 ? '' : 's'}`}
-				{stats.days > 0 && ` · ${days.length} of ${stats.days} day${stats.days === 1 ? '' : 's'} in use`}
-			</p>
+			<div className="tv-fixtures-main">
+				<p className="tv-fixtures-count">
+					{placed.size} of {stats.totalFixtures} fixtures scheduled
+					{stats.courts > 0 && ` · ${stats.courts} court${stats.courts === 1 ? '' : 's'}`}
+					{stats.days > 0 && ` · ${days.length} of ${stats.days} day${stats.days === 1 ? '' : 's'} in use`}
+				</p>
 
-			{scheduledShown === 0 && unscheduled.length === 0 && (
-				<SectionState
-					variant="empty"
-					title="Nothing matches these filters"
-					message="Widen or clear a filter to see more of the schedule.">
-					<button type="button" className="tv-retry" onClick={() => setFilters(EMPTY_FILTERS)}>
-						Clear filters
-					</button>
-				</SectionState>
-			)}
+				{scheduledShown === 0 && unscheduled.length === 0 && (
+					<SectionState
+						variant="empty"
+						title="Nothing matches these filters"
+						message="Widen or clear a filter to see more of the schedule.">
+						<button type="button" className="tv-retry" onClick={() => setFilters(EMPTY_FILTERS)}>
+							Clear filters
+						</button>
+					</SectionState>
+				)}
 
-			{sections.map((day) => (
-				<FixtureGroup
-					key={day.date}
-					title={day.label}
-					meta={formatDateLabel(day.date)}>
-					{day.groups.map((group) => (
-						<div key={group.startTime} className="tv-time-group">
-							<div className="tv-time-group-time">
-								<span>{group.startTime}</span>
-							</div>
+				{sections.map((day) => {
+					const isToday = day.date === now.date;
+					const segments = folding
+						? foldFinishedGroups(day.groups)
+						: day.groups.map((group) => ({ type: 'group', group }));
+					// The Now line goes above the first segment that has not started yet,
+					// or after the last one once everything has.
+					const startOf = (segment) => (segment.type === 'fold' ? segment.startTime : segment.group.startTime);
+					const nowAt = isToday ? segments.findIndex((segment) => compareTimes(startOf(segment), now.time) > 0) : null;
+					const nowLine = <NowLine ref={nowRef} time={now.time} />;
 
-							<ul className="tv-fixture-rows tv-time-group-entries">
-								{group.entries.map((entry) =>
-									entry.type === 'break' ? (
-										<BreakRow key={entry.id} entry={entry} schedule={schedule} />
-									) : (
-										<FixtureRow
-											key={entry.id}
-											fixture={entry.fixture}
-											showDivision={showDivision}
-											court={getCourtName(schedule, entry.courtId)}
-											officials={entry.officials}
-											action={renderFixtureAction ? renderFixtureAction(entry.fixture) : null}
-												divisions={divisions}
-											/>
-									),
-								)}
-							</ul>
-						</div>
-					))}
-				</FixtureGroup>
-			))}
+					return (
+						<FixtureGroup key={day.date} title={day.label} meta={formatDateLabel(day.date)}>
+							{segments.map((segment, index) => {
+								const key = `${day.date}:${segment.type === 'fold' ? segment.key : segment.group.startTime}`;
 
-			{unscheduled.length > 0 && (
-				<FixtureGroup title="Not yet scheduled" meta={`${unscheduled.length} fixtures`}>
-					<ul className="tv-fixture-rows">
-						{unscheduled.map((fixture) => (
-							<FixtureRow
-								key={fixture.id}
-								fixture={fixture}
-								showDivision={showDivision}
-								action={renderFixtureAction ? renderFixtureAction(fixture) : null}
-								divisions={divisions}
-							/>
-						))}
-					</ul>
-				</FixtureGroup>
+								return (
+									<Fragment key={key}>
+										{index === nowAt && nowLine}
+										{segment.type === 'group' ? (
+											renderGroup(segment.group)
+										) : (
+											<>
+												<button
+													type="button"
+													className={`tv-fold ${openFolds.has(key) ? 'is-open' : ''}`.trim()}
+													aria-expanded={openFolds.has(key)}
+													onClick={() => toggleFold(key)}>
+													<svg
+														className="tv-fold-chevron"
+														xmlns="http://www.w3.org/2000/svg"
+														height="20"
+														viewBox="0 -960 960 960"
+														width="20"
+														aria-hidden="true">
+														<path d="M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z" />
+													</svg>
+													<span>
+														{segment.startTime} – {segment.endTime} · {segment.played}{' '}
+														{segment.played === 1 ? 'match' : 'matches'} played
+													</span>
+												</button>
+												{openFolds.has(key) && segment.groups.map(renderGroup)}
+											</>
+										)}
+									</Fragment>
+								);
+							})}
+							{nowAt === -1 && nowLine}
+						</FixtureGroup>
+					);
+				})}
+
+				{unscheduled.length > 0 && (
+					<FixtureGroup title="Not yet scheduled" meta={`${unscheduled.length} fixtures`}>
+						<ul className="tv-fixture-rows">
+							{unscheduled.map((fixture) => (
+								<FixtureRow
+									key={fixture.id}
+									fixture={fixture}
+									showDivision={showDivision}
+									action={renderFixtureAction ? renderFixtureAction(fixture) : null}
+									divisions={divisions}
+								/>
+							))}
+						</ul>
+					</FixtureGroup>
+				)}
+			</div>
+
+			{/* Phones only (see the stylesheet): a long day scrolls the Now line out of
+			    sight, and this brings it back. Present only when today is on screen. */}
+			{showsToday && (
+				<button type="button" className="tv-jump-now" onClick={jumpToNow}>
+					Jump to now
+				</button>
 			)}
 		</div>
+	);
+}
+
+// The line between what has started and what has not, on today only. A ref so
+// "Jump to now" can scroll to it.
+function NowLine({ ref, time }) {
+	return (
+		<p ref={ref} className="tv-now-line">
+			<span>Now {time}</span>
+		</p>
 	);
 }
 

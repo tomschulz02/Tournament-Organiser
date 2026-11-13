@@ -10,6 +10,7 @@ import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 import { updateDivisionTeams } from '../../requests';
 import { TEAM_NAME_MAX, parseBulkTeamNames } from '../create/divisionFormats';
+import { poolMembership } from '../create/divisionPreview';
 
 // The teams in one division, in seed order.
 //
@@ -57,10 +58,10 @@ export default function TeamsTab({
 	const [confirming, setConfirming] = useState(null);
 	const [busy, setBusy] = useState(false);
 
-	// Below 768px, Groups and Team List take turns rather than stacking — see
-	// the icon toggle in the render. Above that width both are always visible
-	// side by side and this state is simply unused.
-	const [mobileTeamsView, setMobileTeamsView] = useState('groups');
+	// Pools or Full list, for a Classic division, at every width. Null until the
+	// reader picks one, so the default below can follow the role and the
+	// tournament's status rather than being fixed on first render.
+	const [teamsView, setTeamsView] = useState(null);
 
 	// The row being carried and the row it is over. Indices rather than keys,
 	// because a move is expressed as a pair of positions.
@@ -108,6 +109,28 @@ export default function TeamsTab({
 	const canEditTeams = canManageSetup && isNotStarted(status);
 
 	const setTeams = (rows) => setDraft({ divisionId: division.id, teams: rows });
+
+	// Pools are a Classic idea; a League division is one list. The organiser who
+	// can still reseed lands on the Full list, where seeding is changed; everyone
+	// else lands on the pools.
+	const isClassic = division.type === 'Classic';
+	const view = isClassic ? (teamsView ?? (canEditTeams ? 'list' : 'pools')) : 'list';
+
+	// The pool each row will land in once saved, read from the pending order with
+	// the client's mirror of the server's draw, against the pool each saved team
+	// is in now. Rows whose pool would change are marked in the Full list and
+	// named in the pending bar.
+	const savedPools = isClassic ? savedPoolOf(division) : new Map();
+	const pendingPools = new Map();
+	if (isClassic) {
+		poolMembership(teams.length, getDivisionStructure(division).numGroups).forEach((positions, pool) =>
+			positions.forEach((position) => teams[position] && pendingPools.set(teams[position].key, pool)),
+		);
+	}
+	const poolChanges = teams
+		.filter((row) => row.id !== null && savedPools.has(row.id) && savedPools.get(row.id) !== pendingPools.get(row.key))
+		.map((row) => ({ key: row.key, name: row.name, from: savedPools.get(row.id), to: pendingPools.get(row.key) }));
+	const movedKeys = new Set(poolChanges.map((change) => change.key));
 
 	const closeForms = () => {
 		setEditingKey(null);
@@ -390,9 +413,12 @@ export default function TeamsTab({
 				</SectionState>
 			) : (
 				<>
-					<p className="tv-fixtures-count">
-						{teams.length} team{teams.length === 1 ? '' : 's'}
-					</p>
+					{/* A Classic division counts its teams beside the view toggle. */}
+					{!isClassic && (
+						<p className="tv-fixtures-count">
+							{teams.length} team{teams.length === 1 ? '' : 's'}
+						</p>
+					)}
 
 					{/* Said rather than left to be discovered. Only the one branch
 					    now: once the tournament has started the handles are not on
@@ -426,7 +452,7 @@ export default function TeamsTab({
 									key={row.key}
 									className={`tv-team-row${draggingIndex === index ? ' tv-team-row--dragging' : ''}${
 										overIndex === index && draggingIndex !== index ? ' tv-team-row--over' : ''
-									}`}
+									}${movedKeys.has(row.key) ? ' tv-team-row--moved' : ''}`}
 									onDragOver={(event) => canEditTeams && handleDragOver(event, index)}
 									onDrop={(event) => canEditTeams && handleDrop(event, index)}>
 									{canEditTeams && (
@@ -443,6 +469,13 @@ export default function TeamsTab({
 											}. Drag, or use the up and down arrow keys.`}>
 											<Icon name="grip" size={16} fill="currentColor" />
 										</button>
+									)}
+
+									{isClassic && pendingPools.has(row.key) && (
+										<PoolTile
+											index={pendingPools.get(row.key)}
+											changed={movedKeys.has(row.key)}
+										/>
 									)}
 
 									{/* The list is in seed order, so a row's position is its
@@ -472,6 +505,17 @@ export default function TeamsTab({
 							),
 						)}
 					</ul>
+
+					{isClassic && canEditTeams && teams.length > 1 && (
+						<p className="tv-teams-legend">
+							<span>
+								<PoolTile index={0} /> Pool the seed lands in
+							</span>
+							<span>
+								<PoolTile index={1} changed /> Pool changes when you save
+							</span>
+						</p>
+					)}
 				</>
 			)}
 		</>
@@ -501,6 +545,7 @@ export default function TeamsTab({
 						{setChanged
 							? 'Unsaved changes. Saving will regenerate this division’s fixtures.'
 							: 'Unsaved changes.'}
+						{poolChanges.length > 0 && ` ${describePoolChanges(poolChanges)}`}
 					</p>
 
 					<div className="tv-inline-form-actions">
@@ -515,51 +560,25 @@ export default function TeamsTab({
 				</div>
 			)}
 
-			{division.type === 'Classic' ? (
-				<>
-					{/* Hidden at 768px and up by the stylesheet, where Groups and
-					    List sit side by side and there is nothing to switch
-					    between. Icons only, mirroring the schedule maker's
-					    grid/list view toggle. */}
-					<div className="tv-teams-view-toggle" role="tablist" aria-label="Teams view">
-						<button
-							type="button"
-							role="tab"
-							aria-selected={mobileTeamsView === 'groups'}
-							aria-label="Groups"
-							className={mobileTeamsView === 'groups' ? 'active' : ''}
-							onClick={() => setMobileTeamsView('groups')}>
-							<Icon name="grid" fill={mobileTeamsView === 'groups' ? '#fff' : 'var(--secondary-text-color)'} />
-						</button>
-						<button
-							type="button"
-							role="tab"
-							aria-selected={mobileTeamsView === 'list'}
-							aria-label="Team List"
-							className={mobileTeamsView === 'list' ? 'active' : ''}
-							onClick={() => setMobileTeamsView('list')}>
-							<Icon name="list" fill={mobileTeamsView === 'list' ? '#fff' : 'var(--secondary-text-color)'} />
-						</button>
-					</div>
+			{isClassic && (
+				<div className="tv-teams-bar">
+					<p className="tv-fixtures-count">
+						{teams.length} team{teams.length === 1 ? '' : 's'} · {getDivisionStructure(division).numGroups} pool
+						{getDivisionStructure(division).numGroups === 1 ? '' : 's'}
+					</p>
 
-					<div className="tv-teams-columns">
-						<div
-							className={`tv-teams-columns-groups${
-								mobileTeamsView === 'groups' ? ' tv-teams-columns-groups--active' : ''
-							}`}>
-							<GeneratedGroups division={division} />
-						</div>
-						<div
-							className={`tv-teams-columns-list${
-								mobileTeamsView === 'list' ? ' tv-teams-columns-list--active' : ''
-							}`}>
-							{teamList}
-						</div>
+					<div className="tv-teams-view-toggle" role="group" aria-label="Teams view">
+						<button type="button" aria-pressed={view === 'pools'} onClick={() => setTeamsView('pools')}>
+							Pools
+						</button>
+						<button type="button" aria-pressed={view === 'list'} onClick={() => setTeamsView('list')}>
+							Full list
+						</button>
 					</div>
-				</>
-			) : (
-				teamList
+				</div>
 			)}
+
+			{view === 'pools' ? <PoolsView division={division} pending={dirty} /> : teamList}
 
 			{confirming && (
 				<StructureConfirmation
@@ -584,34 +603,86 @@ function groupLabel(index) {
 	return `Pool ${String.fromCharCode(65 + index)}`;
 }
 
-// Read-only: shows what's already saved, not the tab's draft state. A
-// division with no pools yet (no teams) gets the same empty state pattern
-// used elsewhere on this tab.
-function GeneratedGroups({ division }) {
+// Read-only: shows what's already saved, not the tab's draft state — the pools
+// the server generated, so they are the pools fixtures were made from. Seeds are
+// positions in the saved seeding. A division with no pools yet (no teams) gets
+// the same empty state pattern used elsewhere on this tab.
+function PoolsView({ division, pending = false }) {
 	const groups = division.state?.rounds?.[0]?.groups ?? [];
 
 	if (groups.length === 0) {
 		return <SectionState variant="empty" title="No pools yet" message="Pools appear once teams have been added." />;
 	}
 
-	const teamNames = new Map((division.teams ?? []).map((team) => [team.id, team.name]));
+	const teams = division.teams ?? [];
+	const teamNames = new Map(teams.map((team) => [team.id, team.name]));
+	const seeds = new Map(teams.map((team, index) => [team.id, index + 1]));
 
 	return (
-		<div className="tv-teams-groups">
-			{groups.map((group, index) => (
-				<article key={index} className="tv-teams-group-card">
-					<div className="tv-teams-group-card-head">{groupLabel(index)}</div>
+		<div className="tv-pools">
+			{pending && (
+				<p className="tv-teams-seed-note">These are the saved pools. Unsaved seeding changes show in the Full list.</p>
+			)}
 
-					{group.map((teamId, seedIndex) => (
-						<div key={teamId} className="tv-teams-group-card-row">
-							<span className="tv-teams-group-card-seed">{seedIndex + 1}</span>
-							<span>{teamNames.get(teamId) ?? 'Unknown team'}</span>
-						</div>
-					))}
-				</article>
+			{groups.map((group, index) => (
+				<section key={index} className="tv-pool" aria-label={groupLabel(index)}>
+					<div className="tv-pool-head">
+						<PoolTile index={index} />
+						<h3 className="tv-pool-name">{groupLabel(index)}</h3>
+						<span className="tv-pool-rule" aria-hidden="true" />
+					</div>
+
+					<ul className="tv-pool-teams">
+						{group.map((teamId) => (
+							<li key={teamId} className="tv-pool-team">
+								<TeamIdentity name={teamNames.get(teamId) ?? 'Unknown team'} />
+								{seeds.has(teamId) && (
+									<span className="tv-pool-seed" aria-label={`Seed ${seeds.get(teamId)}`}>
+										{seeds.get(teamId)}
+									</span>
+								)}
+							</li>
+						))}
+					</ul>
+				</section>
 			))}
 		</div>
 	);
+}
+
+// A pool's letter in a neutral tile. Neutral because identity colours belong to
+// divisions (DESIGN.md); a ring marks a seed whose pool changes on save.
+function PoolTile({ index, changed = false }) {
+	const letter = String.fromCharCode(65 + index);
+
+	return (
+		<span
+			className={`tv-pool-tile${changed ? ' tv-pool-tile--changed' : ''}`}
+			title={changed ? `Moves to Pool ${letter} when saved` : `Pool ${letter}`}>
+			<span aria-hidden="true">{letter}</span>
+			<span className="tv-visually-hidden">{changed ? `Moves to Pool ${letter}` : `Pool ${letter}`}</span>
+		</span>
+	);
+}
+
+// Team id -> index of the pool it is saved in.
+function savedPoolOf(division) {
+	const pools = new Map();
+	(division.state?.rounds?.[0]?.groups ?? []).forEach((group, index) =>
+		(Array.isArray(group) ? group : []).forEach((teamId) => pools.set(teamId, index)),
+	);
+	return pools;
+}
+
+// The pending bar's sentence about pools. Each move by name while that stays a
+// short sentence; a count once it would not.
+function describePoolChanges(changes) {
+	const letter = (index) => String.fromCharCode(65 + index);
+
+	if (changes.length > 3) return `${changes.length} teams change pool.`;
+
+	const parts = changes.map((change) => `${change.name} to Pool ${letter(change.to)}`);
+	return `Pools change: ${parts.join(', ')}.`;
 }
 
 // A saved team keys on its id; one that has never been saved has none, so the

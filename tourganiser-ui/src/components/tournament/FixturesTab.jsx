@@ -56,7 +56,7 @@ export default function FixturesTab({ divisions = [], canEditSchedule = false, o
 	);
 
 	return (
-		<div className="tv-fixtures">
+		<div className="tv-fixtures tv-fixtures--sided">
 			<div className="tv-fixtures-toolbar">
 				<FixtureFilters
 					value={filters}
@@ -74,44 +74,46 @@ export default function FixturesTab({ divisions = [], canEditSchedule = false, o
 				)}
 			</div>
 
-			<p className="tv-fixtures-count">
-				{filtered ? `${visible.length} of ${fixtures.length} fixtures` : `${fixtures.length} fixtures`}
-			</p>
+			<div className="tv-fixtures-main">
+				<p className="tv-fixtures-count">
+					{filtered ? `${visible.length} of ${fixtures.length} fixtures` : `${fixtures.length} fixtures`}
+				</p>
 
-			{fixtures.length === 0 && (
-				<SectionState
-					variant="empty"
-					title="This tournament has no fixtures yet"
-					message="Fixtures are generated when the tournament is created."
-				/>
-			)}
+				{fixtures.length === 0 && (
+					<SectionState
+						variant="empty"
+						title="This tournament has no fixtures yet"
+						message="Fixtures are generated when the tournament is created."
+					/>
+				)}
 
-			{fixtures.length > 0 && visible.length === 0 && (
-				<SectionState
-					variant="empty"
-					title="No fixtures match these filters"
-					message="Widen or clear a filter to see more.">
-					<button type="button" className="tv-retry" onClick={() => setFilters(EMPTY_FILTERS)}>
-						Clear filters
-					</button>
-				</SectionState>
-			)}
+				{fixtures.length > 0 && visible.length === 0 && (
+					<SectionState
+						variant="empty"
+						title="No fixtures match these filters"
+						message="Widen or clear a filter to see more.">
+						<button type="button" className="tv-retry" onClick={() => setFilters(EMPTY_FILTERS)}>
+							Clear filters
+						</button>
+					</SectionState>
+				)}
 
-			{statusGroups.map((group) => (
-				<FixtureGroup key={group.status} title={group.label} meta={`${group.fixtures.length} fixtures`}>
-					<ul className="tv-fixture-rows">
-						{group.fixtures.map((fixture) => (
-							<FixtureRow
-								key={fixture.id}
-								fixture={fixture}
-								showDivision={divisions.length > 1}
-								action={renderFixtureAction ? renderFixtureAction(fixture) : null}
-								divisions={divisions}
-							/>
-						))}
-					</ul>
-				</FixtureGroup>
-			))}
+				{statusGroups.map((group) => (
+					<FixtureGroup key={group.status} title={group.label} meta={`${group.fixtures.length} fixtures`}>
+						<ul className="tv-fixture-rows">
+							{group.fixtures.map((fixture) => (
+								<FixtureRow
+									key={fixture.id}
+									fixture={fixture}
+									showDivision={divisions.length > 1}
+									action={renderFixtureAction ? renderFixtureAction(fixture) : null}
+									divisions={divisions}
+								/>
+							))}
+						</ul>
+					</FixtureGroup>
+				))}
+			</div>
 		</div>
 	);
 }

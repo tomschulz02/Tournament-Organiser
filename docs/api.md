@@ -363,14 +363,23 @@ Success returns `{ divisionId, color }`, with `color` null when the choice was c
 ### Division settings
 
 `PUT /api/divisions/:divisionId/settings`. Body: either or both of
-`{ "rankingBasis": "FIVB_POINTS", "placementDepth": 7 }`. Both are validated before
+`{ "rankingRules": { "method": "wins", "wins": "matches", "tiebreakers": ["SET_RATIO"] }, "placementDepth": 7 }`. Both are validated before
 either is written. PUT rather than PATCH because the CORS configuration allows no PATCH,
 and the colour endpoint above set the precedent for a one-concern PUT.
 
-- `rankingBasis` — `MATCHES_WON`, `FIVB_POINTS`, `SIMPLIFIED_POINTS` or `SETS_WON`.
-  Changeable at any time: it changes how standings are read and nothing else, so there is
-  no rebuild. See `docs/tournament-rules.md`, "Ranking order".
-- `placementDepth` — null, or an odd place from 5 up to the knockout stage's team count.
+- `rankingRules` — how the division's tables are ranked, in the shape of
+  `state.rankingRules` (`docs/division-state.md`): `method` `"points"` with a `points`
+  object of four whole numbers from 0 to 10 (`straightWin`, `decidingWin`, `decidingLoss`,
+  `straightLoss`), or `method` `"wins"` with `wins` `"matches"` or `"sets"`; and
+  `tiebreakers`, the deciders in order, each at most once and never `SEEDING`. The whole
+  object is sent each time. Changeable at any time: it changes how standings are read and
+  nothing else, so there is no rebuild. Saved to state by its own patch. See
+  `docs/tournament-rules.md`, "Ranking order".
+- `rankingBasis` is no longer accepted. A body that sends it is not refused; the key is
+  ignored. `divisions.ranking_basis` is only the fallback for a division with no saved
+  rules.
+- `placementDepth` — null (the final and the 3rd-place match), 1 (the final only, for a
+  knockout with semifinals), or an odd place from 5 up to the knockout stage's team count.
   Classic only. Refused once the knockout stage has started, because it adds and removes
   fixtures: the knockout rounds are redrawn and their fixtures reconciled by round name,
   so every existing knockout fixture keeps its id and its schedule slot and only the
@@ -381,16 +390,18 @@ Rejections:
 
 | Status | Code | Meaning |
 |---|---|---|
-| 400 | `INVALID_RANKING_BASIS` | Not one of the four |
+| 400 | `INVALID_RANKING_RULES` | Not a valid rules object |
 | 400 | `PLACEMENT_NOT_AVAILABLE` | Not a Classic division with a knockout stage |
-| 400 | `INVALID_PLACEMENT_DEPTH` | Not null or an odd place from 5 to the knockout's size |
+| 400 | `INVALID_PLACEMENT_DEPTH` | Not null, 1, or an odd place from 5 to the knockout's size; or 1 for a two-team knockout |
 | 403 | `NOT_TOURNAMENT_OWNER` | Caller holds no role on the tournament |
 | 403 | `ROLE_NOT_PERMITTED` | Caller's role does not include this |
 | 404 | `DIVISION_NOT_FOUND` | No such division |
 | 409 | `KNOCKOUT_ALREADY_STARTED` | Placement depth sent after the knockout stage began |
 
-Success returns `{ divisionId, rankingBasis, placementDepth }`. The division payload
-carries both as `ranking_basis` and `placement_depth`.
+Success returns `{ divisionId, rankingRules, placementDepth }`, the rules being the ones in
+force. The division payload carries them as `ranking_rules` (always present: the saved
+rules, or those `ranking_basis` stands for) and `placement_depth`. `ranking_basis` is
+still sent but nothing in the client reads it.
 
 ### Collaborators
 

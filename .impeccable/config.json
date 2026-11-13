@@ -5,5 +5,29 @@
       "maxFindings": 5,
       "maxChars": 8000
     }
+  },
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "tourganiser-ui/src/styles/schedule-maker.css"
+        ],
+        "createdAt": "2026-11-04T16:25:46.015Z",
+        "reason": "DESIGN.md documents the 3px division edge as the project's colour marker; on these schedule surfaces it carries each entry's division"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "tourganiser-ui/src/styles/schedule-print.css"
+        ],
+        "createdAt": "2026-11-04T16:25:46.296Z",
+        "reason": "DESIGN.md documents the 3px division edge as the project's colour marker; on these schedule surfaces it carries each entry's division"
+      }
+    ]
   }
 }

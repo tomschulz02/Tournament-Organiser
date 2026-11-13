@@ -152,7 +152,6 @@ entry has to be moved by hand.
 ### More formats
 
 - pool-aware crossovers, so each pool's 1st and 2nd are in opposite halves;
-- an optional 3rd-place match;
 - single elimination (stubbed in `generateDivisionDetails`);
 - double elimination;
 - a second pool phase (gold and silver pools), common in volleyball;
@@ -197,7 +196,7 @@ scoresheet mechanism itself.
 - Statistics
 - Public tournaments
 - Officials management
-- Improved scheduling
+- Improved scheduling, including Auto-schedule that keeps hand-placed matches and fills around them
 - Stream integration
 - Forfeit as a first-class fixture status, rather than relying on the organiser
   recording a nominal scoreline by hand. Raised in priority by the 2026-10-22 review: the

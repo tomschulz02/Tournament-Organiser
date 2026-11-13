@@ -407,7 +407,7 @@ export const HELP_TOPICS = {
 				paragraphs: [
 					"The organiser's tool for assigning fixtures to courts and times. The fixtures list is on the left and the board fills the rest, with the day tabs above it. Everything else opens when you need it: Set up, Auto-schedule and Print from the toolbar, and each match's own details when you click it. Nothing here is visible to anyone but the organiser; everyone else sees the result on the read-only Schedule tab once it's saved.",
 				],
-				image: null, // Screenshot needed: the full modal open on a multi-day, multi-court schedule with the grid view active and a few fixtures already placed, wide enough to show the day tabs, the board and the inspector together.
+				image: null, // Screenshot needed: the full modal open on a multi-day, multi-court schedule with the grid view active and a few fixtures already placed, wide enough to show the fixtures list, the day tabs and the board together.
 			},
 			{
 				heading: 'The board',
@@ -451,7 +451,7 @@ export const HELP_TOPICS = {
 			{
 				heading: 'Saving, discarding and printing',
 				paragraphs: [
-					"Save Schedule writes the schedule to the tournament — nothing is visible to anyone else until this is pressed. Under More, Discard Changes reverts everything back to what was last saved, and Reset Schedule empties the board entirely (previously saved matches included), which only takes effect once you save afterwards.",
+					"Save Schedule writes the schedule to the tournament — nothing is visible to anyone else until this is pressed. Undo, or Ctrl+Z, takes back your last change, one at a time, until you save. Under More, Discard Changes reverts everything back to what was last saved, and Reset Schedule empties the board entirely (previously saved matches included), which only takes effect once you save afterwards.",
 					'Print shows where the pages break, with Grid and List to choose between, and you can move any break there. Print this layout opens the printable document in a new tab with its own Print button, using whatever is on the board, saved or not. Page breaks are saved with the rest of the schedule.',
 				],
 			},

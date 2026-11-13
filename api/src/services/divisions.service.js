@@ -5,7 +5,7 @@ import { fixturesRepository } from "../repositories/fixtures.repository.js";
 import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { generateFixtures, fixtureService, generatePartialRoundRobinPairs, roundHolding } from "./fixtures.service.js";
 import { qualifierCount } from "./progression.service.js";
-import { RANKING_BASES } from "../utils/standings.js";
+import { rankingRulesOf, readRankingRules } from "../utils/standings.js";
 import { assertCan, resolveRole } from "../utils/tournamentPermissions.js";
 import { MAX_TEAMS_PER_DIVISION, MAX_ROUND_ROBIN_LEGS, MAX_FIXTURES_PER_DIVISION } from "../config/limits.js";
 import { v4 as uuidv4 } from "uuid";
@@ -154,9 +154,10 @@ async function updateDivisionColour(divisionId, userId, colour) {
 
 // PUT /api/divisions/:divisionId/settings — the Settings page's per-division
 // controls. Its own endpoint, like the colour, because neither setting is part
-// of the teams-and-structure editor: the ranking basis changes how standings are
-// read and nothing else, so it is changeable at any point and takes effect on
-// the next view with no rebuild.
+// of the teams-and-structure editor: the ranking rules change how standings are
+// read and nothing else, so they are changeable at any point and take effect on
+// the next view with no rebuild. They are kept in state.rankingRules and written
+// by their own patch — see docs/division-state.md.
 //
 // Placement depth is different: it adds or removes real fixtures, so it can only
 // change before the knockout stage starts, and a change regenerates the knockout
@@ -173,41 +174,51 @@ async function updateDivisionSettings(divisionId, userId, payload = {}) {
     await assertManagesSetup(division, userId);
 
     const current = {
-        rankingBasis: division.ranking_basis ?? "MATCHES_WON",
+        rankingRules: rankingRulesOf(division),
         placementDepth: division.placement_depth ?? null
     };
 
-    const rankingBasis = payload.rankingBasis === undefined ? current.rankingBasis : readRankingBasis(payload.rankingBasis);
+    const rankingRules =
+        payload.rankingRules === undefined ? current.rankingRules : readSubmittedRankingRules(payload.rankingRules);
     const placementDepth =
         payload.placementDepth === undefined ? current.placementDepth : readPlacementDepth(division, payload.placementDepth);
 
+    // Saved when sent and different from what is stored. Rules that equal the
+    // ones derived from ranking_basis are still written the first time: saving
+    // is what makes state authoritative for the division.
+    const stored = readRankingRules(division.state?.rankingRules);
+    const rulesChanged =
+        payload.rankingRules !== undefined && JSON.stringify(stored) !== JSON.stringify(rankingRules);
+
     if (placementDepth !== current.placementDepth) {
         await db.withTransaction(async (client) => {
-            if (rankingBasis !== current.rankingBasis) {
-                await divisionsRepository.updateRankingBasis(divisionId, rankingBasis, client);
+            if (rulesChanged) {
+                await divisionsRepository.updateStateRankingRules(divisionId, rankingRules, client);
             }
 
             await replaceKnockoutRounds(division, placementDepth, client);
             await divisionsRepository.updatePlacementDepth(divisionId, placementDepth, client);
         });
-    } else if (rankingBasis !== current.rankingBasis) {
-        await divisionsRepository.updateRankingBasis(divisionId, rankingBasis);
+    } else if (rulesChanged) {
+        await divisionsRepository.updateStateRankingRules(divisionId, rankingRules);
     }
 
-    return { divisionId, rankingBasis, placementDepth };
+    return { divisionId, rankingRules, placementDepth };
 }
 
-function readRankingBasis(value) {
-    if (!RANKING_BASES.includes(value)) {
-        throw new AppError("INVALID_RANKING_BASIS");
+function readSubmittedRankingRules(value) {
+    const rules = readRankingRules(value);
+    if (!rules) {
+        throw new AppError("INVALID_RANKING_RULES");
     }
 
-    return value;
+    return rules;
 }
 
-// Null clears the setting. Otherwise an odd rank from 5 — ranks 1 to 4 are the
-// final and the 3rd-place playoff already — up to the number of teams in the
-// knockout stage, which is the lowest rank a match there could decide.
+// Null clears the setting: the final and the 3rd-place playoff. 1 is the final
+// only. Otherwise an odd rank from 5 — ranks 1 to 4 are the final and the
+// playoff already — up to the number of teams in the knockout stage, which is
+// the lowest rank a match there could decide.
 function readPlacementDepth(division, value) {
     const rounds = Array.isArray(division.state?.rounds) ? division.state.rounds : [];
     const firstKnockout = rounds.findIndex((round) => round.type === "knockout");
@@ -227,6 +238,13 @@ function readPlacementDepth(division, value) {
     }
 
     const depth = toCount(value);
+
+    // Final only needs semifinal losers to leave unplayed: a knockout that
+    // starts at the Finals round has two teams and none.
+    if (depth === FINAL_ONLY && rounds[firstKnockout].name !== "Finals") {
+        return depth;
+    }
+
     if (depth === null || depth < 5 || depth % 2 === 0 || depth > qualifierCount(rounds[firstKnockout])) {
         throw new AppError("INVALID_PLACEMENT_DEPTH");
     }
@@ -330,6 +348,22 @@ async function renameTeams(divisionId, entries, existingIds) {
     return { divisionId, rebuilt: false, reordered: false, renamed: changed.length, teams: entries };
 }
 
+// The settings an organiser keeps in state rather than in a column. A reorder
+// and a rebuild write a freshly generated state over the old one, and generation
+// knows nothing of these, so they are copied across first. A new setting key
+// kept in state belongs in this list — see docs/division-state.md.
+const STATE_SETTING_KEYS = ["color", "rankingRules"];
+
+function carryStateSettings(oldState, newState) {
+    const carried = { ...newState };
+
+    STATE_SETTING_KEYS.forEach((key) => {
+        if (oldState?.[key] !== undefined) carried[key] = oldState[key];
+    });
+
+    return carried;
+}
+
 // The reorder path. state.teams is the seeding, and seeding is the final
 // tiebreak in the ranking chain — see docs/tournament-rules.md — so reordering
 // it once results exist would retroactively change who separated from whom, and
@@ -386,7 +420,12 @@ async function reorderTeams(division, entries, payload) {
         // already the entries in the submitted order. Stamps last_update
         // itself, so the tournament view's ETag moves without a separate
         // touchDivision.
-        await divisionsRepository.replaceState(division.id, generated.state, entries.length, client);
+        await divisionsRepository.replaceState(
+            division.id,
+            carryStateSettings(division.state, generated.state),
+            entries.length,
+            client
+        );
         await createFixtures(division.id, fixtures, client);
 
         const scheduleEntriesRemoved = await repairSchedule(
@@ -469,7 +508,12 @@ async function rebuildDivision(division, entries, payload) {
             }
         }
 
-        await divisionsRepository.replaceState(division.id, generated.state, teams.length, client);
+        await divisionsRepository.replaceState(
+            division.id,
+            carryStateSettings(division.state, generated.state),
+            teams.length,
+            client
+        );
         await createFixtures(division.id, fixtures, client);
 
         const scheduleEntriesRemoved = await repairSchedule(
@@ -885,6 +929,10 @@ function leagueConfigFromState(state, teamCount) {
     return { mode: 'legs', legs: 1 };
 }
 
+// placement_depth 1: the final is the only place played for, with no 3rd-place
+// playoff. See docs/tournament-rules.md, "Placement matches".
+const FINAL_ONLY = 1;
+
 function createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth = null) {
     const state = {
         teams: teams,
@@ -939,8 +987,9 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams, place
             }
             round.groups = populateGroups(num_teams/2, teams);
 
-            // add teams for 3rd Place Playoffs
-            if (round.name === "Finals"){
+            // add teams for 3rd Place Playoffs, unless the division plays the
+            // final only
+            if (round.name === "Finals" && placementDepth !== FINAL_ONLY){
                 round.groups.unshift([2,3]);
             }
 
@@ -971,7 +1020,7 @@ function createClassicState(teams, num_teams, num_groups, qualifyingTeams, place
 
     // Additive, and only when asked for: with no depth the rounds above are
     // exactly what they have always been.
-    if (placementDepth !== null && placementDepth !== undefined) {
+    if (placementDepth !== null && placementDepth !== undefined && placementDepth !== FINAL_ONLY) {
         addPlacementMatches(state.rounds, placementDepth);
     }
 
@@ -1194,7 +1243,7 @@ export {
     validateStructure,
     leagueConfigFromPayload,
     leagueConfigFromState,
-    readRankingBasis,
+    carryStateSettings,
     readPlacementDepth
 };
 

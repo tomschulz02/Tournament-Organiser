@@ -24,6 +24,7 @@ import {
 	getCourtName,
 } from '../../utils/scheduleUtils';
 import { useHelpTopic } from '../../HelpContext';
+import { resultsExportPath } from '../../utils/resultsExportLayout';
 
 // Fixtures & Schedule in its scheduled state, reached when tournament.schedule
 // is non-null. Same tab, same route, and no way for the reader to choose — the
@@ -43,6 +44,7 @@ export default function ScheduleTab({
 	onPrintAllScoresheets,
 	scoresheetTemplateSelected = false,
 	scoresheetTemplateReady = false,
+	canExportResults = false,
 }) {
 	useHelpTopic('tournament-fixtures-scheduled');
 
@@ -179,6 +181,19 @@ export default function ScheduleTab({
 							onClick={onPrintAllScoresheets}>
 							Print All Scoresheets
 						</button>
+					)}
+
+					{/* Organiser roles only. Carries the filters above, day and court
+					    included, so the export is the completed fixtures of what is on
+					    screen. */}
+					{canExportResults && (
+						<Link
+							to={resultsExportPath(tournament.id, filters)}
+							className="tv-subtle-action"
+							target="_blank"
+							rel="noopener">
+							Export results
+						</Link>
 					)}
 
 					{/* Unconditional — everyone viewing a scheduled tournament can view

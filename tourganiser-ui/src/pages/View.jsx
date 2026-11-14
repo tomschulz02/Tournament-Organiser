@@ -693,6 +693,7 @@ function TabPanel({
 						onPrintAllScoresheets={onPrintAllScoresheets}
 						scoresheetTemplateSelected={scoresheetTemplateSelected}
 						scoresheetTemplateReady={scoresheetTemplateReady}
+						canExportResults={Boolean(can.enterCurrentRoundResults)}
 					/>
 				) : (
 					<FixturesTab
@@ -700,6 +701,8 @@ function TabPanel({
 						canEditSchedule={can.editSchedule}
 						onCreateSchedule={onOpenSchedule}
 						renderFixtureAction={renderFixtureAction}
+						tournamentId={data.tournament?.id}
+						canExportResults={Boolean(can.enterCurrentRoundResults)}
 					/>
 				)}
 			</>
@@ -714,6 +717,8 @@ function TabPanel({
 				onSelectDivision={onSelectDivision}
 				canProgressRounds={can.progressRounds}
 				onProgressRound={onProgressRound}
+				tournamentId={data.tournament?.id}
+				canExportResults={Boolean(can.enterCurrentRoundResults)}
 			/>
 		);
 	}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
@@ -245,6 +246,7 @@ export default function OverviewTab({
 				tournament={tournament}
 				dashboard={dashboard}
 				canManageSetup={can.manageSetup}
+				canExportResults={Boolean(can.enterCurrentRoundResults)}
 				onChanged={onChanged}
 			/>
 		),
@@ -273,7 +275,13 @@ export default function OverviewTab({
 // The only place the tournament's own metadata appears. The subheader carries
 // the name and nothing else, so this band is where a reader finds out what they
 // are looking at.
-function TournamentInformation({ tournament, dashboard, canManageSetup, onChanged }) {
+function TournamentInformation({ tournament, dashboard, canManageSetup, canExportResults, onChanged }) {
+	const status = tournament.status || 'Not Started';
+	const showLifecycle = Boolean(canManageSetup) && (status === 'Not Started' || status === 'Ongoing');
+	// The whole tournament's results as one printable pack. Organiser roles only,
+	// and only once there is a result to put in it.
+	const showExport = Boolean(canExportResults) && (dashboard.completedFixtureCount ?? 0) > 0;
+
 	// Both labels are pre-formatted by the backend ('1 August 2026'). Do not
 	// reformat them here — the server owns date presentation.
 	const start = tournament.start_date_label;
@@ -301,8 +309,22 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, onChange
 					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} icon="teams" stat />
 				</dl>
 
-				{canManageSetup && (
-					<LifecycleActions tournamentId={tournament.id} status={tournament.status} onChanged={onChanged} />
+				{(showLifecycle || showExport) && (
+					<div className="tv-info-actions">
+						{showLifecycle && (
+							<LifecycleActions tournamentId={tournament.id} status={tournament.status} onChanged={onChanged} />
+						)}
+
+						{showExport && (
+							<Link
+								to={`/tournaments/view/${tournament.id}/results/pack`}
+								className="tv-subtle-action"
+								target="_blank"
+								rel="noopener">
+								Export results pack
+							</Link>
+						)}
+					</div>
 				)}
 			</div>
 		</section>
@@ -320,8 +342,10 @@ function LifecycleActions({ tournamentId, status, onChanged }) {
 
 	if (current !== 'Not Started' && current !== 'Ongoing') return null;
 
+	// The wrapper is TournamentInformation's, which also puts the results pack
+	// link in it.
 	return (
-		<div className="tv-info-actions">
+		<>
 			{current === 'Not Started' && (
 				<button type="button" className="tv-primary-action" disabled={busy} onClick={start}>
 					Start Tournament
@@ -333,7 +357,7 @@ function LifecycleActions({ tournamentId, status, onChanged }) {
 					End Tournament
 				</button>
 			)}
-		</div>
+		</>
 	);
 }
 

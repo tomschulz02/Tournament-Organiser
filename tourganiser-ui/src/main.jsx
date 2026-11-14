@@ -15,6 +15,7 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import LegalPage from './pages/Legal';
 import SchedulePrintPage from './pages/SchedulePrint';
+import ResultsPrintPage from './pages/ResultsPrint';
 import ScrollToTop from './components/ScrollToTop';
 import { AuthProvider } from './AuthProvider';
 import { MessageProvider } from './MessageProvider';
@@ -59,6 +60,9 @@ root.render(
 									    of the shell's own "*" child, so its position here is not what
 									    makes it match. */}
 									<Route path="/tournaments/view/:id/print" element={<SchedulePrintPage />} />
+									{/* The results exports, outside the shell for the same reason:
+									    they are printed pages. :kind is which export. */}
+									<Route path="/tournaments/view/:id/results/:kind" element={<ResultsPrintPage />} />
 								</Routes>
 							</BrowserRouter>
 						</HelpProvider>

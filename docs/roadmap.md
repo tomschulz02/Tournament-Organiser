@@ -6,7 +6,7 @@ application in a better state than it found it.
 Item codes (`C1`, `B7`, `F3`…) refer to `docs/gap-analysis.md`, which describes each one
 in full. This document says what to do and in what order; that one says why.
 
-Last reviewed 2026-08-29.
+Last reviewed 2026-11-14.
 
 ---
 
@@ -908,3 +908,100 @@ one shipped with a known gap, noted below.
   match-number order.
 
 This closes out 1.0 scope in full.
+
+## Release 1.1
+
+Built on the `release-1.1` branch between 2026-09-10 and 2026-11-13. This section was
+written on 2026-11-14 from the standing documents, not from a scope agreed in advance —
+1.1 never had one. Each item points at the document that holds the detail.
+
+### Shipped
+
+**Collaborators**
+
+- ~~**Editors**~~ — **done 2026-09-24.** `tournament_editors` grants result entry on one
+  tournament, added by email or username with no invite step; `fixtures.entered_by`
+  records who wrote a result. Suggestions search usernames only, never emails.
+- ~~**Three roles**~~ — **done 2026-11-04.** Scorer, Match Manager and Co-organiser, with
+  `api/src/utils/tournamentPermissions.js` as the one source of truth and every endpoint
+  tested against every role. Profile gained "Collaborating On". See `docs/decisions.md`,
+  "Extension: collaborator roles replace the owner checks".
+
+**Ranking, placements and pool draws**
+
+- ~~**Configurable ranking basis**~~ — **done 2026-09-24** as `divisions.ranking_basis`,
+  then **superseded 2026-11-13** by full ranking rules in `state.rankingRules`: a method
+  plus an ordered list of tiebreak deciders, seeding always last. The column is now a
+  fallback only and nothing writes it. See `docs/decisions.md`, "Ranking Rules Live In
+  Division State".
+- ~~**Placement matches**~~ — **done 2026-09-24.** `divisions.placement_depth`; matches
+  below 4th are extra groups inside the existing knockout rounds. Final only (no
+  3rd-place playoff) was added on 2026-11-13 as `placement_depth = 1`.
+- ~~**Pool draws**~~ — **done 2026-11-13.** Snake (default), Straight or Seeded pots, as
+  `state.poolDraw`, chosen at creation and in Settings. See `docs/tournament-rules.md`,
+  "Pool Draw".
+
+**Schedule maker**
+
+- ~~**The grid is the organiser's**~~ — **done 2026-09-10.** `slotMinutes` only rules the
+  board; a fixture is drawn at its own start and length, and the rest minimum is its own
+  number of minutes.
+- ~~**Calendar behaviour**~~ — **done 2026-11-04.** Fixed scale, 5-minute snapping,
+  create and resize by pointer, renamed controls, one undo stack. The printed grid draws
+  time to scale. See `docs/decisions.md`, "The Schedule Maker Works Like A Calendar".
+
+**Tournament view**
+
+- ~~**Redesign with one Overview for every role**~~ — **done 2026-11-08.** Same tabs for
+  everyone; the viewer's role changes only the order and prominence of the Overview's
+  sections. See `DESIGN.md`, "Tournament view", and `docs/decisions.md`.
+
+**From the 2026-10-22 review** (`docs/review-2026-10-22.md`)
+
+- ~~**A cancelled or drawn knockout match corrupts progression**~~ (priority 1) — **fixed
+  2026-10-23.** A cancelled knockout match is a double forfeit and a knockout match
+  cannot end level.
+- ~~**CSRF exposure**~~ (priority 2) — closed by `api/src/middleware/csrf.js`.
+- ~~**No server-side size limits**~~ (priority 8) — **fixed 2026-10-23**, in
+  `api/src/config/limits.js`.
+- ~~**Performance and live updates**~~ (priorities 4, 5, 9, 10) — **built 2026-10-23.**
+  The page stays on screen while it refetches, CORS preflights are cached, Discover
+  selects six columns, a 304 is answered before the payload is built, an Ongoing
+  tournament polls every 20 seconds, and only GET is retried. Not yet closed — see below.
+- ~~**"End Tournament" misdescribes itself**~~ (priority 7) — fixed, confirmed in the
+  code 2026-11-14. The confirmation, the Settings status note and the help text all say
+  results can still be corrected, which is what the server does.
+- ~~**The round-complete banner opens the wrong division**~~ (priority 11) — fixed,
+  confirmed in the code 2026-11-14. `RoundCompleteBanner` names each division that can
+  progress and opens Standings on that division.
+
+**Results exports**
+
+- ~~**Printable results**~~ — **done 2026-11-14.** Fixture results (following the tab's
+  filters), final results, and a full results pack with a cover, on
+  `/tournaments/view/:id/results/:kind`. Browser print, organiser roles only. See
+  `docs/decisions.md`, "Results Exports Are Fixed Pages Built From Row Budgets".
+
+### Outstanding before release
+
+- **The performance work's post-deploy checks.** `docs/handover-performance.md`, section
+  7: a browser 304 is about one round trip, Discover is a few kilobytes, and a second
+  score save within two hours sends no OPTIONS request (a normal browser, "Disable cache"
+  off). Delete the handover once they pass.
+- **Whether `tournaments.last_update` is nullable**, carried over from Phase 5. The
+  statements are in `docs/database.md`. Costs caching, not correctness.
+
+### Not in 1.1
+
+Still open from the review and recorded in `docs/future-features.md` or
+`docs/known-limitations.md`; none has been scoped into this release:
+
+- Editing a tournament's name, dates, location and description after creation
+  (priority 3).
+- A first-class forfeit or withdrawal (priority 6).
+- Forgot password, change email, delete account, and a server-side password policy
+  (priority 12).
+- The server-side gaps in `createTournament` listed under Request Size Limits.
+
+The missing match context in the score dialog, from priority 5, was not checked against
+the code when this section was written.

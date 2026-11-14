@@ -617,3 +617,19 @@ here. What is left:
 - Claude's sandbox can create but not delete files under `.git/`, so any git command it
   runs can leave a stale `.git/index.lock` that blocks the developer's commits. Claude
   is barred from running git at all; see `docs/git-hygiene.md`.
+
+## Results exports
+
+- **Page heights are a hand-kept contract.** `BLOCK_HEIGHTS` in
+  `tourganiser-ui/src/utils/resultsExportLayout.js` and the rules marked `layout:` in
+  `styles/results-export.css` must agree. Nothing checks that they do.
+- **The knockout tree's one-page fit is untested.** It is measured in the browser after the
+  bracket is drawn. A 16-team bracket was checked by hand on 2026-11-14; larger ones were
+  not.
+- **The pack is long.** Standings, results and knockout each start a new page per division.
+- **No match points column** in the pack's standings tables, even when the division ranks
+  by points. The Standings tab has it.
+- **The title font covers Latin only.** A character outside it (for example `ž` or `ő` in a
+  tournament or division name) falls back to the app's typeface within the title. The font
+  has one upright weight; the slant is synthesised by the browser.
+- **`formatRatio` exists twice**, in `StandingsTab.jsx` and `ResultsExportView.jsx`.

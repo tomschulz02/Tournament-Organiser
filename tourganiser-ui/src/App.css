@@ -3353,32 +3353,6 @@ Styles for the name change popup
 	width: 100%;
 }
 
-/* 
-Styles for the template for downloading fixtures
-*/
-#fixturesDownloadTemplate {
-	position: fixed;
-	top: 0px;
-	left: -9999px;
-	box-sizing: border-box;
-	width: 210mm;
-	min-height: 297mm;
-	background-color: white;
-	padding: 10mm;
-	font-family: Arial, Helvetica, sans-serif;
-}
-
-.fixtures-doc {
-	color: black;
-	width: 100%;
-	height: 100%;
-}
-
-.fixtures-doc-title {
-	font-size: 2rem;
-	color: var(--main-color);
-}
-
 .tournament-not-found {
 	color: var(--secondary-text-color);
 	text-align: center;
@@ -3646,51 +3620,6 @@ Temporary styles for teams page - taken from old version
 @media (max-width: 768px) {
 	.teams-grid {
 		grid-template-columns: 1fr;
-	}
-}
-
-.team-card {
-	position: relative;
-	padding: var(--space-4);
-	border-radius: 8px;
-	border: 1px solid var(--card-border-color);
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	color: var(--secondary-text-color);
-}
-
-.team-card svg {
-	fill: var(--secondary-text-color);
-	cursor: pointer;
-	transition: fill 0.2s ease;
-}
-
-.team-card svg:hover {
-	fill: #2962ff;
-}
-
-.team-card.team-name-changed {
-	background: rgba(41, 98, 255, 0.1);
-	border-left: 3px solid #2962ff;
-	animation: highlight 1s ease-out;
-}
-
-.team-card.team-name-changed::after {
-	content: '✏️';
-	position: absolute;
-	top: 8px;
-	left: 8px;
-	font-size: 12px;
-	opacity: 0.7;
-}
-
-@keyframes highlight {
-	from {
-		background: rgba(41, 98, 255, 0.3);
-	}
-	to {
-		background: rgba(41, 98, 255, 0.1);
 	}
 }
 

@@ -931,3 +931,52 @@ behaviour before this), Straight, or Seeded pots. The rules are in
 
 Given up: showing a pots draw before it is saved. The seed does not exist until the server
 makes it, so the creation form shows pot 1 and marks the rest "drawn on save".
+
+## Results Exports Are Fixed Pages Built From Row Budgets
+
+Decided and built 2026-11-14.
+
+Three printable exports share one route, `/tournaments/view/:id/results/:kind`: `fixtures`
+(completed fixtures, following the Fixtures & Schedule tab's filters), `final` (the final
+ranking) and `pack` (cover, final ranking, then each division's standings, results and
+knockout). The route sits outside the App shell beside the schedule print, and for the same
+reason.
+
+- **Print through the browser, no PDF library.** `window.print()` on A4 portrait with
+  `@page { margin: 0 }`, so the cover artwork and the footer band reach the paper's edge.
+  `pdf-lib` stays for scoresheets only.
+- **Every page is a fixed A4 block, filled in JavaScript.** `utils/resultsExportLayout.js`
+  decides what goes on which page from fixed block heights and a body budget, the way
+  `schedulePrintLayout.js` does. The browser's own page breaking cannot repeat a page
+  header and footer or keep a heading with its rows. The cost is a contract: every height in
+  `BLOCK_HEIGHTS` is repeated in `styles/results-export.css`, marked `layout:`, and a
+  mismatch clips rows off the paper with no error. The module is tested; the stylesheet is
+  not.
+- **Nothing is recomputed.** Rankings, standings rows and their order, and placing notes are
+  the server's, shown as sent. Sets won and the bold winner on a card use `setsWon`, the
+  helper `FixtureRow` uses.
+- **Completed fixtures only.** Live, upcoming and cancelled fixtures have no result, so a
+  status filter other than Completed exports nothing.
+- **Filters travel in the query string.** The tabs keep their filter state; the link
+  carries it. Day and court are applied through the schedule's entries, as `ScheduleTab`
+  applies them.
+- **The knockout is the app's own bracket.** `BracketView` is rendered unchanged inside a
+  wrapper that pins the light theme tokens and zooms it to fit one page; it is never split.
+  The pack always draws it. The fixture export draws it only while nothing but the division
+  is filtered, because any other filter can take matches out of the tree; otherwise knockout
+  fixtures are cards. The fit is measured in the browser, so it has no unit test.
+- **Offered to organiser roles only, as presentation.** The links and the page appear when
+  `can.enterCurrentRoundResults` is true. The data is already public, so this is not
+  security; it keeps an official-looking record from being produced by anyone.
+- **The stylesheet is injected, not imported.** `results-export.css` carries `html` and
+  `body` print rules, so `ResultsPrint.jsx` injects it for the life of the route, as
+  `SchedulePrint.jsx` does with `schedule-export.css`.
+- **The artwork is the repository's.** `public/assets/2.webp` is the cover band and
+  `9.webp` the page header; the header's drawn lines continue the two lines in `9.webp`.
+- **Titles are hand-lettered in an open face.** The example pack's titles are Pluma Thin, a
+  Canva font whose licence could not be confirmed, so it was neither bundled nor traced.
+  Page titles and the cover title use Patrick Hand SC instead (SIL Open Font License 1.1),
+  the nearest open face to the lettering in the artwork. It is self-hosted at
+  `public/assets/fonts/` with its licence beside it and declared only in
+  `results-export.css`, so the app's own pages never load it. This is the one exception to
+  DESIGN.md's single-typeface rule, and it applies to paper only.

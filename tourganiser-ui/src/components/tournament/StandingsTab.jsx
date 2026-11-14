@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DivisionSelector from './DivisionSelector';
 import SectionState from './SectionState';
 import BracketView from './BracketView';
@@ -48,6 +49,8 @@ export default function StandingsTab({
 	onSelectDivision,
 	canProgressRounds = false,
 	onProgressRound,
+	tournamentId,
+	canExportResults = false,
 }) {
 	// Which stage the reader asked for, which is not necessarily one the current
 	// division has. Resolved against what is actually available during render.
@@ -115,6 +118,19 @@ export default function StandingsTab({
 		<div className="tv-standings">
 			<div className="tv-standings-toolbar">
 				<DivisionSelector divisions={divisions} selectedId={division.id} onSelect={onSelectDivision} />
+
+				{/* Organiser roles only, and only once some division has a placing
+				    decided — the export is the final ranking of every division, not
+				    just the one on screen. Presentation, not security. */}
+				{canExportResults && tournamentId && divisions.some((item) => (item.finalStandings ?? []).length > 0) && (
+					<Link
+						to={`/tournaments/view/${tournamentId}/results/final`}
+						className="tv-subtle-action"
+						target="_blank"
+						rel="noopener">
+						Export final results
+					</Link>
+				)}
 			</div>
 
 			{/* The division has to be named here. DivisionSelector renders nothing

@@ -27,6 +27,15 @@
         ],
         "createdAt": "2026-11-04T16:25:46.296Z",
         "reason": "DESIGN.md documents the 3px division edge as the project's colour marker; on these schedule surfaces it carries each entry's division"
+      },
+      {
+        "rule": "kicker-above-heading",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/results-export-mocks.html"
+        ],
+        "createdAt": "2026-11-14T07:56:14.356Z",
+        "reason": "agent: mock copies the existing schedule print header (ScheduleExportHeader), whose Tourganiser brand line sits above the tournament name; user asked for the same branding"
       }
     ]
   }

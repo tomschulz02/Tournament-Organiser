@@ -1,5 +1,6 @@
 import BracketView from '../tournament/BracketView';
-import { poolMembership, previewBracket } from './divisionPreview';
+import { poolDrawOf } from './divisionFormats';
+import { poolMembership, poolSizes, previewBracket } from './divisionPreview';
 
 // What this division's configuration will produce.
 //
@@ -31,7 +32,14 @@ export default function FormatSchematic({ division }) {
 
 	// A Round Robin division is a single pool that plays itself out, with
 	// nothing after it.
-	const pools = poolMembership(division.teams.length, isClassic ? division.num_groups : 1);
+	//
+	// The pools follow the division's draw. A pots draw is random below its
+	// first pot and the server makes it, so this shows the top seed of each
+	// pool and says how many more are drawn on save — sizes never differ.
+	const poolCount = isClassic ? division.num_groups : 1;
+	const draw = isClassic ? poolDrawOf(division.pool_draw) : 'SNAKE';
+	const pools = poolMembership(division.teams.length, poolCount, draw);
+	const sizes = poolSizes(division.teams.length, poolCount);
 	const rounds = isClassic ? previewBracket(division.knockout_teams) : [];
 
 	return (
@@ -50,7 +58,7 @@ export default function FormatSchematic({ division }) {
 							    label repeats what the heading above already says. */}
 							{pools.length > 1 && <span className="ct-schematic-pool-name">{groupLabel(index)}</span>}
 							<span className="ct-schematic-pool-count">
-								{members.length} {members.length === 1 ? 'team' : 'teams'}
+								{sizes[index]} {sizes[index] === 1 ? 'team' : 'teams'}
 							</span>
 
 							{/* Ordered, because the position within a pool is the
@@ -62,6 +70,12 @@ export default function FormatSchematic({ division }) {
 									</li>
 								))}
 							</ol>
+
+							{members.length < sizes[index] && (
+								<span className="ct-schematic-pool-pending">
+									+ {sizes[index] - members.length} drawn on save
+								</span>
+							)}
 						</div>
 					))}
 				</div>

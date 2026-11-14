@@ -59,10 +59,80 @@ function serpentineOf(list, groupCount) {
 // changes the answer here.
 //
 // Sizes fall out of membership rather than being counted separately.
-export function poolMembership(teamCount, poolCount) {
+//
+// `draw` is the division's pool draw — docs/tournament-rules.md, "Pool Draw" —
+// and mirrors drawPools in api/src/utils/poolDraw.js. Every draw has the
+// snake's pool sizes:
+//
+//   SNAKE    the serpentine itself, and the default.
+//   STRAIGHT consecutive seeds, one pool at a time.
+//   POTS     only what can be known here. Pot 1 goes one per pool in seed
+//            order; every later pot is drawn at random by the server from a
+//            seed number the client never has, so those positions are left out
+//            and each pool comes back holding its top seed alone. Use
+//            poolSizes for how many it will hold.
+export function poolMembership(teamCount, poolCount, draw = 'SNAKE') {
 	// The configuration screen can hold a zero or a blank while it is being
 	// typed into, and the review still has to draw something.
-	return serpentinePositions(teamCount, Math.max(1, Math.floor(poolCount) || 1));
+	const snake = serpentinePositions(teamCount, Math.max(1, Math.floor(poolCount) || 1));
+
+	if (draw === 'STRAIGHT') {
+		let next = 0;
+
+		return snake.map((members) => {
+			const pool = members.map((_, index) => next + index);
+			next += members.length;
+
+			return pool;
+		});
+	}
+
+	if (draw === 'POTS') {
+		return snake.map((_, pool) => (pool < teamCount ? [pool] : []));
+	}
+
+	return snake;
+}
+
+// The pool each seed position lands in: an array as long as the team list,
+// holding a pool index, or null where the answer is a random draw this side
+// cannot make ("drawn on save").
+//
+// Only a pots draw has nulls, and fewer than it might. The server's random
+// choices come from a stored seed number and are made pot by pot, so they belong
+// to the seed *position*, not the team: reordering teams re-applies them. That
+// means a division that already exists has told us where each position goes.
+// `savedPoolByPosition` is that — the pool index its saved order has at each
+// position — and it still holds for every pot that is full both before and
+// after the change. A pot that is, or was, short is drawn among fewer pools, so
+// its positions are unknown again. With nothing saved, only pot 1 is known.
+export function poolByPosition(teamCount, poolCount, draw = 'SNAKE', savedPoolByPosition = []) {
+	const pools = Math.max(1, Math.floor(poolCount) || 1);
+	const result = Array.from({ length: teamCount }, () => null);
+
+	poolMembership(teamCount, pools, draw).forEach((members, pool) =>
+		members.forEach((position) => {
+			result[position] = pool;
+		}),
+	);
+
+	if (draw === 'POTS') {
+		const settled = Math.min(teamCount, savedPoolByPosition.length);
+
+		for (let position = pools; position < teamCount; position++) {
+			const potEnd = (Math.floor(position / pools) + 1) * pools;
+			const saved = savedPoolByPosition[position];
+
+			if (potEnd <= settled && Number.isInteger(saved)) result[position] = saved;
+		}
+	}
+
+	return result;
+}
+
+// How many teams each pool holds. The same for every draw.
+export function poolSizes(teamCount, poolCount) {
+	return poolMembership(teamCount, poolCount).map((members) => members.length);
 }
 
 const FINALS = 'Finals';

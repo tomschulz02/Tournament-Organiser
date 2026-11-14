@@ -891,3 +891,43 @@ tiebreak deciders, with seeding always last. The 3rd-place playoff became option
 
 Given up: a preview of how a table would reorder, and a "Draw" points row. Volleyball has no
 draws.
+
+## The Pool Draw Is A Setting In Division State
+
+Decided 2026-11-08, built 2026-11-13.
+
+A Classic division chooses how seeds are placed into pools: Snake (the default and the only
+behaviour before this), Straight, or Seeded pots. The rules are in
+`docs/tournament-rules.md`, "Pool Draw".
+
+- **Three draws and no manual one.** An organiser who wants a particular pool reorders the
+  seeds. Dragging teams between pools would need its own storage and its own validation of
+  pool sizes, for something seed order already does.
+- **Every draw reproduces the snake's pool sizes.** Fixture counts, `validateStructure` and
+  the qualifier maths all assume them. `drawPools` takes the sizes from `populateGroups`
+  rather than deriving them again.
+- **`populateGroups` is untouched.** It also pairs the knockout, byes and placement matches.
+  Only the Pool Play call in `createClassicState` goes through `drawPools`.
+- **State, not columns.** `state.poolDraw` follows `color` and `rankingRules`: absent means
+  the default, so no migration ran and no existing row changed. The pools the draw produces
+  already live in `state.rounds[0].groups`; a column would put the setting in a different
+  place from its result.
+- **Written by generation, not by a patch.** The draw cannot change without the pools
+  changing, so there is no `jsonb_set` for it and it is not in `carryStateSettings`' list.
+  `createClassicState` writes it; reorder and rebuild read it back from the old state.
+- **Randomness is fixed by a stored seed.** A pots draw that reshuffled on every reorder or
+  rebuild would be unusable and would look like a bug in a public result. The seed drives a
+  small seeded generator (mulberry32), so the same seed and the same shape give the same
+  choices. Only Redraw makes a new seed.
+- **Changing the draw is a regeneration.** It deletes and recreates fixtures like a seed
+  reorder, behind the same two gates: Not Started, and no results.
+
+- **The client mirrors Snake and Straight, and reads Pots back.** `poolMembership` in
+  `divisionPreview.js` takes the draw. It cannot make a pots draw, but it does not need to
+  for a division that exists: the random choices belong to the seed position, so the saved
+  pools say where each position goes. `poolByPosition` uses that for the Teams tab's pending
+  pools, and leaves a position unknown only when its pot is, or was, short. The server half
+  of that claim is tested in `poolDraw.test.js`.
+
+Given up: showing a pots draw before it is saved. The seed does not exist until the server
+makes it, so the creation form shows pot 1 and marks the rest "drawn on save".

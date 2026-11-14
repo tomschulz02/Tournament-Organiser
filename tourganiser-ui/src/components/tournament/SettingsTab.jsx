@@ -10,6 +10,9 @@ import { useTournamentLifecycle } from './useTournamentLifecycle';
 import { SCORESHEET_FIELDS, SYSTEM_TEMPLATES } from '../../utils/scoresheetTemplates';
 import { listTemplates } from '../../utils/scoresheetStorage';
 import { divisionColorStyle } from '../../utils/divisionColors';
+import { isNotStarted } from './tournamentStatus';
+import { DEFAULT_POOL_DRAW, POOL_DRAWS, poolDrawOf } from '../create/divisionFormats';
+import { poolMembership } from '../create/divisionPreview';
 import {
 	MAX_MATCH_POINTS,
 	POINT_PRESETS,
@@ -95,9 +98,9 @@ export default function SettingsTab({ tournament = {}, divisions = [], can = {},
 		can.manageSetup && {
 			id: 'divisions',
 			title: 'Divisions',
-			subtitle: 'How each division ranks its teams, and how far down its knockout plays.',
+			subtitle: 'How each division draws its pools, ranks its teams, and how far down its knockout plays.',
 			summary: plural(divisions.length, 'division', 'divisions'),
-			body: <DivisionSettingsBand divisions={divisions} onChanged={onChanged} />,
+			body: <DivisionSettingsBand divisions={divisions} status={status} onChanged={onChanged} />,
 		},
 		can.manageSetup && {
 			id: 'scoresheets',
@@ -602,15 +605,16 @@ function RoleOptions() {
 // per keystroke, short enough that the list keeps up.
 const SUGGEST_DELAY_MS = 250;
 
-// The Divisions section: one division's rules at a time, in three panels that
-// stack at every width — Ranking, Tiebreak deciders, Placement matches. Every
-// control saves as it is changed. See docs/tournament-rules.md.
-function DivisionSettingsBand({ divisions, onChanged }) {
+// The Divisions section: one division's rules at a time, in panels that stack
+// at every width — Pool draw, Ranking, Tiebreak deciders, Placement matches.
+// Every control saves as it is changed. See docs/tournament-rules.md.
+function DivisionSettingsBand({ divisions, status, onChanged }) {
 	const { showMessage } = useMessage();
 	const confirm = useConfirm();
 	const [selectedId, setSelectedId] = useState(null);
-	// Placement depth regenerates knockout fixtures, which takes long enough to
-	// look like nothing happened; the ranking rules do not.
+	// Placement depth regenerates knockout fixtures, and a pool draw change or a
+	// redraw regenerates all of them, which takes long enough to look like
+	// nothing happened; the ranking rules do not.
 	const [regenerating, setRegenerating] = useState(false);
 	const [copying, setCopying] = useState(false);
 	// What was chosen and not yet confirmed by a refetch, so a control does not
@@ -639,7 +643,7 @@ function DivisionSettingsBand({ divisions, onChanged }) {
 		}
 
 		entry.sending = true;
-		if ('placementDepth' in settings) setRegenerating(true);
+		if ('placementDepth' in settings || 'poolDraw' in settings || settings.redrawPools) setRegenerating(true);
 
 		try {
 			let sending = settings;
@@ -669,6 +673,7 @@ function DivisionSettingsBand({ divisions, onChanged }) {
 	const rules = waiting.rankingRules ?? rulesOf(division);
 	const placementDepth = 'placementDepth' in waiting ? waiting.placementDepth : division.placement_depth ?? null;
 	const knockout = knockoutOf(division);
+	const poolDraw = waiting.poolDraw ?? poolDrawOf(division.state?.poolDraw?.method);
 	const disabled = regenerating || copying;
 	const others = divisions.filter((entry) => entry.id !== division.id);
 
@@ -736,6 +741,18 @@ function DivisionSettingsBand({ divisions, onChanged }) {
 				{division.type ? ` · ${division.type}` : ''} · {division.num_teams ?? division.teams?.length ?? 0} teams
 			</p>
 
+			{/* A League has no pools to draw. */}
+			{division.type === 'Classic' && (
+				<PoolDrawPanel
+					draw={poolDraw}
+					poolCount={division.state?.rounds?.[0]?.groups?.length || 1}
+					locked={!isNotStarted(status)}
+					disabled={disabled}
+					onChange={(next) => save(division, { poolDraw: next })}
+					onRedraw={() => save(division, { redrawPools: true })}
+				/>
+			)}
+
 			<RankingPanel rules={rules} disabled={disabled} onChange={saveRules} />
 			<DecidersPanel rules={rules} disabled={disabled} onChange={saveRules} />
 
@@ -768,6 +785,73 @@ function RulesPanel({ title, subtitle, aside, children }) {
 			</div>
 			{children}
 		</section>
+	);
+}
+
+// How seeds are placed into pools — docs/tournament-rules.md, "Pool Draw".
+// Changing it, or redrawing a pots draw, rebuilds the division's pools and
+// fixtures the way a seed reorder does, so it locks when the tournament starts.
+// The server holds the gate; this only stops offering what it would refuse.
+function PoolDrawPanel({ draw, poolCount, locked, disabled, onChange, onRedraw }) {
+	const off = disabled || locked;
+
+	// Up to three pools of three seeds: enough to see the pattern, small enough
+	// for a card. A pots draw is random below its first pot, so the rest of its
+	// grid is left open rather than showing a draw that has not been made.
+	const gridOf = (method) =>
+		poolMembership(poolCount * 3, poolCount, method === 'POTS' ? DEFAULT_POOL_DRAW : method)
+			.slice(0, 3)
+			.map((members, pool) => (method === 'POTS' ? [pool + 1, '?', '?'] : members.map((position) => position + 1)));
+
+	return (
+		<RulesPanel
+			title="Pool draw"
+			subtitle="How seeds are placed into pools. Locks when the tournament starts."
+			aside={
+				draw === 'POTS' && (
+					<button type="button" className="tv-subtle-action tv-draw-redraw" disabled={off} onClick={onRedraw}>
+						Redraw
+					</button>
+				)
+			}>
+			<div className="tv-draw-options" role="group" aria-label="Pool draw">
+				{POOL_DRAWS.map((option) => (
+					<button
+						key={option.value}
+						type="button"
+						className="tv-draw-option"
+						aria-pressed={option.value === draw}
+						disabled={off}
+						onClick={() => option.value !== draw && onChange(option.value)}>
+						<span className="tv-draw-option-head">
+							<span className="tv-points-label">{option.label}</span>
+							{option.value === DEFAULT_POOL_DRAW && (
+								<span className="tv-ladder-badge tv-ladder-badge--default">Default</span>
+							)}
+						</span>
+						<span className="tv-points-hint">{option.summary}</span>
+						<span className="tv-draw-grid" aria-hidden="true">
+							{gridOf(option.value).map((seeds, pool) => (
+								<span key={pool} className="tv-draw-grid-row">
+									<b>{String.fromCharCode(65 + pool)}</b>
+									{seeds.map((seed, index) => (
+										<span key={index}>{seed}</span>
+									))}
+								</span>
+							))}
+						</span>
+					</button>
+				))}
+			</div>
+
+			<p className="tv-settings-note">
+				{locked
+					? 'The tournament has started, so the pool draw is fixed.'
+					: draw === 'POTS'
+						? 'Changing the draw, or Redraw, rebuilds this division’s pools and fixtures and takes its matches off the schedule. Reordering seeds keeps the draw.'
+						: 'Changing the draw rebuilds this division’s pools and fixtures and takes its matches off the schedule.'}
+			</p>
+		</RulesPanel>
 	);
 }
 

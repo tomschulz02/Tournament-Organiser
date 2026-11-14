@@ -47,8 +47,9 @@ async function updateDivisionColour(req, res) {
     res.status(200).json({ success: true, message: "Division colour updated", data: result });
 }
 
-// The Settings page's per-division controls: `rankingBasis` and
-// `placementDepth`, either or both. What each may be, and when, is the service's.
+// The Settings page's per-division controls: `rankingRules`, `placementDepth`
+// and the pool draw (`poolDraw`, `redrawPools`), any of them. What each may be,
+// and when, is the service's.
 async function updateDivisionSettings(req, res) {
     const { divisionId } = req.params;
 

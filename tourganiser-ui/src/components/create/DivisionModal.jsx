@@ -7,14 +7,18 @@ import {
 	DIVISION_NAME_MAX,
 	FORMATS,
 	MAX_ROUND_ROBIN_LEGS,
+	POOL_DRAWS,
 	TEAM_NAME_MAX,
 	createTeamKey,
 	gamesPerTeamError,
 	getFormat,
+	getPoolDrawLabel,
 	isConfigurableFormat,
 	parseBulkTeamNames,
+	poolDrawOf,
 	validateDivision,
 } from './divisionFormats';
+import { poolByPosition, poolMembership } from './divisionPreview';
 
 // One decision per screen. The middle one only exists for a format that has
 // something to configure, which is why this is derived from the draft rather
@@ -354,6 +358,14 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 	// usually zero. That is the deliberate order: the mismatch between a pool
 	// count and a team count is caught on Add Division, once both are known.
 	const teamCount = draft.teams.length;
+	const poolDraw = poolDrawOf(draft.pool_draw);
+
+	// Pool A's first three seeds under each draw, for the pool count entered.
+	// Three rows of that many pools is enough to show the pattern, and it does
+	// not depend on teams that have not been entered yet.
+	const pools = Math.max(1, Math.floor(Number(draft.num_groups)) || 1);
+	const previewOf = (draw) =>
+		draw === 'POTS' ? [1, '?', '?'] : poolMembership(pools * 3, pools, draw)[0].map((position) => position + 1);
 
 	return (
 		<div className="ct-screen">
@@ -415,6 +427,48 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 					)}
 				</div>
 			</div>
+
+			{/* How seeds are placed into the pools — docs/tournament-rules.md,
+			    "Pool Draw". The same option cards the League screen uses, with
+			    pool A's first seeds beside each so the difference is visible
+			    without reading the sentence. */}
+			<fieldset className="ct-fieldset">
+				<legend className="ct-field-label">
+					<span>Pool draw</span>
+				</legend>
+				<div className="ct-format-options ct-draw-options">
+					{POOL_DRAWS.map((draw) => (
+						<button
+							key={draw.value}
+							type="button"
+							className={`ct-format-option ct-draw-option ${
+								poolDraw === draw.value ? 'ct-format-option-selected' : ''
+							}`.trim()}
+							aria-pressed={poolDraw === draw.value}
+							aria-labelledby={`ct-draw-name-${draw.value}`}
+							aria-describedby={`ct-draw-summary-${draw.value}`}
+							onClick={() => onChange('pool_draw', draw.value)}>
+							<span className="ct-draw-text">
+								<span className="ct-format-name" id={`ct-draw-name-${draw.value}`}>
+									{draw.label}
+								</span>
+								<span className="ct-format-summary" id={`ct-draw-summary-${draw.value}`}>
+									{draw.summary}
+								</span>
+							</span>
+							<span className="ct-draw-mini" aria-hidden="true">
+								<b>A</b>
+								{previewOf(draw.value).map((seed, index) => (
+									<span key={index}>{seed}</span>
+								))}
+							</span>
+						</button>
+					))}
+				</div>
+				<div className="ct-field-foot">
+					<p className="ct-field-hint">You can change this in Settings until the tournament starts.</p>
+				</div>
+			</fieldset>
 		</div>
 	);
 }
@@ -524,6 +578,29 @@ function LeagueConfigurationScreen({ draft, errors, onChange }) {
 	);
 }
 
+// The pool a seed lands in, as a neutral tile: identity colours belong to
+// divisions and action colours to buttons. A dash is a seed a pots draw places
+// at random once the division is saved.
+function PoolLetter({ pool }) {
+	if (pool === null || pool === undefined) {
+		return (
+			<span className="ct-team-pool ct-team-pool--pending" title="Drawn on save">
+				<span aria-hidden="true">–</span>
+				<span className="ct-visually-hidden">Pool drawn on save</span>
+			</span>
+		);
+	}
+
+	const letter = String.fromCharCode(65 + pool);
+
+	return (
+		<span className="ct-team-pool" title={`Pool ${letter}`}>
+			<span aria-hidden="true">{letter}</span>
+			<span className="ct-visually-hidden">Pool {letter}</span>
+		</span>
+	);
+}
+
 function TeamsScreen({
 	draft,
 	errors,
@@ -541,6 +618,15 @@ function TeamsScreen({
 	const bulkInputRef = useRef(null);
 	const listRef = useRef(null);
 	const teamCount = draft.teams.length;
+
+	// The pool each seed lands in under the chosen draw, Classic only. A pots
+	// draw is random below its first pot and the server makes that draw, so
+	// those rows carry no letter here — see poolByPosition.
+	const isClassic = draft.type === 'classic';
+	const poolDraw = poolDrawOf(draft.pool_draw);
+	const poolCount = Math.max(1, Math.floor(Number(draft.num_groups)) || 1);
+	const pools = isClassic ? poolByPosition(teamCount, poolCount, poolDraw) : [];
+	const drawnOnSave = pools.some((pool) => pool === null);
 
 	// Hidden until asked for, so the common one-at-a-time case isn't sharing the
 	// screen with a control most people won't use.
@@ -704,12 +790,21 @@ function TeamsScreen({
 			) : (
 				<>
 					<p className="ct-team-count">
-						{teamCount} {teamCount === 1 ? 'team' : 'teams'}
+						<span>
+							{teamCount} {teamCount === 1 ? 'team' : 'teams'}
+						</span>
+						{isClassic && (
+							<span className="ct-team-draw">
+								{getPoolDrawLabel(poolDraw)} draw · {poolCount} {poolCount === 1 ? 'pool' : 'pools'}
+							</span>
+						)}
 					</p>
 					{/* Said once, above the list. The order is the seeding, and
 					    nothing else on this screen says so. */}
 					<p className="ct-field-hint ct-team-order-hint">
 						This order is the seeding — drag a team by its number to move it.
+						{isClassic && ' The letter is the pool each seed lands in.'}
+						{drawnOnSave && ` Seed ${Math.min(poolCount, teamCount) + 1} onward is drawn on save.`}
 					</p>
 					{/* A row per team, not a card per team. Some divisions hold
 					    thirty-two of these, and the list scrolls rather than
@@ -735,6 +830,7 @@ function TeamsScreen({
 									}. Drag, or use the up and down arrow keys, to reorder.`}>
 									{index + 1}
 								</button>
+								{isClassic && <PoolLetter pool={pools[index]} />}
 								<input
 									className="ct-input ct-team-input"
 									type="text"

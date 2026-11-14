@@ -14,6 +14,7 @@ with it, the code is wrong.
 | `currentRound` | integer | Index into `rounds`. The round currently in progress. |
 | `color` | string, optional | The accent the organiser chose for this division: `"accent-1"` … `"accent-12"`. Absent means no choice. |
 | `rankingRules` | object, optional | How this division's tables are ranked. Absent means the rules are derived from `divisions.ranking_basis`. See "rankingRules" below. |
+| `poolDraw` | object, optional | Classic only. How seeds were placed into pools: `{ "method": "STRAIGHT" }` or `{ "method": "POTS", "seed": <integer> }`. **Absent means Snake.** See "poolDraw" below. |
 
 `color` is the only key here that is presentation rather than structure, and the only one
 an organiser can change at any point in the tournament's life — it bears on neither teams
@@ -75,6 +76,24 @@ saving rules mid-event cannot overwrite a result and a result cannot overwrite t
 freshly generated state over the old one. `carryStateSettings` in `divisions.service.js`
 copies the setting keys, `color` and `rankingRules`, from the old state to the new one
 first. A new setting key kept in state must be added to its list.
+
+### poolDraw
+
+| Key | Type | Description |
+|---|---|---|
+| `method` | string | `"STRAIGHT"` or `"POTS"`. `"SNAKE"` is never stored. |
+| `seed` | integer | Only when `method` is `"POTS"`. The number the random pot draws are derived from. |
+
+The draws themselves are defined in `docs/tournament-rules.md`, "Pool Draw". The key is
+absent for a snake draw, following `color`: the default has one representation, and every
+division created before the setting existed is a snake draw with no data change. League
+state never has it.
+
+Unlike `color` and `rankingRules` it is **not** written by its own patch and is **not** in
+`carryStateSettings`' list. The draw only ever changes together with the pools, so
+`createClassicState` writes it into the state it generates. A reorder and a rebuild read
+it from the old state with `poolDrawFromState` and pass it back into generation, which is
+what keeps a pots draw's seed, and so its random choices, until an organiser redraws.
 
 ## Round Object
 

@@ -687,6 +687,15 @@ describe("normalizeDivisionState", () => {
         expect(normalizeDivisionState({ rankingRules: { method: "draws" } })).not.toHaveProperty("rankingRules");
     });
 
+    // The pool draw, named for the same reason. Absent means Snake.
+    it("carries a stored pool draw through and omits a snake or malformed one", () => {
+        expect(normalizeDivisionState({ poolDraw: { method: "STRAIGHT" } }).poolDraw).toEqual({ method: "STRAIGHT" });
+        expect(normalizeDivisionState({ poolDraw: { method: "POTS", seed: 8 } }).poolDraw).toEqual({ method: "POTS", seed: 8 });
+        expect(normalizeDivisionState({ teams: [] })).not.toHaveProperty("poolDraw");
+        expect(normalizeDivisionState({ poolDraw: { method: "POTS" } })).not.toHaveProperty("poolDraw");
+        expect(normalizeDivisionState({ poolDraw: { method: "SNAKE" } })).not.toHaveProperty("poolDraw");
+    });
+
     it.each(["accent-0", "accent-13", "red", "", 3, null])("omits an unusable colour %p", (value) => {
         expect(normalizeDivisionState({ color: value })).not.toHaveProperty("color");
     });

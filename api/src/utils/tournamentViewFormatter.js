@@ -15,6 +15,7 @@ import {
 import { qualifierCount } from "../services/progression.service.js";
 import { roundHolding } from "../services/fixtures.service.js";
 import { ordinal } from "../services/divisions.service.js";
+import { poolDrawFromState, storedPoolDraw } from "./poolDraw.js";
 import { AppError } from "../errors.js";
 
 const FIXTURE_STATUS_LABELS = {
@@ -953,6 +954,7 @@ function normalizeDivisionState(state) {
 
     const colour = divisionColourOf(state);
     const rankingRules = readRankingRules(state.rankingRules);
+    const poolDraw = storedPoolDraw(poolDrawFromState(state));
 
     return {
         teams: Array.isArray(state.teams) ? state.teams : [],
@@ -967,7 +969,10 @@ function normalizeDivisionState(state) {
         ...(colour ? { color: colour } : {}),
         // The same for saved ranking rules: absent means "derived from
         // ranking_basis", and a value that does not validate is treated as absent.
-        ...(rankingRules ? { rankingRules } : {})
+        ...(rankingRules ? { rankingRules } : {}),
+        // And for the pool draw: absent means Snake. storedPoolDraw gives back
+        // nothing for a snake draw or a value that does not read as one.
+        ...(poolDraw ? { poolDraw } : {})
     };
 }
 

@@ -3017,6 +3017,14 @@ body.dark .tv-division-badge {
 	color: var(--main-color);
 }
 
+/* A seed a pots draw places at random on save: outlined, not yet filled in. */
+.tv-pool-tile--pending {
+	border-style: dashed;
+	border-color: var(--tv-muted);
+	background: transparent;
+	color: var(--tv-muted);
+}
+
 .tv-team-row {
 	display: flex;
 	align-items: center;
@@ -4317,6 +4325,98 @@ body.dark .tv-division-badge {
 .tv-decider-button:disabled {
 	opacity: 0.45;
 	cursor: not-allowed;
+}
+
+/* The pool draw's three options. A column on a phone, a row from 768px. */
+.tv-draw-options {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-2);
+}
+
+.tv-draw-option {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	min-width: 0;
+	min-height: 56px;
+	padding: var(--space-3);
+	border: 2px solid var(--tv-border);
+	border-radius: 10px;
+	background: var(--tv-surface);
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 0.2s ease;
+}
+
+.tv-draw-option:hover:not(:disabled) {
+	border-color: var(--tv-muted);
+}
+
+.tv-draw-option[aria-pressed='true'] {
+	border-color: var(--main-color);
+}
+
+/* Dimmed when it cannot be changed, but the chosen one keeps its border so the
+   panel still says which draw is in force. */
+.tv-draw-option:disabled {
+	cursor: not-allowed;
+}
+
+.tv-draw-option:disabled:not([aria-pressed='true']) {
+	opacity: 0.45;
+}
+
+.tv-draw-option-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+/* Seeds per pool, one row a pool. */
+.tv-draw-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: auto;
+	padding-top: var(--space-2);
+	font-size: 0.7rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--tv-muted);
+}
+
+.tv-draw-grid-row {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+}
+
+.tv-draw-grid-row b {
+	width: 16px;
+}
+
+.tv-draw-grid-row span {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 20px;
+	border: 1px solid var(--tv-border);
+	border-radius: 4px;
+	background: var(--tv-surface-alt);
+}
+
+.tv-draw-redraw {
+	min-height: 44px;
+	border-color: var(--tv-border);
+}
+
+@media (min-width: 768px) {
+	.tv-draw-options {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
 }
 
 /* The placement options can run to eight; they wrap rather than scroll. */

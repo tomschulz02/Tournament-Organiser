@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+	DEFAULT_POOL_DRAW,
 	MAX_ROUND_ROBIN_LEGS,
+	POOL_DRAWS,
 	createEmptyDivision,
 	gamesPerTeamError,
+	getPoolDrawLabel,
+	poolDrawOf,
 	validateDivision,
 } from '../src/components/create/divisionFormats.js';
 
@@ -100,5 +104,28 @@ describe('validateDivision — Classic is unaffected by the League changes', () 
 	it('accepts a valid Classic configuration', () => {
 		const division = baseDivision({ type: 'classic', num_groups: 2, knockout_teams: 2 });
 		expect(validateDivision(division)).toEqual({});
+	});
+});
+
+describe('pool draw', () => {
+	it('starts a new division on the snake', () => {
+		expect(createEmptyDivision().pool_draw).toBe('SNAKE');
+		expect(DEFAULT_POOL_DRAW).toBe('SNAKE');
+	});
+
+	it('offers the three draws the API takes', () => {
+		expect(POOL_DRAWS.map((draw) => draw.value)).toEqual(['SNAKE', 'STRAIGHT', 'POTS']);
+	});
+
+	it('reads anything unrecognised as the snake', () => {
+		expect(poolDrawOf('POTS')).toBe('POTS');
+		expect(poolDrawOf('STRAIGHT')).toBe('STRAIGHT');
+		expect(poolDrawOf(undefined)).toBe('SNAKE');
+		expect(poolDrawOf('manual')).toBe('SNAKE');
+	});
+
+	it('labels a draw', () => {
+		expect(getPoolDrawLabel('POTS')).toBe('Seeded pots');
+		expect(getPoolDrawLabel(undefined)).toBe('Snake');
 	});
 });

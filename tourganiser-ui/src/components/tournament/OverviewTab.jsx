@@ -30,7 +30,7 @@ import { useHelpTopic } from '../../HelpContext';
 // behavioural gain, and copying the modal would give the application two
 // definitions of what a valid division is.
 import DivisionModal from '../create/DivisionModal';
-import { createEmptyDivision } from '../create/divisionFormats';
+import { createEmptyDivision, poolDrawOf } from '../create/divisionFormats';
 import {
 	addDivision,
 	deleteDivision,
@@ -419,6 +419,7 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 					...(draft.type === 'classic' && {
 						num_groups: Number(draft.num_groups),
 						knockout_teams: Number(draft.knockout_teams),
+						pool_draw: poolDrawOf(draft.pool_draw),
 					}),
 					...(draft.type === 'league' && {
 						round_robin_mode: draft.roundRobinMode,

@@ -2,7 +2,7 @@ import CreateModal from './CreateModal';
 import FormatSchematic from './FormatSchematic';
 import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
-import { getFormatLabel } from './divisionFormats';
+import { getFormatLabel, getPoolDrawLabel } from './divisionFormats';
 import { totalMatches } from './divisionPreview';
 
 // Classic reads its match count from pools and a knockout stage. League has
@@ -141,6 +141,10 @@ function ReviewDivision({ division }) {
 						<div className="ct-review-fact">
 							<dt>Advancing</dt>
 							<dd>{division.knockout_teams}</dd>
+						</div>
+						<div className="ct-review-fact">
+							<dt>Pool draw</dt>
+							<dd>{getPoolDrawLabel(division.pool_draw)}</dd>
 						</div>
 					</>
 				)}

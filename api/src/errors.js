@@ -85,6 +85,10 @@ export const ERRORS = {
 	// Ranking rules as kept in state.rankingRules: a known method, whole points
 	// from 0 to 10, and known deciders listed once each. See readRankingRules.
 	INVALID_RANKING_RULES: [400, "Those ranking rules are not valid"],
+	// The pool draw: SNAKE, STRAIGHT or POTS, on a Classic division. See
+	// docs/tournament-rules.md, "Pool Draw".
+	INVALID_POOL_DRAW: [400, "The pool draw must be Snake, Straight or Seeded pots"],
+	POOL_DRAW_NOT_AVAILABLE: [400, "Only a Classic division has a pool draw"],
 	// Placement depth: Classic only, an odd rank from 5 to the knockout's team
 	// count, and fixed once the knockout stage is under way, because changing it
 	// adds and removes fixtures.

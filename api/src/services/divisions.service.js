@@ -6,6 +6,7 @@ import { tournamentRepository } from "../repositories/tournament.repository.js";
 import { generateFixtures, fixtureService, generatePartialRoundRobinPairs, roundHolding } from "./fixtures.service.js";
 import { qualifierCount } from "./progression.service.js";
 import { rankingRulesOf, readRankingRules } from "../utils/standings.js";
+import { drawPools, poolDrawFor, poolDrawFromState, readDrawMethod, storedPoolDraw } from "../utils/poolDraw.js";
 import { assertCan, resolveRole } from "../utils/tournamentPermissions.js";
 import { MAX_TEAMS_PER_DIVISION, MAX_ROUND_ROBIN_LEGS, MAX_FIXTURES_PER_DIVISION } from "../config/limits.js";
 import { v4 as uuidv4 } from "uuid";
@@ -42,8 +43,13 @@ async function createDivision(details, tournamentId, userId, client){
     // division outright. Classic's own generation used to accept a num_groups
     // greater than the team count and silently hand back empty group arrays;
     // this is the same check rebuildDivision/reorderTeams already make.
+    //
+    // The pool draw is Classic's too. A pots draw gets its seed here, once: it
+    // is stored with the pools and only a Redraw replaces it.
+    let poolDraw;
     if (details.type === "classic") {
         validateStructure(toCount(details.num_groups), toCount(details.knockout_teams), teamIds.length);
+        poolDraw = poolDrawFor(readSubmittedDrawMethod(details.pool_draw));
     }
 
     const { division, fixtures } = buildDivision(
@@ -52,7 +58,9 @@ async function createDivision(details, tournamentId, userId, client){
         details.num_teams,
         details.num_groups,
         details.knockout_teams,
-        leagueConfigFromPayload(details)
+        leagueConfigFromPayload(details),
+        null,
+        poolDraw
     );
     division.name = details.name;
     division.num_teams = details.num_teams;
@@ -163,8 +171,12 @@ async function updateDivisionColour(divisionId, userId, colour) {
 // change before the knockout stage starts, and a change regenerates the knockout
 // rounds — see replaceKnockoutRounds.
 //
-// Only the keys present in the body are touched, and both are validated before
-// either is written.
+// The pool draw is the third: `poolDraw` names a method and `redrawPools: true`
+// asks a pots draw for new random choices. Either one regenerates the division
+// the way a seed reorder does, behind the same gates — see redrawDivision.
+//
+// Only the keys present in the body are touched, and all are validated before
+// anything is written.
 async function updateDivisionSettings(divisionId, userId, payload = {}) {
     const division = await divisionsRepository.getDivisionWithOwner(divisionId);
     if (!division) {
@@ -190,6 +202,20 @@ async function updateDivisionSettings(divisionId, userId, payload = {}) {
     const rulesChanged =
         payload.rankingRules !== undefined && JSON.stringify(stored) !== JSON.stringify(rankingRules);
 
+    const drawAsked = payload.poolDraw !== undefined || payload.redrawPools === true;
+    if (drawAsked) {
+        const poolDraw = readSubmittedPoolDraw(division, payload);
+
+        // A request that leaves the draw as it is — the method already in
+        // force, or a redraw of a draw with nothing random in it — regenerates
+        // nothing, so it is not refused once the tournament has started either.
+        if (JSON.stringify(poolDraw) !== JSON.stringify(poolDrawFromState(division.state))) {
+            await redrawDivision(division, poolDraw, placementDepth, rulesChanged ? rankingRules : null);
+
+            return { divisionId, rankingRules, placementDepth, poolDraw: poolDraw.method };
+        }
+    }
+
     if (placementDepth !== current.placementDepth) {
         await db.withTransaction(async (client) => {
             if (rulesChanged) {
@@ -203,7 +229,87 @@ async function updateDivisionSettings(divisionId, userId, payload = {}) {
         await divisionsRepository.updateStateRankingRules(divisionId, rankingRules);
     }
 
-    return { divisionId, rankingRules, placementDepth };
+    return drawAsked
+        ? { divisionId, rankingRules, placementDepth, poolDraw: poolDrawFromState(division.state).method }
+        : { divisionId, rankingRules, placementDepth };
+}
+
+// The draw a settings request asks for: the method it names, or the one in
+// force when it only asks for a redraw. A pots draw keeps its seed unless the
+// request redraws.
+function readSubmittedPoolDraw(division, payload) {
+    // Classic only: a League has no pools to draw.
+    if (division.type !== "Classic") {
+        throw new AppError("POOL_DRAW_NOT_AVAILABLE");
+    }
+
+    const current = poolDrawFromState(division.state);
+    const method = payload.poolDraw === undefined ? current.method : readSubmittedDrawMethod(payload.poolDraw);
+
+    return poolDrawFor(method, current, payload.redrawPools === true);
+}
+
+// Regenerates a Classic division for a new pool draw: same teams in the same
+// seed order, same pool and qualifier counts, new pools and so new fixtures.
+// It is a seed reorder in everything but what changed, so it has reorderTeams'
+// two gates and writes the same way — fixtures replaced, state overwritten with
+// the settings carried, schedule repaired.
+//
+// A placement depth or ranking rules sent in the same request go into the same
+// regeneration rather than being patched onto a state about to be replaced.
+async function redrawDivision(division, poolDraw, placementDepth, rankingRules) {
+    if ((division.tournament_status || "Not Started") !== "Not Started") {
+        throw new AppError("TOURNAMENT_ALREADY_STARTED");
+    }
+
+    const played = await fixturesRepository.getResults(division.id);
+    if (played.length > 0) {
+        throw new AppError("DIVISION_HAS_RESULTS");
+    }
+
+    const teamIds = teamIdsOf(division.state);
+    const rounds = division.state.rounds;
+    const knockout = rounds.find((round) => round.type === "knockout");
+
+    const { division: generated, fixtures } = buildDivision(
+        "classic",
+        teamIds,
+        teamIds.length,
+        rounds[0].groups.length,
+        qualifierCount(knockout),
+        undefined,
+        placementDepth,
+        poolDraw
+    );
+
+    const settings = rankingRules ? { ...division.state, rankingRules } : division.state;
+
+    await db.withTransaction(async (client) => {
+        const deletedFixtureIds = await fixturesRepository.deleteByDivisionId(division.id, client);
+
+        await divisionsRepository.replaceState(
+            division.id,
+            carryStateSettings(settings, generated.state),
+            teamIds.length,
+            client
+        );
+        await createFixtures(division.id, fixtures, client);
+
+        if (placementDepth !== (division.placement_depth ?? null)) {
+            await divisionsRepository.updatePlacementDepth(division.id, placementDepth, client);
+        }
+
+        await repairSchedule(division.tournament_id, deletedFixtureIds, client);
+    });
+}
+
+function readSubmittedDrawMethod(value) {
+    const method = readDrawMethod(value);
+    if (!method) {
+        throw new AppError("INVALID_POOL_DRAW");
+    }
+
+    return method;
 }
 
 function readSubmittedRankingRules(value) {
@@ -352,6 +458,10 @@ async function renameTeams(divisionId, entries, existingIds) {
 // and a rebuild write a freshly generated state over the old one, and generation
 // knows nothing of these, so they are copied across first. A new setting key
 // kept in state belongs in this list — see docs/division-state.md.
+//
+// state.poolDraw is deliberately not here. It changes only together with the
+// pools, so generation writes it: the callers read it from the old state with
+// poolDrawFromState and pass it back in.
 const STATE_SETTING_KEYS = ["color", "rankingRules"];
 
 function carryStateSettings(oldState, newState) {
@@ -406,7 +516,8 @@ async function reorderTeams(division, entries, payload) {
         numGroups,
         knockoutTeams,
         leagueConfigFromState(division.state, entries.length),
-        division.placement_depth ?? null
+        division.placement_depth ?? null,
+        poolDrawFromState(division.state)
     );
 
     return await db.withTransaction(async (client) => {
@@ -482,7 +593,8 @@ async function rebuildDivision(division, entries, payload) {
         numGroups,
         knockoutTeams,
         leagueConfigFromState(division.state, teams.length),
-        division.placement_depth ?? null
+        division.placement_depth ?? null,
+        poolDrawFromState(division.state)
     );
 
     const kept = new Set(teams.map((team) => team.id));
@@ -711,8 +823,8 @@ function readTeamEntries(teams, existingIds) {
 // The generation sequence, shared so a rebuilt division is indistinguishable
 // from a freshly created one. generateFixtures mutates the rounds it is given
 // and hands them back, which is why the state's rounds are reassigned from it.
-function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig, placementDepth = null) {
-    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig, placementDepth);
+function buildDivision(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig, placementDepth = null, poolDraw) {
+    const division = generateDivisionDetails(format, teamIds, numTeams, numGroups, knockoutTeams, leagueConfig, placementDepth, poolDraw);
 
     const generated = generateFixtures(division.state.rounds);
     division.state.rounds = generated.rounds;
@@ -784,11 +896,11 @@ function validateStructure(numGroups, knockoutTeams, teamCount) {
     }
 }
 
-function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0, leagueConfig, placementDepth = null){
+function generateDivisionDetails(format, teams, num_teams, num_groups=1, qualifyingTeams=0, leagueConfig, placementDepth = null, poolDraw){
     let division = {};
     if (format === 'classic'){
         division.type = "Classic";
-        division.state = createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth);
+        division.state = createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth, poolDraw);
     } else if (format === 'league'){
         division.type = "League";
         division.state = createLeagueState(teams, num_teams, leagueConfig);
@@ -933,17 +1045,27 @@ function leagueConfigFromState(state, teamCount) {
 // playoff. See docs/tournament-rules.md, "Placement matches".
 const FINAL_ONLY = 1;
 
-function createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth = null) {
+// `poolDraw` is { method, seed } — see utils/poolDraw.js. It decides the Pool
+// Play groups and nothing else: every populateGroups call below this one pairs
+// the knockout and is the same for every draw. Absent is a snake draw.
+function createClassicState(teams, num_teams, num_groups, qualifyingTeams, placementDepth = null, poolDraw) {
     const state = {
         teams: teams,
         rounds: [],
         currentRound: 0
     }
 
+    // Written with the pools it produced, and omitted for a snake draw so the
+    // default has one representation — see docs/division-state.md.
+    const stored = storedPoolDraw(poolDraw);
+    if (stored) {
+        state.poolDraw = stored;
+    }
+
     state.rounds.push({
         name: "Pool Play",
         type: "roundRobin",
-        groups: populateGroups(num_groups, teams),
+        groups: drawPools(poolDraw?.method, populateGroups(num_groups, teams), teams, poolDraw?.seed),
         results: [],
         totalGames: 0,
         completedGames: 0,

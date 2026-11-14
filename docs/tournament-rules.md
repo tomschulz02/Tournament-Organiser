@@ -50,6 +50,43 @@ Division state references Team IDs.
 
 Fixtures are stored separately and referenced by ID.
 
+## Pool Draw
+
+How a Classic division's seeds are placed into its pools. Chosen per division when it is
+created, and changeable in Settings until the tournament starts. League divisions have no
+pools and no draw. There is no manual draw: an organiser shapes pools by reordering seeds.
+
+Every draw produces **the same pool sizes**, the ones the snake gives for that team and
+pool count. Only which seed lands in which pool differs. With `n` pools:
+
+- **Snake** (the default). Seeds are dealt across the pools and back again: row 1 goes
+  A → last pool, row 2 comes back last pool → A, and so on. This is `populateGroups`.
+- **Straight.** Consecutive seeds fill one pool at a time: pool A takes the top seeds up to
+  its size, pool B the next, and so on.
+- **Seeded pots.** Pot *k* is seeds `(k−1)·n + 1` to `k·n`. Pot 1 goes one team per pool in
+  seed order, so seed 1 is in pool A. Every later pot is drawn at random into the pools,
+  one team per pool. A short last pot is drawn into the pools the snake makes larger.
+
+Worked example, 12 teams in 3 pools (numbers are seeds):
+
+| Draw | Pool A | Pool B | Pool C |
+|---|---|---|---|
+| Snake | 1 6 7 12 | 2 5 8 11 | 3 4 9 10 |
+| Straight | 1 2 3 4 | 5 6 7 8 | 9 10 11 12 |
+| Seeded pots | 1, then one each of 4–6, 7–9, 10–12 | 2, then one each of 4–6, 7–9, 10–12 | 3, then one each of 4–6, 7–9, 10–12 |
+
+One possible pots result is A 1 5 9 10 / B 2 6 7 12 / C 3 4 8 11.
+
+**A pots draw is kept until Redraw.** The random choices come from a seed number stored
+with the division (`state.poolDraw.seed`, see `docs/division-state.md`). Reordering seeds,
+or adding and removing teams, re-applies the same choices to the new pots: it does not
+reshuffle. Only **Redraw** in Settings makes a new seed number. Changing the draw or
+redrawing regenerates the division's pools and fixtures exactly as a seed reorder does, so
+both are refused once the tournament has started or the division has a result.
+
+The draws are `drawPools` in `api/src/utils/poolDraw.js`. The knockout pairing still uses
+`populateGroups` directly and is unaffected by the choice.
+
 ## Match Format
 
 Match format is set **per round**, not per division. Pool play may be best-of-3 while

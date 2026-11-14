@@ -9,7 +9,7 @@ import DivisionCard from '../components/create/DivisionCard';
 import DivisionModal from '../components/create/DivisionModal';
 import LoadingScreen from '../components/LoadingScreen';
 import ReviewModal from '../components/create/ReviewModal';
-import { createEmptyDivision, isDivisionValid } from '../components/create/divisionFormats';
+import { createEmptyDivision, isDivisionValid, poolDrawOf } from '../components/create/divisionFormats';
 import { clearDraft, describeDraftAge, hasDraftContent, readDraft, writeDraft } from '../utils/createDraft';
 import '../styles/create-tournament.css';
 // The review embeds BracketView, whose styles live with the tournament view and
@@ -159,6 +159,7 @@ function buildPayload(details, divisions) {
 			...(division.type === 'classic' && {
 				num_groups: Number(division.num_groups),
 				knockout_teams: Number(division.knockout_teams),
+				pool_draw: poolDrawOf(division.pool_draw),
 			}),
 			...(division.type === 'league' && {
 				round_robin_mode: division.roundRobinMode,

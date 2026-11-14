@@ -9,8 +9,8 @@ import { useConfirm } from '../ConfirmContext';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
 import { updateDivisionTeams } from '../../requests';
-import { TEAM_NAME_MAX, parseBulkTeamNames } from '../create/divisionFormats';
-import { poolMembership } from '../create/divisionPreview';
+import { TEAM_NAME_MAX, getPoolDrawLabel, parseBulkTeamNames, poolDrawOf } from '../create/divisionFormats';
+import { poolByPosition } from '../create/divisionPreview';
 
 // The teams in one division, in seed order.
 //
@@ -120,15 +120,31 @@ export default function TeamsTab({
 	// the client's mirror of the server's draw, against the pool each saved team
 	// is in now. Rows whose pool would change are marked in the Full list and
 	// named in the pending bar.
+	//
+	// The mirror follows the division's own draw, state.poolDraw. A pots draw's
+	// random choices belong to the seed position, so the saved pools say where
+	// each position goes; a position whose pot is redrawn by the change has no
+	// pool to show until it is saved (null — see poolByPosition).
+	const poolDraw = poolDrawOf(division.state?.poolDraw?.method);
 	const savedPools = isClassic ? savedPoolOf(division) : new Map();
 	const pendingPools = new Map();
 	if (isClassic) {
-		poolMembership(teams.length, getDivisionStructure(division).numGroups).forEach((positions, pool) =>
-			positions.forEach((position) => teams[position] && pendingPools.set(teams[position].key, pool)),
-		);
+		poolByPosition(
+			teams.length,
+			getDivisionStructure(division).numGroups,
+			poolDraw,
+			saved.map((team) => savedPools.get(team.id)),
+		).forEach((pool, position) => pendingPools.set(teams[position].key, pool));
 	}
+	const drawnOnSave = [...pendingPools.values()].some((pool) => pool === null);
 	const poolChanges = teams
-		.filter((row) => row.id !== null && savedPools.has(row.id) && savedPools.get(row.id) !== pendingPools.get(row.key))
+		.filter(
+			(row) =>
+				row.id !== null &&
+				savedPools.has(row.id) &&
+				pendingPools.get(row.key) !== null &&
+				savedPools.get(row.id) !== pendingPools.get(row.key),
+		)
 		.map((row) => ({ key: row.key, name: row.name, from: savedPools.get(row.id), to: pendingPools.get(row.key) }));
 	const movedKeys = new Set(poolChanges.map((change) => change.key));
 
@@ -514,6 +530,11 @@ export default function TeamsTab({
 							<span>
 								<PoolTile index={1} changed /> Pool changes when you save
 							</span>
+							{drawnOnSave && (
+								<span>
+									<PoolTile index={null} /> Drawn at random when you save
+								</span>
+							)}
 						</p>
 					)}
 				</>
@@ -564,7 +585,7 @@ export default function TeamsTab({
 				<div className="tv-teams-bar">
 					<p className="tv-fixtures-count">
 						{teams.length} team{teams.length === 1 ? '' : 's'} · {getDivisionStructure(division).numGroups} pool
-						{getDivisionStructure(division).numGroups === 1 ? '' : 's'}
+						{getDivisionStructure(division).numGroups === 1 ? '' : 's'} · {getPoolDrawLabel(poolDraw)} draw
 					</p>
 
 					<div className="tv-teams-view-toggle" role="group" aria-label="Teams view">
@@ -653,6 +674,16 @@ function PoolsView({ division, pending = false }) {
 // A pool's letter in a neutral tile. Neutral because identity colours belong to
 // divisions (DESIGN.md); a ring marks a seed whose pool changes on save.
 function PoolTile({ index, changed = false }) {
+	// A seed a pots draw places at random once the change is saved.
+	if (index === null) {
+		return (
+			<span className="tv-pool-tile tv-pool-tile--pending" title="Drawn at random when saved">
+				<span aria-hidden="true">–</span>
+				<span className="tv-visually-hidden">Pool drawn when saved</span>
+			</span>
+		);
+	}
+
 	const letter = String.fromCharCode(65 + index);
 
 	return (

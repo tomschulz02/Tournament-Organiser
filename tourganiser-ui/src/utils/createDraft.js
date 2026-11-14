@@ -8,6 +8,8 @@
 //
 // Only form state is stored. No tokens, no session, no identifiers.
 
+import { poolDrawOf } from '../components/create/divisionFormats';
+
 const STORAGE_KEY = 'tourganiser.create-draft';
 
 // Bump this whenever the stored shape changes. An older draft is discarded
@@ -74,6 +76,8 @@ function normaliseDivision(raw) {
 		type,
 		num_groups: Number.isFinite(Number(raw.num_groups)) ? Number(raw.num_groups) : 1,
 		knockout_teams: Number.isFinite(Number(raw.knockout_teams)) ? Number(raw.knockout_teams) : 2,
+		// A draft saved before the pool draw existed has none, and is a snake.
+		pool_draw: poolDrawOf(raw.pool_draw),
 		teams,
 	};
 }

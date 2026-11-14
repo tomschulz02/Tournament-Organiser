@@ -385,6 +385,19 @@ and the colour endpoint above set the precedent for a one-concern PUT.
   so every existing knockout fixture keeps its id and its schedule slot and only the
   placement fixtures are created or deleted (their schedule entries go with them). See
   `docs/tournament-rules.md`, "Placement matches".
+- `poolDraw` — `"SNAKE"`, `"STRAIGHT"` or `"POTS"`, and `redrawPools: true`, which gives a
+  pots draw new random choices. Classic only. Either one that actually changes the draw
+  regenerates the division exactly as a seed reorder does (pools and fixtures replaced, the
+  schedule repaired, `color` and `rankingRules` carried), so both are refused once the
+  tournament has started or the division has a result. A method already in force, and a
+  redraw of a snake or straight draw, change nothing and are not refused. Ranking rules and
+  a placement depth sent in the same body go into the same regeneration. See
+  `docs/tournament-rules.md`, "Pool Draw".
+
+The same choice is made at creation: each Classic division in `POST /api/tournaments` and
+`POST /api/tournaments/:tournamentId/divisions` may carry `pool_draw` with one of the three
+method names. Absent means `"SNAKE"`; anything else is `400 INVALID_POOL_DRAW`. A League
+division's `pool_draw` is ignored. The server makes the seed for a pots draw.
 
 Rejections:
 
@@ -397,9 +410,15 @@ Rejections:
 | 403 | `ROLE_NOT_PERMITTED` | Caller's role does not include this |
 | 404 | `DIVISION_NOT_FOUND` | No such division |
 | 409 | `KNOCKOUT_ALREADY_STARTED` | Placement depth sent after the knockout stage began |
+| 400 | `INVALID_POOL_DRAW` | `poolDraw` is not one of the three methods |
+| 400 | `POOL_DRAW_NOT_AVAILABLE` | `poolDraw` or `redrawPools` sent for a division that is not Classic |
+| 409 | `TOURNAMENT_ALREADY_STARTED` | A draw change or a redraw after the tournament has started |
+| 409 | `DIVISION_HAS_RESULTS` | A draw change or a redraw on a division that holds a completed fixture |
 
 Success returns `{ divisionId, rankingRules, placementDepth }`, the rules being the ones in
-force. The division payload carries them as `ranking_rules` (always present: the saved
+force, plus `poolDraw` (the method now in force) when the body sent `poolDraw` or
+`redrawPools: true`. The division payload carries the draw as `state.poolDraw`, absent for
+a snake draw. The division payload carries them as `ranking_rules` (always present: the saved
 rules, or those `ranking_basis` stands for) and `placement_depth`. `ranking_basis` is
 still sent but nothing in the client reads it.
 

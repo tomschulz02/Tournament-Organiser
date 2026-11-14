@@ -39,6 +39,29 @@ export const MIN_TEAMS = 2;
 // that grows as legs * teamCount * (teamCount - 1) / 2 into something absurd.
 export const MAX_ROUND_ROBIN_LEGS = 10;
 
+// How a Classic division's seeds are placed into pools — docs/tournament-rules.md,
+// "Pool Draw". `value` is what the API takes, as `pool_draw` on creation and
+// `poolDraw` in the settings body. Snake is the default and is what a division
+// with no stored draw has.
+export const POOL_DRAWS = [
+	{ value: 'SNAKE', label: 'Snake', summary: 'Seeds alternate direction each row, so pools stay even.' },
+	{ value: 'STRAIGHT', label: 'Straight', summary: 'Consecutive seeds fill one pool at a time.' },
+	{ value: 'POTS', label: 'Seeded pots', summary: 'Top seeds one per pool, the rest drawn at random from their pot.' },
+];
+
+export const DEFAULT_POOL_DRAW = 'SNAKE';
+
+// A draw value from anywhere — a draft, a restored draft from before the field
+// existed, a division's state.poolDraw.method — as one of the three, with
+// anything else read as Snake, the way the server reads an absent draw.
+export function poolDrawOf(value) {
+	return POOL_DRAWS.some((draw) => draw.value === value) ? value : DEFAULT_POOL_DRAW;
+}
+
+export function getPoolDrawLabel(value) {
+	return POOL_DRAWS.find((draw) => draw.value === poolDrawOf(value)).label;
+}
+
 export const DIVISION_NAME_MAX = 100;
 
 export const TEAM_NAME_MAX = 100;
@@ -82,6 +105,8 @@ export function createEmptyDivision() {
 		type: '',
 		num_groups: 2,
 		knockout_teams: 4,
+		// Classic only. One of POOL_DRAWS.
+		pool_draw: DEFAULT_POOL_DRAW,
 		// League only. 'legs' plays roundRobinLegs full cycles; 'limited' plays
 		// exactly gamesPerTeam games per team — a different, exact constraint,
 		// not a rounded-up cycle count. See docs/division-state.md.

@@ -90,6 +90,7 @@ export const HELP_TOPICS = {
 				heading: "If you're the organiser",
 				paragraphs: [
 					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament marks an Ongoing tournament as finished. Results can still be corrected afterwards.',
+					'Export results pack, shown to the organiser and collaborators once a match has been completed, opens a printable pack of the whole tournament in a new tab: a cover, the final ranking, then each division\'s standings, results and knockout bracket.',
 					"Scoresheet Template opens a picker for what prints when anyone downloads a fixture's scoresheet — a built-in FIVB layout, or a PDF of your own with fields placed on it. Deleting the tournament, adding collaborators and each division's ranking and placement options are on the Settings tab.",
 					"While the tournament hasn't started, each division's card also offers a way to add or remove divisions — Add Division opens the same screen the creation page uses, and a division's own card can be removed (which takes its teams, fixtures and any scheduled slots with it). Both close once the tournament starts, since the schedule and standings would otherwise be describing a division that no longer matches them.",
 				],
@@ -161,6 +162,7 @@ export const HELP_TOPICS = {
 				paragraphs: [
 					"Once the tournament has started, the organiser can enter or edit a result on any fixture whose teams are known — look for the score icon on the fixture's row; it opens the score entry screen for that match. A Scorer the organiser has added can do the same for the current round's fixtures, and a Match Manager or Co-organiser for any fixture the organiser can.",
 					"If you organise this tournament, Create Schedule opens the schedule builder, where you assign fixtures to courts and times — see its own help entry once it's open.",
+					'Export results, shown to the organiser and collaborators, opens a printable page of the completed fixtures in a new tab. It follows the filters set here, so filter first to export one division, stage or team.',
 				],
 			},
 		],
@@ -184,6 +186,7 @@ export const HELP_TOPICS = {
 				heading: "If you're the organiser",
 				paragraphs: [
 					"Edit Schedule reopens the schedule builder to make changes — see its own help entry once it's open for what each part of that screen does.",
+					'Export results, shown to the organiser and collaborators, opens a printable page of the completed fixtures in a new tab. It follows the filters set here, day and court included.',
 				],
 			},
 		],
@@ -237,6 +240,7 @@ export const HELP_TOPICS = {
 			{
 				paragraphs: [
 					'Where every team in this division finished. Places fill in from the bottom as knockout rounds are decided — a team eliminated in an earlier round already has its place before the final has been played — so this can show results before the tournament is finished.',
+					'Export final results, shown to the organiser and collaborators, opens a printable final ranking of every division in a new tab.',
 				],
 			},
 		],

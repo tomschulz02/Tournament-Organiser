@@ -301,6 +301,25 @@ One set of tabs for everyone. The viewer's role changes the order and prominence
 - **Teams:** a segmented Pools / Full list switch, the chosen half filled blue. Pools view: a heading per pool (a neutral letter tile, the name, a rule) over team cards with a seed badge. Full list: the seed list with a neutral pool tile per row. A row whose pool would change is tinted and its tile ringed in blue.
 - **Settings:** sections stack, and nothing sits side by side inside one. From 768px a sticky list on the left jumps between sections and follows the scroll. Below 768px each section is an accordion row (56px) showing its current value. Collaborators has a role grid (capabilities down, roles across, ticks in success green). Scoresheets are cards, the one in use ringed blue with an "In use" badge, plus a dashed upload card. Tournament status is three numbered steps, the current one filled blue. Divisions shows one division at a time, picked by chip, as three stacked panels: Ranking (a Points / Wins segmented switch, 44px steppers and preset chips), Tiebreak deciders (numbered rows with up, down and remove buttons, Seeding pinned last and dashed) and Placement matches (a segmented place picker over a ladder: played places tinted blue, unplayed ones dashed).
 
+### Home
+The marketing face of the app: the title artwork (`public/assets/2.webp`) carried down the page. It is the one screen that leaves the light and dark panel style, and it looks the same in both themes.
+- **Ground:** the artwork's deep blue (`#213198`) edge to edge, white text, soft blue-white (`#C9D3FF`) for secondary text.
+- **The line:** one 3px court line in the artwork's three blues (periwinkle, sky, aqua). It leaves the two opening buttons at the centre, turns square corners and passes five numbered stops (Teams, Format, Schedule, Match day, Final rankings), alternating sides, then returns to the centre and ends in a circle ("Free for everyone"). At 768px and below it runs straight down the left edge.
+- **Stops:** a numbered circle on the line, a hand-lettered heading, a short paragraph and who the step is for, beside a line drawing of an example event (team sheet, a court split into two pools, three courts from above, a scoreboard, a podium). The example is labelled as one.
+- **Type:** headings and drawings in Patrick Hand SC, as on the results exports; body text stays in the system sans.
+- **Buttons:** "Run a tournament" filled white, "Find a tournament" outlined in aqua; both turn aqua on hover. Tourganiser Blue is not the action colour here because it does not read on the deep blue.
+- **Claims:** copy describes built features only (PRODUCT.md, "Claim only what exists").
+
+### Results exports
+Paper, not app: A4 portrait sheets on white, light whatever the theme, printed from the browser.
+- **Sheet:** a 108px header with the wordmark artwork (`public/assets/9.webp`) top right and three drawn lines (cyan, sky, periwinkle) running to the left edge, two of them meeting the lines in the artwork. A 40px periwinkle footer band with web, email and Instagram. Body padding 45px.
+- **Title:** centred, uppercase, slanted and underlined, one line, in Patrick Hand SC (open licence, self-hosted, loaded by the export stylesheet only). The one place a second typeface is allowed, because it echoes the hand-lettered artwork. The cover's tournament name uses it too. A muted line beneath it states the filter in force.
+- **Cover (pack only):** the cover artwork (`public/assets/2.webp`) edge to edge at the top, the tournament name large and centred, "Results pack" in blue, then Dates, Venue, Divisions and Played.
+- **Fixture card:** one column. Match number, division dot and name, and round on the left; two team lines with sets won and per-set scores on the right; the winner in bold.
+- **Final ranking:** two division columns a page. Places 1 to 3 are blue-tinted blocks, 1st larger, each labelled with the server's note; the rest is a numbered list.
+- **Standings table:** a tinted head row carrying the group's name, then fixed columns.
+- **Knockout:** the app's bracket, scaled to fit one page, with placement matches beneath it.
+
 ### Schedule maker
 A dense tool: the fixtures list on the left and the board filling the rest, with nothing else on screen until it is asked for.
 - **Board:** courts across, time down, at a fixed scale of 1.6px a minute. Grid lines are only a reading aid. Matches sit at their own start and length, and a drag previews the true time, with any reason beside the pointer.
@@ -336,4 +355,4 @@ The tournament view's subheader sits on a faint wash of the tournament's identit
 - **Don't** use an identity hue to signal status, or a status colour as an identity.
 - **Don't** let the page scroll sideways; give wide content its own scroll container.
 - **Don't** truncate tournament or team names in headings; let them wrap.
-- **Don't** introduce a second typeface.
+- **Don't** introduce a second typeface. Patrick Hand SC on Home and the results exports is the only exception.

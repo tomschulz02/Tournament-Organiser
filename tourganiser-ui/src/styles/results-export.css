@@ -1,0 +1,692 @@
+/* The printed pages of the results exports (/tournaments/view/:id/results/:kind).
+ *
+ * Injected as text by pages/ResultsPrint.jsx for the life of that route, never
+ * imported: the `html` and `body` rules below must not follow the reader back
+ * into the app. The route's own toolbar is styled by schedule-print.css.
+ *
+ * Pages are fixed A4 blocks filled by utils/resultsExportLayout.js from fixed
+ * block heights. EVERY HEIGHT MARKED "layout:" BELOW IS A CONTRACT with
+ * BLOCK_HEIGHTS and the page constants in that module. Change one and change
+ * the other, or rows are clipped off the paper with no error.
+ *
+ * Paper is light whatever the app's theme is, so every colour here is a literal.
+ */
+
+/* The hand-lettered face for page titles: Patrick Hand SC, SIL Open Font
+ * License 1.1 (licence beside the file). Chosen as the nearest open face to the
+ * lettering in the header artwork. Self-hosted and declared only here, so the
+ * app's own pages never load it. Latin only: a character outside it falls back
+ * to the app's typeface. One upright weight; the slant is the browser's.
+ */
+@font-face {
+	font-family: 'Patrick Hand SC';
+	src: url('/assets/fonts/patrick-hand-sc-latin-400.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: block;
+}
+
+.rx-pages {
+	--rx-ink: #1f2937;
+	--rx-muted: #5b6472;
+	--rx-line: #dfe4ec;
+	--rx-accent: #2962ff;
+	--rx-cyan: #4cdede;
+	--rx-sky: #1da8ec;
+	--rx-periwinkle: #7b80f6;
+	--rx-hand: 'Patrick Hand SC', 'Segoe UI', 'Roboto', sans-serif;
+
+	display: grid;
+	justify-content: center;
+	gap: 24px;
+	padding: 24px 16px 48px;
+	/* Below the width of a sheet the preview scrolls sideways in here rather
+	   than shrinking: what is on screen stays what prints. */
+	overflow-x: auto;
+}
+
+/* One A4 sheet. Millimetres, so the sheet is exactly the paper and a rounding
+   pixel cannot push a blank page out of the printer. */
+.rx-page {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 210mm;
+	height: 297mm;
+	overflow: hidden;
+	background: #fff;
+	color: var(--rx-ink);
+	font-size: 16px;
+	line-height: 1.3;
+	box-shadow: 0 2px 12px rgb(15 23 42 / 0.18);
+}
+
+.rx-page > * {
+	flex: none;
+}
+
+/* App.css colours bare elements for the app's own surfaces, and an element
+   rule beats an inherited colour. Restated here so paper text is the sheet's.
+   Coloured rules below carry two classes to outrank this. */
+.rx-page :is(h1, h2, h3, h4, p, span, div, ol, ul, li, b, strong, dl, dt, dd) {
+	color: inherit;
+}
+
+/* --- header: layout: 108px ------------------------------------------------ */
+
+.rx-page .rx-head {
+	position: relative;
+	height: 108px;
+}
+
+/* The wordmark image carries a blue and a periwinkle line across its full
+   width. The drawn lines continue them to the page's left edge. */
+.rx-page .rx-head-mark {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 300px;
+	height: 100px;
+}
+
+.rx-page .rx-head-line {
+	position: absolute;
+	left: 0;
+	right: 299px;
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+.rx-page .rx-head-line.is-cyan {
+	top: 14px;
+	height: 1.5px;
+	background: var(--rx-cyan);
+}
+
+.rx-page .rx-head-line.is-sky {
+	top: 30px;
+	height: 3px;
+	background: var(--rx-sky);
+}
+
+.rx-page .rx-head-line.is-periwinkle {
+	top: 48px;
+	height: 3px;
+	background: var(--rx-periwinkle);
+}
+
+.rx-page .rx-running {
+	position: absolute;
+	left: 45px;
+	top: 68px;
+	max-width: 420px;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.74rem;
+	color: var(--rx-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* --- footer: layout: 40px -------------------------------------------------- */
+
+.rx-page .rx-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 40px;
+	margin-top: auto;
+	padding: 0 30px;
+	background: var(--rx-periwinkle);
+	color: #111827;
+	font-size: 0.86rem;
+	letter-spacing: 0.02em;
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+.rx-page .rx-foot span {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.rx-page .rx-foot svg {
+	width: 22px;
+	height: 22px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* --- body ------------------------------------------------------------------ */
+
+.rx-page .rx-body {
+	padding: 0 45px;
+}
+
+/* layout: 80px (TITLE_HEIGHT). One line, always. */
+.rx-page .rx-title {
+	height: 80px;
+	margin: 0;
+	padding-top: 12px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	text-align: center;
+	font-family: var(--rx-hand);
+	font-size: 2.9rem;
+	line-height: 1.25;
+	font-weight: 400;
+	font-style: italic;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	text-decoration: underline;
+	text-decoration-thickness: 3px;
+	text-underline-offset: 7px;
+}
+
+/* layout: 40px (heading). A division's name above its column or section. */
+.rx-page .rx-heading {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	height: 40px;
+	margin: 0;
+	font-size: 1.05rem;
+	font-weight: 700;
+	white-space: nowrap;
+	color: color-mix(in srgb, var(--rx-accent) 75%, #1f2937);
+}
+
+.rx-page .rx-heading span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.rx-page .rx-heading small {
+	font-size: 0.74rem;
+	font-weight: 600;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-heading::after {
+	content: '';
+	flex: 1;
+	border-top: 1px solid var(--rx-line);
+}
+
+.rx-page .rx-dot {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--tv-division-color, var(--rx-accent));
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+/* --- final ranking --------------------------------------------------------- */
+
+.rx-page .rx-rank-cols {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 36px;
+	align-items: start;
+}
+
+.rx-page .rx-rank-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/* layout: 64px (rankingBlock): a 58px block and 6px beneath it. */
+.rx-page .rx-honour {
+	display: grid;
+	grid-template-columns: 62px minmax(0, 1fr);
+	align-items: center;
+	column-gap: 12px;
+	box-sizing: border-box;
+	height: 58px;
+	margin-bottom: 6px;
+	padding: 0 14px;
+	border: 1px solid color-mix(in srgb, var(--rx-accent) 40%, #fff);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--rx-accent) 7%, #fff);
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+/* layout: 96px (rankingFirst): a 90px block and 6px beneath it. */
+.rx-page .rx-honour.is-first {
+	height: 90px;
+	background: color-mix(in srgb, var(--rx-accent) 15%, #fff);
+}
+
+.rx-page .rx-honour-rank {
+	font-size: 1.9rem;
+	line-height: 1;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: color-mix(in srgb, var(--rx-accent) 80%, #1f2937);
+}
+
+.rx-page .rx-honour.is-first .rx-honour-rank {
+	font-size: 2.9rem;
+}
+
+.rx-page .rx-honour-rank sup {
+	margin-left: 2px;
+	font-size: 0.38em;
+	font-weight: 600;
+	vertical-align: top;
+	color: inherit;
+}
+
+.rx-page .rx-honour-text {
+	min-width: 0;
+}
+
+.rx-page .rx-honour-label,
+.rx-page .rx-honour-team {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.rx-page .rx-honour-label {
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-honour-team {
+	font-size: 1.05rem;
+	font-weight: 700;
+}
+
+.rx-page .rx-honour.is-first .rx-honour-team {
+	font-size: 1.35rem;
+}
+
+/* layout: 30px (rankingRow). */
+.rx-page .rx-placing {
+	display: grid;
+	grid-template-columns: 62px minmax(0, 1fr);
+	align-items: center;
+	column-gap: 12px;
+	box-sizing: border-box;
+	height: 30px;
+	padding: 0 14px;
+	border-bottom: 1px solid var(--rx-line);
+	font-size: 0.95rem;
+}
+
+.rx-page .rx-placing-rank {
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.rx-page .rx-placing-team {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* --- fixture results -------------------------------------------------------- */
+
+/* layout: 24px (SUBTITLE_HEIGHT). The filter in force, one line. */
+.rx-page .rx-subtitle {
+	height: 24px;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: center;
+	font-size: 0.86rem;
+	line-height: 1.2;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-blocks {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/* layout: 30px (subheading). A round or pool name above its cards. */
+.rx-page .rx-round {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	box-sizing: border-box;
+	height: 30px;
+	padding-top: 4px;
+	overflow: hidden;
+	white-space: nowrap;
+	font-size: 0.86rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-round small {
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--rx-muted);
+}
+
+/* layout: 64px (card): a 58px card and 6px beneath it. Every line inside is
+   one line with an ellipsis, so a long team name cannot make it taller. */
+.rx-page .rx-card {
+	display: grid;
+	grid-template-columns: 190px minmax(0, 1fr);
+	align-items: center;
+	column-gap: 16px;
+	box-sizing: border-box;
+	height: 58px;
+	margin-bottom: 6px;
+	padding: 0 12px;
+	border: 1px solid var(--rx-line);
+	border-radius: 10px;
+}
+
+.rx-page .rx-card-meta {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 1px 8px;
+	min-width: 0;
+	font-size: 0.76rem;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-card-no {
+	grid-column: 1 / -1;
+	font-variant-numeric: tabular-nums;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-card-division {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	max-width: 110px;
+	font-weight: 600;
+	color: var(--rx-ink);
+}
+
+.rx-page .rx-card-division .rx-dot {
+	width: 9px;
+	height: 9px;
+}
+
+.rx-page .rx-card-division span,
+.rx-page .rx-card-round,
+.rx-page .rx-card-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.rx-page .rx-card-round {
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-card-teams {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 2px 12px;
+	font-size: 0.92rem;
+}
+
+.rx-page .rx-card-sets {
+	min-width: 1ch;
+	text-align: right;
+	font-size: 1.05rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.rx-page .rx-card-scores {
+	min-width: 9ch;
+	text-align: right;
+	white-space: pre;
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-card-name.is-winner,
+.rx-page .rx-card-sets.is-winner {
+	font-weight: 700;
+}
+
+/* --- standings tables ------------------------------------------------------- */
+
+/* A table is a head and rows laid out on one shared grid, not a <table>: the
+   layout module breaks pages between rows, so each row is its own block. */
+.rx-page .rx-table-head,
+.rx-page .rx-table-row {
+	display: grid;
+	grid-template-columns: 34px minmax(0, 1fr) repeat(9, 52px);
+	align-items: center;
+	box-sizing: border-box;
+	padding: 0 4px;
+	border-bottom: 1px solid var(--rx-line);
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+/* layout: 34px (tableHead). The group's name sits in the team column. */
+.rx-page .rx-table-head {
+	height: 34px;
+	background: #f4f7fb;
+	font-size: 0.66rem;
+	font-weight: 600;
+	line-height: 1.1;
+	color: var(--rx-muted);
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+.rx-page .rx-table-head .rx-table-team {
+	font-size: 0.86rem;
+	font-weight: 700;
+	color: color-mix(in srgb, var(--rx-accent) 80%, #1f2937);
+}
+
+.rx-page .rx-table-head small {
+	margin-left: 8px;
+	font-size: 0.7rem;
+	font-weight: 600;
+	color: var(--rx-muted);
+}
+
+/* layout: 26px (tableRow). */
+.rx-page .rx-table-row {
+	height: 26px;
+	font-size: 0.8rem;
+}
+
+.rx-page .rx-table-team {
+	padding-left: 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: left;
+}
+
+.rx-page .rx-table-row .rx-table-team {
+	font-weight: 600;
+}
+
+.rx-page .rx-table-pos {
+	font-weight: 700;
+}
+
+/* layout: 16px (gap). */
+.rx-page .rx-gap {
+	height: 16px;
+}
+
+/* --- knockout tree ---------------------------------------------------------- */
+
+/* The app's bracket (components/tournament/BracketView.jsx, styled by
+   tournament-view.css) on paper. Those styles read the theme's tokens, which
+   are dark when the app is; paper is not, so the light values are pinned here.
+   The border is a little stronger than on screen so the connectors survive a
+   printer. */
+.rx-page .rx-tree {
+	--tv-surface: #ffffff;
+	--tv-surface-alt: #f4f7fb;
+	--tv-border: rgba(37, 37, 37, 0.28);
+	--tv-muted: rgba(37, 37, 37, 0.66);
+	--secondary-text-color: rgb(37, 37, 37);
+
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+/* As wide as the bracket needs, and never narrower than the sheet's body. The
+   export view zooms this element down until it fits the page. */
+.rx-page .rx-tree-frame {
+	width: max-content;
+	min-width: 704px;
+}
+
+/* On screen the bracket scrolls sideways in its own box. On paper there is
+   nothing to scroll: it takes its full width and the frame is scaled. */
+.rx-page .rx-tree .tv-bracket-scroll {
+	overflow: visible;
+	padding-bottom: 0;
+}
+
+/* Centred on the sheet when it is narrower than the body. */
+.rx-page .rx-tree .tv-bracket,
+.rx-page .rx-tree .tv-bracket-placements {
+	justify-content: center;
+}
+
+/* The placement matches wrap to the bracket's width rather than widening it,
+   and each block is as wide as a bracket column. */
+.rx-page .rx-tree .tv-bracket-placements {
+	width: 0;
+	min-width: 100%;
+}
+
+.rx-page .rx-tree .tv-bracket-placement {
+	width: 200px;
+}
+
+.rx-page .rx-tree .tv-bracket-round-name,
+.rx-page .rx-tree .tv-bracket-match-head,
+.rx-page .rx-tree .tv-bracket-match-head span,
+.rx-page .rx-tree .tv-bracket-participant--placeholder span {
+	color: var(--tv-muted);
+}
+
+/* --- cover ------------------------------------------------------------------ */
+
+/* The artwork is 3:1 and spans the sheet, so it is a third of the width tall. */
+.rx-page .rx-cover-art {
+	display: block;
+	width: 210mm;
+	height: 70mm;
+}
+
+.rx-page .rx-cover-title {
+	flex: 1 1 auto;
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	gap: 18px;
+	padding: 0 60px;
+	text-align: center;
+}
+
+.rx-page .rx-cover-title h1 {
+	margin: 0;
+	font-family: var(--rx-hand);
+	font-size: 4.4rem;
+	line-height: 1.1;
+	font-weight: 400;
+	font-style: italic;
+	text-transform: uppercase;
+	text-wrap: balance;
+	overflow-wrap: anywhere;
+}
+
+.rx-page .rx-cover-kind {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: color-mix(in srgb, var(--rx-accent) 80%, #1f2937);
+}
+
+.rx-page .rx-cover-title dl {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, auto));
+	gap: 14px 48px;
+	margin: 26px 0 0;
+	padding-top: 22px;
+	border-top: 1px solid #c5ccd8;
+	text-align: left;
+}
+
+.rx-page .rx-cover-title dt {
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--rx-muted);
+}
+
+.rx-page .rx-cover-title dd {
+	margin: 2px 0 0;
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+/* --- paper ----------------------------------------------------------------- */
+
+@media print {
+	html,
+	body {
+		margin: 0;
+		padding: 0;
+		background: #fff;
+	}
+
+	.rx-pages {
+		display: block;
+		padding: 0;
+		overflow: visible;
+	}
+
+	.rx-page {
+		box-shadow: none;
+		break-after: page;
+		break-inside: avoid;
+	}
+
+	/* Nothing follows the last sheet, so nothing may ask for a page after it:
+	   that is where a blank trailing page comes from. */
+	.rx-page:last-child {
+		break-after: auto;
+	}
+}

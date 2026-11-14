@@ -1651,3 +1651,150 @@ describe("carryStateSettings", () => {
         expect(carryStateSettings(null, { teams: [] })).toEqual({ teams: [] });
     });
 });
+
+// The pool draw — docs/tournament-rules.md, "Pool Draw". The draws themselves
+// are covered in test/unit/utils/poolDraw.test.js; this is where one is chosen,
+// stored and kept.
+describe("the pool draw", () => {
+    const twelve = Array.from({ length: 12 }, (_, index) => `t${index + 1}`);
+    const poolsOf = (state) => state.rounds[0].groups;
+
+    describe("createClassicState", () => {
+        it("is byte-identical to the snake when no draw, or a snake draw, is given", () => {
+            const plain = JSON.stringify(createClassicState(twelve, 12, 3, 4));
+
+            expect(JSON.stringify(createClassicState(twelve, 12, 3, 4, null, { method: "SNAKE" }))).toBe(plain);
+            expect(JSON.parse(plain)).not.toHaveProperty("poolDraw");
+            expect(poolsOf(JSON.parse(plain))).toEqual(populateGroups(3, twelve));
+        });
+
+        it("draws straight pools and records the method", () => {
+            const state = createClassicState(twelve, 12, 3, 4, null, { method: "STRAIGHT" });
+
+            expect(state.poolDraw).toEqual({ method: "STRAIGHT" });
+            expect(poolsOf(state)).toEqual([twelve.slice(0, 4), twelve.slice(4, 8), twelve.slice(8, 12)]);
+        });
+
+        it("draws pots from the seed and records both", () => {
+            const state = createClassicState(twelve, 12, 3, 4, null, { method: "POTS", seed: 11 });
+
+            expect(state.poolDraw).toEqual({ method: "POTS", seed: 11 });
+            expect(poolsOf(state).map((pool) => pool[0])).toEqual(["t1", "t2", "t3"]);
+            expect(poolsOf(state)).toEqual(poolsOf(createClassicState(twelve, 12, 3, 4, null, { method: "POTS", seed: 11 })));
+        });
+
+        it("leaves the knockout rounds exactly as the snake's", () => {
+            const knockout = (poolDraw) => createClassicState(twelve, 12, 3, 8, 5, poolDraw).rounds.slice(1);
+
+            expect(knockout({ method: "POTS", seed: 3 })).toEqual(knockout(undefined));
+            expect(knockout({ method: "STRAIGHT" })).toEqual(knockout(undefined));
+        });
+    });
+
+    describe("on creation", () => {
+        const details = (overrides = {}) => ({
+            name: "Division A",
+            type: "classic",
+            teams: twelve.map((name) => ({ name })),
+            num_teams: 12,
+            num_groups: 3,
+            knockout_teams: 4,
+            ...overrides
+        });
+
+        const createdState = async (overrides) => {
+            await divisionService.createDivision(details(overrides), "tour-1", "user-1", dbMock.client);
+
+            return divisionsRepository.createDivision.mock.calls[0][2].state;
+        };
+
+        it("defaults to a snake draw and writes no key", async () => {
+            expect(await createdState()).not.toHaveProperty("poolDraw");
+        });
+
+        it("stores a straight draw", async () => {
+            const state = await createdState({ pool_draw: "STRAIGHT" });
+
+            expect(state.poolDraw).toEqual({ method: "STRAIGHT" });
+            expect(poolsOf(state)[0]).toEqual(state.teams.slice(0, 4));
+        });
+
+        it("gives a pots draw a seed", async () => {
+            const state = await createdState({ pool_draw: "POTS" });
+
+            expect(state.poolDraw.method).toBe("POTS");
+            expect(Number.isInteger(state.poolDraw.seed)).toBe(true);
+        });
+
+        it("refuses an unknown draw before writing anything", async () => {
+            await expect(divisionService.createDivision(details({ pool_draw: "MANUAL" }), "tour-1", "user-1", dbMock.client))
+                .rejects.toMatchObject({ code: "INVALID_POOL_DRAW", status: 400 });
+            expect(divisionsRepository.createDivision).not.toHaveBeenCalled();
+        });
+
+        it("ignores the draw on a League division", async () => {
+            const state = await createdState({ type: "league", pool_draw: "MANUAL" });
+
+            expect(state).not.toHaveProperty("poolDraw");
+        });
+    });
+
+    describe("on a reorder and a rebuild", () => {
+        const stored = (poolDraw, extra = {}) => ({
+            id: "div-1",
+            tournament_id: "tour-1",
+            name: "Division A",
+            type: "Classic",
+            state: { ...createClassicState(twelve, 12, 3, 4, null, poolDraw), ...extra },
+            created_by: "user-1",
+            tournament_status: "Not Started"
+        });
+
+        const entries = (ids) => ids.map((id) => ({ id, name: id.toUpperCase() }));
+        const body = (teams) => ({ teams, num_groups: 3, knockout_teams: 4 });
+        const swapped = () => [twelve[1], twelve[0], ...twelve.slice(2)];
+
+        const writtenState = () => divisionsRepository.replaceState.mock.calls.at(-1)[1];
+
+        beforeEach(() => {
+            divisionsRepository.getTeamsByIds.mockResolvedValue(twelve.map((id) => ({ id, name: id.toUpperCase() })));
+        });
+
+        it("writes no draw key when a snake division is reordered", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(stored(undefined));
+
+            await divisionService.updateDivision("div-1", "user-1", body(entries(swapped())));
+
+            expect(writtenState()).not.toHaveProperty("poolDraw");
+            expect(poolsOf(writtenState())).toEqual(populateGroups(3, swapped()));
+        });
+
+        it("keeps a pots draw and its seed, so reordering back restores the pools", async () => {
+            const division = stored({ method: "POTS", seed: 2024 }, { color: "accent-3" });
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division);
+
+            await divisionService.updateDivision("div-1", "user-1", body(entries(swapped())));
+            const reordered = writtenState();
+
+            expect(reordered.poolDraw).toEqual({ method: "POTS", seed: 2024 });
+            expect(reordered.color).toBe("accent-3");
+            expect(poolsOf(reordered)).not.toEqual(poolsOf(division.state));
+
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue({ ...division, state: reordered });
+            await divisionService.updateDivision("div-1", "user-1", body(entries(twelve)));
+
+            expect(poolsOf(writtenState())).toEqual(poolsOf(division.state));
+            expect(writtenState().poolDraw).toEqual({ method: "POTS", seed: 2024 });
+        });
+
+        it("keeps the draw and the colour through a rebuild", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(stored({ method: "STRAIGHT" }, { color: "accent-9" }));
+
+            await divisionService.updateDivision("div-1", "user-1", body(entries(twelve.slice(0, 11))));
+
+            expect(writtenState().poolDraw).toEqual({ method: "STRAIGHT" });
+            expect(writtenState().color).toBe("accent-9");
+            expect(poolsOf(writtenState()).flat()).toEqual(twelve.slice(0, 11));
+        });
+    });
+});

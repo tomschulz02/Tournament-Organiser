@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
@@ -11,6 +12,7 @@ import {
 	orderedStages,
 } from './fixtureUtils';
 import { useHelpTopic } from '../../HelpContext';
+import { resultsExportPath } from '../../utils/resultsExportLayout';
 
 // Fixed display order for the status groups: Live and Upcoming first (what's
 // happening or about to), then Completed, then Cancelled last. Not derived from
@@ -25,7 +27,14 @@ const STATUS_ORDER = ['LIVE', 'UPCOMING', 'COMPLETED', 'CANCELLED'];
 // scheduling that has not happened yet. ScheduleTab replaces this presentation
 // wholesale when tournament.schedule is non-null — it is not a view the user can
 // toggle.
-export default function FixturesTab({ divisions = [], canEditSchedule = false, onCreateSchedule, renderFixtureAction }) {
+export default function FixturesTab({
+	divisions = [],
+	canEditSchedule = false,
+	onCreateSchedule,
+	renderFixtureAction,
+	tournamentId,
+	canExportResults = false,
+}) {
 	useHelpTopic('tournament-fixtures-unscheduled');
 
 	const fixtures = useMemo(() => flattenFixtures(divisions), [divisions]);
@@ -67,11 +76,21 @@ export default function FixturesTab({ divisions = [], canEditSchedule = false, o
 				/>
 
 				{/* A viewer sees nothing extra at all. */}
-				{canEditSchedule && onCreateSchedule && (
-					<button type="button" className="tv-primary-action" onClick={onCreateSchedule}>
-						Create Schedule
-					</button>
-				)}
+				<div className="tv-toolbar-actions">
+					{/* Organiser roles only. Carries the filters above, so the export
+					    is the completed fixtures of what is on screen. */}
+					{canExportResults && tournamentId && (
+						<Link to={resultsExportPath(tournamentId, filters)} className="tv-subtle-action" target="_blank" rel="noopener">
+							Export results
+						</Link>
+					)}
+
+					{canEditSchedule && onCreateSchedule && (
+						<button type="button" className="tv-primary-action" onClick={onCreateSchedule}>
+							Create Schedule
+						</button>
+					)}
+				</div>
 			</div>
 
 			<div className="tv-fixtures-main">

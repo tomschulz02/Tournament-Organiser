@@ -777,6 +777,47 @@ textarea.ct-input {
 	max-width: 160px;
 }
 
+/* The pool draw's option cards: the same card as a format option, with pool
+   A's first seeds on the right so the three can be compared at a glance. */
+.ct-draw-option {
+	flex-direction: row;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.ct-draw-text {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.ct-draw-mini {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 3px;
+	font-size: 0.7rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--ct-muted);
+}
+
+.ct-draw-mini b {
+	width: 16px;
+	text-align: center;
+}
+
+.ct-draw-mini span {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 20px;
+	border-radius: 4px;
+	border: 1px solid var(--ct-border);
+}
+
 /* --- teams --------------------------------------------------------------- */
 
 .ct-team-add {
@@ -792,6 +833,10 @@ textarea.ct-input {
 }
 
 .ct-team-count {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--space-2);
 	margin: 0;
 	font-size: 0.85rem;
 	font-weight: 600;
@@ -800,6 +845,34 @@ textarea.ct-input {
 
 .ct-team-order-hint {
 	margin: 0;
+}
+
+.ct-team-draw {
+	font-weight: 500;
+}
+
+/* The pool a seed lands in. Neutral on purpose: identity colours belong to
+   divisions, and nothing here is an action. */
+.ct-team-pool {
+	flex: 0 0 auto;
+	display: inline-grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 7px;
+	border: 1px solid var(--ct-border);
+	background-color: var(--ct-surface-alt);
+	color: var(--secondary-text-color);
+	font-size: 0.8rem;
+	font-weight: 800;
+}
+
+/* Drawn at random on save: outlined, so it reads as not yet filled in. */
+.ct-team-pool--pending {
+	background-color: transparent;
+	border-style: dashed;
+	border-color: var(--ct-muted);
+	color: var(--ct-muted);
 }
 
 .ct-team-list {
@@ -1164,4 +1237,17 @@ textarea.ct-input {
 	.ct-review-button {
 		min-width: 260px;
 	}
+}
+
+/* Three draws read as a list, not a pair and an orphan: one column at every
+   width. After the 768px rule above on purpose, which it has to override. */
+.ct-draw-options {
+	grid-template-columns: 1fr;
+}
+
+/* In the review: the seeds of a pots draw that are placed on save. */
+.ct-schematic-pool-pending {
+	font-size: 0.78rem;
+	font-style: italic;
+	color: var(--ct-muted);
 }

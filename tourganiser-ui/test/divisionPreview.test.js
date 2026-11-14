@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { knockoutRounds, poolMembership, previewBracket } from '../src/components/create/divisionPreview.js';
+import { knockoutRounds, poolByPosition, poolMembership, poolSizes, previewBracket } from '../src/components/create/divisionPreview.js';
 
 // The client's half of the shared expectation fixture.
 //
@@ -112,5 +112,79 @@ describe('poolMembership', () => {
 
 	it('is empty for a division with no teams yet', () => {
 		expect(poolMembership(0, 2)).toEqual([[], []]);
+	});
+});
+
+// The pool draws — docs/tournament-rules.md, "Pool Draw". The worked examples
+// there are the expectations here; the server's own are in
+// api/test/unit/utils/poolDraw.test.js.
+describe('poolMembership for a chosen draw', () => {
+	it('is the snake by default and for SNAKE', () => {
+		expect(poolMembership(12, 3, 'SNAKE')).toEqual(poolMembership(12, 3));
+		expect(poolMembership(12, 3)).toEqual([
+			[0, 5, 6, 11],
+			[1, 4, 7, 10],
+			[2, 3, 8, 9],
+		]);
+	});
+
+	it('fills a straight draw with consecutive seeds in the snake sizes', () => {
+		expect(poolMembership(12, 3, 'STRAIGHT')).toEqual([
+			[0, 1, 2, 3],
+			[4, 5, 6, 7],
+			[8, 9, 10, 11],
+		]);
+		// 10 teams in 3 pools: the snake makes the last pool the larger one.
+		expect(poolMembership(10, 3, 'STRAIGHT')).toEqual([
+			[0, 1, 2],
+			[3, 4, 5],
+			[6, 7, 8, 9],
+		]);
+	});
+
+	it('knows only pot 1 of a pots draw', () => {
+		expect(poolMembership(12, 3, 'POTS')).toEqual([[0], [1], [2]]);
+		expect(poolMembership(2, 3, 'POTS')).toEqual([[0], [1], []]);
+	});
+
+	it('keeps the snake pool sizes whatever the draw', () => {
+		for (let teams = 2; teams <= 32; teams++) {
+			for (let pools = 1; pools <= teams; pools++) {
+				expect(poolMembership(teams, pools, 'STRAIGHT').map((members) => members.length)).toEqual(
+					poolSizes(teams, pools),
+				);
+			}
+		}
+		expect(poolSizes(10, 3)).toEqual([3, 3, 4]);
+	});
+});
+
+describe('poolByPosition', () => {
+	it('gives every position its pool for snake and straight', () => {
+		expect(poolByPosition(8, 2)).toEqual([0, 1, 1, 0, 0, 1, 1, 0]);
+		expect(poolByPosition(8, 2, 'STRAIGHT')).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
+	});
+
+	it('falls back to one pool for a blank pool count', () => {
+		expect(poolByPosition(3, 0)).toEqual([0, 0, 0]);
+	});
+
+	it('knows only pot 1 of a pots draw that has not been saved', () => {
+		expect(poolByPosition(6, 3, 'POTS')).toEqual([0, 1, 2, null, null, null]);
+	});
+
+	it('reads later pots of a saved pots draw back by position', () => {
+		const saved = [0, 1, 2, 2, 0, 1, 1, 2, 0];
+
+		expect(poolByPosition(9, 3, 'POTS', saved)).toEqual(saved);
+	});
+
+	it('leaves a pot that is or was short as drawn on save', () => {
+		// Saved with 8 teams: the third pot was short, so growing to 9 redraws it.
+		expect(poolByPosition(9, 3, 'POTS', [0, 1, 2, 2, 0, 1, 1, 2])).toEqual([0, 1, 2, 2, 0, 1, null, null, null]);
+		// Shrinking from 9 to 8 makes the third pot short.
+		expect(poolByPosition(8, 3, 'POTS', [0, 1, 2, 2, 0, 1, 1, 2, 0])).toEqual([0, 1, 2, 2, 0, 1, null, null]);
+		// A hole in what was saved is unknown too.
+		expect(poolByPosition(6, 3, 'POTS', [0, 1, 2, undefined, 0, 1])).toEqual([0, 1, 2, null, 0, 1]);
 	});
 });

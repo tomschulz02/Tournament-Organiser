@@ -5,3 +5,4 @@ api/.env
 /api/node_modules
 /.vscode
 /api/coverage
+/.impeccable

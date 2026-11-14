@@ -31,6 +31,10 @@ export default defineConfig({
                 // editor and the page-count indicator — agree on what a row
                 // index means. See docs/schedule.md.
                 "src/utils/schedulePrintLayout.js",
+                // What a results export contains and where its fixed A4 pages
+                // break. A page given too much clips rows off the paper with
+                // no error, so the selection and pagination rules are tested.
+                "src/utils/resultsExportLayout.js",
                 // The Discover card's date tile and start countdown.
                 "src/utils/tournamentDates.js",
                 // Ranking rules as the Settings and Standings tabs present them:

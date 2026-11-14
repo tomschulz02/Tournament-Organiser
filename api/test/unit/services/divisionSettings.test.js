@@ -17,7 +17,8 @@ vi.mock("../../../src/repositories/divisions.repository.js", () => ({
         updateStateRankingRules: vi.fn(),
         updatePlacementDepth: vi.fn(),
         getFixturesByDivisionId: vi.fn(),
-        updateStateRounds: vi.fn()
+        updateStateRounds: vi.fn(),
+        replaceState: vi.fn()
     }
 }));
 
@@ -25,7 +26,9 @@ vi.mock("../../../src/repositories/fixtures.repository.js", () => ({
     fixturesRepository: {
         createFixture: vi.fn(),
         updateFixtureSlot: vi.fn(),
-        deleteByIds: vi.fn()
+        deleteByIds: vi.fn(),
+        getResults: vi.fn(),
+        deleteByDivisionId: vi.fn()
     }
 }));
 
@@ -449,5 +452,161 @@ describe("readPlacementDepth", () => {
         delete state.currentRound;
 
         expect(readPlacementDepth({ type: "Classic", state }, 5)).toBe(5);
+    });
+});
+
+// The pool draw — docs/tournament-rules.md, "Pool Draw". Changing it, or
+// redrawing a pots draw, regenerates the division the way a seed reorder does.
+describe("pool draw", () => {
+    const save = (body) => divisionService.updateDivisionSettings("div-1", "user-1", body);
+    const written = () => divisionsRepository.replaceState.mock.calls.at(-1)[1];
+    const poolsOf = (state) => state.rounds[0].groups;
+
+    // The stored division, drawn the given way.
+    function drawn(poolDraw, overrides = {}) {
+        const stored = storedDivision({ overrides: { tournament_status: "Not Started", ...overrides } });
+        const state = createClassicState(TEAMS, TEAMS.length, 2, 8, null, poolDraw);
+        stored.division.state = { ...state, rounds: generateFixtures(state.rounds).rounds, color: "accent-4" };
+
+        return stored;
+    }
+
+    beforeEach(() => {
+        fixturesRepository.getResults.mockResolvedValue([]);
+        fixturesRepository.deleteByDivisionId.mockResolvedValue(["old-1", "old-2"]);
+    });
+
+    it("changes the draw: new pools, new fixtures, settings carried, schedule repaired", async () => {
+        const before = storedDivision().division.state;
+
+        await expect(save({ poolDraw: "STRAIGHT" })).resolves.toEqual({
+            divisionId: "div-1",
+            rankingRules: MATCH_WINS,
+            placementDepth: null,
+            poolDraw: "STRAIGHT"
+        });
+
+        const [divisionId, state, numTeams, client] = divisionsRepository.replaceState.mock.calls[0];
+        expect({ divisionId, numTeams }).toEqual({ divisionId: "div-1", numTeams: 12 });
+        expect(client).toBe(dbMock.client);
+        expect(state.poolDraw).toEqual({ method: "STRAIGHT" });
+        expect(state.color).toBe("accent-4");
+        expect(state.teams).toEqual(TEAMS);
+        expect(poolsOf(state)).toEqual([TEAMS.slice(0, 6), TEAMS.slice(6)]);
+        expect(poolsOf(state)).not.toEqual(poolsOf(before));
+        // The knockout is the same shape as before.
+        expect(state.rounds.slice(1).map((round) => round.groups)).toEqual(before.rounds.slice(1).map((round) => round.groups));
+
+        expect(fixturesRepository.deleteByDivisionId).toHaveBeenCalledWith("div-1", dbMock.client);
+        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(state.rounds.flatMap((round) => round.fixtures).length);
+        expect(tournamentRepository.getScheduleForUpdate).toHaveBeenCalled();
+        expect(divisionsRepository.updatePlacementDepth).not.toHaveBeenCalled();
+    });
+
+    it("gives a new pots draw a seed and keeps it when the method is sent again", async () => {
+        await save({ poolDraw: "POTS" });
+        const first = written();
+        expect(first.poolDraw.method).toBe("POTS");
+        expect(Number.isInteger(first.poolDraw.seed)).toBe(true);
+
+        use(drawn(first.poolDraw));
+        divisionsRepository.replaceState.mockClear();
+
+        await expect(save({ poolDraw: "POTS" })).resolves.toMatchObject({ poolDraw: "POTS" });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("redraws a pots draw with a new seed", async () => {
+        use(drawn({ method: "POTS", seed: 5 }));
+
+        await expect(save({ redrawPools: true })).resolves.toMatchObject({ poolDraw: "POTS" });
+
+        expect(written().poolDraw.method).toBe("POTS");
+        expect(written().poolDraw.seed).not.toBe(5);
+    });
+
+    it("returns to the snake by writing no draw key", async () => {
+        use(drawn({ method: "STRAIGHT" }));
+
+        await expect(save({ poolDraw: "SNAKE" })).resolves.toMatchObject({ poolDraw: "SNAKE" });
+
+        expect(written()).not.toHaveProperty("poolDraw");
+        expect(poolsOf(written())).toEqual(poolsOf(storedDivision().division.state));
+    });
+
+    it("does nothing for the draw already in force, or a redraw of a draw with nothing random", async () => {
+        await expect(save({ poolDraw: "SNAKE" })).resolves.toMatchObject({ poolDraw: "SNAKE" });
+        await expect(save({ redrawPools: true })).resolves.toMatchObject({ poolDraw: "SNAKE" });
+
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+        expect(fixturesRepository.getResults).not.toHaveBeenCalled();
+    });
+
+    it("ignores redrawPools unless it is true", async () => {
+        use(drawn({ method: "POTS", seed: 5 }));
+
+        await expect(save({ redrawPools: false })).resolves.not.toHaveProperty("poolDraw");
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("regenerates a pool-only division with no knockout", async () => {
+        const stored = drawn(undefined);
+        const state = createClassicState(TEAMS, TEAMS.length, 3, 0);
+        stored.division.state = { ...state, rounds: generateFixtures(state.rounds).rounds };
+        use(stored);
+
+        await save({ poolDraw: "STRAIGHT" });
+
+        expect(written().rounds).toHaveLength(1);
+        expect(poolsOf(written()).map((pool) => pool.length)).toEqual([4, 4, 4]);
+    });
+
+    it("applies ranking rules and a placement depth sent with it in the same regeneration", async () => {
+        await expect(save({ poolDraw: "STRAIGHT", rankingRules: SET_WINS, placementDepth: 7 })).resolves.toEqual({
+            divisionId: "div-1",
+            rankingRules: SET_WINS,
+            placementDepth: 7,
+            poolDraw: "STRAIGHT"
+        });
+
+        expect(written().rankingRules).toEqual(SET_WINS);
+        expect(written().rounds).toEqual(
+            expect.arrayContaining([expect.objectContaining({ placement: expect.any(Array) })])
+        );
+        expect(divisionsRepository.updatePlacementDepth).toHaveBeenCalledWith("div-1", 7, dbMock.client);
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
+        expect(divisionsRepository.updateStateRounds).not.toHaveBeenCalled();
+    });
+
+    it("refuses a change or a redraw once the tournament has started", async () => {
+        use(drawn({ method: "POTS", seed: 5 }, { tournament_status: "In Progress" }));
+
+        await expect(save({ poolDraw: "SNAKE" })).rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+        await expect(save({ redrawPools: true })).rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED" });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("refuses when the division already has a result", async () => {
+        fixturesRepository.getResults.mockResolvedValue([{ id: "f1" }]);
+
+        await expect(save({ poolDraw: "STRAIGHT" })).rejects.toMatchObject({ code: "DIVISION_HAS_RESULTS", status: 409 });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("refuses an unknown draw, and any draw on a League", async () => {
+        await expect(save({ poolDraw: "MANUAL" })).rejects.toMatchObject({ code: "INVALID_POOL_DRAW", status: 400 });
+
+        use({
+            division: { ...storedDivision().division, type: "League", state: createLeagueState(TEAMS, TEAMS.length) },
+            rows: []
+        });
+        await expect(save({ poolDraw: "STRAIGHT" })).rejects.toMatchObject({ code: "POOL_DRAW_NOT_AVAILABLE", status: 400 });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("refuses anyone without manageSetup", async () => {
+        await expect(divisionService.updateDivisionSettings("div-1", "user-2", { poolDraw: "STRAIGHT" }))
+            .rejects.toMatchObject({ status: 403 });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
     });
 });

@@ -36,6 +36,21 @@
         ],
         "createdAt": "2026-11-14T07:56:14.356Z",
         "reason": "agent: mock copies the existing schedule print header (ScheduleExportHeader), whose Tourganiser brand line sits above the tournament name; user asked for the same branding"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "patrick hand sc",
+        "createdAt": "2026-11-14T13:03:25.954Z",
+        "reason": "user confirmed: approved the hand-lettered face for Home headings when choosing mockup C on 2026-11-14"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "tourganiser-ui/src/styles/home.css"
+        ],
+        "createdAt": "2026-11-14T13:03:54.178Z",
+        "reason": "agent: the one-sided borders are the drawn court line and net lines of the approved Home design C, not card accent stripes"
       }
     ]
   }

@@ -326,6 +326,7 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 	return (
 		<CreateModal
 			titleId="score-modal-title"
+			helpTopic="score-update-modal"
 			title={`Match #${fixture.match_no}`}
 			subtitle={
 				matchContext || slotContext ? (

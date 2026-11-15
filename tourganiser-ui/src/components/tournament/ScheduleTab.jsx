@@ -1,6 +1,8 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
+import Icon from '../Icons';
+import IconTooltip from '../IconTooltip';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
 import FixtureGroup from './FixtureGroup';
@@ -189,10 +191,11 @@ export default function ScheduleTab({
 					{canExportResults && (
 						<Link
 							to={resultsExportPath(tournament.id, filters)}
-							className="tv-subtle-action"
+							className="tv-icon-button"
 							target="_blank"
 							rel="noopener">
-							Export results
+							<Icon name="download" size={18} fill="currentColor" />
+							Results
 						</Link>
 					)}
 
@@ -201,9 +204,16 @@ export default function ScheduleTab({
 					    grid and list are a choice made on the print page itself now that
 					    it is a real, linkable route rather than a generated document.
 					    Never loads ScheduleMakerModal. */}
-					<Link to={`/tournaments/view/${tournament.id}/print`} className="tv-subtle-action" target="_blank" rel="noopener">
-						View/Print Schedule
-					</Link>
+					<IconTooltip label="View/Print Schedule">
+						<Link
+							to={`/tournaments/view/${tournament.id}/print`}
+							className="tv-icon-button tv-icon-button--icon"
+							target="_blank"
+							rel="noopener"
+							aria-label="View/Print Schedule">
+							<Icon name="print" size={20} fill="currentColor" />
+						</Link>
+					</IconTooltip>
 
 					{/* In place of Create Schedule, not alongside it. */}
 					{canEditSchedule && onEditSchedule && (

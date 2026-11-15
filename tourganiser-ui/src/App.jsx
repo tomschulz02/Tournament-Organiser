@@ -6,10 +6,10 @@ import { useMessage } from './MessageContext';
 import { MessagePopup } from './MessageProvider';
 import { useTheme } from './ThemeContext';
 import { useHelp } from './HelpContext';
-import { HELP_TOPICS } from './helpContent';
 import { logoutUser } from './requests';
 import LoadingScreen from './components/LoadingScreen';
 import Icon from './components/Icons';
+import HelpModal from './components/HelpModal';
 
 // Shared by the desktop nav's account control and the mobile Profile sheet —
 // the one working account action (Friends and Saved Tournaments are still
@@ -54,7 +54,7 @@ function isActivePath(pathname, target) {
 
 export default function App() {
 	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
-	const [showHelpMenu, setShowHelpMenu] = useState(false);
+	const { helpRequest, openHelp } = useHelp();
 
 	useEffect(() => {
 		// Resolved once, not on every scroll event. Effects run after the whole
@@ -88,9 +88,9 @@ export default function App() {
 			    takes up space — there is no third, hamburger-driven state left. */}
 			<BottomNav loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} />
 			<MessagePopup />
-			{showHelpMenu && <HelpMenu onClose={() => setShowHelpMenu(false)} />}
-			{!showHelpMenu && (
-				<div className="help-button" onClick={() => setShowHelpMenu(true)}>
+			<HelpModal />
+			{!helpRequest && (
+				<div className="help-button" onClick={() => openHelp()}>
 					<i className="fas fa-question-circle"></i>
 				</div>
 			)}
@@ -366,51 +366,5 @@ function Footer() {
 				</div>
 			</div>
 		</footer>
-	);
-}
-
-function HelpMenu({ onClose }) {
-	const { activeTopic } = useHelp();
-	const { title, icon = 'info', sections } = HELP_TOPICS[activeTopic] ?? HELP_TOPICS.fallback;
-
-	const handleClickOutside = (e) => {
-		if (e.target.classList.contains('help-menu-container')) {
-			onClose();
-		}
-	};
-
-	useEffect(() => {
-		const handleKeyDown = (e) => {
-			if (e.key === 'Escape') onClose();
-		};
-		window.addEventListener('keydown', handleKeyDown);
-		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, [onClose]);
-
-	return (
-		<div className="help-menu-container" onClick={handleClickOutside}>
-			<div className="help-menu">
-				<div className="help-menu-header">
-					<Icon name={icon} size={28} fill="var(--secondary-text-color)" />
-					<h1>{title}</h1>
-					<button type="button" className="help-menu-close" onClick={onClose} aria-label="Close">
-						&times;
-					</button>
-				</div>
-				<div className="help-menu-body">
-					{sections.map((section, sectionIndex) => (
-						<div className="help-menu-section" key={sectionIndex}>
-							{section.heading && <h2 className="help-menu-section-heading">{section.heading}</h2>}
-							{section.paragraphs.map((paragraph, paragraphIndex) => (
-								<p key={paragraphIndex}>{paragraph}</p>
-							))}
-							{section.image && (
-								<img className="help-menu-image" src={section.image.src} alt={section.image.alt} />
-							)}
-						</div>
-					))}
-				</div>
-			</div>
-		</div>
 	);
 }

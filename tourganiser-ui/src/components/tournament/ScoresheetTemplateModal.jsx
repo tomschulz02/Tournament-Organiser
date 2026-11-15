@@ -202,6 +202,8 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 		return (
 			<CreateModal
 				titleId="sst-modal-title"
+				helpTopic="scoresheet-template-modal"
+				helpSection="placing-fields"
 				title="Place fields"
 				subtitle={placingDraft.name}
 				onClose={cancelPlacing}
@@ -238,6 +240,8 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 		return (
 			<CreateModal
 				titleId="sst-modal-title"
+				helpTopic="scoresheet-template-modal"
+				helpSection="uploading"
 				title="Upload a template"
 				subtitle="Choose the PDF to place fields on"
 				onClose={() => setScreen('picker')}
@@ -260,10 +264,6 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 					</>
 				}>
 				<div className="sst-screen">
-					<p className="sst-lede">
-						Upload the PDF this template is printed from. You will draw a box for each field on the next screen.
-					</p>
-
 					<div className="ct-field">
 						<label className="ct-field-label" htmlFor="sst-template-name">
 							<span>Template name</span>
@@ -293,8 +293,8 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 	return (
 		<CreateModal
 			titleId="sst-modal-title"
+			helpTopic="scoresheet-template-modal"
 			title="Scoresheet template"
-			subtitle="Choose what prints when an organiser downloads a fixture's scoresheet"
 			onClose={onCancel}
 			footer={
 				<>
@@ -393,11 +393,6 @@ export default function ScoresheetTemplateModal({ initialTemplateKey = null, onC
 				<button type="button" className="ct-button ct-button-quiet" onClick={() => setScreen('upload')}>
 					Upload new template
 				</button>
-
-				<p className="sst-lede">
-					A custom template is only usable on the device it was uploaded from. Other viewers see it is selected but
-					cannot download it.
-				</p>
 			</div>
 		</CreateModal>
 	);
@@ -543,13 +538,6 @@ function FieldPlacementScreen({ draft, pdfDoc, onChangeDraft, onPlace, onRemove 
 
 	return (
 		<div className="sst-screen sst-placing-screen">
-			<p className="sst-lede sst-lede-wide">
-				Click-drag a box on the page for the selected field — a quick click without dragging drops a default-size
-				box you can redraw. A field can be placed more than once, and stays selected after each box so another
-				location for it is a straight-away drag; open Fields below to place a different one. Text is sized and
-				wrapped to fit each box when the scoresheet is generated.
-			</p>
-
 			<div className="sst-placer-area">
 				<button type="button" className="sst-fields-toggle" onClick={() => setFieldsPanelOpen(true)}>
 					<span className="sst-fields-toggle-label">

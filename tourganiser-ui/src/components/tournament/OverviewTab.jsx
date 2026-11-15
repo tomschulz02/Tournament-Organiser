@@ -341,10 +341,11 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, canExpor
 						{showExport && (
 							<Link
 								to={`/tournaments/view/${tournament.id}/results/pack`}
-								className="tv-subtle-action"
+								className="tv-icon-button"
 								target="_blank"
 								rel="noopener">
-								Export results pack
+								<Icon name="download" size={18} fill="currentColor" />
+								Results pack
 							</Link>
 						)}
 					</div>

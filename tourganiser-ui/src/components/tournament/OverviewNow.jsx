@@ -207,8 +207,9 @@ export function UpNextBand({ slot, schedule, upcoming = [], divisions, onOpenFix
 				<h2 id="tv-ov-next" className="tv-band-heading">
 					Up next{slot ? ` · ${slot.date ? `${formatDateLabel(slot.date)} ` : ''}${slot.startTime}` : ''}
 				</h2>
-				<button type="button" className="tv-ov-link" onClick={onOpenFixtures}>
+				<button type="button" className="tv-ov-action" onClick={onOpenFixtures}>
 					Full schedule
+					<Icon name="arrowRight" size={16} fill="currentColor" />
 				</button>
 			</div>
 
@@ -469,7 +470,8 @@ export function TimelineBand({ rows, schedule, nowTime, played, total, canEditSc
 				</ul>
 
 				{canEditSchedule && (
-					<button type="button" className="tv-subtle-action" onClick={onOpenSchedule}>
+					<button type="button" className="tv-icon-button" onClick={onOpenSchedule}>
+						<Icon name="edit" size={18} fill="currentColor" />
 						Edit schedule
 					</button>
 				)}
@@ -502,7 +504,8 @@ export function FinalResultsBand({ divisions, tournamentId, canExport = false, o
 						className="tv-ov-action"
 						target="_blank"
 						rel="noopener">
-						Export results pack
+						<Icon name="download" size={18} fill="currentColor" />
+						Results pack
 					</Link>
 				)}
 			</div>
@@ -541,9 +544,10 @@ export function FinalResultsBand({ divisions, tournamentId, canExport = false, o
 
 							<button
 								type="button"
-								className="tv-ov-link tv-ov-result-more"
+								className="tv-ov-action tv-ov-result-more"
 								onClick={() => onOpenDivision(division.id, 'standings')}>
 								Full ranking
+								<Icon name="arrowRight" size={16} fill="currentColor" />
 							</button>
 						</li>
 					);

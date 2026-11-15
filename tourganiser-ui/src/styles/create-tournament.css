@@ -62,6 +62,34 @@ body.dark {
 	padding-bottom: var(--space-2);
 }
 
+/* The heading and its "?" (the page's lede moved into help). */
+.ct-title-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin-bottom: var(--space-2);
+}
+
+.ct-title-row .ct-title {
+	margin: 0;
+}
+
+/* A screen's "?" where its lede was, at the top right of the screen. */
+.ct-screen-help {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: calc(-1 * var(--space-3));
+}
+
+/* A field's "?" sits at the right of its foot row, after any error or count.
+   Legends hold one too, after the Required tag. */
+.ct-field-foot .help-inline-button,
+.ct-fieldset legend .help-inline-button,
+.ct-team-count .help-inline-button {
+	align-self: center;
+	margin-left: auto;
+}
+
 .ct-title {
 	margin: 0 0 var(--space-2);
 	font-size: clamp(1.4rem, 5vw, 2rem);
@@ -198,6 +226,18 @@ body.dark {
 	font-size: 1.1rem;
 	line-height: 1.3;
 	color: var(--secondary-text-color);
+}
+
+/* A section heading and its "?" (the hint below it moved into help). */
+.ct-section-head {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	margin-bottom: var(--space-3);
+}
+
+.ct-section-head .ct-section-heading {
+	margin: 0;
 }
 
 .ct-section-hint {

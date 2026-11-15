@@ -998,12 +998,14 @@ nothing here has been scoped against the code yet. Each item needs a handover do
 (see `CLAUDE.md`) before it is built, and the help and What's new items touch shared UI,
 so they are Medium Risk at least. More items may be added.
 
-1. **Less text by default.** Detailed explanations are fine, but they should not be on
+1. **Less text by default.** *(built 2026-11-15 with item 2, except the help media — see
+   `docs/handover-help-and-less-text.md`, "Status".)* Detailed explanations are fine, but they should not be on
    screen by default. The worst case is the collaborators section of Settings, with its
    large permissions table; the problem is app-wide. Long explanations move into the help
    (item 2) and the page keeps a short label plus a help button. This depends on item 2.
 
-2. **Help redesign.**
+2. **Help redesign.** *(built 2026-11-15 except the media, which waits for a deploy to the
+   test instance — see `docs/handover-help-and-less-text.md`, "Status".)*
    - *Contextual help buttons inside pages.* Besides the floating help button and the
      existing contextual help, pages get small in-place help buttons ("?" or a short
      question such as "What do these roles mean?") that open the help **at a specific
@@ -1031,7 +1033,14 @@ so they are Medium Risk at least. More items may be added.
    - Open detail: the release identifier the popup compares against does not exist yet;
      the handover must decide where it lives.
 
-4. **Better buttons.** Actions that look like underlined links become real buttons, and
+4. ~~**Better buttons.**~~ — **done 2026-11-15** (its handover is deleted).
+   Every text-styled action from that handover's audit is an outlined button, with icons
+   where they are unambiguous. Exports read "Results", "Final results" and "Results pack"
+   with a download icon. The print schedule and all three grid/list toggles are icon-only.
+   Team and collaborator Edit/Remove are icon-only. Scoresheet cards are chosen by
+   clicking the card, with a "Clear selection" button. New `components/IconTooltip.jsx`
+   names icon-only controls on hover, keyboard focus and long-press. Original request:
+   Actions that look like underlined links become real buttons, and
    icons replace words where the icon is unambiguous. Examples: the results export and
    print schedule links (print schedule becomes a print icon), and the schedule's
    grid/list toggle (icons instead of the words). Icons need accessible labels or

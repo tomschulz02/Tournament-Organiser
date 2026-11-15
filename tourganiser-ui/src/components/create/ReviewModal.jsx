@@ -76,8 +76,9 @@ export default function ReviewModal({ details, divisions, isCreating, onClose, o
 	return (
 		<CreateModal
 			titleId="ct-review-modal-title"
+			helpTopic="create-tournament"
+			helpSection="reviewing"
 			title="Review your tournament"
-			subtitle="Nothing has been created yet. Check it over, then confirm."
 			size="large"
 			onClose={onClose}
 			footer={footer}>

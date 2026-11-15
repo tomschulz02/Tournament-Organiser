@@ -198,6 +198,7 @@ function NextRoundModal({ divisionId, onConfirmed, onCancel }) {
 	const frame = (children, footer) => (
 		<CreateModal
 			titleId="next-round-title"
+			helpTopic="next-round-modal"
 			title="Next round setup"
 			subtitle={
 				proposal ? `${proposal.roundName} is complete. These teams progress to ${proposal.nextRoundName}.` : null

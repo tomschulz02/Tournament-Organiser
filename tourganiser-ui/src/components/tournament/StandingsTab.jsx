@@ -5,6 +5,7 @@ import SectionState from './SectionState';
 import BracketView from './BracketView';
 import TeamIdentity from './TeamIdentity';
 import Icon from '../Icons';
+import HelpButton from '../HelpButton';
 import { canProgress } from './fixtureUtils';
 import { nextRoundFixtures } from './nextRound';
 import {
@@ -128,10 +129,11 @@ export default function StandingsTab({
 				{canExportResults && tournamentId && divisions.some((item) => (item.finalStandings ?? []).length > 0) && (
 					<Link
 						to={`/tournaments/view/${tournamentId}/results/final`}
-						className="tv-subtle-action"
+						className="tv-icon-button"
 						target="_blank"
 						rel="noopener">
-						Export final results
+						<Icon name="download" size={18} fill="currentColor" />
+						Final results
 					</Link>
 				)}
 			</div>
@@ -619,7 +621,10 @@ function NextRoundPreview({ division, proposal, onStart }) {
 
 	return (
 		<aside className="tv-next-round" aria-labelledby="tv-next-round-heading">
-			<p className="tv-next-round-eyebrow">Next round</p>
+			<div className="tv-next-round-head">
+				<p className="tv-next-round-eyebrow">Next round</p>
+				<HelpButton topic="tournament-standings-groups" section="organiser" />
+			</div>
 			<h3 id="tv-next-round-heading" className="tv-next-round-name">
 				{nextName}
 			</h3>
@@ -632,10 +637,6 @@ function NextRoundPreview({ division, proposal, onStart }) {
 				<p className="tv-next-round-note" role="alert">
 					{proposal.error}
 				</p>
-			)}
-
-			{data?.nextRound?.type === 'roundRobin' && (
-				<p className="tv-next-round-note">Every team carries forward to this leg, in ranking order.</p>
 			)}
 
 			{matchups.length > 0 && (
@@ -663,7 +664,6 @@ function NextRoundPreview({ division, proposal, onStart }) {
 			<button type="button" className="tv-primary-action tv-next-round-start" onClick={onStart}>
 				Start {nextName}
 			</button>
-			<p className="tv-next-round-note">You can reorder or swap teams before it starts.</p>
 		</aside>
 	);
 }

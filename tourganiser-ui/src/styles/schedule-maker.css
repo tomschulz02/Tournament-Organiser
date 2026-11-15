@@ -239,6 +239,24 @@ body.dark {
 	fill: currentColor;
 }
 
+/* The header's "?", matching the close button beside it rather than the filled
+   header actions. The anchor wrapper is IconTooltip's. */
+.schedule-maker-header-actions .schedule-maker-help {
+	width: 46px;
+	height: 46px;
+	padding: 0;
+	border-radius: 12px;
+	background: var(--schedule-surface-alt);
+	color: var(--main-color);
+}
+
+@media (max-width: 768px) {
+	.schedule-maker-header-actions .schedule-maker-help {
+		width: 44px;
+		height: 44px;
+	}
+}
+
 .schedule-maker-toolbar {
 	display: flex;
 	justify-content: space-between;
@@ -420,11 +438,18 @@ body.dark {
 }
 
 .schedule-view-toggle button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	background: transparent;
 	color: var(--schedule-text);
 	padding: var(--space-2) var(--space-3);
 	border: none;
 	min-height: 36px;
+}
+
+.schedule-view-toggle button svg {
+	fill: currentColor;
 }
 
 /* Long labels by default, short ones below 768px. Rendered together and picked
@@ -473,6 +498,8 @@ body.dark {
 
 .schedule-sheet-head h3 {
 	margin: 0;
+	/* Pushes the sheet's "?" and close button together at the right. */
+	margin-right: auto;
 }
 
 .schedule-sheet-close {
@@ -596,18 +623,30 @@ body.dark .schedule-popover input {
 	box-sizing: border-box;
 }
 
-/* Quiet on purpose. The destructive action is never the filled one. */
+/* Outlined, never filled: the destructive action is never the filled one. The
+   label stays beside the bin, which alone could read as deleting the match. */
 .schedule-panel button.schedule-popover-remove {
 	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
 	min-height: 44px;
-	padding: 0;
+	padding: 0 var(--space-3);
+	border: 1px solid rgb(from var(--error-color) r g b / 0.5);
+	border-radius: 999px;
 	background: transparent;
 	color: var(--error-color);
 }
 
+.schedule-panel button.schedule-popover-remove svg {
+	fill: currentColor;
+	flex: 0 0 auto;
+}
+
 .schedule-panel button.schedule-popover-remove:hover {
 	transform: none;
-	text-decoration: underline;
+	border-color: var(--error-color);
+	background: rgb(from var(--error-color) r g b / 0.08);
 }
 
 /* A bottom sheet on a phone, under the thumb. The placement above is inline, so it takes
@@ -1713,11 +1752,6 @@ button.schedule-grid-header-court:hover {
 
 .schedule-generator-option .schedule-generator-toggle input {
 	margin-top: 0;
-}
-
-.schedule-generator-option .tooltip-container {
-	flex: none;
-	color: var(--schedule-muted);
 }
 
 .schedule-generator-value {

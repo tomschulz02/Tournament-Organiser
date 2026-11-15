@@ -2,6 +2,8 @@ import { Suspense, lazy, useEffect, useId, useRef, useState, useSyncExternalStor
 import SectionState from './SectionState';
 import LoadingScreen from '../LoadingScreen';
 import Icon from '../Icons';
+import IconTooltip from '../IconTooltip';
+import HelpButton from '../HelpButton';
 import { useConfirm } from '../ConfirmContext';
 import { useMessage } from '../../MessageContext';
 import { useHelpTopic } from '../../HelpContext';
@@ -56,9 +58,9 @@ function useWide() {
 }
 
 const STATUS_STEPS = [
-	{ value: 'Not Started', label: 'Not started', note: 'Teams and divisions can still be changed.' },
-	{ value: 'Ongoing', label: 'Ongoing', note: 'Results are being entered. Teams and divisions are fixed.' },
-	{ value: 'Finished', label: 'Finished', note: 'Results can still be corrected.' },
+	{ value: 'Not Started', label: 'Not started' },
+	{ value: 'Ongoing', label: 'Ongoing' },
+	{ value: 'Finished', label: 'Finished' },
 ];
 
 // The organiser's settings for the tournament: who else works on it, how each
@@ -91,35 +93,35 @@ export default function SettingsTab({ tournament = {}, divisions = [], can = {},
 		can.manageCollaborators && {
 			id: 'collaborators',
 			title: 'Collaborators',
-			subtitle: 'Who else can work on this tournament, and what each role can do.',
+			help: 'collaborators',
 			summary: collaboratorCount === null ? null : collaboratorCount === 0 ? 'None yet' : plural(collaboratorCount, 'person', 'people'),
 			body: <EditorsBand tournamentId={tournament.id} onCount={setCollaboratorCount} />,
 		},
 		can.manageSetup && {
 			id: 'divisions',
 			title: 'Divisions',
-			subtitle: 'How each division draws its pools, ranks its teams, and how far down its knockout plays.',
+			help: 'divisions',
 			summary: plural(divisions.length, 'division', 'divisions'),
 			body: <DivisionSettingsBand divisions={divisions} status={status} onChanged={onChanged} />,
 		},
 		can.manageSetup && {
 			id: 'scoresheets',
 			title: 'Scoresheets',
-			subtitle: "What prints when a fixture's scoresheet is downloaded.",
+			help: 'scoresheets',
 			summary: templateName(templateKey),
 			body: <ScoresheetSection selectedKey={templateKey} busy={lifecycle.busy} onUse={lifecycle.setTemplate} />,
 		},
 		can.manageSetup && {
 			id: 'status',
 			title: 'Tournament status',
-			subtitle: 'Where the tournament is, and its next step.',
+			help: 'status',
 			summary: STATUS_STEPS.find((step) => step.value === status)?.label ?? status,
 			body: <StatusSection status={status} lifecycle={lifecycle} />,
 		},
 		can.deleteTournament && {
 			id: 'delete',
 			title: 'Delete tournament',
-			subtitle: 'Remove it, and everything in it, for good.',
+			help: 'delete',
 			summary: null,
 			danger: true,
 			body: <DangerZone tournament={tournament} onDeleted={onDeleted} />,
@@ -197,7 +199,7 @@ export default function SettingsTab({ tournament = {}, divisions = [], can = {},
 							{wide ? (
 								<div className="tv-settings-section-head">
 									<h2 className="tv-band-heading">{section.title}</h2>
-									<p className="tv-settings-section-sub">{section.subtitle}</p>
+									<HelpButton topic="tournament-settings" section={section.help} />
 								</div>
 							) : (
 								<h2 className="tv-settings-acc-heading">
@@ -220,7 +222,11 @@ export default function SettingsTab({ tournament = {}, divisions = [], can = {},
 							)}
 
 							<div id={bodyId} className="tv-settings-section-body" hidden={!open}>
-								{!wide && <p className="tv-settings-section-sub">{section.subtitle}</p>}
+								{!wide && (
+									<div className="tv-settings-section-help">
+										<HelpButton topic="tournament-settings" section={section.help} />
+									</div>
+								)}
 								{section.body}
 							</div>
 						</section>
@@ -418,10 +424,7 @@ function EditorsBand({ tournamentId, onCount }) {
 
 	return (
 		<>
-			<RoleGrid />
-
 			<div className="tv-info-card tv-info-card--combobox">
-				<p className="tv-settings-note">Search for someone by username, or type their full email address.</p>
 
 				<div className="tv-inline-form">
 					<label className="tv-inline-form-field tv-editor-field">
@@ -520,13 +523,16 @@ function EditorsBand({ tournamentId, onCount }) {
 											<RoleOptions />
 										</select>
 									</div>
-									<button
-										type="button"
-										className="tv-subtle-action tv-subtle-action--danger"
-										disabled={busy}
-										onClick={() => handleRemove(editor)}>
-										Remove
-									</button>
+									<IconTooltip label={`Remove ${editor.username}`}>
+										<button
+											type="button"
+											className="tv-icon-button tv-icon-button--icon tv-icon-button--danger"
+											aria-label={`Remove ${editor.username}`}
+											disabled={busy}
+											onClick={() => handleRemove(editor)}>
+											<Icon name="delete" size={20} fill="currentColor" />
+										</button>
+									</IconTooltip>
 								</div>
 							</li>
 						))}
@@ -534,62 +540,6 @@ function EditorsBand({ tournamentId, onCount }) {
 				)}
 			</div>
 		</>
-	);
-}
-
-// What each role allows, as a grid. A mirror of capabilitiesFor in
-// api/src/utils/tournamentPermissions.js for reading only: the server decides,
-// and each role holds everything of the roles before it.
-const ROLE_CAPABILITIES = [
-	{ label: 'Enter results in the current round', from: 'SCORER' },
-	{ label: 'Correct results in earlier rounds', from: 'MATCH_MANAGER' },
-	{ label: 'Start the next round', from: 'MATCH_MANAGER' },
-	{ label: 'Edit the schedule', from: 'MATCH_MANAGER' },
-	{ label: 'Print scoresheets', from: 'MATCH_MANAGER' },
-	{ label: 'Change teams and divisions', from: 'CO_ORGANISER' },
-	{ label: 'Choose the scoresheet template', from: 'CO_ORGANISER' },
-	{ label: 'Start and end the tournament', from: 'CO_ORGANISER' },
-];
-
-function RoleGrid() {
-	const rank = (value) => ROLES.findIndex((role) => role.value === value);
-
-	return (
-		<div className="tv-role-grid-wrap">
-			<table className="tv-role-grid">
-				<thead>
-					<tr>
-						<th scope="col" className="tv-role-grid-what">
-							<span className="tv-visually-hidden">What they can do</span>
-						</th>
-						{ROLES.map((role) => (
-							<th key={role.value} scope="col">
-								{role.label}
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody>
-					{ROLE_CAPABILITIES.map((capability) => (
-						<tr key={capability.label}>
-							<th scope="row" className="tv-role-grid-what">
-								{capability.label}
-							</th>
-							{ROLES.map((role) => {
-								const allowed = rank(role.value) >= rank(capability.from);
-								return (
-									<td key={role.value} className={allowed ? 'tv-role-grid-yes' : 'tv-role-grid-no'}>
-										<span aria-hidden="true">{allowed ? '✓' : '–'}</span>
-										<span className="tv-visually-hidden">{allowed ? 'Yes' : 'No'}</span>
-									</td>
-								);
-							})}
-						</tr>
-					))}
-				</tbody>
-			</table>
-			<p className="tv-settings-note">Only you can manage collaborators and delete the tournament.</p>
-		</div>
 	);
 }
 
@@ -730,7 +680,8 @@ function DivisionSettingsBand({ divisions, status, onChanged }) {
 						))}
 					</div>
 
-					<button type="button" className="tv-subtle-action tv-rules-copy" disabled={disabled} onClick={copyToAll}>
+					<button type="button" className="tv-icon-button tv-rules-copy" disabled={disabled} onClick={copyToAll}>
+						<Icon name="copy" size={18} fill="currentColor" />
 						Copy to all divisions
 					</button>
 				</div>
@@ -773,13 +724,13 @@ function DivisionSettingsBand({ divisions, status, onChanged }) {
 	);
 }
 
-function RulesPanel({ title, subtitle, aside, children }) {
+function RulesPanel({ title, help, aside, children }) {
 	return (
 		<section className="tv-info-card tv-rules-panel">
 			<div className="tv-rules-panel-head">
-				<div>
+				<div className="tv-rules-panel-title">
 					<h3>{title}</h3>
-					<p>{subtitle}</p>
+					<HelpButton topic="tournament-settings" section={help} />
 				</div>
 				{aside}
 			</div>
@@ -806,10 +757,11 @@ function PoolDrawPanel({ draw, poolCount, locked, disabled, onChange, onRedraw }
 	return (
 		<RulesPanel
 			title="Pool draw"
-			subtitle="How seeds are placed into pools. Locks when the tournament starts."
+			help="pool-draw"
 			aside={
 				draw === 'POTS' && (
-					<button type="button" className="tv-subtle-action tv-draw-redraw" disabled={off} onClick={onRedraw}>
+					<button type="button" className="tv-icon-button tv-draw-redraw" disabled={off} onClick={onRedraw}>
+						<Icon name="shuffle" size={18} fill="currentColor" />
 						Redraw
 					</button>
 				)
@@ -844,13 +796,6 @@ function PoolDrawPanel({ draw, poolCount, locked, disabled, onChange, onRedraw }
 				))}
 			</div>
 
-			<p className="tv-settings-note">
-				{locked
-					? 'The tournament has started, so the pool draw is fixed.'
-					: draw === 'POTS'
-						? 'Changing the draw, or Redraw, rebuilds this division’s pools and fixtures and takes its matches off the schedule. Reordering seeds keeps the draw.'
-						: 'Changing the draw rebuilds this division’s pools and fixtures and takes its matches off the schedule.'}
-			</p>
 		</RulesPanel>
 	);
 }
@@ -862,7 +807,7 @@ function RankingPanel({ rules, disabled, onChange }) {
 	return (
 		<RulesPanel
 			title="Ranking"
-			subtitle="How teams are ordered in pool and league tables."
+			help="ranking"
 			aside={
 				<div className="tv-seg" role="group" aria-label="Ranking method">
 					{[
@@ -897,16 +842,13 @@ function RankingPanel({ rules, disabled, onChange }) {
 					</div>
 
 					<ul className="tv-points">
-						{POINT_RESULTS.map(({ key, label, hint }) => {
+						{POINT_RESULTS.map(({ key, label }) => {
 							const value = rules.points[key];
 							const step = (by) => setPoints({ ...rules.points, [key]: value + by });
 
 							return (
 								<li key={key} className="tv-points-row">
-									<span>
-										<span className="tv-points-label">{label}</span>
-										<span className="tv-points-hint">{hint}</span>
-									</span>
+									<span className="tv-points-label">{label}</span>
 									<span className="tv-stepper" role="group" aria-label={`Points for a ${label.toLowerCase()}`}>
 										<button type="button" aria-label="One point fewer" disabled={disabled || value <= 0} onClick={() => step(-1)}>
 											−
@@ -928,9 +870,9 @@ function RankingPanel({ rules, disabled, onChange }) {
 			) : (
 				<div className="tv-rules-radios" role="radiogroup" aria-label="Wins counted">
 					{[
-						['matches', 'Match wins', 'The team with more matches won ranks higher.'],
-						['sets', 'Set wins', 'The team with more sets won ranks higher, whoever won the matches.'],
-					].map(([wins, label, hint]) => (
+						['matches', 'Match wins'],
+						['sets', 'Set wins'],
+					].map(([wins, label]) => (
 						<label key={wins} className="tv-rules-radio">
 							<input
 								type="radio"
@@ -939,10 +881,7 @@ function RankingPanel({ rules, disabled, onChange }) {
 								disabled={disabled}
 								onChange={() => onChange({ ...rules, wins })}
 							/>
-							<span>
-								<span className="tv-points-label">{label}</span>
-								<span className="tv-points-hint">{hint}</span>
-							</span>
+							<span className="tv-points-label">{label}</span>
 						</label>
 					))}
 				</div>
@@ -987,7 +926,7 @@ function DecidersPanel({ rules, disabled, onChange }) {
 	};
 
 	return (
-		<RulesPanel title="Tiebreak deciders" subtitle="Applied in this order when teams are level on ranking.">
+		<RulesPanel title="Tiebreak deciders" help="deciders">
 			<ol className="tv-deciders">
 				{used.map((key, index) => {
 					const entry = TIEBREAKERS.find((candidate) => candidate.key === key);
@@ -1025,7 +964,6 @@ function DecidersPanel({ rules, disabled, onChange }) {
 							<span className="tv-decider-number">{index + 1}</span>
 							<span className="tv-decider-text">
 								<span className="tv-points-label">{label}</span>
-								{entry?.hint && <span className="tv-points-hint">{entry.hint}</span>}
 							</span>
 							<span className="tv-decider-actions">
 								<button
@@ -1064,7 +1002,6 @@ function DecidersPanel({ rules, disabled, onChange }) {
 					<span className="tv-decider-number">{used.length + 1}</span>
 					<span className="tv-decider-text">
 						<span className="tv-points-label">Seeding</span>
-						<span className="tv-points-hint">Always last, so every tie is settled</span>
 					</span>
 				</li>
 			</ol>
@@ -1092,7 +1029,7 @@ function PlacementPanel({ knockout, depth, divisionTeams, disabled, onChange }) 
 	const locked = disabled || knockout.started;
 
 	return (
-		<RulesPanel title="Placement matches" subtitle="Which knockout places are decided by a match.">
+		<RulesPanel title="Placement matches" help="placement">
 			<div className="tv-placement-pick">
 				<span className="tv-points-label">Play for places down to</span>
 				<div className="tv-seg tv-seg--wrap" role="group" aria-label="Play for places down to">
@@ -1119,11 +1056,6 @@ function PlacementPanel({ knockout, depth, divisionTeams, disabled, onChange }) 
 				))}
 			</ul>
 
-			<p className="tv-settings-note">
-				{knockout.started
-					? 'The knockout stage has started, so its placement matches are fixed.'
-					: '1st plays the final only, with no 3rd-place match. Changing this rebuilds the knockout fixtures.'}
-			</p>
 		</RulesPanel>
 	);
 }
@@ -1179,7 +1111,6 @@ function DangerZone({ tournament, onDeleted }) {
 			<div className="tv-settings-row">
 				<div>
 					<p className="tv-settings-row-name">Delete this tournament</p>
-					<p className="tv-settings-note">Removes every division, fixture and result. This cannot be undone.</p>
 				</div>
 				<button type="button" className="tv-danger-action" disabled={busy} onClick={handleDelete}>
 					Delete Tournament
@@ -1190,9 +1121,13 @@ function DangerZone({ tournament, onDeleted }) {
 }
 
 // The scoresheet templates as cards: the two built in, any uploaded on this
-// device, and an upload card. "Use this" and "Stop using" save straight away
-// through the same endpoint the template modal saves with; "Edit fields" and
-// "Upload a PDF" open that modal, unchanged, where both flows live.
+// device, and an upload card. Choosing a card, or Clear selection, saves
+// straight away through the same endpoint the template modal saves with; the
+// border marks the one in use. "Edit fields" and "Upload a PDF" open that
+// modal, unchanged, where both flows live.
+//
+// The choosing control is the card's body, and "Edit fields" sits beside it
+// rather than inside it: a button cannot hold another button.
 function ScoresheetSection({ selectedKey, busy, onUse }) {
 	const [custom, setCustom] = useState(null);
 	const [version, setVersion] = useState(0);
@@ -1247,6 +1182,8 @@ function ScoresheetSection({ selectedKey, busy, onUse }) {
 			name: 'Uploaded template',
 			meta: 'Uploaded on another device, so it can only be printed there.',
 			warning: null,
+			// Shown as the one in use, but not a choice that can be made here.
+			elsewhere: true,
 		});
 	}
 
@@ -1255,32 +1192,39 @@ function ScoresheetSection({ selectedKey, busy, onUse }) {
 			<ul className="tv-template-cards">
 				{cards.map((card) => {
 					const inUse = card.key === selectedKey;
+					const text = (
+						<>
+							<span className="tv-template-card-name">{card.name}</span>
+							<span className="tv-template-card-meta">{card.meta}</span>
+							{card.warning && <span className="tv-template-card-warning">{card.warning}</span>}
+						</>
+					);
+
 					return (
 						<li key={card.key} className={`tv-template-card${inUse ? ' tv-template-card--in-use' : ''}`}>
-							<div className="tv-template-card-body">
-								<p className="tv-template-card-name">{card.name}</p>
-								<p className="tv-template-card-meta">{card.meta}</p>
-								{card.warning && <p className="tv-template-card-warning">{card.warning}</p>}
-							</div>
-							<div className="tv-template-card-actions">
-								{inUse ? (
-									<>
-										<span className="tv-template-card-badge">In use</span>
-										<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => onUse(null)}>
-											Stop using
+							{card.elsewhere ? (
+								<div className="tv-template-card-body">{text}</div>
+							) : (
+								<button
+									type="button"
+									className="tv-template-card-body tv-template-card-choose"
+									aria-pressed={inUse}
+									disabled={busy}
+									onClick={() => !inUse && onUse(card.key)}>
+									{text}
+								</button>
+							)}
+							{(inUse || card.custom) && (
+								<div className="tv-template-card-actions">
+									{inUse && <span className="tv-template-card-badge">In use</span>}
+									{card.custom && (
+										<button type="button" className="tv-icon-button" disabled={busy} onClick={() => setModalOpen(true)}>
+											<Icon name="edit" size={18} fill="currentColor" />
+											Edit fields
 										</button>
-									</>
-								) : (
-									<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => onUse(card.key)}>
-										Use this
-									</button>
-								)}
-								{card.custom && (
-									<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => setModalOpen(true)}>
-										Edit fields
-									</button>
-								)}
-							</div>
+									)}
+								</div>
+							)}
 						</li>
 					);
 				})}
@@ -1293,20 +1237,28 @@ function ScoresheetSection({ selectedKey, busy, onUse }) {
 
 				<li className="tv-template-card tv-template-card--upload">
 					<div className="tv-template-card-body">
-						<p className="tv-template-card-name">Your own scoresheet</p>
-						<p className="tv-template-card-meta">
+						<span className="tv-template-card-name">Your own scoresheet</span>
+						<span className="tv-template-card-meta">
 							Upload a PDF and mark where each field prints. It stays on the device it was uploaded from.
-						</p>
+						</span>
 					</div>
 					<div className="tv-template-card-actions">
-						<button type="button" className="tv-subtle-action" disabled={busy} onClick={() => setModalOpen(true)}>
+						<button type="button" className="tv-icon-button" disabled={busy} onClick={() => setModalOpen(true)}>
+							<Icon name="upload" size={18} fill="currentColor" />
 							Upload a PDF
 						</button>
 					</div>
 				</li>
 			</ul>
 
-			{!selectedKey && <p className="tv-settings-note">No template is in use, so fixtures show no scoresheet download.</p>}
+			{selectedKey ? (
+				<button type="button" className="tv-icon-button" disabled={busy} onClick={() => onUse(null)}>
+					<Icon name="exit" size={18} fill="currentColor" />
+					Clear selection
+				</button>
+			) : (
+				<p className="tv-settings-note">No template in use</p>
+			)}
 
 			{modalOpen && (
 				<Suspense fallback={<LoadingScreen />}>
@@ -1344,7 +1296,6 @@ function StatusSection({ status, lifecycle }) {
 							</span>
 							<span className="tv-status-step-text">
 								<span className="tv-status-step-label">{step.label}</span>
-								<span className="tv-status-step-note">{step.note}</span>
 							</span>
 						</li>
 					);

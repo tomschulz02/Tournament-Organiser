@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
+import Icon from '../Icons';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
 import FixtureGroup from './FixtureGroup';
@@ -80,8 +81,9 @@ export default function FixturesTab({
 					{/* Organiser roles only. Carries the filters above, so the export
 					    is the completed fixtures of what is on screen. */}
 					{canExportResults && tournamentId && (
-						<Link to={resultsExportPath(tournamentId, filters)} className="tv-subtle-action" target="_blank" rel="noopener">
-							Export results
+						<Link to={resultsExportPath(tournamentId, filters)} className="tv-icon-button" target="_blank" rel="noopener">
+							<Icon name="download" size={18} fill="currentColor" />
+							Results
 						</Link>
 					)}
 

@@ -4,6 +4,8 @@ import { AuthContext } from '../AuthContext';
 import { fetchTournamentData, updateTournamentSchedule } from '../requests';
 import { ScheduleExportPages } from '../components/ScheduleExportView';
 import SchedulePrintLayoutEditor from '../components/SchedulePrintLayoutEditor';
+import Icon from '../components/Icons';
+import IconTooltip from '../components/IconTooltip';
 import { buildFixtureIndex, buildTournamentSchedule, pruneStalePrintLayout, serialiseScheduleForSave } from '../utils/scheduleUtils';
 import scheduleExportCss from '../styles/schedule-export.css?raw';
 import '../styles/schedule-print.css';
@@ -184,14 +186,16 @@ export default function SchedulePrintPage() {
 				<div className="schedule-print-bar-actions">
 					<div className="schedule-print-types" role="group" aria-label="Schedule layout">
 						{['grid', 'list'].map((option) => (
-							<button
-								key={option}
-								type="button"
-								className="schedule-print-choice"
-								aria-pressed={type === option}
-								onClick={() => setType(option)}>
-								{option === 'grid' ? 'Grid' : 'List'}
-							</button>
+							<IconTooltip key={option} label={option === 'grid' ? 'Grid' : 'List'}>
+								<button
+									type="button"
+									className="schedule-print-choice"
+									aria-pressed={type === option}
+									aria-label={option === 'grid' ? 'Grid' : 'List'}
+									onClick={() => setType(option)}>
+									<Icon name={option} size={20} fill="currentColor" />
+								</button>
+							</IconTooltip>
 						))}
 					</div>
 

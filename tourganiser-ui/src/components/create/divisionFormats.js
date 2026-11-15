@@ -124,7 +124,11 @@ export function createEmptyDivision() {
 // api/src/services/divisions.service.js: at least one group, no more groups
 // than teams, and no more qualifiers than teams. Being stricter here would
 // refuse configurations the API accepts.
-export function validateDivision(division) {
+//
+// takenNames is the names of the tournament's other divisions. Compared trimmed
+// and case-insensitively, as the server does before answering
+// DUPLICATE_DIVISION.
+export function validateDivision(division, takenNames = []) {
 	const errors = {};
 
 	const name = division.name.trim();
@@ -132,6 +136,8 @@ export function validateDivision(division) {
 		errors.name = 'Give this division a name.';
 	} else if (division.name.length > DIVISION_NAME_MAX) {
 		errors.name = `That name is a little long. Keep it to ${DIVISION_NAME_MAX} characters.`;
+	} else if (takenNames.some((taken) => taken.trim().toLowerCase() === name.toLowerCase())) {
+		errors.name = `Another division is already called "${name}". Every division needs its own name.`;
 	}
 
 	if (!division.type) {

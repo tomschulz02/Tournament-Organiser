@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect } from "react";
 
 export const HelpContext = createContext();
 
+// { activeTopic, registerTopic, openHelp(topicId?, sectionId?), closeHelp,
+//   helpRequest } — helpRequest is null while the help modal is closed.
 export const useHelp = () => useContext(HelpContext);
 
 // A component registers its own topic on mount and drops it on unmount, so the

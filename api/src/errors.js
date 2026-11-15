@@ -69,6 +69,10 @@ export const ERRORS = {
 	// Removing a division. CreateTournament refuses to build a tournament with no
 	// divisions, so one should not be reducible to zero afterwards either.
 	LAST_DIVISION: [409, "A tournament needs at least one division"],
+	// Two divisions of one tournament with the same name, trimmed and whatever the
+	// case. Nothing downstream can tell them apart: chips, banners, exports and
+	// the ORDER BY name the division list is read with.
+	DUPLICATE_DIVISION: [400, "Two divisions cannot have the same name"],
 	// The size caps in config/limits.js. The numbers are interpolated once, at
 	// load, so the messages are as static as every other one here and cannot
 	// disagree with what the services enforce.

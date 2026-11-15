@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import DivisionSelector from './DivisionSelector';
 import Icon from '../Icons';
+import IconTooltip from '../IconTooltip';
+import HelpButton from '../HelpButton';
 import LoadingScreen from '../LoadingScreen';
 import SectionState from './SectionState';
 import TeamIdentity from './TeamIdentity';
@@ -409,7 +411,7 @@ export default function TeamsTab({
 							onClick={bulkAdding ? handleAddBulk : handleAdd}>
 							{bulkAdding ? 'Add teams' : 'Add'}
 						</button>
-						<button type="button" className="tv-subtle-action" disabled={busy} onClick={cancelAdding}>
+						<button type="button" className="tv-icon-button" disabled={busy} onClick={cancelAdding}>
 							Cancel
 						</button>
 					</div>
@@ -436,13 +438,13 @@ export default function TeamsTab({
 						</p>
 					)}
 
-					{/* Said rather than left to be discovered. Only the one branch
-					    now: once the tournament has started the handles are not on
-					    screen either, and there is nothing left to explain. */}
+					{/* The seeding and how to reorder it are explained in help. Only
+					    while the order can still change: once the tournament has
+					    started the handles are not on screen either. */}
 					{canEditTeams && teams.length > 1 && (
-						<p className="tv-teams-seed-note">
-							This order is the seeding. Drag a team by its handle to move it, then Save.
-						</p>
+						<div className="tv-teams-help">
+							<HelpButton topic="tournament-teams" section="organiser" />
+						</div>
 					)}
 
 					<ul
@@ -501,20 +503,26 @@ export default function TeamsTab({
 
 									{canEditTeams && (
 										<span className="tv-team-actions">
-											<button
-												type="button"
-												className="tv-subtle-action"
-												disabled={busy}
-												onClick={() => startEditing(row)}>
-												Edit
-											</button>
-											<button
-												type="button"
-												className="tv-subtle-action tv-subtle-action--danger"
-												disabled={busy}
-												onClick={() => handleRemove(row)}>
-												Remove
-											</button>
+											<IconTooltip label={`Edit ${row.name}`}>
+												<button
+													type="button"
+													className="tv-icon-button tv-icon-button--icon"
+													aria-label={`Edit ${row.name}`}
+													disabled={busy}
+													onClick={() => startEditing(row)}>
+													<Icon name="edit" size={20} fill="currentColor" />
+												</button>
+											</IconTooltip>
+											<IconTooltip label={`Remove ${row.name}`}>
+												<button
+													type="button"
+													className="tv-icon-button tv-icon-button--icon tv-icon-button--danger"
+													aria-label={`Remove ${row.name}`}
+													disabled={busy}
+													onClick={() => handleRemove(row)}>
+													<Icon name="delete" size={20} fill="currentColor" />
+												</button>
+											</IconTooltip>
 										</span>
 									)}
 								</li>
@@ -574,7 +582,7 @@ export default function TeamsTab({
 							{busy && <LoadingScreen variant="inline" />}
 							<span>{busy ? 'Saving…' : 'Save Changes'}</span>
 						</button>
-						<button type="button" className="tv-subtle-action" disabled={busy} onClick={handleDiscard}>
+						<button type="button" className="tv-icon-button" disabled={busy} onClick={handleDiscard}>
 							Discard
 						</button>
 					</div>
@@ -642,7 +650,10 @@ function PoolsView({ division, pending = false }) {
 	return (
 		<div className="tv-pools">
 			{pending && (
-				<p className="tv-teams-seed-note">These are the saved pools. Unsaved seeding changes show in the Full list.</p>
+				<p className="tv-teams-seed-note">
+					These are the saved pools.
+					<HelpButton topic="tournament-teams" section="pools-view" />
+				</p>
 			)}
 
 			{groups.map((group, index) => (
@@ -851,7 +862,7 @@ function TeamNameForm({ label, value, busy, submitLabel, onChange, onSubmit, onC
 				<button type="button" className="tv-primary-action" disabled={busy} onClick={onSubmit}>
 					{submitLabel}
 				</button>
-				<button type="button" className="tv-subtle-action" disabled={busy} onClick={onCancel}>
+				<button type="button" className="tv-icon-button" disabled={busy} onClick={onCancel}>
 					Cancel
 				</button>
 			</div>

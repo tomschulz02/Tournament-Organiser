@@ -154,6 +154,8 @@ body.dark {
 	/* Keeps min-content equal to the button's full width, which is what the
 	   subheader grid uses as the floor for its outer columns. */
 	white-space: nowrap;
+	/* Also rendered as a <Link> (the exports and the print schedule). */
+	text-decoration: none;
 	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
@@ -170,6 +172,29 @@ body.dark {
 .tv-icon-button:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
+}
+
+/* No words, only the icon: square padding and a circle. The accessible name is
+   the button's aria-label and IconTooltip shows the same words. */
+.tv-icon-button--icon {
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+}
+
+/* The danger form of the outlined button: quiet until hovered, the way
+   .tv-subtle-action--danger was, so a row of Remove buttons does not shout. */
+.tv-icon-button--danger:hover:not(:disabled) {
+	border-color: rgb(from var(--error-color) r g b / 0.5);
+	color: var(--error-color);
+}
+
+@media (max-width: 768px) {
+	.tv-icon-button--icon {
+		width: 44px;
+		height: 44px;
+	}
 }
 
 .tv-follow.active {
@@ -1026,6 +1051,8 @@ body.dark .tv-division-badge {
 	font-size: 0.84rem;
 	font-weight: 600;
 	white-space: nowrap;
+	/* Also rendered as a <Link> (the results pack export). */
+	text-decoration: none;
 	cursor: pointer;
 }
 
@@ -1427,6 +1454,104 @@ body.dark .tv-division-badge {
 
 .tv-ov-panel > .tv-subtle-action {
 	margin-top: var(--space-3);
+}
+
+/* Final results, on a Finished tournament: a card per division, as many across
+   as fit, so one division takes the full width and a phone gets one column. The
+   only colour is the division's dot; first place is carried by size and weight. */
+.tv-ov-results {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+	gap: var(--space-3);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tv-ov-result {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	min-width: 0;
+	padding: var(--space-4);
+}
+
+.tv-ov-result-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.tv-ov-result-division {
+	margin: 0;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-ov-result-places {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tv-ov-result-place {
+	display: grid;
+	grid-template-columns: 24px minmax(0, 1fr) auto;
+	align-items: baseline;
+	gap: var(--space-2);
+	padding: var(--space-2) 0;
+	font-size: 0.92rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-ov-result-place + .tv-ov-result-place {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-ov-result-rank {
+	font-weight: 700;
+	color: var(--tv-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-ov-result-team {
+	overflow-wrap: anywhere;
+}
+
+.tv-ov-result-place--first {
+	padding-top: 0;
+}
+
+.tv-ov-result-place--first .tv-ov-result-rank {
+	font-size: 1.25rem;
+	color: var(--main-color);
+}
+
+.tv-ov-result-place--first .tv-ov-result-team {
+	font-size: 1.25rem;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.tv-ov-result-note {
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-result-none {
+	margin: 0;
+	font-size: 0.88rem;
+	color: var(--tv-muted);
+}
+
+/* Pinned to the foot so the links line up across cards of different heights. */
+.tv-ov-result-more {
+	align-self: flex-start;
+	min-height: 44px;
+	margin: auto 0 calc(-1 * var(--space-2));
 }
 
 /* Division progress, one row per division. The dot is the division's identity
@@ -2637,6 +2762,13 @@ body.dark .tv-division-badge {
 	background: var(--tv-surface);
 }
 
+.tv-next-round-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
 .tv-next-round-eyebrow {
 	margin: 0;
 	font-size: 0.74rem;
@@ -3117,9 +3249,19 @@ body.dark .tv-division-badge {
    states: a handle that has silently gone missing reads as a fault rather than
    as a rule. */
 .tv-teams-seed-note {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
 	margin: 0 0 var(--space-2);
 	color: var(--tv-muted);
 	font-size: 0.85rem;
+}
+
+/* The "?" that replaced the seeding note above the team list. */
+.tv-teams-help {
+	display: flex;
+	justify-content: flex-end;
+	margin: calc(-1 * var(--space-2)) 0 var(--space-1);
 }
 
 .tv-team-actions {
@@ -3558,8 +3700,24 @@ body.dark .tv-division-badge {
 	scroll-margin-top: 96px;
 }
 
+/* The heading and its "?" (the subtitle that sat here moved into help). */
+.tv-settings-section-head {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	margin-bottom: var(--space-2);
+}
+
 .tv-settings-section-head .tv-band-heading {
-	margin-bottom: var(--space-1);
+	margin-bottom: 0;
+}
+
+/* Phones: the "?" opens the accordion body, since it cannot sit inside the
+   accordion's own button. */
+.tv-settings-section-help {
+	display: flex;
+	justify-content: flex-end;
+	margin: calc(-1 * var(--space-2)) 0 var(--space-1);
 }
 
 .tv-settings-section-sub {
@@ -3787,7 +3945,53 @@ body.dark .tv-division-badge {
 	min-width: 0;
 }
 
+/* The card's body is the control that chooses it. Its ::after stretches over the
+   whole card, so a click anywhere on it chooses; the actions sit above that
+   layer so "Edit fields" stays its own target. */
+.tv-template-card:has(.tv-template-card-choose) {
+	position: relative;
+}
+
+.tv-template-card-choose {
+	padding: 0;
+	border: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.tv-template-card-choose[aria-pressed='true'] {
+	cursor: default;
+}
+
+.tv-template-card-choose:disabled {
+	cursor: default;
+}
+
+.tv-template-card-choose::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 12px;
+}
+
+.tv-template-card-choose:focus-visible {
+	outline: none;
+}
+
+.tv-template-card-choose:focus-visible::after {
+	outline: 2px solid var(--main-color);
+	outline-offset: 2px;
+}
+
+.tv-template-card:has(.tv-template-card-choose[aria-pressed='false']:hover:not(:disabled)) {
+	border-color: var(--main-color);
+}
+
 .tv-template-card-name {
+	display: block;
 	margin: 0;
 	font-weight: 700;
 	color: var(--secondary-text-color);
@@ -3796,6 +4000,7 @@ body.dark .tv-division-badge {
 
 .tv-template-card-meta,
 .tv-template-card-warning {
+	display: block;
 	margin: 2px 0 0;
 	font-size: 0.8rem;
 	color: var(--tv-muted);
@@ -3806,18 +4011,12 @@ body.dark .tv-division-badge {
 }
 
 .tv-template-card-actions {
+	position: relative;
+	z-index: 1;
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
 	gap: var(--space-2);
-}
-
-.tv-template-card-actions .tv-subtle-action {
-	min-height: 36px;
-	padding-inline: var(--space-3);
-	border-color: var(--tv-border);
-	color: var(--secondary-text-color);
-	font-weight: 600;
 }
 
 .tv-template-card-badge {
@@ -3896,7 +4095,7 @@ body.dark .tv-division-badge {
 }
 
 @media (max-width: 767.98px) {
-	.tv-template-card-actions .tv-subtle-action,
+	.tv-settings-section-body .tv-icon-button:not(.tv-icon-button--icon),
 	.tv-settings-section-body .tv-primary-action {
 		min-height: 44px;
 	}
@@ -4166,6 +4365,7 @@ body.dark .tv-division-badge {
 	.tv-division-pill,
 	.tv-primary-action,
 	.tv-subtle-action,
+	.tv-icon-button,
 	.tv-retry,
 	.tv-division-card-actions button {
 		min-height: 44px;
@@ -4307,6 +4507,12 @@ body.dark .tv-division-badge {
 	margin: 0;
 	font-size: 1rem;
 	color: var(--secondary-text-color);
+}
+
+.tv-rules-panel-title {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
 }
 
 .tv-rules-panel-head p {

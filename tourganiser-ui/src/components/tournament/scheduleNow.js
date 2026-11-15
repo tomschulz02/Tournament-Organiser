@@ -10,7 +10,7 @@
 //
 // Only today counts. With no schedule, no fixture entries, or no tournament
 // day falling on now's date, every helper returns an empty result rather than
-// guessing.
+// guessing. nextSlotLater is the single exception, and says so.
 //
 // A separate module rather than part of fixtureUtils.js because scheduleUtils.js
 // already imports fixtureUtils.js; importing back would make a cycle.
@@ -69,6 +69,32 @@ export function currentSlot(schedule, fixtures, now) {
 // The first slot that has not started yet, or null once the last has.
 export function nextSlot(schedule, fixtures, now) {
 	return todaysSlots(schedule, fixtures, now).find((slot) => compareTimes(slot.startTime, now.time) > 0) ?? null;
+}
+
+// The first slot of the nearest later tournament day that still has a match to
+// play, with that day's `date` on it, or null when no later day has one.
+//
+// The one helper here that looks past today, and only for the Overview's "Up
+// next" once nextSlot has nothing: before the first day, between days, and
+// after a day's last slot. The date on the slot is what tells the reader it is
+// not today's. A slot whose matches are all resolved is skipped: played early,
+// it is not what comes next.
+export function nextSlotLater(schedule, fixtures, now) {
+	if (!now?.date) return null;
+
+	const laterDates = (schedule?.days ?? [])
+		.map((day) => day.date)
+		.filter((date) => date > now.date)
+		.sort();
+
+	for (const date of laterDates) {
+		const slot = todaysSlots(schedule, fixtures, { date }).find((candidate) =>
+			candidate.matches.some(({ fixture }) => !RESOLVED.has(fixture.status)),
+		);
+		if (slot) return { ...slot, date };
+	}
+
+	return null;
 }
 
 // Slots that have finished with a match still neither completed nor cancelled,

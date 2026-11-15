@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import { useMessage } from '../MessageContext';
 import { useHelpTopic } from '../HelpContext';
+import HelpButton from '../components/HelpButton';
 import { useConfirm } from '../components/ConfirmContext';
 import { createTournament } from '../requests';
 import DivisionCard from '../components/create/DivisionCard';
@@ -392,11 +393,10 @@ function CreateTournamentForm() {
 	return (
 		<div className="ct-page">
 			<div className="ct-intro">
-				<h1 className="ct-title">Create a tournament</h1>
-				<p className="ct-lede">
-					Start with the tournament itself — what it is called, where and when it runs. Then add a division for each
-					competition within it. Nothing is created until you review and confirm.
-				</p>
+				<div className="ct-title-row">
+					<h1 className="ct-title">Create a tournament</h1>
+					<HelpButton topic="create-tournament" section="intro" />
+				</div>
 			</div>
 
 			{/* Offered, never restored behind the organiser's back — and nothing
@@ -441,10 +441,12 @@ function CreateTournamentForm() {
 
 			<div className="ct-sections">
 				<section className="ct-section" aria-labelledby="ct-details-heading">
-					<h2 className="ct-section-heading" id="ct-details-heading">
-						Tournament details
-					</h2>
-					<p className="ct-section-hint">The name, place and dates everyone will see.</p>
+					<div className="ct-section-head">
+						<h2 className="ct-section-heading" id="ct-details-heading">
+							Tournament details
+						</h2>
+						<HelpButton topic="create-tournament" section="details" />
+					</div>
 
 					<TournamentDetailsFields
 						details={details}
@@ -457,10 +459,12 @@ function CreateTournamentForm() {
 				</section>
 
 				<section className="ct-section" aria-labelledby="ct-divisions-heading">
-					<h2 className="ct-section-heading" id="ct-divisions-heading">
-						Divisions
-					</h2>
-					<p className="ct-section-hint">Each division is its own competition, with its own teams and format.</p>
+					<div className="ct-section-head">
+						<h2 className="ct-section-heading" id="ct-divisions-heading">
+							Divisions
+						</h2>
+						<HelpButton topic="create-tournament" section="intro" />
+					</div>
 
 					{divisions.length === 0 ? (
 						// Guidance, not an error. Someone creating their first
@@ -509,9 +513,7 @@ function CreateTournamentForm() {
 					Review Tournament
 				</button>
 
-				{isReady ? (
-					<p className="ct-actions-note">Nothing is created until you confirm it on the next screen.</p>
-				) : (
+				{!isReady && (
 					<div className="ct-actions-missing">
 						<p className="ct-actions-note">Before you can review this tournament:</p>
 						<ul className="ct-missing-list">
@@ -531,6 +533,9 @@ function CreateTournamentForm() {
 					key={editing.division.id}
 					division={editing.division}
 					isEditing={editing.isEditing}
+					takenNames={divisions
+						.filter((candidate) => candidate.id !== editing.division.id)
+						.map((candidate) => candidate.name)}
 					onCancel={() => setEditing(null)}
 					onSave={handleSaveDivision}
 				/>
@@ -580,13 +585,14 @@ function TournamentDetailsFields({ details, errors, touched, serverError, onChan
 				label="Description"
 				type="textarea"
 				maxLength={DESCRIPTION_MAX}
-				hint="Optional. Anything a visitor should know — the venue, the format, who to contact."
+				hint="Optional"
+				help="details"
 			/>
 		</div>
 	);
 }
 
-function DetailField({ field, label, value, error, onChange, onBlur, type = 'text', required = false, maxLength, hint }) {
+function DetailField({ field, label, value, error, onChange, onBlur, type = 'text', required = false, maxLength, hint, help }) {
 	const inputId = `ct-${field}`;
 	const errorId = `${inputId}-error`;
 	const hintId = `${inputId}-hint`;
@@ -644,6 +650,7 @@ function DetailField({ field, label, value, error, onChange, onBlur, type = 'tex
 						{value.length}/{maxLength}
 					</span>
 				)}
+				{help && <HelpButton topic="create-tournament" section={help} />}
 			</div>
 		</div>
 	);

@@ -369,7 +369,11 @@ function standingsBlocks(division) {
 			...round.groups
 				.filter((group) => group.standings?.length)
 				.flatMap((group) => {
-					const table = { division, key: `${round.roundIndex}:${group.groupIndex}`, label: group.name || round.round };
+					// A league's one table is stored as "Pool A", which names
+					// nothing when there is no Pool B beside it. The round's own
+					// name does.
+					const label = round.groups.length > 1 ? group.name || round.round : round.round || group.name;
+					const table = { division, key: `${round.roundIndex}:${group.groupIndex}`, label };
 
 					return [
 						{ type: 'tableHead', ...table, continued: false },

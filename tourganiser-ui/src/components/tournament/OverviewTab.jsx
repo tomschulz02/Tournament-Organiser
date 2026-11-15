@@ -5,11 +5,12 @@ import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
 import { viewerRole } from './collaboratorRoles';
 import { canProgress, flattenFixtures } from './fixtureUtils';
-import { dayTimeline, nextSlot, onCourtNow, slotsMissingResults } from './scheduleNow';
+import { dayTimeline, nextSlot, nextSlotLater, onCourtNow, slotsMissingResults } from './scheduleNow';
 import { useScheduleClock } from './useScheduleClock';
 import {
 	CourtsBand,
 	DivisionProgressBand,
+	FinalResultsBand,
 	QueueBand,
 	StatusLine,
 	TimelineBand,
@@ -74,16 +75,21 @@ function storeCourt(tournamentId, courtId) {
 // On a phone the sections stack in exactly this order. On a desktop the "main"
 // sections fill the left column, the "side" ones a narrower right column, and
 // the "full" ones run the full width underneath, each group in this order.
+//
+// `results` exists only once the tournament is Finished, when the match-day
+// sections after it are gone, so it sits second for everyone: who won is the
+// first thing anybody opens a finished tournament for.
 const ROLE_SECTIONS = {
-	spectator: ['status', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
-	scorer: ['status', 'toScore', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
-	'match-manager': ['status', 'queue', 'timeline', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
-	'co-organiser': ['status', 'queue', 'divisions', 'courts', 'timeline', 'upNext', 'recent', 'about'],
-	organiser: ['status', 'queue', 'divisions', 'courts', 'timeline', 'upNext', 'recent', 'about'],
+	spectator: ['status', 'results', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
+	scorer: ['status', 'results', 'toScore', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
+	'match-manager': ['status', 'results', 'queue', 'timeline', 'courts', 'upNext', 'divisionProgress', 'recent', 'about'],
+	'co-organiser': ['status', 'results', 'queue', 'divisions', 'courts', 'timeline', 'upNext', 'recent', 'about'],
+	organiser: ['status', 'results', 'queue', 'divisions', 'courts', 'timeline', 'upNext', 'recent', 'about'],
 };
 
 const SECTION_AREA = {
 	status: 'main',
+	results: 'main',
 	toScore: 'main',
 	queue: 'main',
 	courts: 'main',
@@ -170,6 +176,16 @@ export default function OverviewTab({
 
 	const sections = {
 		status: <StatusLine tournament={tournament} dashboard={dashboard} />,
+		results: status === 'Finished' && (
+			<FinalResultsBand
+				divisions={fullDivisions}
+				tournamentId={tournament.id}
+				// The same rule About applies to the pack link, which this takes
+				// over once the tournament is Finished.
+				canExport={Boolean(can.enterCurrentRoundResults) && (dashboard.completedFixtureCount ?? 0) > 0}
+				onOpenDivision={onOpenDivision}
+			/>
+		),
 		toScore: live && (
 			<ToScoreBand
 				items={toScore}
@@ -211,7 +227,10 @@ export default function OverviewTab({
 		),
 		upNext: status !== 'Finished' && (
 			<UpNextBand
-				slot={next}
+				// Nothing left today: the next tournament day's first slot,
+				// which carries its date. Only here — the court cards and
+				// scoresheets above stay on today's slot.
+				slot={next ?? nextSlotLater(schedule, fixtures, now)}
 				schedule={schedule}
 				upcoming={dashboard.upcomingFixtures ?? []}
 				divisions={fullDivisions}
@@ -279,8 +298,12 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, canExpor
 	const status = tournament.status || 'Not Started';
 	const showLifecycle = Boolean(canManageSetup) && (status === 'Not Started' || status === 'Ongoing');
 	// The whole tournament's results as one printable pack. Organiser roles only,
-	// and only once there is a result to put in it.
-	const showExport = Boolean(canExportResults) && (dashboard.completedFixtureCount ?? 0) > 0;
+	// and only once there is a result to put in it. A Finished tournament offers
+	// it at the top instead, on Final results, which needs a division to exist.
+	const showExport =
+		Boolean(canExportResults) &&
+		(dashboard.completedFixtureCount ?? 0) > 0 &&
+		!(status === 'Finished' && (dashboard.divisionCount ?? 0) > 0);
 
 	// Both labels are pre-formatted by the backend ('1 August 2026'). Do not
 	// reformat them here — the server owns date presentation.
@@ -318,10 +341,11 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, canExpor
 						{showExport && (
 							<Link
 								to={`/tournaments/view/${tournament.id}/results/pack`}
-								className="tv-subtle-action"
+								className="tv-icon-button"
 								target="_blank"
 								rel="noopener">
-								Export results pack
+								<Icon name="download" size={18} fill="currentColor" />
+								Results pack
 							</Link>
 						)}
 					</div>
@@ -559,6 +583,7 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 				<DivisionModal
 					division={createEmptyDivision()}
 					isEditing={false}
+					takenNames={divisions.map((division) => division.name)}
 					onCancel={() => setAdding(false)}
 					onSave={handleAdd}
 				/>

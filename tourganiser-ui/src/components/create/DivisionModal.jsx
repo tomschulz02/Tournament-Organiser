@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import CreateModal from './CreateModal';
+import HelpButton from '../HelpButton';
 import Icon from '../Icons';
 import { useConfirm } from '../ConfirmContext';
 import { useHelpTopic } from '../../HelpContext';
@@ -11,7 +12,6 @@ import {
 	TEAM_NAME_MAX,
 	createTeamKey,
 	gamesPerTeamError,
-	getFormat,
 	getPoolDrawLabel,
 	isConfigurableFormat,
 	parseBulkTeamNames,
@@ -53,7 +53,7 @@ const TEAM_DRAG = 'team:';
 // The same modal for adding and for editing. `division` is the one being edited,
 // or a fresh empty one — this component never needs to know which, beyond the
 // wording of its title and its confirming button.
-export default function DivisionModal({ division, isEditing, onCancel, onSave }) {
+export default function DivisionModal({ division, isEditing, onCancel, onSave, takenNames = [] }) {
 	useHelpTopic('division-modal');
 
 	// A stable id per row, handed out when the row enters the draft.
@@ -68,9 +68,6 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 	}));
 	const [screen, setScreen] = useState('basics');
 	const [errors, setErrors] = useState({});
-	// Whether the pool settings have been deliberately changed. Only then is it
-	// worth telling someone that a format change makes them irrelevant.
-	const [configurationTouched, setConfigurationTouched] = useState(false);
 	const [newTeamName, setNewTeamName] = useState('');
 	const [bulkTeamText, setBulkTeamText] = useState('');
 	const confirm = useConfirm();
@@ -91,7 +88,6 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 
 	const handleConfigurationChange = (field, value) => {
 		update({ [field]: value });
-		setConfigurationTouched(true);
 	};
 
 	const goBack = () => {
@@ -160,7 +156,7 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 	// The hard check. Everything the server would refuse, refused here first and
 	// on the screen that owns it.
 	const handleSave = () => {
-		const found = validateDivision(draft);
+		const found = validateDivision(draft, takenNames);
 		setErrors(found);
 
 		const firstProblem = Object.keys(found)[0];
@@ -224,6 +220,7 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 	return (
 		<CreateModal
 			titleId="ct-division-modal-title"
+			helpTopic="division-modal"
 			title={isEditing ? 'Edit division' : 'Add a division'}
 			subtitle={`${SCREEN_TITLES[screen]} — step ${screenIndex + 1} of ${screens.length}`}
 			onClose={handleClose}
@@ -232,7 +229,6 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 				<BasicsScreen
 					draft={draft}
 					errors={errors}
-					configurationTouched={configurationTouched}
 					onNameChange={(name) => {
 						update({ name });
 						setErrors((previous) => ({ ...previous, name: undefined }));
@@ -264,12 +260,10 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 	);
 }
 
-function BasicsScreen({ draft, errors, configurationTouched, onNameChange, onFormatChange }) {
+function BasicsScreen({ draft, errors, onNameChange, onFormatChange }) {
 	// Every option shows the same amount of information whether it is selected or
 	// not, so choosing one changes a border and nothing else. A screen that grows
 	// under the cursor as you pick is a screen you have to re-read.
-	const chosen = getFormat(draft.type);
-	const droppingConfiguration = configurationTouched && chosen && !chosen.configurable;
 
 	return (
 		<div className="ct-screen">
@@ -302,6 +296,7 @@ function BasicsScreen({ draft, errors, configurationTouched, onNameChange, onFor
 				<legend className="ct-field-label">
 					<span>How will it be played?</span>
 					<span className="ct-field-required">Required</span>
+					<HelpButton topic="division-modal" section="basics" />
 				</legend>
 
 				<div className="ct-format-options">
@@ -333,14 +328,6 @@ function BasicsScreen({ draft, errors, configurationTouched, onNameChange, onFor
 				{errors.type && <p className="ct-field-error">{errors.type}</p>}
 			</fieldset>
 
-			{/* Said out loud rather than dropped in silence. The values are still
-			    there if the format is changed back. */}
-			{droppingConfiguration && (
-				<p className="ct-notice" role="status">
-					{chosen.label} has no pools or knockout stage, so the pool settings you entered will not be used. They are
-					kept in case you switch back.
-				</p>
-			)}
 		</div>
 	);
 }
@@ -369,10 +356,7 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 
 	return (
 		<div className="ct-screen">
-			<p className="ct-screen-lede">
-				Teams are split evenly across the pools. Once every pool has played, the best teams across the division go
-				through to a knockout bracket.
-			</p>
+			<div className="ct-screen-help"><HelpButton topic="division-modal" section="configuration" /></div>
 
 			<div className="ct-field">
 				<label className="ct-field-label" htmlFor="ct-division-groups">
@@ -390,10 +374,8 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 					aria-invalid={errors.num_groups ? true : undefined}
 				/>
 				<div className="ct-field-foot">
-					{errors.num_groups ? (
+					{errors.num_groups && (
 						<p className="ct-field-error">{errors.num_groups}</p>
-					) : (
-						<p className="ct-field-hint">Teams are shared out as evenly as the numbers allow.</p>
 					)}
 				</div>
 			</div>
@@ -420,10 +402,7 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 						// A2: the backend reads this as the full qualifier count, not
 						// a per-pool one. Labelling it per pool would quietly create a
 						// bracket several times the size the organiser expected.
-						<p className="ct-field-hint">
-							The total across the whole division, not the number from each pool.
-							{teamCount > 0 && ` This division has ${teamCount} teams.`}
-						</p>
+						<p className="ct-field-hint">{teamCount > 0 ? `This division has ${teamCount} teams.` : ''}</p>
 					)}
 				</div>
 			</div>
@@ -435,6 +414,7 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 			<fieldset className="ct-fieldset">
 				<legend className="ct-field-label">
 					<span>Pool draw</span>
+					<HelpButton topic="division-modal" section="pool-draw" />
 				</legend>
 				<div className="ct-format-options ct-draw-options">
 					{POOL_DRAWS.map((draw) => (
@@ -465,9 +445,6 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 						</button>
 					))}
 				</div>
-				<div className="ct-field-foot">
-					<p className="ct-field-hint">You can change this in Settings until the tournament starts.</p>
-				</div>
 			</fieldset>
 		</div>
 	);
@@ -488,7 +465,7 @@ function LeagueConfigurationScreen({ draft, errors, onChange }) {
 
 	return (
 		<div className="ct-screen">
-			<p className="ct-screen-lede">Choose how many games each team plays. Every game counts toward one shared table.</p>
+			<div className="ct-screen-help"><HelpButton topic="division-modal" section="configuration-league" /></div>
 
 			<fieldset className="ct-fieldset">
 				<legend className="ct-field-label">
@@ -538,10 +515,7 @@ function LeagueConfigurationScreen({ draft, errors, onChange }) {
 						{errors.gamesPerTeam || liveError ? (
 							<p className="ct-field-error">{errors.gamesPerTeam || liveError}</p>
 						) : (
-							<p className="ct-field-hint">
-								Has to be less than a full round robin, and — with an odd number of teams — an even number.
-								{teamCount > 0 && ` This division has ${teamCount} teams.`}
-							</p>
+							<p className="ct-field-hint">{teamCount > 0 ? `This division has ${teamCount} teams.` : ''}</p>
 						)}
 					</div>
 				</div>
@@ -563,13 +537,8 @@ function LeagueConfigurationScreen({ draft, errors, onChange }) {
 						aria-invalid={errors.roundRobinLegs ? true : undefined}
 					/>
 					<div className="ct-field-foot">
-						{errors.roundRobinLegs ? (
+						{errors.roundRobinLegs && (
 							<p className="ct-field-error">{errors.roundRobinLegs}</p>
-						) : (
-							<p className="ct-field-hint">
-								1 leg is a single round robin. Each additional leg repeats it, so every team meets every other team
-								again.
-							</p>
 						)}
 					</div>
 				</div>
@@ -626,7 +595,6 @@ function TeamsScreen({
 	const poolDraw = poolDrawOf(draft.pool_draw);
 	const poolCount = Math.max(1, Math.floor(Number(draft.num_groups)) || 1);
 	const pools = isClassic ? poolByPosition(teamCount, poolCount, poolDraw) : [];
-	const drawnOnSave = pools.some((pool) => pool === null);
 
 	// Hidden until asked for, so the common one-at-a-time case isn't sharing the
 	// screen with a control most people won't use.
@@ -732,7 +700,8 @@ function TeamsScreen({
 					</button>
 				</div>
 				<div className="ct-field-foot">
-					<p className="ct-field-hint">Press Enter to add and keep typing.</p>
+					<span />
+					<HelpButton topic="division-modal" section="teams" />
 				</div>
 			</div>
 
@@ -749,9 +718,6 @@ function TeamsScreen({
 						placeholder={'One team per line, e.g.\nAces\nEagles\nFalcons'}
 						onChange={(event) => onBulkTeamTextChange(event.target.value)}
 					/>
-					<div className="ct-field-foot">
-						<p className="ct-field-hint">One name per line, or separated by commas.</p>
-					</div>
 					<button
 						type="button"
 						className="ct-button ct-button-primary"
@@ -798,13 +764,6 @@ function TeamsScreen({
 								{getPoolDrawLabel(poolDraw)} draw · {poolCount} {poolCount === 1 ? 'pool' : 'pools'}
 							</span>
 						)}
-					</p>
-					{/* Said once, above the list. The order is the seeding, and
-					    nothing else on this screen says so. */}
-					<p className="ct-field-hint ct-team-order-hint">
-						This order is the seeding — drag a team by its number to move it.
-						{isClassic && ' The letter is the pool each seed lands in.'}
-						{drawnOnSave && ` Seed ${Math.min(poolCount, teamCount) + 1} onward is drawn on save.`}
 					</p>
 					{/* A row per team, not a card per team. Some divisions hold
 					    thirty-two of these, and the list scrolls rather than

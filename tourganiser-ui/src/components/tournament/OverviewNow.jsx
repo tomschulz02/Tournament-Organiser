@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import DivisionBadge from './DivisionBadge';
 import Icon from '../Icons';
 import { setsWon, setScores } from './fixtureUtils';
-import { getCourtName } from '../../utils/scheduleUtils';
+import { finalPodium } from './standingsView';
+import { formatDateLabel, getCourtName } from '../../utils/scheduleUtils';
 import { divisionColorStyle } from '../../utils/divisionColors';
 
 // The "happening now" sections of the Overview: the status line, the queue of
@@ -39,14 +41,20 @@ export function StatusLine({ tournament, dashboard }) {
 	);
 }
 
-// What a fixture's card says under its teams. Only completed sets are stored, so
-// a live match says which set is under way rather than a running score.
+// What a fixture's card says under its teams. A live match says how many sets
+// have been entered, and nothing about which one is being played: Save score
+// stores a set part-way through as readily as a finished one, and there is no
+// points target to tell them apart, so "Set 2 in progress" was a guess that a
+// score of 12-9 proved wrong.
 function progressNote(fixture) {
 	const sets = Array.isArray(fixture.result) ? fixture.result.length : 0;
 
 	if (fixture.status === 'COMPLETED') return 'Final';
 	if (fixture.status === 'CANCELLED') return 'Cancelled';
-	if (fixture.status === 'LIVE') return sets > 0 ? `Set ${sets + 1} in progress` : 'No sets entered yet';
+	if (fixture.status === 'LIVE') {
+		if (sets === 0) return 'No sets entered yet';
+		return sets === 1 ? '1 set entered' : `${sets} sets entered`;
+	}
 	return 'Not started';
 }
 
@@ -197,10 +205,11 @@ export function UpNextBand({ slot, schedule, upcoming = [], divisions, onOpenFix
 		<section className="tv-band tv-ov-band" aria-labelledby="tv-ov-next">
 			<div className="tv-band-header">
 				<h2 id="tv-ov-next" className="tv-band-heading">
-					Up next{slot ? ` · ${slot.startTime}` : ''}
+					Up next{slot ? ` · ${slot.date ? `${formatDateLabel(slot.date)} ` : ''}${slot.startTime}` : ''}
 				</h2>
-				<button type="button" className="tv-ov-link" onClick={onOpenFixtures}>
+				<button type="button" className="tv-ov-action" onClick={onOpenFixtures}>
 					Full schedule
+					<Icon name="arrowRight" size={16} fill="currentColor" />
 				</button>
 			</div>
 
@@ -461,7 +470,8 @@ export function TimelineBand({ rows, schedule, nowTime, played, total, canEditSc
 				</ul>
 
 				{canEditSchedule && (
-					<button type="button" className="tv-subtle-action" onClick={onOpenSchedule}>
+					<button type="button" className="tv-icon-button" onClick={onOpenSchedule}>
+						<Icon name="edit" size={18} fill="currentColor" />
 						Edit schedule
 					</button>
 				)}
@@ -473,6 +483,80 @@ export function TimelineBand({ rows, schedule, nowTime, played, total, canEditSc
 // Division progress as one compact list: name, current round, matches played.
 // The organiser's full cards (add, remove, recolour) are DivisionsBand in
 // OverviewTab; this is everyone else's.
+// Who won, once the tournament is Finished: a card per division with its top
+// three, first place given the weight. The full ranking stays on Standings and
+// each card opens it. A division the tournament ended without deciding says so
+// rather than showing the places that happened to be settled.
+//
+// `divisions` is the full list, the one carrying finalStandings and fixtures.
+export function FinalResultsBand({ divisions, tournamentId, canExport = false, onOpenDivision }) {
+	if (divisions.length === 0) return null;
+
+	return (
+		<section className="tv-band tv-ov-band" aria-labelledby="tv-ov-results">
+			<div className="tv-band-header">
+				<h2 id="tv-ov-results" className="tv-band-heading">
+					Final results
+				</h2>
+				{canExport && tournamentId && (
+					<Link
+						to={`/tournaments/view/${tournamentId}/results/pack`}
+						className="tv-ov-action"
+						target="_blank"
+						rel="noopener">
+						<Icon name="download" size={18} fill="currentColor" />
+						Results pack
+					</Link>
+				)}
+			</div>
+
+			<ul className="tv-ov-results">
+				{divisions.map((division) => {
+					const places = finalPodium(division.finalStandings);
+					const fixtures = division.fixtures ?? [];
+					const played = fixtures.filter((fixture) => fixture.status === 'COMPLETED').length;
+
+					return (
+						<li key={division.id} className="tv-ov-panel tv-ov-result" style={divisionColorStyle(division.id, divisions)}>
+							<div className="tv-ov-result-head">
+								<span className="tv-ov-division-dot" aria-hidden="true" />
+								<h3 className="tv-ov-result-division">{division.name}</h3>
+								{division.type && <span className="tv-info-format">{division.type}</span>}
+							</div>
+
+							{places.length > 0 ? (
+								<ol className="tv-ov-result-places">
+									{places.map((row) => (
+										<li
+											key={row.team_id}
+											className={`tv-ov-result-place${row.rank === 1 ? ' tv-ov-result-place--first' : ''}`}>
+											<span className="tv-ov-result-rank">{row.rank}</span>
+											<span className="tv-ov-result-team">{row.name}</span>
+											{row.rank === 1 && row.note && <span className="tv-ov-result-note">{row.note}</span>}
+										</li>
+									))}
+								</ol>
+							) : (
+								<p className="tv-ov-result-none">
+									No final result. {played} of {fixtures.length} matches played.
+								</p>
+							)}
+
+							<button
+								type="button"
+								className="tv-ov-action tv-ov-result-more"
+								onClick={() => onOpenDivision(division.id, 'standings')}>
+								Full ranking
+								<Icon name="arrowRight" size={16} fill="currentColor" />
+							</button>
+						</li>
+					);
+				})}
+			</ul>
+		</section>
+	);
+}
+
 export function DivisionProgressBand({ divisions, onOpenDivision }) {
 	if (divisions.length === 0) return null;
 

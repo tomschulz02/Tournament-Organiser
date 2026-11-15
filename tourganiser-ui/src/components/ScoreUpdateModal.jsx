@@ -208,6 +208,11 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 	const tally = tallySets(sets);
 	// Ending — End Match, or Save changes on a finished match — needs a winner.
 	const needsWinner = isKnockout && tally.team1 === tally.team2;
+	// The server reads a finished match with nothing scored as cancelled — that
+	// is how Cancel match is sent, see pages/View.jsx. Ending one from here would
+	// cancel it under a dialog that promises to record the score, so ending
+	// waits for a point and Cancel match stays the only way to cancel.
+	const scoreless = sets.every((set) => set.team1 === 0 && set.team2 === 0);
 
 	// Match numbers repeat across divisions, so the title alone does not say
 	// which match this is. The round already names the pool for pool play.
@@ -255,6 +260,13 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 	// through the form attribute.
 	const footer = (
 		<>
+			{scoreless && !needsWinner && (
+				<p className="score-modal-note">
+					{wasCompleted
+						? 'A finished match needs a score.'
+						: 'Enter a score before ending the match. If it was not played, use Cancel match.'}
+				</p>
+			)}
 			{needsWinner && (
 				<p className="score-modal-note">
 					{wasCompleted
@@ -284,7 +296,7 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 						type="submit"
 						form="score-form"
 						className="ct-button ct-button-primary"
-						disabled={busy || needsWinner}>
+						disabled={busy || needsWinner || scoreless}>
 						{submitting === 'save' ? <LoadingScreen variant="inline" /> : null}
 						<span>Save changes</span>
 					</button>
@@ -298,7 +310,7 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 							type="button"
 							className="ct-button ct-button-primary"
 							onClick={handleEndMatchClick}
-							disabled={busy || needsWinner}>
+							disabled={busy || needsWinner || scoreless}>
 							{submitting === 'end' ? <LoadingScreen variant="inline" /> : null}
 							<span>End match</span>
 						</button>
@@ -314,6 +326,7 @@ const ScoreUpdateModal = ({ fixture, slot, onClose, onSave, onEndMatch, onCancel
 	return (
 		<CreateModal
 			titleId="score-modal-title"
+			helpTopic="score-update-modal"
 			title={`Match #${fixture.match_no}`}
 			subtitle={
 				matchContext || slotContext ? (

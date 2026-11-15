@@ -19,6 +19,20 @@ export const DEFAULT_ROLE = 'SCORER';
 
 export const roleLabel = (role) => ROLES.find((entry) => entry.value === role)?.label ?? role;
 
+// What each role allows, for the help's role table (RoleGrid.jsx). A mirror of
+// capabilitiesFor in api/src/utils/tournamentPermissions.js for reading only:
+// the server decides, and each role holds everything of the roles before it.
+export const ROLE_CAPABILITIES = [
+	{ label: 'Enter results in the current round', from: 'SCORER' },
+	{ label: 'Correct results in earlier rounds', from: 'MATCH_MANAGER' },
+	{ label: 'Start the next round', from: 'MATCH_MANAGER' },
+	{ label: 'Edit the schedule', from: 'MATCH_MANAGER' },
+	{ label: 'Print scoresheets', from: 'MATCH_MANAGER' },
+	{ label: 'Change teams and divisions', from: 'CO_ORGANISER' },
+	{ label: 'Choose the scoresheet template', from: 'CO_ORGANISER' },
+	{ label: 'Start and end the tournament', from: 'CO_ORGANISER' },
+];
+
 // The viewer's role, read back from the capability flags the tournament payload
 // sends as data.can. The server sends booleans, not a role name, and each role
 // holds every flag of the roles below it (capabilitiesFor in

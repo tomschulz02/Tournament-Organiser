@@ -707,6 +707,12 @@ function buildFinalStandings({ division, state, fixtures, standings, bracket, te
     if (isDivisionComplete(fixtures) && rankedTeams.length === 0 && standings.length > 0) {
         let rank = 1;
         standings.forEach((round) => {
+            // The group's name says which table a place came from, which only
+            // means something when there is more than one. A league's single
+            // table is stored as "Pool A", and printing that beside every team
+            // describes nothing.
+            const nameGroups = round.groups.length > 1;
+
             round.groups.forEach((group) => {
                 group.standings.forEach((team) => {
                     if (seenTeams.has(team.id)) {
@@ -717,7 +723,7 @@ function buildFinalStandings({ division, state, fixtures, standings, bracket, te
                         rank,
                         team_id: team.id,
                         name: team.name,
-                        note: group.name
+                        note: nameGroups ? group.name : null
                     });
                     seenTeams.add(team.id);
                     rank += 1;

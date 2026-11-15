@@ -1,8 +1,9 @@
 import { startTransition, useDeferredValue, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icons';
+import IconTooltip from './IconTooltip';
+import HelpButton from './HelpButton';
 import LoadingScreen from './LoadingScreen';
-import Tooltip from './Tooltip';
 import { useMessage } from '../MessageContext';
 import { useConfirm } from './ConfirmContext';
 import { useHelpTopic } from '../HelpContext';
@@ -1244,6 +1245,7 @@ export default function ScheduleMakerModal({
 						</p>
 					</div>
 					<div className="schedule-maker-header-actions">
+						<HelpButton topic="schedule-maker-modal" className="schedule-maker-help" />
 						<button type="button" className="schedule-maker-close" onClick={handleClose} aria-label="Close schedule maker">
 							<Icon name="exit" />
 						</button>
@@ -1252,13 +1254,27 @@ export default function ScheduleMakerModal({
 
 				<div className="schedule-maker-toolbar">
 					<div className="schedule-maker-toolbar-actions">
-						<div className="schedule-view-toggle">
-							<button type="button" className={viewMode === 'grid' ? 'active' : ''} aria-pressed={viewMode === 'grid'} onClick={() => setViewMode('grid')}>
-								Board
-							</button>
-							<button type="button" className={viewMode === 'list' ? 'active' : ''} aria-pressed={viewMode === 'list'} onClick={() => setViewMode('list')}>
-								List
-							</button>
+						<div className="schedule-view-toggle" role="group" aria-label="Schedule view">
+							<IconTooltip label="Board">
+								<button
+									type="button"
+									className={viewMode === 'grid' ? 'active' : ''}
+									aria-pressed={viewMode === 'grid'}
+									aria-label="Board"
+									onClick={() => setViewMode('grid')}>
+									<Icon name="grid" size={20} fill="currentColor" />
+								</button>
+							</IconTooltip>
+							<IconTooltip label="List">
+								<button
+									type="button"
+									className={viewMode === 'list' ? 'active' : ''}
+									aria-pressed={viewMode === 'list'}
+									aria-label="List"
+									onClick={() => setViewMode('list')}>
+									<Icon name="list" size={20} fill="currentColor" />
+								</button>
+							</IconTooltip>
 						</div>
 
 						{/* Rendered whatever the width; the stylesheet hides this group below
@@ -2763,6 +2779,7 @@ function EntryPopover({ entry, schedule, fixturesById, canEdit, commitRef, getAn
 				</small>
 			)}
 			<button type="button" className="schedule-popover-remove" onClick={() => onRemove(entry)}>
+				<Icon name="delete" size={18} fill="currentColor" />
 				Remove from schedule
 			</button>
 		</BoardPopover>
@@ -2816,7 +2833,7 @@ function describeSetUp(schedule) {
 // Over the right of the board, and the whole of it below 900px or when wide. Inside the modal's own
 // focus trap. Its close button takes focus on opening, so that Tab moves through what is
 // in the sheet and Escape closes it first.
-function ScheduleSheet({ title, wide = false, onClose, children }) {
+function ScheduleSheet({ title, wide = false, helpSection = null, onClose, children }) {
 	const closeRef = useRef(null);
 
 	useEffect(() => {
@@ -2827,6 +2844,7 @@ function ScheduleSheet({ title, wide = false, onClose, children }) {
 		<section className={`schedule-sheet${wide ? ' is-wide' : ''}`} aria-label={title}>
 			<div className="schedule-sheet-head">
 				<h3>{title}</h3>
+				{helpSection && <HelpButton topic="schedule-maker-modal" section={helpSection} className="schedule-sheet-help" />}
 				<button type="button" ref={closeRef} className="schedule-sheet-close" onClick={onClose} aria-label={`Close ${title}`}>
 					<Icon name="exit" />
 				</button>
@@ -2924,7 +2942,7 @@ function SetUpSheet({
 	}, [focusCourtId]);
 
 	return (
-		<ScheduleSheet title="Set up" onClose={onClose}>
+		<ScheduleSheet title="Set up" helpSection="set-up" onClose={onClose}>
 			<div ref={bodyRef} className="schedule-setup">
 				<div className="schedule-form-grid">
 					<label>
@@ -2936,9 +2954,7 @@ function SetUpSheet({
 						<input type="time" value={hours.end} onChange={(event) => changeHours({ ...hours, end: event.target.value })} />
 					</label>
 				</div>
-				{hoursValid ? (
-					<small className="schedule-generator-note">These hours apply to every day.</small>
-				) : (
+				{!hoursValid && (
 					<small className="schedule-setup-error" role="alert">
 						The day must end after it starts. The board keeps its last valid hours until then.
 					</small>
@@ -2983,12 +2999,8 @@ function SetUpSheet({
 									<span className="schedule-generator-unit">min</span>
 								</label>
 							))}
-							<small className="schedule-generator-note">Blank uses the default.</small>
 						</details>
 					)}
-					<small className="schedule-generator-note">
-						New matches take this length, whether placed by hand or by Auto-schedule. Drag a match&apos;s edge to change just that match.
-					</small>
 				</div>
 
 				<div className="schedule-panel-section">
@@ -3027,7 +3039,6 @@ function SetUpSheet({
 													</label>
 												))}
 											</div>
-											<small className="schedule-generator-note">Selecting nothing means the court takes any division.</small>
 										</details>
 									)}
 								</div>
@@ -3063,7 +3074,6 @@ function SetUpSheet({
 							</span>
 						</label>
 					))}
-					<small className="schedule-generator-note">A day that is off stays in the tournament, but nothing can be scheduled on it.</small>
 				</div>
 			</div>
 		</ScheduleSheet>
@@ -3088,14 +3098,16 @@ function PrintSheet({ schedule, fixturesById, canEdit, onChange, onPrint, onClos
 			<div className="schedule-print-sheet-bar">
 				<div className="schedule-print-types is-on-light" role="group" aria-label="Schedule layout">
 					{['grid', 'list'].map((option) => (
-						<button
-							key={option}
-							type="button"
-							className="schedule-print-choice"
-							aria-pressed={type === option}
-							onClick={() => setType(option)}>
-							{option === 'grid' ? 'Grid' : 'List'}
-						</button>
+						<IconTooltip key={option} label={option === 'grid' ? 'Grid' : 'List'}>
+							<button
+								type="button"
+								className="schedule-print-choice"
+								aria-pressed={type === option}
+								aria-label={option === 'grid' ? 'Grid' : 'List'}
+								onClick={() => setType(option)}>
+								<Icon name={option} size={20} fill="currentColor" />
+							</button>
+						</IconTooltip>
 					))}
 				</div>
 				<button type="button" className="schedule-print-action is-primary" onClick={() => onPrint(type)}>
@@ -3124,10 +3136,9 @@ function PrintSheet({ schedule, fixturesById, canEdit, onChange, onPrint, onClos
 	);
 }
 
-// One generator rule or preference: a checkbox, an optional value beside it, and
-// a hover tooltip for anything the label cannot say in a few words. The longer
-// explanation lives in the help entry for this modal.
-function GeneratorOption({ label, checked, onToggle, hint, children }) {
+// One generator rule or preference: a checkbox and an optional value beside it.
+// What each one does is explained in the help, behind the sheet's "?".
+function GeneratorOption({ label, checked, onToggle, children }) {
 	return (
 		<div className="schedule-generator-option">
 			<label className="schedule-generator-toggle">
@@ -3135,7 +3146,6 @@ function GeneratorOption({ label, checked, onToggle, hint, children }) {
 				<span>{label}</span>
 			</label>
 			{children}
-			{hint && <Tooltip message={hint} />}
 		</div>
 	);
 }
@@ -3147,8 +3157,7 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 	const hasCourts = schedule.courts.length > 0;
 
 	return (
-		<ScheduleSheet title="Auto-schedule" onClose={onClose}>
-			<p>Fills the board using your set up. Breaks are kept. Fixtures already on the board are replaced.</p>
+		<ScheduleSheet title="Auto-schedule" helpSection="auto-schedule" onClose={onClose}>
 			<div className="schedule-panel-section">
 				<div className="schedule-panel-section-head">
 					<p>{describeSetUp(schedule)}</p>
@@ -3167,8 +3176,7 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 				<GeneratorOption
 					label="Minimum rest"
 					checked={draft.restEnabled}
-					onToggle={set('restEnabled')}
-					hint="The gap a team gets between two of its own matches on the same day. Off allows back-to-back matches.">
+					onToggle={set('restEnabled')}>
 					<input
 						type="number"
 						className="schedule-generator-value"
@@ -3184,8 +3192,7 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 				<GeneratorOption
 					label="Break before knockout rounds"
 					checked={draft.knockoutGapEnabled}
-					onToggle={set('knockoutGapEnabled')}
-					hint="Time between the end of one round and the start of each knockout round. Knockout teams aren't known in advance, so minimum rest can't cover this.">
+					onToggle={set('knockoutGapEnabled')}>
 					<input
 						type="number"
 						className="schedule-generator-value"
@@ -3202,13 +3209,11 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 					label="Bend rules to fit every fixture"
 					checked={draft.fitAll}
 					onToggle={set('fitAll')}
-					hint="Shortens rest or a knockout break, or exceeds the daily limit, only where a fixture has nowhere else to go, as few times as possible. Every bend is listed afterwards."
 				/>
 				<GeneratorOption
 					label="Assign officials automatically"
 					checked={draft.assignOfficials}
 					onToggle={set('assignOfficials')}
-					hint="One team per match from the same division, never while it is playing. Off keeps any officials already entered."
 				/>
 			</div>
 
@@ -3217,8 +3222,7 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 				<GeneratorOption
 					label="Max matches per team per day"
 					checked={draft.maxPerDayEnabled}
-					onToggle={set('maxPerDayEnabled')}
-					hint="The most matches one team plays on a single day.">
+					onToggle={set('maxPerDayEnabled')}>
 					<input
 						type="number"
 						className="schedule-generator-value"
@@ -3233,8 +3237,7 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 				<GeneratorOption
 					label="Longest wait between matches"
 					checked={draft.maxWaitEnabled}
-					onToggle={set('maxWaitEnabled')}
-					hint="The most time a team should wait between two of its matches on the same day. Teams near the limit play first; any wait over it is reported.">
+					onToggle={set('maxWaitEnabled')}>
 					<input
 						type="number"
 						className="schedule-generator-value"
@@ -3251,7 +3254,6 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 					label="Run past the day's end time"
 					checked={draft.allowOverrun}
 					onToggle={set('allowOverrun')}
-					hint="Last resort: adds time after the end of the final day, only as much as needed."
 				/>
 				<GeneratorOption label="Keep each pool on one court" checked={draft.courtAffinity} onToggle={set('courtAffinity')} />
 				<GeneratorOption label="Keep each court on one division" checked={draft.groupDivisions} onToggle={set('groupDivisions')} />
@@ -3259,7 +3261,6 @@ function AutoScheduleSheet({ schedule, draft, onChange, onGenerate, onOpenSetUp,
 					label="Spread matches evenly across days"
 					checked={draft.spreadDays}
 					onToggle={set('spreadDays')}
-					hint="Off finishes as early as possible, filling the first day first."
 				/>
 			</details>
 

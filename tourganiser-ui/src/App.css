@@ -726,7 +726,9 @@ img {
 	align-items: center;
 	font-size: 32px;
 	cursor: pointer;
-	z-index: calc(var(--z-chrome) + 1);
+	/* Above modal backdrops, so the help of whichever modal is open can be
+	   reached; below the help modal itself (--z-modal + 50) and confirm dialogs. */
+	z-index: calc(var(--z-modal) + 10);
 	transition: background-color 0.3s ease, transform 0.2s ease;
 }
 
@@ -752,92 +754,278 @@ img {
 	}
 }
 
-.help-menu-container {
-	position: fixed;
-	inset: 0;
-	background-color: rgba(0, 0, 0, 0.5);
-	display: flex;
-	justify-content: flex-end;
-	z-index: var(--z-menu);
+/* The help modal (components/HelpModal.jsx), built on CreateModal. It opens over
+   any other modal — its "?" buttons live inside them — so it sits above
+   --z-modal and the raised floating button, and below confirm dialogs. */
+.ct-modal-backdrop.help-modal-backdrop {
+	z-index: calc(var(--z-modal) + 50);
 }
 
-.help-menu {
-	display: flex;
-	flex-direction: column;
-	width: min(420px, 100%);
-	height: 100%;
-	background-color: var(--background-color);
-	color: var(--secondary-text-color);
-	border-radius: 16px 0 0 16px;
-	box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
-	font-family: var(--main-font-family);
-	animation: helpPanelSlideIn 0.2s ease-out;
+.ct-modal.ct-modal-help {
+	max-width: 960px;
+	height: min(88vh, 900px);
 }
 
-@keyframes helpPanelSlideIn {
-	from { transform: translateX(100%); }
-	to { transform: translateX(0); }
+/* The layout scrolls its content column, not the modal body, so the topic
+   list stays put beside a long topic. */
+.ct-modal-help .ct-modal-body {
+	display: flex;
+	padding: 0;
+	overflow: hidden;
 }
 
-.help-menu-header {
-	display: flex;
+.help-title {
+	display: inline-flex;
 	align-items: center;
-	gap: var(--space-3);
-	padding: var(--space-5) var(--space-4) var(--space-4);
-	border-bottom: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+	gap: var(--space-2);
 }
 
-.help-menu-header h1 {
-	flex: 1;
+.help-title svg {
+	flex: 0 0 auto;
+	fill: currentColor;
+}
+
+.help-layout {
+	display: grid;
+	grid-template-columns: 220px minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+}
+
+.help-topics {
+	overflow-y: auto;
+	padding: var(--space-3) var(--space-2);
+	border-right: 1px solid var(--ct-border);
+	background-color: var(--ct-surface-alt);
+}
+
+.help-topics ul {
 	margin: 0;
-	font-size: 1.25rem;
+	padding: 0;
+	list-style: none;
 }
 
-.help-menu-close {
+.help-topic {
+	display: block;
+	width: 100%;
+	padding: var(--space-2) var(--space-3);
 	border: none;
+	border-radius: 8px;
 	background: none;
-	font-size: 1.5rem;
-	line-height: 1;
-	color: var(--secondary-text-color);
+	color: var(--ct-muted);
+	font: inherit;
+	font-size: 0.86rem;
+	line-height: 1.3;
+	text-align: left;
 	cursor: pointer;
 }
 
-.help-menu-body {
-	flex: 1;
+.help-topic:hover {
+	color: var(--secondary-text-color);
+	background-color: var(--ct-surface);
+}
+
+.help-topic[aria-current='true'] {
+	color: var(--main-color);
+	background-color: var(--ct-surface);
+	font-weight: 700;
+}
+
+.help-topic--extra {
+	margin-top: var(--space-2);
+	border-top: 1px solid var(--ct-border);
+	border-radius: 0 0 8px 8px;
+}
+
+/* The phone's topic picker. Hidden above 768px, where the sidebar shows. */
+.help-picker {
+	display: none;
+}
+
+.help-content {
+	position: relative;
 	overflow-y: auto;
 	padding: var(--space-4);
 }
 
-.help-menu-body p {
+.help-content p {
 	margin: 0 0 var(--space-3);
-	line-height: 1.5;
+	line-height: 1.55;
 }
 
-.help-menu-section {
+.help-section {
 	margin-bottom: var(--space-5);
 }
 
-.help-menu-section:last-child {
+.help-section:last-child {
 	margin-bottom: 0;
 }
 
-.help-menu-section:last-child p:last-child {
-	margin-bottom: 0;
-}
-
-.help-menu-section-heading {
+.help-section-heading {
 	margin: 0 0 var(--space-2);
 	font-size: 1rem;
-	font-weight: 600;
+	font-weight: 700;
 	color: var(--secondary-text-color);
 }
 
-.help-menu-image {
+.help-media {
 	display: block;
 	width: 100%;
-	margin-top: var(--space-2);
+	height: auto;
+	margin: var(--space-2) 0 var(--space-3);
+	border: 1px solid var(--ct-border);
 	border-radius: 8px;
-	border: 1px solid rgb(from var(--secondary-text-color) r g b / 0.15);
+}
+
+.help-stepper {
+	margin-top: var(--space-2);
+	padding: var(--space-3);
+	border: 1px solid var(--ct-border);
+	border-radius: 10px;
+	background-color: var(--ct-surface-alt);
+}
+
+.help-stepper-step p:last-child {
+	margin-bottom: 0;
+}
+
+.help-stepper-controls {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	margin-top: var(--space-3);
+}
+
+.help-stepper-count {
+	font-size: 0.8rem;
+	color: var(--ct-muted);
+}
+
+.help-stepper-button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	min-height: 36px;
+	padding: 0 var(--space-3);
+	border: 1px solid var(--ct-border);
+	border-radius: 999px;
+	background-color: var(--ct-surface);
+	color: var(--secondary-text-color);
+	font: inherit;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.help-stepper-button svg {
+	fill: currentColor;
+}
+
+.help-stepper-next-icon {
+	transform: rotate(180deg);
+}
+
+.help-stepper-button:hover:not(:disabled) {
+	border-color: var(--main-color);
+	color: var(--main-color);
+}
+
+.help-stepper-button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+@media (max-width: 768px) {
+	.ct-modal.ct-modal-help {
+		height: 100%;
+		max-width: none;
+	}
+
+	.help-layout {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+
+	.help-topics {
+		display: none;
+	}
+
+	.help-picker {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		padding: var(--space-3) var(--space-4);
+		border-bottom: 1px solid var(--ct-border);
+		background-color: var(--ct-surface-alt);
+	}
+
+	.help-picker label {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--ct-muted);
+	}
+
+	.help-picker select {
+		min-height: 44px;
+		padding: 0 var(--space-3);
+		border: 1px solid var(--ct-border);
+		border-radius: 8px;
+		background-color: var(--ct-surface);
+		color: var(--secondary-text-color);
+		font: inherit;
+	}
+
+	.help-stepper-button {
+		min-height: 44px;
+	}
+}
+
+/* The "?" that opens help at a section (components/HelpButton.jsx). Quiet: it
+   sits beside a heading or label and must not compete with it. */
+.help-inline-button {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: none;
+	color: var(--main-color);
+	cursor: pointer;
+	vertical-align: middle;
+}
+
+.help-inline-button svg {
+	fill: currentColor;
+}
+
+.help-inline-button:hover {
+	background-color: rgb(from var(--main-color) r g b / 0.12);
+}
+
+.help-inline-button:focus-visible {
+	outline: 2px solid var(--main-color);
+	outline-offset: 1px;
+}
+
+/* In a modal header it matches the close button beside it. */
+.ct-modal-help-button,
+.ct-modal-header .help-inline-button {
+	width: 44px;
+	height: 44px;
+	border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+	.help-inline-button {
+		width: 44px;
+		height: 44px;
+	}
 }
 
 .menu-bar {
@@ -2231,39 +2419,48 @@ body.dark .nr-error {
 /* 
 Tooltip styles
 */
-.tooltip-container {
-	position: relative;
-	display: inline-block;
-	vertical-align: middle;
-	width: 24px;
-	height: 24px;
-}
-
-.tooltip-icon {
-	width: 24px;
-	height: 24px;
+/* IconTooltip: the name of an icon-only control. The anchor is a plain inline
+   wrapper; it must not change how the control inside it lays out. */
+.icon-tooltip-anchor {
 	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
+	/* No iOS link preview or text selection on a long-press. */
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
 }
 
-.tooltip-box {
-	position: fixed; /* fixed positioning to follow mouse */
-	background-color: var(--secondary-text-color);
-	color: var(--main-color);
-	text-shadow: 0 1px 2px rgb(0, 0, 0);
-	padding: 0.5em 0.75em;
-	border-radius: 4px;
-	font-size: 0.9em;
-	white-space: normal;
-	max-width: 220px;
+.icon-tooltip {
+	position: fixed;
 	z-index: var(--z-tooltip);
+	max-width: 220px;
+	padding: var(--space-1) var(--space-2);
+	border-radius: 6px;
+	background-color: var(--secondary-text-color);
+	color: var(--background-color);
+	font-family: var(--main-font-family);
+	font-size: 0.8rem;
+	line-height: 1.3;
+	white-space: normal;
 	pointer-events: none;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-/* 
+@media (prefers-reduced-motion: no-preference) {
+	.icon-tooltip {
+		animation: iconTooltipIn 0.12s ease-out;
+	}
+}
+
+@keyframes iconTooltipIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/*
 Tournaments page styles
 */
 .tournament-tabs-container {

@@ -97,12 +97,19 @@
 }
 
 .schedule-print-choice {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	font: inherit;
 	padding: var(--space-2, 8px) var(--space-4, 16px);
 	border: none;
 	background: transparent;
 	color: var(--text-color, #fff);
 	cursor: pointer;
+}
+
+.schedule-print-choice svg {
+	fill: currentColor;
 }
 
 .schedule-print-choice[aria-pressed='true'] {

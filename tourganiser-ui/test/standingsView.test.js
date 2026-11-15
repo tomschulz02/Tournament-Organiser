@@ -5,6 +5,7 @@ import {
 	recentForm,
 	divisionStages,
 	defaultStage,
+	finalPodium,
 } from '../src/components/tournament/standingsView';
 
 const pools = { name: 'Pool Play', type: 'roundRobin', groups: [[0, 1, 2], [3, 4, 5], [6, 7, 8]] };
@@ -113,6 +114,19 @@ describe('divisionStages', () => {
 		]);
 	});
 
+	// Places fill from the bottom: once the semifinals are committed the pool
+	// round's non-qualifiers are ranked, while the final is still to be played.
+	it('keeps the knockout in progress while the rankings are still filling', () => {
+		const stages = divisionStages(classic(2), { ...content, rankings: true, rankingsPartial: true });
+
+		expect(stages.map((stage) => [stage.status, stage.available])).toEqual([
+			['done', true],
+			['live', true],
+			['live', true],
+		]);
+		expect(defaultStage(stages)).toBe('knockout');
+	});
+
 	it('names a division without a knockout a league', () => {
 		const league = { state: { rounds: [{ ...pools, groups: [[0, 1, 2]] }], currentRound: 0 }, fixtures: [] };
 		expect(divisionStages(league, { groups: true, groupsPlayed: true }).map((stage) => [stage.label, stage.status])).toEqual([
@@ -127,6 +141,25 @@ describe('divisionStages', () => {
 		expect(divisionStages({}, { knockout: true }).map((stage) => stage.id)).toEqual(['knockout', 'rankings']);
 		expect(divisionStages(null, { rankings: true }).map((stage) => stage.id)).toEqual(['rankings']);
 		expect(divisionStages(null, {})).toEqual([]);
+	});
+});
+
+describe('finalPodium', () => {
+	const row = (rank, name) => ({ rank, team_id: name, name });
+
+	it('gives the top three in order, whatever order they arrive in', () => {
+		const standings = [row(4, 'D'), row(2, 'B'), row(1, 'A'), row(3, 'C')];
+		expect(finalPodium(standings).map((entry) => entry.name)).toEqual(['A', 'B', 'C']);
+	});
+
+	it('gives what there is for a division with fewer than three teams', () => {
+		expect(finalPodium([row(1, 'A'), row(2, 'B')]).map((entry) => entry.name)).toEqual(['A', 'B']);
+	});
+
+	it('is empty until first place is decided, and with no rankings', () => {
+		expect(finalPodium([row(3, 'C'), row(4, 'D')])).toEqual([]);
+		expect(finalPodium([])).toEqual([]);
+		expect(finalPodium(undefined)).toEqual([]);
 	});
 });
 

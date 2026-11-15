@@ -635,7 +635,8 @@ describe('packPages', () => {
 
 		expect(pages.length).toBeGreaterThan(1);
 		expect(pages[1].blocks.slice(0, 3).map((block) => block.type)).toEqual(['heading', 'tableHead', 'tableRow']);
-		expect(pages[1].blocks[1]).toMatchObject({ continued: true, label: 'All' });
+		// A round's only table is headed by the round's name, not the group's.
+		expect(pages[1].blocks[1]).toMatchObject({ continued: true, label: 'Round Robin' });
 		expect(pages.flatMap((page) => page.blocks).filter((block) => block.type === 'tableRow')).toHaveLength(60);
 		pages.forEach((page) => {
 			expect(page.blocks.reduce((total, block) => total + blockHeight(block), 0)).toBeLessThanOrEqual(BODY_BUDGET);

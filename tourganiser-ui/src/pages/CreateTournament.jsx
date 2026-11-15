@@ -531,6 +531,9 @@ function CreateTournamentForm() {
 					key={editing.division.id}
 					division={editing.division}
 					isEditing={editing.isEditing}
+					takenNames={divisions
+						.filter((candidate) => candidate.id !== editing.division.id)
+						.map((candidate) => candidate.name)}
 					onCancel={() => setEditing(null)}
 					onSave={handleSaveDivision}
 				/>

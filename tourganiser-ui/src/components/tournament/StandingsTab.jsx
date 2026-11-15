@@ -92,6 +92,9 @@ export default function StandingsTab({
 		groupsPlayed: rounds.some((round) => round.groups.some((group) => group.standings.some((row) => row.played > 0))),
 		knockout: bracketRounds.length > 0,
 		rankings: finalStandings.length > 0,
+		// Places fill from the bottom; until every team has one, the top is
+		// still being played for.
+		rankingsPartial: finalStandings.length < (division?.num_teams ?? division?.teams?.length ?? 0),
 	});
 
 	// Resolved during render rather than corrected in an effect. Switching to a

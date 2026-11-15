@@ -53,7 +53,7 @@ const TEAM_DRAG = 'team:';
 // The same modal for adding and for editing. `division` is the one being edited,
 // or a fresh empty one — this component never needs to know which, beyond the
 // wording of its title and its confirming button.
-export default function DivisionModal({ division, isEditing, onCancel, onSave }) {
+export default function DivisionModal({ division, isEditing, onCancel, onSave, takenNames = [] }) {
 	useHelpTopic('division-modal');
 
 	// A stable id per row, handed out when the row enters the draft.
@@ -160,7 +160,7 @@ export default function DivisionModal({ division, isEditing, onCancel, onSave })
 	// The hard check. Everything the server would refuse, refused here first and
 	// on the screen that owns it.
 	const handleSave = () => {
-		const found = validateDivision(draft);
+		const found = validateDivision(draft, takenNames);
 		setErrors(found);
 
 		const firstProblem = Object.keys(found)[0];

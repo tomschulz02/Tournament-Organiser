@@ -25,6 +25,26 @@ const TOURNAMENT_NAME_MAX = 100;
 const TOURNAMENT_DESCRIPTION_MAX = 2000;
 const TOURNAMENT_LOCATION_MAX = 50;
 
+// How two division names are compared: trimmed and case-insensitive, the same
+// comparison createDivision makes between team names. A name that is missing or
+// not text has no key and is left for createDivision to refuse.
+function divisionNameKey(name) {
+    return typeof name === "string" ? name.trim().toLowerCase() : "";
+}
+
+// Refuses a division whose name another division of the tournament already has.
+// `taken` is a Set of keys and gains this one, so a payload of several divisions
+// is checked against itself by passing the same Set each time.
+function assertDivisionNameFree(name, taken) {
+    const key = divisionNameKey(name);
+    if (key === "") return;
+
+    if (taken.has(key)) {
+        throw new AppError("DUPLICATE_DIVISION", { details: { name: name.trim() } });
+    }
+    taken.add(key);
+}
+
 async function createTournament(tournamentData, userId) {
     const details = tournamentData?.details;
     if (!details) {
@@ -38,6 +58,11 @@ async function createTournament(tournamentData, userId) {
 
     if (tournamentData.divisions.length > MAX_DIVISIONS_PER_TOURNAMENT) {
         throw new AppError("TOO_MANY_DIVISIONS");
+    }
+
+    const takenNames = new Set();
+    for (const division of tournamentData.divisions) {
+        assertDivisionNameFree(division.name, takenNames);
     }
 
     // One transaction for the whole creation: the tournament, its divisions,
@@ -260,6 +285,8 @@ async function addDivision(tournamentId, userId, division) {
     if (existing.length >= MAX_DIVISIONS_PER_TOURNAMENT) {
         throw new AppError("TOO_MANY_DIVISIONS");
     }
+
+    assertDivisionNameFree(division.name, new Set(existing.map((entry) => divisionNameKey(entry.name))));
 
     return await db.withTransaction(async (client) =>
         divisionService.createDivision(division, tournamentId, userId, client)

@@ -89,10 +89,15 @@ export function recentForm(fixtures, teamId, limit = 5) {
 //
 // `content` says what the page can actually render: { groups, knockout,
 // rankings } as booleans.
+//
+// Rankings fill from the bottom as knockout rounds are decided, so having some
+// is not the same as the division being over. `rankingsPartial` says places are
+// still to be played for: the rankings can be opened, but nothing is done yet.
 export function divisionStages(division, content) {
 	const rounds = Array.isArray(division?.state?.rounds) ? division.state.rounds : [];
 	const current = division?.state?.currentRound ?? 0;
-	const finished = Boolean(content.rankings);
+	const hasRankings = Boolean(content.rankings);
+	const finished = hasRankings && !content.rankingsPartial;
 	const ready = canProgress(division ?? {});
 
 	const robinIndexes = rounds.map((round, index) => (round.type === 'roundRobin' ? index : -1)).filter((i) => i >= 0);
@@ -121,24 +126,35 @@ export function divisionStages(division, content) {
 		stages.push({ id: STAGE_KNOCKOUT, label: 'Knockout', status, available: Boolean(content.knockout) });
 	}
 
-	if (stages.length > 0 || finished) {
+	if (stages.length > 0 || hasRankings) {
 		stages.push({
 			id: STAGE_RANKINGS,
 			label: 'Final rankings',
-			status: finished ? 'done' : 'idle',
-			available: finished,
+			status: finished ? 'done' : hasRankings ? 'live' : 'idle',
+			available: hasRankings,
 		});
 	}
 
 	return stages;
 }
 
+// The top places of a division's final ranking, in order, for the Overview's
+// Final results. Empty until first place is decided: rankings fill from the
+// bottom, and a podium without a winner would read as a result when it is not
+// one.
+export function finalPodium(finalStandings, size = 3) {
+	const places = (finalStandings ?? []).filter((row) => row.rank >= 1 && row.rank <= size).sort((a, b) => a.rank - b.rank);
+
+	return places.some((row) => row.rank === 1) ? places : [];
+}
+
 // The stage to open on: the one being played. Rankings once the division has
-// finished, the knockout while it runs, otherwise the first available.
+// finished, the knockout while it runs, otherwise the first available. Rankings
+// that are still filling are live, and come after the knockout that fills them.
 export function defaultStage(stages) {
 	const available = stages.filter((stage) => stage.available);
 	const rankings = available.find((stage) => stage.id === STAGE_RANKINGS);
-	if (rankings) return rankings.id;
+	if (rankings && rankings.status !== 'live') return rankings.id;
 
 	const live = available.find((stage) => stage.status === 'live');
 	return (live ?? available[0])?.id ?? null;

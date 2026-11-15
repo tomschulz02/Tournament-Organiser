@@ -1670,8 +1670,26 @@ describe("buildFinalStandings", () => {
 
         expect(buildFinalStandings({ division, fixtures: completeFixtures, standings, bracket: { rounds: [] }, teams }))
             .toEqual([
+                { rank: 1, team_id: "t1", name: "Aces", note: null },
+                { rank: 2, team_id: "t2", name: "Bears", note: null }
+            ]);
+    });
+
+    // A league's one table is stored as "Pool A". With several tables the name
+    // still says which one a place came from.
+    it("names the table a place came from only when there is more than one", () => {
+        const standings = [{
+            round: "Pool Play",
+            groups: [
+                { name: "Pool A", standings: [{ id: "t1", name: "Aces" }] },
+                { name: "Pool B", standings: [{ id: "t2", name: "Bears" }] }
+            ]
+        }];
+
+        expect(buildFinalStandings({ division, fixtures: completeFixtures, standings, bracket: { rounds: [] }, teams }))
+            .toEqual([
                 { rank: 1, team_id: "t1", name: "Aces", note: "Pool A" },
-                { rank: 2, team_id: "t2", name: "Bears", note: "Pool A" }
+                { rank: 2, team_id: "t2", name: "Bears", note: "Pool B" }
             ]);
     });
 

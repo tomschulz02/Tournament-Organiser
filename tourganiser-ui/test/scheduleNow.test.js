@@ -4,6 +4,7 @@ import {
 	todaysSlots,
 	currentSlot,
 	nextSlot,
+	nextSlotLater,
 	slotsMissingResults,
 	onCourtNow,
 	dayTimeline,
@@ -80,6 +81,31 @@ describe('todaysSlots', () => {
 		expect(todaysSlots({}, fixtures, at('09:30'))).toEqual([]);
 		expect(todaysSlots({ days: schedule.days }, fixtures, at('09:30'))).toEqual([]);
 		expect(todaysSlots(schedule, fixtures, undefined)).toEqual([]);
+	});
+});
+
+describe('nextSlotLater', () => {
+	it('before the first day: the first slot with a match still to play, carrying its date', () => {
+		const slot = nextSlotLater(schedule, fixtures, at('08:00', '2026-09-01'));
+
+		expect(slot).toMatchObject({ date: '2026-09-19', startTime: '09:00' });
+		expect(ids(slot)).toEqual(['f1', 'f2']);
+	});
+
+	it('after a day is over: the next day, never today', () => {
+		expect(nextSlotLater(schedule, fixtures, at('16:00'))).toMatchObject({ date: '2026-09-20', startTime: '09:00' });
+	});
+
+	it('skips a slot that has already been played in full', () => {
+		const played = fixtures.map((fixture) => (fixture.id === 'f2' ? { ...fixture, status: 'CANCELLED' } : fixture));
+
+		expect(nextSlotLater(schedule, played, at('08:00', '2026-09-01'))).toMatchObject({ date: '2026-09-19', startTime: '10:00' });
+	});
+
+	it('is null on or after the last day, with no schedule, and with no clock', () => {
+		expect(nextSlotLater(schedule, fixtures, at('08:00', '2026-09-20'))).toBeNull();
+		expect(nextSlotLater(undefined, fixtures, at('08:00'))).toBeNull();
+		expect(nextSlotLater(schedule, fixtures, undefined)).toBeNull();
 	});
 });
 

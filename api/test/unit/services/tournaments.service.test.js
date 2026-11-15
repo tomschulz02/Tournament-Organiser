@@ -193,6 +193,29 @@ describe("tournamentService.createTournament", () => {
             expect(divisionService.createDivision).not.toHaveBeenCalled();
         });
 
+        // Two divisions with one name cannot be told apart anywhere afterwards.
+        // Trimmed and case-insensitive, like team names within a division.
+        it("refuses two divisions with the same name, before the transaction opens", async () => {
+            const divisions = [{ name: "Open" }, { name: "Mixed" }, { name: "  open " }];
+
+            await expect(tournamentService.createTournament({ ...payload, divisions }, "user-1"))
+                .rejects.toMatchObject({ code: "DUPLICATE_DIVISION", status: 400, details: { name: "open" } });
+
+            expect(clientSql()).toEqual([]);
+            expect(divisionService.createDivision).not.toHaveBeenCalled();
+        });
+
+        // A missing name is createDivision's to refuse; two of them are not
+        // duplicates of each other.
+        it("leaves divisions with no usable name for createDivision to judge", async () => {
+            tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
+            const divisions = [{}, { name: 42 }, { name: "   " }, { name: "" }];
+
+            await expect(tournamentService.createTournament({ ...payload, divisions }, "user-1"))
+                .resolves.toBe("tour-1");
+            expect(divisionService.createDivision).toHaveBeenCalledTimes(4);
+        });
+
         it("accepts exactly the division cap", async () => {
             tournamentRepository.createTournament.mockResolvedValue({ tournamentId: "tour-1" });
             const divisions = Array.from({ length: MAX_DIVISIONS_PER_TOURNAMENT }, (_, index) => ({ name: `D${index}` }));
@@ -1118,6 +1141,18 @@ describe("tournamentService.addDivision", () => {
         await expect(tournamentService.addDivision("tour-1", "user-1", division))
             .rejects.toMatchObject({ code: "TOO_MANY_DIVISIONS", status: 400 });
         expect(divisionsRepository.getDivisionsByTournamentId).toHaveBeenCalledWith("tour-1");
+        expect(clientSql()).toEqual([]);
+        expect(divisionService.createDivision).not.toHaveBeenCalled();
+    });
+
+    it("refuses a name another division of the tournament already has", async () => {
+        tournamentRepository.getTournamentById
+            .mockResolvedValue(makeTournament({ created_by: "user-1", status: "Not Started" }));
+        divisionsRepository.getDivisionsByTournamentId
+            .mockResolvedValue([makeDivision({ id: "div-1", name: "division b " })]);
+
+        await expect(tournamentService.addDivision("tour-1", "user-1", division))
+            .rejects.toMatchObject({ code: "DUPLICATE_DIVISION", status: 400, details: { name: "Division B" } });
         expect(clientSql()).toEqual([]);
         expect(divisionService.createDivision).not.toHaveBeenCalled();
     });

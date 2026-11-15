@@ -701,8 +701,8 @@ textarea.ct-input {
 .ct-notice {
 	margin: 0;
 	padding: var(--space-3) var(--space-3);
-	border-left: 3px solid var(--main-color);
-	border-radius: 0 8px 8px 0;
+	border: 1px solid var(--ct-border);
+	border-radius: 8px;
 	background-color: var(--ct-surface-alt);
 	font-size: 0.875rem;
 	line-height: 1.55;

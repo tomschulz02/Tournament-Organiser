@@ -991,6 +991,84 @@ written on 2026-11-14 from the standing documents, not from a scope agreed in ad
 - **Whether `tournaments.last_update` is nullable**, carried over from Phase 5. The
   statements are in `docs/database.md`. Costs caching, not correctness.
 
+### UI polish before release
+
+Asked for on 2026-11-15, to be done before 1.1 goes to production. Recorded as asked;
+nothing here has been scoped against the code yet. Each item needs a handover document
+(see `CLAUDE.md`) before it is built, and the help and What's new items touch shared UI,
+so they are Medium Risk at least. More items may be added.
+
+1. **Less text by default.** Detailed explanations are fine, but they should not be on
+   screen by default. The worst case is the collaborators section of Settings, with its
+   large permissions table; the problem is app-wide. Long explanations move into the help
+   (item 2) and the page keeps a short label plus a help button. This depends on item 2.
+
+2. **Help redesign.**
+   - *Contextual help buttons inside pages.* Besides the floating help button and the
+     existing contextual help, pages get small in-place help buttons ("?" or a short
+     question such as "What do these roles mean?") that open the help **at a specific
+     section** and scroll to it. Example: the permissions table leaves Settings and
+     becomes part of the Settings help topic; the add-collaborator area gets a button
+     that opens that topic scrolled to the table.
+   - *A centred modal replaces the slide-in side panel* (decided 2026-11-15). This
+     reverses the 2026-08-29 side-panel design under "Help menu" above.
+   - *Walkthroughs, not walls of text.* Each feature is explained like a short
+     walkthrough, using images, GIFs and icons alongside the text.
+   - *Media:* Claude drafts screenshots and GIFs from the test instance with test data;
+     the user reviews them and replaces any they want to.
+
+3. **"What's new" popup.**
+   - A modal shown after each update or release, one slide per major change or
+     addition, each with an explanation and pictures or GIFs (same media arrangement as
+     item 2).
+   - Appears on whichever page the visitor lands on first: the home page, a direct link
+     to a tournament, or anywhere else.
+   - Shown to **everyone**, including first-time visitors (decided 2026-11-15).
+   - A "Don't show this again" toggle hides it until the next release. That choice is
+     stored in local storage against the release it was dismissed for.
+   - Without the toggle, closing it hides it for the rest of the browser session only
+     (session storage), and it returns in the next session (decided 2026-11-15).
+   - Open detail: the release identifier the popup compares against does not exist yet;
+     the handover must decide where it lives.
+
+4. **Better buttons.** Actions that look like underlined links become real buttons, and
+   icons replace words where the icon is unambiguous. Examples: the results export and
+   print schedule links (print schedule becomes a print icon), and the schedule's
+   grid/list toggle (icons instead of the words). Icons need accessible labels or
+   tooltips.
+
+5. **Wording changes.** The user is making these by hand. Listed here only so they are
+   tracked with the rest; Claude does not act on this item.
+
+6. **Randomised matchups for limited round robin.** *(added 2026-11-15)* When a round
+   robin limits games per team (`round_robin_mode: 'limited'`), the pairs come from
+   `generatePartialRoundRobinPairs` (`api/src/services/fixtures.service.js`): a circulant
+   graph over the teams *in seed order*, so each team plays its neighbours by seed. That
+   stays the default. A new toggle randomises the matchups instead.
+   - Probably the cheapest correct way: shuffle the team order before the same circulant
+     construction. That keeps the g-regular guarantee and the existing parity rules.
+   - Fixture generation is Medium Risk. The toggle needs a home in the payload and in
+     division state, and `docs/division-state.md` would need updating.
+   - Open: whether the toggle is offered only at creation (`DivisionModal.jsx`) or also
+     in Settings, and what flipping it does once fixtures exist.
+
+7. **Division colour on schedule maker fixture cards.** *(added 2026-11-15)* Cards on the
+   schedule maker's board drop the default blue background for a background in their
+   division's colour, keeping the left border as an accent. Colours already come from
+   `divisionColorStyle` (`tourganiser-ui/src/utils/divisionColors.js`, applied in
+   `ScheduleMakerModal.jsx` and `schedule-maker.css`). The background must stay readable
+   in both themes.
+   - **Open, to discuss:** how to tell pools within one division apart. Candidates: a
+     pool letter badge on the card; a lighter or darker shade of the division hue for
+     each pool; a pattern such as stripes on alternate pools; varying the accent
+     border's style or width per pool. These can be combined, e.g. a badge plus shades.
+
+8. **Faint division background in the Fixtures & Schedule tab.** *(added 2026-11-15)* The
+   coloured division dot in fixture rows (`FixtureRow.jsx`, which only shows it in a
+   multi-division tournament) is replaced by a faint background tint in the division's
+   colour. Reason: a status dot next to a division dot makes the two hard to tell apart.
+   Use the same approach as item 7 so the two views look the same.
+
 ### Not in 1.1
 
 Still open from the review and recorded in `docs/future-features.md` or

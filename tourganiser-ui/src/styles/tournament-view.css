@@ -1429,6 +1429,104 @@ body.dark .tv-division-badge {
 	margin-top: var(--space-3);
 }
 
+/* Final results, on a Finished tournament: a card per division, as many across
+   as fit, so one division takes the full width and a phone gets one column. The
+   only colour is the division's dot; first place is carried by size and weight. */
+.tv-ov-results {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+	gap: var(--space-3);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tv-ov-result {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	min-width: 0;
+	padding: var(--space-4);
+}
+
+.tv-ov-result-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.tv-ov-result-division {
+	margin: 0;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--secondary-text-color);
+	overflow-wrap: anywhere;
+}
+
+.tv-ov-result-places {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tv-ov-result-place {
+	display: grid;
+	grid-template-columns: 24px minmax(0, 1fr) auto;
+	align-items: baseline;
+	gap: var(--space-2);
+	padding: var(--space-2) 0;
+	font-size: 0.92rem;
+	color: var(--secondary-text-color);
+}
+
+.tv-ov-result-place + .tv-ov-result-place {
+	border-top: 1px solid var(--tv-border);
+}
+
+.tv-ov-result-rank {
+	font-weight: 700;
+	color: var(--tv-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.tv-ov-result-team {
+	overflow-wrap: anywhere;
+}
+
+.tv-ov-result-place--first {
+	padding-top: 0;
+}
+
+.tv-ov-result-place--first .tv-ov-result-rank {
+	font-size: 1.25rem;
+	color: var(--main-color);
+}
+
+.tv-ov-result-place--first .tv-ov-result-team {
+	font-size: 1.25rem;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.tv-ov-result-note {
+	font-size: 0.78rem;
+	color: var(--tv-muted);
+}
+
+.tv-ov-result-none {
+	margin: 0;
+	font-size: 0.88rem;
+	color: var(--tv-muted);
+}
+
+/* Pinned to the foot so the links line up across cards of different heights. */
+.tv-ov-result-more {
+	align-self: flex-start;
+	min-height: 44px;
+	margin: auto 0 calc(-1 * var(--space-2));
+}
+
 /* Division progress, one row per division. The dot is the division's identity
    colour; the row opens its standings. */
 .tv-ov-divisions {

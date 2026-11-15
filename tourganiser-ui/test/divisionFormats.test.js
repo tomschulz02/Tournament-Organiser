@@ -107,6 +107,17 @@ describe('validateDivision — Classic is unaffected by the League changes', () 
 	});
 });
 
+describe('validateDivision — division names within a tournament', () => {
+	it('rejects a name another division already has, trimmed and whatever the case', () => {
+		const errors = validateDivision(baseDivision({ name: ' Open ' }), ['Mixed', 'open']);
+		expect(errors.name).toMatch(/already called "Open"/);
+	});
+
+	it('accepts a name no other division has', () => {
+		expect(validateDivision(baseDivision({ name: 'Open' }), ['Mixed']).name).toBeUndefined();
+	});
+});
+
 describe('pool draw', () => {
 	it('starts a new division on the snake', () => {
 		expect(createEmptyDivision().pool_draw).toBe('SNAKE');

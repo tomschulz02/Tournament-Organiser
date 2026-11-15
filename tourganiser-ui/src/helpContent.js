@@ -27,11 +27,14 @@
 // a stepper, a single idea is a paragraph, and a step is a sentence or two.
 //
 // The on-screen explanations that used to sit on the pages live here now (see
-// docs/handover-help-and-less-text.md). The pages keep labels, controls, live
+// docs/decisions.md, "Help Is A Modal Of Topics"). The pages keep labels, controls, live
 // status and a "?" that opens the matching section.
 //
-// A media item without a src has not been captured yet: the "Shot:" comment
-// beside it says exactly what the capture must show, and is the shot list.
+// The "Shot:" comment beside each media item says what its capture shows, and is
+// the shot list for recapturing. The files are public/assets/help/<topic>--<section>
+// [--<step>].webp, with --still, --phone and --phone-still variants. A media item
+// without a src was left uncaptured on purpose (it would show other people's
+// tournaments or accounts, or needs one you didn't create) and renders nothing.
 // Nothing here uses a placeholder, mockup or stock image standing in for a real
 // capture; a missing image is represented by its absence, not by a fake one.
 export const HELP_TOPICS = {
@@ -45,7 +48,12 @@ export const HELP_TOPICS = {
 					'Tourganiser is where you create and run a tournament, or follow one someone else is running.',
 					"Use Discover to browse tournaments that are upcoming, ongoing or completed. Sign in to create your own — once you're signed in, Create takes you straight to a new tournament.",
 				],
-				media: { type: 'image', alt: 'The Tourganiser home page' }, // Shot: the home page, top of the page, signed out.
+				media: {
+					type: 'image',
+					src: '/assets/help/home--intro.webp',
+					phoneSrc: '/assets/help/home--intro--phone.webp',
+					alt: 'The Tourganiser home page',
+				}, // Shot: the home page, top of the page, signed out.
 			},
 			{
 				id: 'support-tourganiser',
@@ -98,17 +106,34 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Fill in the name, location and dates. A description is optional.'],
-						media: { type: 'image', alt: 'The tournament details form' }, // Shot: the create page's details form, filled in with test values.
+						media: {
+							type: 'image',
+							src: '/assets/help/create-tournament--intro--1.webp',
+							phoneSrc: '/assets/help/create-tournament--intro--1--phone.webp',
+							alt: 'The tournament details form',
+						}, // Shot: the create page's details form, filled in with test values.
 					},
 					{
 						text: [
 							'Press Add Division for each competition — Men’s Open, Under 19, Mixed B. Each opens in its own screen; its help entry covers what each screen does.',
 						],
-						media: { type: 'animation', alt: 'Adding a division' }, // Shot: pressing Add Division, the division modal opening, and the new division card appearing after Add Division.
+						media: {
+							type: 'animation',
+							src: '/assets/help/create-tournament--intro--2.webp',
+							still: '/assets/help/create-tournament--intro--2--still.webp',
+							phoneSrc: '/assets/help/create-tournament--intro--2--phone.webp',
+							phoneStill: '/assets/help/create-tournament--intro--2--phone-still.webp',
+							alt: 'Adding a division',
+						}, // Shot: pressing Add Division, the division modal opening, and the new division card appearing after Add Division.
 					},
 					{
 						text: ['Press Review Tournament to check what will be built, then Create Tournament.'],
-						media: { type: 'image', alt: 'The review screen' }, // Shot: the review modal for a tournament with two divisions.
+						media: {
+							type: 'image',
+							src: '/assets/help/create-tournament--intro--3.webp',
+							phoneSrc: '/assets/help/create-tournament--intro--3--phone.webp',
+							alt: 'The review screen',
+						}, // Shot: the review modal for a tournament with two divisions.
 					},
 				],
 			},
@@ -151,7 +176,12 @@ export const HELP_TOPICS = {
 				paragraphs: [
 					"The tournament's dashboard. Everyone sees what is on court now, what is up next, recent results and a card for each division. Once the tournament is finished, the final results lead the page.",
 				],
-				media: { type: 'image', alt: 'The Overview of an ongoing tournament' }, // Shot: the Overview of an ongoing tournament as a spectator, showing On court now and Up next.
+				media: {
+					type: 'image',
+					src: '/assets/help/tournament-overview--intro.webp',
+					phoneSrc: '/assets/help/tournament-overview--intro--phone.webp',
+					alt: 'The Overview of an ongoing tournament',
+				}, // Shot: the Overview of an ongoing tournament as a spectator, showing On court now and Up next.
 			},
 			{
 				id: 'organiser',
@@ -160,7 +190,12 @@ export const HELP_TOPICS = {
 					'The organiser and collaborators get more at the top. Your queue lists what needs you: a time slot whose matches finished without a result, a division whose round is complete and ready to move on, and the next slot’s scoresheets to print.',
 					"Today's timeline shows every court's slots at a glance — done, live, missing a result, or upcoming — with Edit schedule beside it for those who can change the schedule.",
 				],
-				media: { type: 'image', alt: 'Your queue and the day timeline' }, // Shot: Your queue with at least one item, and the timeline below it, as the organiser.
+				media: {
+					type: 'image',
+					src: '/assets/help/tournament-overview--organiser.webp',
+					phoneSrc: '/assets/help/tournament-overview--organiser--phone.webp',
+					alt: 'Your queue and the day timeline',
+				}, // Shot: Your queue with at least one item, and the timeline below it, as the organiser.
 			},
 			{
 				id: 'lifecycle',
@@ -248,7 +283,21 @@ export const HELP_TOPICS = {
 					'Snake (the default) deals the seeds across the pools and back again, so pools stay even. Straight fills one pool at a time with consecutive seeds. Seeded pots puts the top seeds one per pool, then draws each later group of seeds at random into the pools; Redraw makes a new random draw.',
 					"Changing the draw, or Redraw, rebuilds this division's pools and fixtures and takes its matches off the schedule. Reordering seeds on the Teams tab keeps the draw. The pool draw is fixed once the tournament starts.",
 				],
-				media: { type: 'image', alt: 'The three pool draws side by side' }, // Shot: the Pool draw panel with all three option cards, Seeded pots selected.
+				media: {
+					type: 'image',
+					src: '/assets/help/tournament-settings--pool-draw.webp',
+					phoneSrc: '/assets/help/tournament-settings--pool-draw--phone.webp',
+					alt: 'The three pool draws side by side',
+				}, // Shot: the Pool draw panel with all three option cards, Seeded pots selected.
+			},
+			{
+				id: 'matchups',
+				heading: 'Matchups',
+				paragraphs: [
+					'Who plays whom, for a Round Robin division that limits games per team. By seed pairs each team with the teams seeded nearest to it; Random draws the opponents instead, and Reshuffle draws them again.',
+					'Every team still plays the same number of games either way, and the seeding is unchanged, so it still breaks the last tie in the table. Adding, removing or reordering teams keeps the same draw.',
+					"Changing it, or Reshuffle, rebuilds this division's fixtures and takes its matches off the schedule. It is fixed once the tournament starts.",
+				],
 			},
 			{
 				id: 'ranking',
@@ -269,11 +318,23 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Drag a decider by its handle, or use its arrows, to change the order.'],
-						media: { type: 'animation', alt: 'Reordering tiebreak deciders' }, // Shot: dragging Head-to-head above Set ratio in the deciders list.
+						media: {
+							type: 'animation',
+							src: '/assets/help/tournament-settings--deciders--1.webp',
+							still: '/assets/help/tournament-settings--deciders--1--still.webp',
+							phoneSrc: '/assets/help/tournament-settings--deciders--1--phone.webp',
+							phoneStill: '/assets/help/tournament-settings--deciders--1--phone-still.webp',
+							alt: 'Reordering tiebreak deciders',
+						}, // Shot: dragging Head-to-head above Set ratio in the deciders list.
 					},
 					{
 						text: ['The × stops using a decider, and “Add a decider” puts one back.'],
-						media: { type: 'image', alt: 'Adding a decider back' }, // Shot: the deciders panel with one removed and its "+" chip under "Add a decider".
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-settings--deciders--2.webp',
+							phoneSrc: '/assets/help/tournament-settings--deciders--2--phone.webp',
+							alt: 'Adding a decider back',
+						}, // Shot: the deciders panel with one removed and its "+" chip under "Add a decider".
 					},
 				],
 			},
@@ -335,11 +396,21 @@ export const HELP_TOPICS = {
 						text: [
 							"Once the tournament has started, look for the score icon on a fixture's row. It appears on any fixture whose teams are known, for everyone allowed to score it.",
 						],
-						media: { type: 'image', alt: 'The score action on a fixture row' }, // Shot: a fixture row with its score action, on an ongoing tournament, as the organiser.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-fixtures-unscheduled--entering-results--1.webp',
+							phoneSrc: '/assets/help/tournament-fixtures-unscheduled--entering-results--1--phone.webp',
+							alt: 'The score action on a fixture row',
+						}, // Shot: a fixture row with its score action, on an ongoing tournament, as the organiser.
 					},
 					{
 						text: ['It opens the score entry screen for that match — see its own help entry once it’s open.'],
-						media: { type: 'image', alt: 'The score entry screen' }, // Shot: the score entry modal for a pool match with one set entered.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-fixtures-unscheduled--entering-results--2.webp',
+							phoneSrc: '/assets/help/tournament-fixtures-unscheduled--entering-results--2--phone.webp',
+							alt: 'The score entry screen',
+						}, // Shot: the score entry modal for a pool match with one set entered.
 					},
 				],
 				paragraphs: [
@@ -366,7 +437,12 @@ export const HELP_TOPICS = {
 					"This tournament has a schedule, so its fixtures are shown grouped by day, then by time, then by court — what's on, when, and where. The same division, stage, status and team filters as the unscheduled list are available here, plus day and court.",
 					'Finished time slots fold away so the current part of the day stays in view; open one to see its results. Jump to now scrolls to the current time.',
 				],
-				media: { type: 'image', alt: 'The Schedule tab grouped by time' }, // Shot: the Schedule tab on a day in progress, with a folded run of finished slots and the next slots open.
+				media: {
+					type: 'image',
+					src: '/assets/help/tournament-fixtures-scheduled--intro.webp',
+					phoneSrc: '/assets/help/tournament-fixtures-scheduled--intro--phone.webp',
+					alt: 'The Schedule tab grouped by time',
+				}, // Shot: the Schedule tab on a day in progress, with a folded run of finished slots and the next slots open.
 			},
 			{
 				id: 'viewing-and-printing',
@@ -374,11 +450,23 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['The print icon opens a clean, printable version of the whole schedule in a new tab. Anyone can use it, not only the organiser.'],
-						media: { type: 'image', alt: 'The print icon in the schedule toolbar' }, // Shot: the Schedule toolbar with the print icon's tooltip showing.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--1.webp',
+							phoneSrc: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--1--phone.webp',
+							alt: 'The print icon in the schedule toolbar',
+						}, // Shot: the Schedule toolbar with the print icon's tooltip showing.
 					},
 					{
 						text: ['Switch between the grid (courts across, times down) and the list (one row per fixture) with the two icons at the top, then press Print.'],
-						media: { type: 'animation', alt: 'Switching the printable schedule between grid and list' }, // Shot: the print page, pressing the list icon and then the grid icon.
+						media: {
+							type: 'animation',
+							src: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--2.webp',
+							still: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--2--still.webp',
+							phoneSrc: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--2--phone.webp',
+							phoneStill: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--2--phone-still.webp',
+							alt: 'Switching the printable schedule between grid and list',
+						}, // Shot: the print page, pressing the list icon and then the grid icon.
 					},
 				],
 			},
@@ -402,7 +490,12 @@ export const HELP_TOPICS = {
 					"Teams in this pool or league, ranked by the division's ranking rules and tiebreak deciders (the organiser sets them on the Settings tab). If this division spans more than one round-robin round, the table combines all of them rather than showing a table per round.",
 					'Turn on Advanced statistics for the full breakdown behind the ranking — set and point ratios, and a column for every scoreline this division has actually produced (for example, how many matches finished 2–1).',
 				],
-				media: { type: 'image', alt: 'A pool table with advanced statistics on' }, // Shot: a pool standings table with Advanced statistics switched on.
+				media: {
+					type: 'image',
+					src: '/assets/help/tournament-standings-groups--intro.webp',
+					phoneSrc: '/assets/help/tournament-standings-groups--intro--phone.webp',
+					alt: 'A pool table with advanced statistics on',
+				}, // Shot: a pool standings table with Advanced statistics switched on.
 			},
 			{
 				id: 'switching-division-and-stage',
@@ -417,13 +510,23 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Once this round is complete, Start Next Round appears here.'],
-						media: { type: 'image', alt: 'Start Next Round below a completed pool table' }, // Shot: a completed pool round with the Start Next Round button visible.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-standings-groups--organiser--1.webp',
+							phoneSrc: '/assets/help/tournament-standings-groups--organiser--1--phone.webp',
+							alt: 'The next round panel beside a completed pool table',
+						}, // Shot: a completed pool round with the Start Next Round button visible.
 					},
 					{
 						text: [
 							'It proposes who qualifies (or the order for another round-robin leg) and lets you reorder or swap a team before confirming. Nothing changes until you confirm.',
 						],
-						media: { type: 'image', alt: 'The next round screen' }, // Shot: the next round modal with its preview beside the list.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-standings-groups--organiser--2.webp',
+							phoneSrc: '/assets/help/tournament-standings-groups--organiser--2--phone.webp',
+							alt: 'The next round screen',
+						}, // Shot: the next round modal with its preview beside the list.
 					},
 				],
 			},
@@ -438,7 +541,12 @@ export const HELP_TOPICS = {
 				paragraphs: [
 					'The knockout bracket for this division. A match still waiting on an earlier result shows “Winner of…” until that result is in; once pool play has decided who fills the first knockout round, an unbound slot shows the pool position that earns it (for example “A1”) instead of a bare rank number.',
 				],
-				media: { type: 'image', alt: 'A knockout bracket part-way through' }, // Shot: a mid-tournament knockout bracket showing at least one round already decided (real team names) feeding into a round still showing "Winner of #N" placeholders, so the two states are both visible at once.
+				media: {
+					type: 'image',
+					src: '/assets/help/tournament-standings-knockout--intro.webp',
+					phoneSrc: '/assets/help/tournament-standings-knockout--intro--phone.webp',
+					alt: 'A knockout bracket part-way through',
+				}, // Shot: a mid-tournament knockout bracket showing at least one round already decided (real team names) feeding into a round still showing "Winner of #N" placeholders, so the two states are both visible at once.
 			},
 			{
 				id: 'organiser',
@@ -481,23 +589,47 @@ export const HELP_TOPICS = {
 						text: [
 							'Add Team adds one at a time. “Add multiple teams” takes a whole list at once — one name per line, or separated by commas.',
 						],
-						media: { type: 'animation', alt: 'Adding several teams at once' }, // Shot: Add Team, switching to Add multiple teams, pasting four names and pressing Add teams.
+						media: {
+							type: 'animation',
+							src: '/assets/help/tournament-teams--organiser--1.webp',
+							still: '/assets/help/tournament-teams--organiser--1--still.webp',
+							phoneSrc: '/assets/help/tournament-teams--organiser--1--phone.webp',
+							phoneStill: '/assets/help/tournament-teams--organiser--1--phone-still.webp',
+							alt: 'Adding several teams at once',
+						}, // Shot: Add Team, switching to Add multiple teams, pasting four names and pressing Add teams.
 					},
 					{
 						text: ['The pencil renames a team, and the bin removes it.'],
-						media: { type: 'image', alt: 'A team row with its edit and remove icons' }, // Shot: a team row with the pencil's tooltip showing.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-teams--organiser--2.webp',
+							phoneSrc: '/assets/help/tournament-teams--organiser--2--phone.webp',
+							alt: 'A team row with its edit and remove icons',
+						}, // Shot: a team row with the pencil's tooltip showing.
 					},
 					{
 						text: [
 							"This order is the seeding. Drag a team by its handle — or focus the handle and use the up and down arrow keys — to move it. Seeding decides how pools and knockout positions are drawn.",
 						],
-						media: { type: 'animation', alt: 'Reordering teams by dragging' }, // Shot: dragging the fourth seed up to second place.
+						media: {
+							type: 'animation',
+							src: '/assets/help/tournament-teams--organiser--3.webp',
+							still: '/assets/help/tournament-teams--organiser--3--still.webp',
+							phoneSrc: '/assets/help/tournament-teams--organiser--3--phone.webp',
+							phoneStill: '/assets/help/tournament-teams--organiser--3--phone-still.webp',
+							alt: 'Reordering teams by dragging',
+						}, // Shot: dragging the fourth seed up to second place.
 					},
 					{
 						text: [
 							'Changes wait until you press Save Changes; Discard drops them. Adding, removing or reordering teams (not just renaming) regenerates the division’s fixtures, so you confirm the pool and qualifier setup again first.',
 						],
-						media: { type: 'image', alt: 'Unsaved team changes with Save Changes and Discard' }, // Shot: the unsaved-changes bar with Save Changes and Discard.
+						media: {
+							type: 'image',
+							src: '/assets/help/tournament-teams--organiser--4.webp',
+							phoneSrc: '/assets/help/tournament-teams--organiser--4--phone.webp',
+							alt: 'Unsaved team changes with Save Changes and Discard',
+						}, // Shot: the unsaved-changes bar with Save Changes and Discard.
 					},
 				],
 			},
@@ -596,28 +728,61 @@ export const HELP_TOPICS = {
 				],
 			},
 			{
+				id: 'matchups',
+				heading: 'Matchups',
+				paragraphs: [
+					'Only when games per team are limited, since not everyone meets everyone. By seed, each team plays the teams seeded nearest to it. Random draws the opponents instead.',
+					'Random changes only who plays whom. Every team still plays exactly the same number of games, and the seeding stays as you set it — it still breaks the last tie in the table.',
+					'The draw is kept with the division: adding, removing or reordering teams before the start pairs the new list the same way. To draw again, use Reshuffle in Tournament settings → Divisions.',
+				],
+			},
+			{
 				id: 'teams',
 				heading: 'Teams',
 				steps: [
 					{
 						text: ['Type a team name and press Enter (or Add) — the field stays ready for the next one.'],
-						media: { type: 'animation', alt: 'Adding teams one at a time' }, // Shot: typing three team names, pressing Enter after each.
+						media: {
+							type: 'animation',
+							src: '/assets/help/division-modal--teams--1.webp',
+							still: '/assets/help/division-modal--teams--1--still.webp',
+							phoneSrc: '/assets/help/division-modal--teams--1--phone.webp',
+							phoneStill: '/assets/help/division-modal--teams--1--phone-still.webp',
+							alt: 'Adding teams one at a time',
+						}, // Shot: typing three team names, pressing Enter after each.
 					},
 					{
 						text: ['“Add multiple teams” takes a whole list at once: one name per line, or separated by commas.'],
-						media: { type: 'image', alt: 'The bulk team box' }, // Shot: the Add multiple teams box with four names pasted in.
+						media: {
+							type: 'image',
+							src: '/assets/help/division-modal--teams--2.webp',
+							phoneSrc: '/assets/help/division-modal--teams--2--phone.webp',
+							alt: 'The bulk team box',
+						}, // Shot: the Add multiple teams box with four names pasted in.
 					},
 					{
 						text: [
 							'The order is the seeding. Drag a team by its number, or focus it and use the arrow keys, to move it. The letter beside each team is the pool its seed lands in.',
 						],
-						media: { type: 'animation', alt: 'Reordering teams in the division' }, // Shot: dragging a team by its number in a Pool Play division, the pool letters updating.
+						media: {
+							type: 'animation',
+							src: '/assets/help/division-modal--teams--3.webp',
+							still: '/assets/help/division-modal--teams--3--still.webp',
+							phoneSrc: '/assets/help/division-modal--teams--3--phone.webp',
+							phoneStill: '/assets/help/division-modal--teams--3--phone-still.webp',
+							alt: 'Reordering teams in the division',
+						}, // Shot: dragging a team by its number in a Pool Play division, the pool letters updating.
 					},
 					{
 						text: [
 							'With a Seeded pots draw, only the top seeds have a pool letter yet — the rest show a dash, and are drawn at random when the division is saved.',
 						],
-						media: { type: 'image', alt: 'Seeds drawn on save in a Seeded pots division' }, // Shot: the team list of a Seeded pots division, with dashes from the second pot onward.
+						media: {
+							type: 'image',
+							src: '/assets/help/division-modal--teams--4.webp',
+							phoneSrc: '/assets/help/division-modal--teams--4--phone.webp',
+							alt: 'Seeds drawn on save in a Seeded pots division',
+						}, // Shot: the team list of a Seeded pots division, with dashes from the second pot onward.
 					},
 				],
 			},
@@ -635,15 +800,32 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Type a score, or use the − and + buttons beside it.'],
-						media: { type: 'animation', alt: 'Entering a set score' }, // Shot: entering 25–20 for the first set, using + for one team.
+						media: {
+							type: 'animation',
+							src: '/assets/help/score-update-modal--intro--1.webp',
+							still: '/assets/help/score-update-modal--intro--1--still.webp',
+							phoneSrc: '/assets/help/score-update-modal--intro--1--phone.webp',
+							phoneStill: '/assets/help/score-update-modal--intro--1--phone-still.webp',
+							alt: 'Entering a set score',
+						}, // Shot: entering 25–20 for the first set, using + for one team.
 					},
 					{
 						text: ['Add set adds another set. The bin removes a set entered by mistake.'],
-						media: { type: 'image', alt: 'Adding and removing sets' }, // Shot: the score modal with three sets and the bin visible.
+						media: {
+							type: 'image',
+							src: '/assets/help/score-update-modal--intro--2.webp',
+							phoneSrc: '/assets/help/score-update-modal--intro--2--phone.webp',
+							alt: 'Adding and removing sets',
+						}, // Shot: the score modal with three sets and the bin visible.
 					},
 					{
 						text: ['Save score records what’s entered so far without finishing the match. End match finishes it from the sets entered.'],
-						media: { type: 'image', alt: 'Save score and End match' }, // Shot: the score modal's footer with Save score and End match.
+						media: {
+							type: 'image',
+							src: '/assets/help/score-update-modal--intro--3.webp',
+							phoneSrc: '/assets/help/score-update-modal--intro--3--phone.webp',
+							alt: 'Save score and End match',
+						}, // Shot: the score modal's footer with Save score and End match.
 					},
 				],
 			},
@@ -680,19 +862,36 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ["The list shows who's progressing, in the order calculated from the completed round's results."],
-						media: { type: 'image', alt: 'The calculated qualifier order' }, // Shot: the next round modal as it opens, before any change.
+						media: {
+							type: 'image',
+							src: '/assets/help/next-round-modal--reviewing--1.webp',
+							phoneSrc: '/assets/help/next-round-modal--reviewing--1--phone.webp',
+							alt: 'The calculated qualifier order',
+						}, // Shot: the next round modal as it opens, before any change.
 					},
 					{
 						text: [
 							'Use the arrows beside a team to reorder (or drag it by its handle), or the swap control to substitute a different eligible team. A change is recorded as a deliberate adjustment.',
 						],
-						media: { type: 'animation', alt: 'Reordering and swapping qualifiers' }, // Shot: moving a team up one place, then opening the swap list and choosing another team.
+						media: {
+							type: 'animation',
+							src: '/assets/help/next-round-modal--reviewing--2.webp',
+							still: '/assets/help/next-round-modal--reviewing--2--still.webp',
+							phoneSrc: '/assets/help/next-round-modal--reviewing--2--phone.webp',
+							phoneStill: '/assets/help/next-round-modal--reviewing--2--phone-still.webp',
+							alt: 'Reordering and swapping qualifiers',
+						}, // Shot: moving a team up one place, then opening the swap list and choosing another team.
 					},
 					{
 						text: [
 							'Beside the list (below it on a phone), the preview shows the matchups this order produces, live. A round-robin leg carries every team forward, so it has no bracket to preview.',
 						],
-						media: { type: 'image', alt: 'The matchup preview' }, // Shot: the preview panel beside a reordered list.
+						media: {
+							type: 'image',
+							src: '/assets/help/next-round-modal--reviewing--3.webp',
+							phoneSrc: '/assets/help/next-round-modal--reviewing--3--phone.webp',
+							alt: 'The matchup preview',
+						}, // Shot: the preview panel beside a reordered list.
 					},
 				],
 			},
@@ -730,11 +929,21 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Name the template and choose the PDF it is printed from.'],
-						media: { type: 'image', alt: 'Uploading a PDF template' }, // Shot: the Upload a template screen with a name entered and a PDF chosen.
+						media: {
+							type: 'image',
+							src: '/assets/help/scoresheet-template-modal--uploading--1.webp',
+							phoneSrc: '/assets/help/scoresheet-template-modal--uploading--1--phone.webp',
+							alt: 'Uploading a PDF template',
+						}, // Shot: the Upload a template screen with a name entered and a PDF chosen.
 					},
 					{
 						text: ['On the next screen you draw a box for each piece of information to prefill — team names, date, court, division and more.'],
-						media: { type: 'image', alt: 'The field placement screen' }, // Shot: the Place fields screen as it opens, with the PDF shown.
+						media: {
+							type: 'image',
+							src: '/assets/help/scoresheet-template-modal--uploading--2.webp',
+							phoneSrc: '/assets/help/scoresheet-template-modal--uploading--2--phone.webp',
+							alt: 'The field placement screen',
+						}, // Shot: the Place fields screen as it opens, with the PDF shown.
 					},
 				],
 			},
@@ -744,17 +953,34 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Click-drag a box on the page for the selected field. A quick click without dragging drops a default-size box you can redraw.'],
-						media: { type: 'animation', alt: 'Drawing a field box on the PDF' }, // Shot: drawing a box for Team 1 on the PDF.
+						media: {
+							type: 'animation',
+							src: '/assets/help/scoresheet-template-modal--placing-fields--1.webp',
+							still: '/assets/help/scoresheet-template-modal--placing-fields--1--still.webp',
+							phoneSrc: '/assets/help/scoresheet-template-modal--placing-fields--1--phone.webp',
+							phoneStill: '/assets/help/scoresheet-template-modal--placing-fields--1--phone-still.webp',
+							alt: 'Drawing a field box on the PDF',
+						}, // Shot: drawing a box for Team 1 on the PDF.
 					},
 					{
 						text: [
 							'A field can be placed more than once, and stays selected after each box, so another place for it is a straight-away drag. Open Fields to place a different one.',
 						],
-						media: { type: 'image', alt: 'The fields list' }, // Shot: the Fields panel open with some fields marked as placed.
+						media: {
+							type: 'image',
+							src: '/assets/help/scoresheet-template-modal--placing-fields--2.webp',
+							phoneSrc: '/assets/help/scoresheet-template-modal--placing-fields--2--phone.webp',
+							alt: 'The fields list',
+						}, // Shot: the Fields panel open with some fields marked as placed.
 					},
 					{
 						text: ['Text is sized and wrapped to fit each box when the scoresheet is generated. Save template when you are done.'],
-						media: { type: 'image', alt: 'A placed template ready to save' }, // Shot: a page with several placed boxes and the Save template button.
+						media: {
+							type: 'image',
+							src: '/assets/help/scoresheet-template-modal--placing-fields--3.webp',
+							phoneSrc: '/assets/help/scoresheet-template-modal--placing-fields--3--phone.webp',
+							alt: 'A placed template ready to save',
+						}, // Shot: a page with several placed boxes and the Save template button.
 					},
 				],
 			},
@@ -776,7 +1002,12 @@ export const HELP_TOPICS = {
 				paragraphs: [
 					"The organiser's tool for assigning fixtures to courts and times. The fixtures list is on the left and the board fills the rest, with the day tabs above it. Everything else opens when you need it: Set up, Auto-schedule and Print from the toolbar, and each match's own details when you click it. Nothing here is visible to anyone else until it's saved.",
 				],
-				media: { type: 'image', alt: 'The schedule maker on a multi-court day' }, // Shot: the full modal open on a multi-day, multi-court schedule with the board view active and a few fixtures already placed, wide enough to show the fixtures list, the day tabs and the board together.
+				media: {
+					type: 'image',
+					src: '/assets/help/schedule-maker-modal--intro.webp',
+					phoneSrc: '/assets/help/schedule-maker-modal--intro--phone.webp',
+					alt: 'The schedule maker on a multi-court day',
+				}, // Shot: the full modal open on a multi-day, multi-court schedule with the board view active and a few fixtures already placed, wide enough to show the fixtures list, the day tabs and the board together.
 			},
 			{
 				id: 'the-board',
@@ -788,23 +1019,45 @@ export const HELP_TOPICS = {
 				steps: [
 					{
 						text: ['Drag a fixture from the sidebar onto the board. It lands where you drop it, at its round’s length.'],
-						media: { type: 'animation', alt: 'Dragging a fixture onto the board' }, // Shot: dragging an unscheduled fixture onto Court 1 at 10:00.
+						media: {
+							type: 'animation',
+							src: '/assets/help/schedule-maker-modal--the-board--1.webp',
+							still: '/assets/help/schedule-maker-modal--the-board--1--still.webp',
+							alt: 'Dragging a fixture onto the board',
+						}, // Shot: dragging an unscheduled fixture onto Court 1 at 10:00.
 					},
 					{
 						text: [
 							"Drag a placed match to move it, or drag its top or bottom edge to change its length. If it can't go there — a team is playing on another court, say — the reason appears beside your pointer and dropping changes nothing.",
 						],
-						media: { type: 'animation', alt: 'Moving and resizing a match' }, // Shot: moving a match to another court, then dragging its bottom edge longer.
+						media: {
+							type: 'animation',
+							src: '/assets/help/schedule-maker-modal--the-board--2.webp',
+							still: '/assets/help/schedule-maker-modal--the-board--2--still.webp',
+							alt: 'Moving and resizing a match',
+						}, // Shot: moving a match to another court, then dragging its bottom edge longer.
 					},
 					{
 						text: [
 							"Click a match to edit its start, length, court, day, officials and notes where it sits. Remove from schedule takes it off the board and back to the sidebar.",
 						],
-						media: { type: 'image', alt: 'A match’s details' }, // Shot: a match's popover open on the board, Remove from schedule visible.
+						media: {
+							type: 'image',
+							src: '/assets/help/schedule-maker-modal--the-board--3.webp',
+							phoneSrc: '/assets/help/schedule-maker-modal--the-board--3--phone.webp',
+							alt: 'A match’s details',
+						}, // Shot: a match's popover open on the board, Remove from schedule visible.
 					},
 					{
 						text: ['Click or tap any empty time to choose a fixture for it, or drag down an empty court to choose the exact times first.'],
-						media: { type: 'animation', alt: 'Placing a fixture by choosing a time' }, // Shot: dragging down an empty court and picking a fixture from the list that opens.
+						media: {
+							type: 'animation',
+							src: '/assets/help/schedule-maker-modal--the-board--4.webp',
+							still: '/assets/help/schedule-maker-modal--the-board--4--still.webp',
+							phoneSrc: '/assets/help/schedule-maker-modal--the-board--4--phone.webp',
+							phoneStill: '/assets/help/schedule-maker-modal--the-board--4--phone-still.webp',
+							alt: 'Placing a fixture by choosing a time',
+						}, // Shot: dragging down an empty court and picking a fixture from the list that opens.
 					},
 				],
 			},

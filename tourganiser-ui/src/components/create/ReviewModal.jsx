@@ -2,7 +2,7 @@ import CreateModal from './CreateModal';
 import FormatSchematic from './FormatSchematic';
 import Icon from '../Icons';
 import LoadingScreen from '../LoadingScreen';
-import { getFormatLabel, getPoolDrawLabel } from './divisionFormats';
+import { getFormatLabel, getMatchupDrawLabel, getPoolDrawLabel } from './divisionFormats';
 import { totalMatches } from './divisionPreview';
 
 // Classic reads its match count from pools and a knockout stage. League has
@@ -153,6 +153,12 @@ function ReviewDivision({ division }) {
 					<div className="ct-review-fact">
 						<dt>{division.roundRobinMode === 'limited' ? 'Games per team' : 'Legs'}</dt>
 						<dd>{division.roundRobinMode === 'limited' ? division.gamesPerTeam : division.roundRobinLegs}</dd>
+					</div>
+				)}
+				{division.type === 'league' && division.roundRobinMode === 'limited' && (
+					<div className="ct-review-fact">
+						<dt>Matchups</dt>
+						<dd>{getMatchupDrawLabel(division.matchup_draw)}</dd>
 					</div>
 				)}
 				<div className="ct-review-fact">

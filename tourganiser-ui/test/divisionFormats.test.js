@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
+	DEFAULT_MATCHUP_DRAW,
 	DEFAULT_POOL_DRAW,
+	MATCHUP_DRAWS,
 	MAX_ROUND_ROBIN_LEGS,
 	POOL_DRAWS,
 	createEmptyDivision,
 	gamesPerTeamError,
+	getMatchupDrawLabel,
 	getPoolDrawLabel,
+	matchupDrawOf,
 	poolDrawOf,
 	validateDivision,
 } from '../src/components/create/divisionFormats.js';
@@ -138,5 +142,27 @@ describe('pool draw', () => {
 	it('labels a draw', () => {
 		expect(getPoolDrawLabel('POTS')).toBe('Seeded pots');
 		expect(getPoolDrawLabel(undefined)).toBe('Snake');
+	});
+});
+
+describe('matchup draw', () => {
+	it('starts a new division in seed order', () => {
+		expect(createEmptyDivision().matchup_draw).toBe('SEED');
+		expect(DEFAULT_MATCHUP_DRAW).toBe('SEED');
+	});
+
+	it('offers the two draws the API takes', () => {
+		expect(MATCHUP_DRAWS.map((draw) => draw.value)).toEqual(['SEED', 'RANDOM']);
+	});
+
+	it('reads anything unrecognised as seed order', () => {
+		expect(matchupDrawOf('RANDOM')).toBe('RANDOM');
+		expect(matchupDrawOf(undefined)).toBe('SEED');
+		expect(matchupDrawOf('shuffle')).toBe('SEED');
+	});
+
+	it('labels a draw', () => {
+		expect(getMatchupDrawLabel('RANDOM')).toBe('Random');
+		expect(getMatchupDrawLabel(undefined)).toBe('By seed');
 	});
 });

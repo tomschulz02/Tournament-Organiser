@@ -13,7 +13,7 @@ import { SCORESHEET_FIELDS, SYSTEM_TEMPLATES } from '../../utils/scoresheetTempl
 import { listTemplates } from '../../utils/scoresheetStorage';
 import { divisionColorStyle } from '../../utils/divisionColors';
 import { isNotStarted } from './tournamentStatus';
-import { DEFAULT_POOL_DRAW, POOL_DRAWS, poolDrawOf } from '../create/divisionFormats';
+import { DEFAULT_POOL_DRAW, MATCHUP_DRAWS, POOL_DRAWS, matchupDrawOf, poolDrawOf } from '../create/divisionFormats';
 import { poolMembership } from '../create/divisionPreview';
 import {
 	MAX_MATCH_POINTS,
@@ -562,9 +562,9 @@ function DivisionSettingsBand({ divisions, status, onChanged }) {
 	const { showMessage } = useMessage();
 	const confirm = useConfirm();
 	const [selectedId, setSelectedId] = useState(null);
-	// Placement depth regenerates knockout fixtures, and a pool draw change or a
-	// redraw regenerates all of them, which takes long enough to look like
-	// nothing happened; the ranking rules do not.
+	// Placement depth regenerates knockout fixtures, and a pool or matchup draw
+	// change, a redraw or a reshuffle regenerates all of them, which takes long
+	// enough to look like nothing happened; the ranking rules do not.
 	const [regenerating, setRegenerating] = useState(false);
 	const [copying, setCopying] = useState(false);
 	// What was chosen and not yet confirmed by a refetch, so a control does not
@@ -593,7 +593,15 @@ function DivisionSettingsBand({ divisions, status, onChanged }) {
 		}
 
 		entry.sending = true;
-		if ('placementDepth' in settings || 'poolDraw' in settings || settings.redrawPools) setRegenerating(true);
+		if (
+			'placementDepth' in settings ||
+			'poolDraw' in settings ||
+			settings.redrawPools ||
+			'matchupDraw' in settings ||
+			settings.reshuffleMatchups
+		) {
+			setRegenerating(true);
+		}
 
 		try {
 			let sending = settings;
@@ -624,6 +632,7 @@ function DivisionSettingsBand({ divisions, status, onChanged }) {
 	const placementDepth = 'placementDepth' in waiting ? waiting.placementDepth : division.placement_depth ?? null;
 	const knockout = knockoutOf(division);
 	const poolDraw = waiting.poolDraw ?? poolDrawOf(division.state?.poolDraw?.method);
+	const matchupDraw = waiting.matchupDraw ?? matchupDrawOf(division.state?.matchupDraw?.method);
 	const disabled = regenerating || copying;
 	const others = divisions.filter((entry) => entry.id !== division.id);
 
@@ -701,6 +710,18 @@ function DivisionSettingsBand({ divisions, status, onChanged }) {
 					disabled={disabled}
 					onChange={(next) => save(division, { poolDraw: next })}
 					onRedraw={() => save(division, { redrawPools: true })}
+				/>
+			)}
+
+			{/* Only a League with a limited number of games per team chooses its
+			    opponents: in legs mode every team meets every other team. */}
+			{isLimitedLeague(division) && (
+				<MatchupPanel
+					draw={matchupDraw}
+					locked={!isNotStarted(status)}
+					disabled={disabled}
+					onChange={(next) => save(division, { matchupDraw: next })}
+					onReshuffle={() => save(division, { reshuffleMatchups: true })}
 				/>
 			)}
 
@@ -797,6 +818,55 @@ function PoolDrawPanel({ draw, poolCount, locked, disabled, onChange, onRedraw }
 			</div>
 
 		</RulesPanel>
+	);
+}
+
+// A League plays a limited number of games per team when its one round-robin
+// round has fewer games than a full cycle — the way leagueConfigFromState in
+// api/src/services/divisions.service.js reads it back.
+function isLimitedLeague(division) {
+	if (division.type !== 'League') return false;
+
+	const rounds = (division.state?.rounds ?? []).filter((round) => round.type === 'roundRobin');
+	const teams = division.state?.teams?.length ?? 0;
+	const fullCycle = (teams * (teams - 1)) / 2;
+
+	return rounds.length === 1 && rounds[0].totalGames > 0 && rounds[0].totalGames < fullCycle;
+}
+
+// Who plays whom in a limited League — docs/tournament-rules.md, "Matchups
+// (limited round robin)". Like the pool draw, changing it or reshuffling
+// rebuilds the division's fixtures, so it locks when the tournament starts.
+function MatchupPanel({ draw, locked, disabled, onChange, onReshuffle }) {
+	const off = disabled || locked;
+
+	return (
+		<RulesPanel
+			title="Matchups"
+			help="matchups"
+			aside={
+				<div className="tv-rules-panel-actions">
+					{draw === 'RANDOM' && (
+						<button type="button" className="tv-icon-button" disabled={off} onClick={onReshuffle}>
+							<Icon name="shuffle" size={18} fill="currentColor" />
+							Reshuffle
+						</button>
+					)}
+					<div className="tv-seg" role="group" aria-label="Matchups">
+						{MATCHUP_DRAWS.map((option) => (
+							<button
+								key={option.value}
+								type="button"
+								aria-pressed={option.value === draw}
+								disabled={off}
+								onClick={() => option.value !== draw && onChange(option.value)}>
+								{option.label}
+							</button>
+						))}
+					</div>
+				</div>
+			}
+		/>
 	);
 }
 

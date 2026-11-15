@@ -93,6 +93,8 @@ export const ERRORS = {
 	// docs/tournament-rules.md, "Pool Draw".
 	INVALID_POOL_DRAW: [400, "The pool draw must be Snake, Straight or Seeded pots"],
 	POOL_DRAW_NOT_AVAILABLE: [400, "Only a Classic division has a pool draw"],
+	INVALID_MATCHUP_DRAW: [400, "Matchups must be by seed or random"],
+	MATCHUP_DRAW_NOT_AVAILABLE: [400, "Only a League with a limited number of games per team has random matchups"],
 	// Placement depth: Classic only, an odd rank from 5 to the knockout's team
 	// count, and fixed once the knockout stage is under way, because changing it
 	// adds and removes fixtures.

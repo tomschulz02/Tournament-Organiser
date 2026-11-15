@@ -7,6 +7,13 @@ import { generateFixtures, fixtureService, generatePartialRoundRobinPairs, round
 import { qualifierCount } from "./progression.service.js";
 import { rankingRulesOf, readRankingRules } from "../utils/standings.js";
 import { drawPools, poolDrawFor, poolDrawFromState, readDrawMethod, storedPoolDraw } from "../utils/poolDraw.js";
+import {
+    matchupDrawFor,
+    matchupDrawFromState,
+    matchupOrder,
+    readMatchupMethod,
+    storedMatchupDraw
+} from "../utils/matchupDraw.js";
 import { assertCan, resolveRole } from "../utils/tournamentPermissions.js";
 import { MAX_TEAMS_PER_DIVISION, MAX_ROUND_ROBIN_LEGS, MAX_FIXTURES_PER_DIVISION } from "../config/limits.js";
 import { v4 as uuidv4 } from "uuid";
@@ -50,6 +57,13 @@ async function createDivision(details, tournamentId, userId, client){
     if (details.type === "classic") {
         validateStructure(toCount(details.num_groups), toCount(details.knockout_teams), teamIds.length);
         poolDraw = poolDrawFor(readSubmittedDrawMethod(details.pool_draw));
+    }
+
+    // Random matchups are a limited League's. leagueConfigFromPayload refuses
+    // them for a League in legs mode; a Classic payload never reaches it with a
+    // mode, so it is refused here.
+    if (details.type !== "league" && readSubmittedMatchupMethod(details.matchup_draw) === "RANDOM") {
+        throw new AppError("MATCHUP_DRAW_NOT_AVAILABLE");
     }
 
     const { division, fixtures } = buildDivision(
@@ -175,6 +189,10 @@ async function updateDivisionColour(divisionId, userId, colour) {
 // asks a pots draw for new random choices. Either one regenerates the division
 // the way a seed reorder does, behind the same gates — see redrawDivision.
 //
+// The matchup draw is the League's counterpart: `matchupDraw` ("SEED" or
+// "RANDOM") and `reshuffleMatchups: true`, for a League with a limited number of
+// games per team only. It regenerates the same way.
+//
 // Only the keys present in the body are touched, and all are validated before
 // anything is written.
 async function updateDivisionSettings(divisionId, userId, payload = {}) {
@@ -210,9 +228,22 @@ async function updateDivisionSettings(divisionId, userId, payload = {}) {
         // force, or a redraw of a draw with nothing random in it — regenerates
         // nothing, so it is not refused once the tournament has started either.
         if (JSON.stringify(poolDraw) !== JSON.stringify(poolDrawFromState(division.state))) {
-            await redrawDivision(division, poolDraw, placementDepth, rulesChanged ? rankingRules : null);
+            await redrawDivision(division, { poolDraw }, placementDepth, rulesChanged ? rankingRules : null);
 
             return { divisionId, rankingRules, placementDepth, poolDraw: poolDraw.method };
+        }
+    }
+
+    const matchupAsked = payload.matchupDraw !== undefined || payload.reshuffleMatchups === true;
+    if (matchupAsked) {
+        const matchupDraw = readSubmittedMatchupDraw(division, payload);
+
+        // As with the pool draw: the method already in force, or a reshuffle of
+        // seed order, changes nothing and so is not refused after the start.
+        if (JSON.stringify(matchupDraw) !== JSON.stringify(matchupDrawFromState(division.state))) {
+            await redrawDivision(division, { matchupDraw }, placementDepth, rulesChanged ? rankingRules : null);
+
+            return { divisionId, rankingRules, placementDepth, matchupDraw: matchupDraw.method };
         }
     }
 
@@ -229,9 +260,29 @@ async function updateDivisionSettings(divisionId, userId, payload = {}) {
         await divisionsRepository.updateStateRankingRules(divisionId, rankingRules);
     }
 
-    return drawAsked
-        ? { divisionId, rankingRules, placementDepth, poolDraw: poolDrawFromState(division.state).method }
-        : { divisionId, rankingRules, placementDepth };
+    return {
+        divisionId,
+        rankingRules,
+        placementDepth,
+        ...(drawAsked ? { poolDraw: poolDrawFromState(division.state).method } : {}),
+        ...(matchupAsked ? { matchupDraw: matchupDrawFromState(division.state).method } : {})
+    };
+}
+
+// The matchup draw a settings request asks for, in the shape generation takes.
+// Only a League in limited mode has one: the mode is read back from the state
+// the way a rebuild reads it.
+function readSubmittedMatchupDraw(division, payload) {
+    const config =
+        division.type === "League" ? leagueConfigFromState(division.state, teamIdsOf(division.state).length) : null;
+    if (config?.mode !== "limited") {
+        throw new AppError("MATCHUP_DRAW_NOT_AVAILABLE");
+    }
+
+    const current = matchupDrawFromState(division.state);
+    const method = payload.matchupDraw === undefined ? current.method : readSubmittedMatchupMethod(payload.matchupDraw);
+
+    return matchupDrawFor(method, current, payload.reshuffleMatchups === true);
 }
 
 // The draw a settings request asks for: the method it names, or the one in
@@ -249,15 +300,17 @@ function readSubmittedPoolDraw(division, payload) {
     return poolDrawFor(method, current, payload.redrawPools === true);
 }
 
-// Regenerates a Classic division for a new pool draw: same teams in the same
-// seed order, same pool and qualifier counts, new pools and so new fixtures.
-// It is a seed reorder in everything but what changed, so it has reorderTeams'
-// two gates and writes the same way — fixtures replaced, state overwritten with
-// the settings carried, schedule repaired.
+// Regenerates a division for a new draw: same teams in the same seed order, and
+// for a Classic division the same pool and qualifier counts with new pools, for
+// a League the same mode and games per team with new pairings — so new fixtures
+// either way. `draws` is { poolDraw } for a Classic division, { matchupDraw } for
+// a League. It is a seed reorder in everything but what changed, so it has
+// reorderTeams' two gates and writes the same way — fixtures replaced, state
+// overwritten with the settings carried, schedule repaired.
 //
 // A placement depth or ranking rules sent in the same request go into the same
 // regeneration rather than being patched onto a state about to be replaced.
-async function redrawDivision(division, poolDraw, placementDepth, rankingRules) {
+async function redrawDivision(division, draws, placementDepth, rankingRules) {
     if ((division.tournament_status || "Not Started") !== "Not Started") {
         throw new AppError("TOURNAMENT_ALREADY_STARTED");
     }
@@ -271,16 +324,27 @@ async function redrawDivision(division, poolDraw, placementDepth, rankingRules) 
     const rounds = division.state.rounds;
     const knockout = rounds.find((round) => round.type === "knockout");
 
-    const { division: generated, fixtures } = buildDivision(
-        "classic",
-        teamIds,
-        teamIds.length,
-        rounds[0].groups.length,
-        qualifierCount(knockout),
-        undefined,
-        placementDepth,
-        poolDraw
-    );
+    const { division: generated, fixtures } =
+        division.type === "League"
+            ? buildDivision(
+                  "league",
+                  teamIds,
+                  teamIds.length,
+                  undefined,
+                  undefined,
+                  { ...leagueConfigFromState(division.state, teamIds.length), matchupDraw: draws.matchupDraw },
+                  placementDepth
+              )
+            : buildDivision(
+                  "classic",
+                  teamIds,
+                  teamIds.length,
+                  rounds[0].groups.length,
+                  qualifierCount(knockout),
+                  undefined,
+                  placementDepth,
+                  draws.poolDraw
+              );
 
     const settings = rankingRules ? { ...division.state, rankingRules } : division.state;
 
@@ -307,6 +371,15 @@ function readSubmittedDrawMethod(value) {
     const method = readDrawMethod(value);
     if (!method) {
         throw new AppError("INVALID_POOL_DRAW");
+    }
+
+    return method;
+}
+
+function readSubmittedMatchupMethod(value) {
+    const method = readMatchupMethod(value);
+    if (!method) {
+        throw new AppError("INVALID_MATCHUP_DRAW");
     }
 
     return method;
@@ -461,7 +534,9 @@ async function renameTeams(divisionId, entries, existingIds) {
 //
 // state.poolDraw is deliberately not here. It changes only together with the
 // pools, so generation writes it: the callers read it from the old state with
-// poolDrawFromState and pass it back in.
+// poolDrawFromState and pass it back in. state.matchupDraw is the same: it
+// changes only together with the pairings, and leagueConfigFromState reads it
+// back so a rebuild or reorder regenerates with the stored seed.
 const STATE_SETTING_KEYS = ["color", "rankingRules"];
 
 function carryStateSettings(oldState, newState) {
@@ -938,7 +1013,13 @@ function createLeagueState(teams, num_teams, leagueConfig){
     const mode = leagueConfig?.mode === 'limited' ? 'limited' : 'legs';
 
     if (mode === 'limited') {
-        const pairs = generatePartialRoundRobinPairs(teams, leagueConfig.gamesPerTeam);
+        // A random draw shuffles only the pairing input — see
+        // utils/matchupDraw.js. state.teams and the pool stay in seed order.
+        const pairs = generatePartialRoundRobinPairs(
+            matchupOrder(teams, leagueConfig.matchupDraw),
+            leagueConfig.gamesPerTeam
+        );
+        const matchupDraw = storedMatchupDraw(leagueConfig.matchupDraw);
 
         return {
             teams: teams,
@@ -957,7 +1038,8 @@ function createLeagueState(teams, num_teams, leagueConfig){
                     fixtures: []
                 }
             ],
-            currentRound: 0
+            currentRound: 0,
+            ...(matchupDraw ? { matchupDraw } : {})
         };
     }
 
@@ -999,9 +1081,25 @@ function legName(index, legs) {
 // entirely (an older client, or Classic's payload) is undefined, which
 // createLeagueState reads as a single full cycle — no behaviour change for a
 // caller that doesn't know about this feature.
+//
+// `matchup_draw` ("SEED" or "RANDOM", absent meaning seed order) is read only for
+// limited mode, where it becomes the config's matchupDraw. A random draw gets its
+// seed here, once; only a Reshuffle replaces it.
 function leagueConfigFromPayload(payload) {
+    const matchupMethod = readSubmittedMatchupMethod(payload.matchup_draw);
+
     if (payload.round_robin_mode === 'limited') {
-        return { mode: 'limited', gamesPerTeam: toCount(payload.games_per_team) };
+        return {
+            mode: 'limited',
+            gamesPerTeam: toCount(payload.games_per_team),
+            matchupDraw: matchupDrawFor(matchupMethod)
+        };
+    }
+
+    // Every team plays every other team in legs mode, so there is no choice of
+    // opponents to randomise.
+    if (matchupMethod === "RANDOM") {
+        throw new AppError("MATCHUP_DRAW_NOT_AVAILABLE");
     }
 
     if (payload.round_robin_mode === 'legs') {
@@ -1035,7 +1133,11 @@ function leagueConfigFromState(state, teamCount) {
     const round = roundRobinRounds[0];
     const fullCycleGames = (teamCount * (teamCount - 1)) / 2;
     if (round && round.totalGames > 0 && round.totalGames < fullCycleGames) {
-        return { mode: 'limited', gamesPerTeam: Math.round((round.totalGames * 2) / teamCount) };
+        return {
+            mode: 'limited',
+            gamesPerTeam: Math.round((round.totalGames * 2) / teamCount),
+            matchupDraw: matchupDrawFromState(state)
+        };
     }
 
     return { mode: 'legs', legs: 1 };

@@ -48,8 +48,8 @@ async function updateDivisionColour(req, res) {
 }
 
 // The Settings page's per-division controls: `rankingRules`, `placementDepth`
-// and the pool draw (`poolDraw`, `redrawPools`), any of them. What each may be,
-// and when, is the service's.
+// the pool draw (`poolDraw`, `redrawPools`) and the matchup draw (`matchupDraw`,
+// `reshuffleMatchups`), any of them. What each may be, and when, is the service's.
 async function updateDivisionSettings(req, res) {
     const { divisionId } = req.params;
 

@@ -15,7 +15,7 @@ const topicOf = (id) => (id && HELP_TOPICS[id] ? id : 'fallback');
 // The help, as a centred modal: the topic list down the left (a picker at the
 // top on a phone) and the topic on the right. Opened through useHelp().openHelp
 // — by the floating button, or by a "?" button at a topic and section. See
-// docs/handover-help-and-less-text.md.
+// docs/decisions.md, "Help Is A Modal Of Topics".
 //
 // `extraEntries` are list items that are not topics: [{ id, label, onSelect }].
 // Choosing one closes help and calls onSelect.

@@ -15,6 +15,7 @@ with it, the code is wrong.
 | `color` | string, optional | The accent the organiser chose for this division: `"accent-1"` … `"accent-12"`. Absent means no choice. |
 | `rankingRules` | object, optional | How this division's tables are ranked. Absent means the rules are derived from `divisions.ranking_basis`. See "rankingRules" below. |
 | `poolDraw` | object, optional | Classic only. How seeds were placed into pools: `{ "method": "STRAIGHT" }` or `{ "method": "POTS", "seed": <integer> }`. **Absent means Snake.** See "poolDraw" below. |
+| `matchupDraw` | object, optional | League in limited-games mode only. `{ "method": "RANDOM", "seed": <integer> }` when the opponents were drawn at random. **Absent means seed order.** See "matchupDraw" below. |
 
 `color` is the only key here that is presentation rather than structure, and the only one
 an organiser can change at any point in the tournament's life — it bears on neither teams
@@ -95,6 +96,23 @@ Unlike `color` and `rankingRules` it is **not** written by its own patch and is 
 it from the old state with `poolDrawFromState` and pass it back into generation, which is
 what keeps a pots draw's seed, and so its random choices, until an organiser redraws.
 
+### matchupDraw
+
+| Key | Type | Description |
+|---|---|---|
+| `method` | string | `"RANDOM"`. `"SEED"` is never stored. |
+| `seed` | integer | The number the shuffle of the pairing input is derived from. |
+
+Present only on a League whose one round-robin round limits games per team, and only when
+its opponents were drawn at random — see `docs/tournament-rules.md`, "Matchups (limited
+round robin)". Absent is seed order, with the same one-representation rule as `poolDraw`;
+a malformed value reads as seed order.
+
+It is handled exactly like `poolDraw`: written by generation (`createLeagueState`), **not**
+in `carryStateSettings`' list, and read back on a reorder or rebuild by
+`leagueConfigFromState`, which passes it into generation so the new team list is paired
+from the same seed. `state.teams` is never reordered by it.
+
 ## Round Object
 
 | Key | Type | Description |
@@ -157,7 +175,10 @@ the full `n - 1` a cycle would give — via `generatePartialRoundRobinPairs` in
 `api/src/services/fixtures.service.js` (a circulant construction, not a truncated cycle:
 truncating the circle-method rotation gives an uneven schedule whenever `n` is odd). The
 round object itself is indistinguishable from any other `roundRobin` round once
-generated — `totalGames` is just smaller than `n * (n - 1) / 2`.
+generated — `totalGames` is just smaller than `n * (n - 1) / 2`. With random matchups
+(`state.matchupDraw`) the circulant runs over a seeded shuffle of the teams instead of
+seed order; the guarantees are the same because the construction only uses positions, and
+the round's `groups` and `state.teams` stay in seed order.
 
 ### placement
 

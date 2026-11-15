@@ -5,7 +5,7 @@ import { HELP_TOPICS } from '../helpContent';
 
 // The "?" that replaces an on-screen explanation: it opens the help at a topic
 // and, optionally, a section within it. Always the icon, never question text —
-// see docs/handover-help-and-less-text.md, "Decisions already made".
+// see docs/decisions.md, "Help Is A Modal Of Topics".
 //
 // Its name says what it explains: the section's heading when there is one,
 // otherwise the topic's title. Never place it inside another button (an

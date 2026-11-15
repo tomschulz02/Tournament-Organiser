@@ -694,6 +694,11 @@ describe("normalizeDivisionState", () => {
         expect(normalizeDivisionState({ teams: [] })).not.toHaveProperty("poolDraw");
         expect(normalizeDivisionState({ poolDraw: { method: "POTS" } })).not.toHaveProperty("poolDraw");
         expect(normalizeDivisionState({ poolDraw: { method: "SNAKE" } })).not.toHaveProperty("poolDraw");
+        expect(normalizeDivisionState({ matchupDraw: { method: "RANDOM", seed: 3 } }).matchupDraw)
+            .toEqual({ method: "RANDOM", seed: 3 });
+        expect(normalizeDivisionState({ teams: [] })).not.toHaveProperty("matchupDraw");
+        expect(normalizeDivisionState({ matchupDraw: { method: "RANDOM" } })).not.toHaveProperty("matchupDraw");
+        expect(normalizeDivisionState({ matchupDraw: { method: "SEED" } })).not.toHaveProperty("matchupDraw");
     });
 
     it.each(["accent-0", "accent-13", "red", "", 3, null])("omits an unusable colour %p", (value) => {

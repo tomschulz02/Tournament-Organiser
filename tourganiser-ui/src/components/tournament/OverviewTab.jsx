@@ -32,7 +32,7 @@ import { useHelpTopic } from '../../HelpContext';
 // behavioural gain, and copying the modal would give the application two
 // definitions of what a valid division is.
 import DivisionModal from '../create/DivisionModal';
-import { createEmptyDivision, poolDrawOf } from '../create/divisionFormats';
+import { createEmptyDivision, matchupDrawOf, poolDrawOf } from '../create/divisionFormats';
 import {
 	addDivision,
 	deleteDivision,
@@ -472,7 +472,7 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 					...(draft.type === 'league' && {
 						round_robin_mode: draft.roundRobinMode,
 						...(draft.roundRobinMode === 'limited'
-							? { games_per_team: Number(draft.gamesPerTeam) }
+							? { games_per_team: Number(draft.gamesPerTeam), matchup_draw: matchupDrawOf(draft.matchup_draw) }
 							: { round_robin_legs: Number(draft.roundRobinLegs) }),
 					}),
 					teams: draft.teams.map((team) => ({ name: team.name })),

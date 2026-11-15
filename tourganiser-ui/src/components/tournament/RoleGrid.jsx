@@ -2,7 +2,7 @@ import { ROLES, ROLE_CAPABILITIES } from './collaboratorRoles';
 
 // What each collaborator role allows, as a grid. Shown in the help's
 // Tournament settings topic (table 'roleCapabilities'), not on the Settings
-// page: it moved there under docs/handover-help-and-less-text.md.
+// page: it moved there (docs/decisions.md, "Help Is A Modal Of Topics").
 export default function RoleGrid() {
 	const rank = (value) => ROLES.findIndex((role) => role.value === value);
 

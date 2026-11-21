@@ -27,6 +27,7 @@ import {
 	getEntryDivisionStyle,
 	getEntryLabel,
 	getEntryOfficials,
+	getEntryPoolLetter,
 	getEntrySecondary,
 	getFixtureDefaultLength,
 	getPlacementProblem,
@@ -1430,14 +1431,19 @@ export default function ScheduleMakerModal({
 									<small>{NEW_BREAK_MINUTES} minutes across all courts</small>
 								</button>
 								{filteredUnscheduledFixtures.length > 0 ? (
-									filteredUnscheduledFixtures.map((fixture) => (
+									filteredUnscheduledFixtures.map((fixture) => {
+										const divisionStyle = getFixtureDivisionStyle(fixture, divisionList);
+
+										return (
 										<button
 											key={fixture.id}
 											type="button"
 											draggable
 											aria-pressed={pendingFixtureId === fixture.id}
-											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
-											style={getFixtureDivisionStyle(fixture, divisionList)}
+											className={`schedule-fixture-pill${divisionStyle ? ' has-division' : ''}${
+												pendingFixtureId === fixture.id ? ' pending' : ''
+											}`}
+											style={divisionStyle}
 											onDragStart={(event) => {
 												// effectAllowed has to be set explicitly here, or Chrome can
 												// drop the payload set below somewhere between dragstart and
@@ -1457,7 +1463,8 @@ export default function ScheduleMakerModal({
 												{fixture.round} - Match {fixture.matchNo}
 											</small>
 										</button>
-									))
+										);
+									})
 								) : (
 									<div className="schedule-empty-panel">
 										<p>All fixtures are scheduled.</p>
@@ -2325,6 +2332,10 @@ function ScheduleGridView({
 						const preview = resizingEntryId === entry.id ? gesture : item;
 						const height = heightFor(preview.startOffset, preview.endOffset);
 						const sizeClass = height < TINY_ENTRY_HEIGHT ? ' compact tiny' : height < COMPACT_ENTRY_HEIGHT ? ' compact' : '';
+						// Undefined in a single-division tournament, which keeps the default
+						// blue card; has-division switches to the division's tint.
+						const divisionStyle = getEntryDivisionStyle(entry, fixturesById, divisions);
+						const poolLetter = getEntryPoolLetter(entry, fixturesById);
 
 						return (
 							// Draggable and clickable at once: dragging moves the entry, clicking
@@ -2334,7 +2345,9 @@ function ScheduleGridView({
 								key={entry.id}
 								type="button"
 								data-entry-id={entry.id}
-								className={`schedule-grid-entry ${entry.type}${sizeClass}${
+								className={`schedule-grid-entry ${entry.type}${sizeClass}${divisionStyle ? ' has-division' : ''}${
+									poolLetter ? ' has-pool' : ''
+								}${
 									resizingEntryId === entry.id ? ' resizing' : ''
 								}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}${
 									linkedEntryIds.has(entry.id) ? ' linked' : ''
@@ -2378,9 +2391,18 @@ function ScheduleGridView({
 									gridRow: '1 / -1',
 									top: `${topFor(preview.startOffset)}px`,
 									height: `${height}px`,
-									...getEntryDivisionStyle(entry, fixturesById, divisions),
+									...divisionStyle,
 								}}
 								onClick={() => takeClick() && onSelectEntry(entry)}>
+								{/* Every card size shows it, unlike the subtitle that also names
+								    the pool. The letter is decoration; the hidden text is what a
+								    screen reader announces. */}
+								{poolLetter && (
+									<span className="schedule-grid-entry-pool" title={`Pool ${poolLetter}`}>
+										<span aria-hidden="true">{poolLetter}</span>
+										<span className="tv-visually-hidden">Pool {poolLetter}</span>
+									</span>
+								)}
 								{/* Read off the offsets rather than the stored times, so that the
 								    times shown mid-resize are the ones the drag is about to
 								    write. Off a gesture the two are the same value. */}
@@ -2483,7 +2505,7 @@ function ScheduleGridView({
 							<button
 								key={entry.id}
 								type="button"
-								className="schedule-fixture-pill"
+								className={`schedule-fixture-pill${getEntryDivisionStyle(entry, fixturesById, divisions) ? ' has-division' : ''}`}
 								style={getEntryDivisionStyle(entry, fixturesById, divisions)}
 								onClick={() => onSelectEntry(entry)}>
 								<strong>{getEntryLabel(entry, fixturesById)}</strong>
@@ -2800,7 +2822,7 @@ function FixturePickerPopover({ draft, schedule, fixtures, divisions, getAnchor,
 						<button
 							key={fixture.id}
 							type="button"
-							className="schedule-fixture-pill"
+							className={`schedule-fixture-pill${getFixtureDivisionStyle(fixture, divisions) ? ' has-division' : ''}`}
 							style={getFixtureDivisionStyle(fixture, divisions)}
 							onClick={() => onAssign(fixture)}>
 							<strong>{fixture.team1}</strong>

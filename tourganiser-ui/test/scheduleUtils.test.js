@@ -57,6 +57,7 @@ import {
 	getEntrySecondary,
 	getEntryOfficials,
 	getEntryDivisionStyle,
+	getEntryPoolLetter,
 } from '../src/utils/scheduleUtils';
 
 function entry(overrides = {}) {
@@ -1409,6 +1410,28 @@ describe('entry presentation helpers', () => {
 		it('returns a division accent style once a division name is set', () => {
 			const style = getEntryDivisionStyle(entry({ type: 'fixture', fixtureId: 'f1' }), fixturesById);
 			expect(style).toHaveProperty('--tv-division-color');
+		});
+	});
+
+	describe('getEntryPoolLetter', () => {
+		const pooled = { f1: { ...fixturesById.f1, pool: 'Pool B' } };
+
+		it('returns the letter of the fixture\'s pool', () => {
+			expect(getEntryPoolLetter(entry({ type: 'fixture', fixtureId: 'f1' }), pooled)).toBe('B');
+		});
+
+		it('returns null when the fixture has no pool', () => {
+			expect(getEntryPoolLetter(entry({ type: 'fixture', fixtureId: 'f1' }), fixturesById)).toBeNull();
+		});
+
+		it('returns null for a pool value it cannot read', () => {
+			const odd = { f1: { ...fixturesById.f1, pool: 'Group 1' } };
+			expect(getEntryPoolLetter(entry({ type: 'fixture', fixtureId: 'f1' }), odd)).toBeNull();
+		});
+
+		it('returns null for a break or a fixture no longer in the lookup', () => {
+			expect(getEntryPoolLetter(entry({ type: 'break' }), pooled)).toBeNull();
+			expect(getEntryPoolLetter(entry({ type: 'fixture', fixtureId: 'missing' }), pooled)).toBeNull();
 		});
 	});
 });

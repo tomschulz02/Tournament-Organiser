@@ -99,8 +99,9 @@ const SECTION_AREA = {
 	// The side column, not the full width: a result line stretched across the
 	// whole page puts the two team names too far apart to read as one match.
 	recent: 'side',
+	// Last in every role's order, so under Recent results on a desktop.
+	about: 'side',
 	divisions: 'full',
-	about: 'full',
 };
 
 // The tournament dashboard: what is happening now, what needs doing, and what
@@ -180,7 +181,7 @@ export default function OverviewTab({
 			<FinalResultsBand
 				divisions={fullDivisions}
 				tournamentId={tournament.id}
-				// The same rule About applies to the pack link, which this takes
+				// The same rule the header applies to the pack link, which this takes
 				// over once the tournament is Finished.
 				canExport={Boolean(can.enterCurrentRoundResults) && (dashboard.completedFixtureCount ?? 0) > 0}
 				onOpenDivision={onOpenDivision}
@@ -260,15 +261,7 @@ export default function OverviewTab({
 			/>
 		),
 		recent: <RecentBand dashboard={dashboard} divisions={divisions} />,
-		about: (
-			<TournamentInformation
-				tournament={tournament}
-				dashboard={dashboard}
-				canManageSetup={can.manageSetup}
-				canExportResults={Boolean(can.enterCurrentRoundResults)}
-				onChanged={onChanged}
-			/>
-		),
+		about: <TournamentInformation tournament={tournament} dashboard={dashboard} />,
 	};
 
 	const order = ROLE_SECTIONS[role];
@@ -292,19 +285,9 @@ export default function OverviewTab({
 }
 
 // The only place the tournament's own metadata appears. The subheader carries
-// the name and nothing else, so this band is where a reader finds out what they
-// are looking at.
-function TournamentInformation({ tournament, dashboard, canManageSetup, canExportResults, onChanged }) {
-	const status = tournament.status || 'Not Started';
-	const showLifecycle = Boolean(canManageSetup) && (status === 'Not Started' || status === 'Ongoing');
-	// The whole tournament's results as one printable pack. Organiser roles only,
-	// and only once there is a result to put in it. A Finished tournament offers
-	// it at the top instead, on Final results, which needs a division to exist.
-	const showExport =
-		Boolean(canExportResults) &&
-		(dashboard.completedFixtureCount ?? 0) > 0 &&
-		!(status === 'Finished' && (dashboard.divisionCount ?? 0) > 0);
-
+// the name and the tournament's actions, so this band is where a reader finds
+// out what they are looking at.
+function TournamentInformation({ tournament, dashboard }) {
 	// Both labels are pre-formatted by the backend ('1 August 2026'). Do not
 	// reformat them here — the server owns date presentation.
 	const start = tournament.start_date_label;
@@ -331,27 +314,43 @@ function TournamentInformation({ tournament, dashboard, canManageSetup, canExpor
 					<InfoItem label="Divisions" value={dashboard.divisionCount ?? 0} icon="structure" stat />
 					<InfoItem label="Teams" value={dashboard.totalTeams ?? 0} icon="teams" stat />
 				</dl>
-
-				{(showLifecycle || showExport) && (
-					<div className="tv-info-actions">
-						{showLifecycle && (
-							<LifecycleActions tournamentId={tournament.id} status={tournament.status} onChanged={onChanged} />
-						)}
-
-						{showExport && (
-							<Link
-								to={`/tournaments/view/${tournament.id}/results/pack`}
-								className="tv-icon-button"
-								target="_blank"
-								rel="noopener">
-								<Icon name="download" size={18} fill="currentColor" />
-								Results pack
-							</Link>
-						)}
-					</div>
-				)}
 			</div>
 		</section>
+	);
+}
+
+// Start/End and the results pack, in the page header on every tab. Rendered by
+// View.jsx and placed by TournamentShell; it lives here because the rules for
+// when each shows are Overview's (FinalResultsBand takes over the pack link once
+// the tournament is Finished).
+export function TournamentActions({ tournament = {}, dashboard = {}, canManageSetup, canExportResults, onChanged }) {
+	const status = tournament.status || 'Not Started';
+	const showLifecycle = Boolean(canManageSetup) && (status === 'Not Started' || status === 'Ongoing');
+	// The whole tournament's results as one printable pack. Organiser roles only,
+	// and only once there is a result to put in it. A Finished tournament offers
+	// it at the top instead, on Final results, which needs a division to exist.
+	const showExport =
+		Boolean(canExportResults) &&
+		(dashboard.completedFixtureCount ?? 0) > 0 &&
+		!(status === 'Finished' && (dashboard.divisionCount ?? 0) > 0);
+
+	if (!showLifecycle && !showExport) return null;
+
+	return (
+		<div className="tv-header-actions">
+			{showLifecycle && <LifecycleActions tournamentId={tournament.id} status={tournament.status} onChanged={onChanged} />}
+
+			{showExport && (
+				<Link
+					to={`/tournaments/view/${tournament.id}/results/pack`}
+					className="tv-icon-button"
+					target="_blank"
+					rel="noopener">
+					<Icon name="download" size={18} fill="currentColor" />
+					Results pack
+				</Link>
+			)}
+		</div>
 	);
 }
 

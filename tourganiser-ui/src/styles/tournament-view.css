@@ -22,6 +22,9 @@ body.light {
 	--tv-muted: rgba(37, 37, 37, 0.66);
 	--tv-skeleton: rgba(37, 37, 37, 0.09);
 	--tv-skeleton-sheen: rgba(37, 37, 37, 0.04);
+	/* How much of the division colour a fixture row mixes into the surface.
+	   Below the schedule maker's cards, but enough to name the hue. */
+	--tv-division-tint: 16%;
 }
 
 body.dark {
@@ -31,6 +34,7 @@ body.dark {
 	--tv-muted: rgba(245, 245, 245, 0.7);
 	--tv-skeleton: rgba(245, 245, 245, 0.1);
 	--tv-skeleton-sheen: rgba(245, 245, 245, 0.05);
+	--tv-division-tint: 20%;
 }
 
 /* For text that only a screen reader needs — a status carried visually by a
@@ -130,6 +134,25 @@ body.dark {
 .tv-subheader .tv-follow {
 	grid-column: 3;
 	justify-self: end;
+}
+
+/* The tournament's own actions (Start/End, Results pack), on every tab. Their
+   own grid row across all three columns, centred under the name, so on a phone
+   they are not squeezed between Back and Save. */
+.tv-header-actions {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+/* Side by side on a phone too, rather than the full-width primary button the
+   phone rule further down gives every other .tv-primary-action. */
+.tv-header-actions .tv-primary-action {
+	width: auto;
 }
 
 /* Equal-width buttons, so the outer columns have equal floors and the name sits
@@ -523,15 +546,6 @@ body.dark .tv-division-badge {
 
 /* The organiser's lifecycle controls, at the foot of the info card. Separated
    by a rule because they act on the tournament rather than describe it. */
-.tv-info-actions {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--space-2);
-	margin-top: var(--space-4);
-	padding-top: var(--space-4);
-	border-top: 1px solid var(--tv-border);
-}
 
 .tv-status-pill {
 	padding: var(--space-1) var(--space-3);
@@ -1664,10 +1678,90 @@ body.dark .tv-division-badge {
 	margin-bottom: var(--space-3);
 }
 
+/* One line at every width: the "more" button (ToolbarMenu: print schedule,
+   results export, print all scoresheets) keeps its size and the main action
+   (Create/Edit Schedule) takes the rest. */
 .tv-toolbar-actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	gap: var(--space-2);
+}
+
+.tv-toolbar-actions > * {
+	flex: none;
+}
+
+/* Drops below the "more" button, from its left edge — the toolbar starts at
+   the left of the page at every width, so there is always room to the right. */
+.tv-toolbar-menu {
+	position: relative;
+	display: flex;
+}
+
+.tv-toolbar-menu-list {
+	position: absolute;
+	top: calc(100% + var(--space-1));
+	left: 0;
+	z-index: var(--z-menu);
+	display: grid;
+	min-width: 220px;
+	padding: var(--space-1);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.tv-toolbar-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 40px;
+	padding: var(--space-2) var(--space-3);
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--secondary-text-color);
+	font: inherit;
+	font-size: 0.9rem;
+	text-align: left;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-toolbar-menu-item svg {
+	flex: none;
+	fill: currentColor;
+}
+
+.tv-toolbar-menu-item:hover:not(:disabled),
+.tv-toolbar-menu-item:focus-visible {
+	background: rgb(from var(--main-color) r g b / 0.1);
+	color: var(--main-color);
+	outline: none;
+}
+
+.tv-toolbar-menu-item:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+	.tv-toolbar-menu-item {
+		min-height: 44px;
+	}
+}
+
+.tv-toolbar-actions > .tv-primary-action {
+	/* Basis 0, so the phone rule's width: 100% does not push it onto a line
+	   of its own; it grows into whatever the icons leave. */
+	flex: 1 1 0;
+	min-width: 10rem;
+	/* The same height as the 36px icon buttons beside it; phones raise all
+	   three to 44px further down. */
+	align-self: stretch;
 }
 
 /* Compact and inline. The filters wrap onto as many rows as they need rather
@@ -1810,10 +1904,18 @@ body.dark .tv-division-badge {
 	column-gap: var(--space-4);
 	padding: var(--space-4) var(--space-3);
 	background: var(--tv-surface);
-	/* Neutral on every side. The division is the dot in the meta line
-	   (.tv-division-inline), which replaced a 3px left edge in its colour. */
+	/* Neutral by default. In a multi-division tournament the border and a
+	   background tint take the division's colour (.tv-fixture-row--division). */
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
+}
+
+/* Multi-division tournaments only. The solid border is what names the hue;
+   the tint carries it across the row. Must stay before --live, which overrides
+   both while a match is being played. */
+.tv-fixture-row--division {
+	border-color: var(--tv-division-color);
+	background: color-mix(in srgb, var(--tv-division-color) var(--tv-division-tint), var(--tv-surface));
 }
 
 .tv-fixture-row--cancelled {
@@ -1837,7 +1939,6 @@ body.dark .tv-division-badge {
 	white-space: nowrap;
 }
 
-.tv-division-inline-dot,
 .tv-division-chip-dot {
 	flex: none;
 	width: 9px;
@@ -1846,12 +1947,8 @@ body.dark .tv-division-badge {
 	background: var(--tv-division-color, var(--tv-muted));
 }
 
-/* The division filter: one chip per division with its dot, "All" first. The
+/* Division chips, one per division with its dot (Settings → Divisions). The
    chosen chip is in the action blue; the dot keeps the division's colour. */
-.tv-filter--chips {
-	flex-basis: 100%;
-}
-
 .tv-division-chips {
 	display: flex;
 	flex-wrap: wrap;
@@ -1992,12 +2089,12 @@ body.dark .tv-division-badge {
 
 	.tv-fixtures--sided .tv-toolbar-actions {
 		order: -1;
-		flex-direction: column;
 	}
 
-	.tv-fixtures--sided .tv-toolbar-actions > * {
-		justify-content: center;
-		text-align: center;
+	/* The sidebar is 240px: the main action fits beside the two icons only
+	   without the floor the wider layouts give it. */
+	.tv-fixtures--sided .tv-toolbar-actions > .tv-primary-action {
+		min-width: 0;
 	}
 
 	.tv-fixtures--sided .tv-filters {
@@ -4446,7 +4543,7 @@ body.dark .tv-division-badge {
 	}
 
 	.tv-toolbar-actions {
-		margin: 0 auto;
+		width: 100%;
 	}
 }
 

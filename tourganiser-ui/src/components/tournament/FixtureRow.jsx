@@ -38,11 +38,12 @@ export default function FixtureRow({
 	// placeholder.
 	const hasPlace = Boolean(court || showDivision || fixture.round);
 
-	// Only in a multi-division tournament: the division's dot and name in the
-	// meta line are what make "Division 1 vs Division 2" readable at a glance in
-	// a flattened list. A single-division tournament has nothing to tell apart.
-	// The dot replaced a 3px left edge in the same colour; the row's border stays
-	// neutral, so the only colour on its edge is the live tint.
+	// Only in a multi-division tournament: a faint tint of the division's colour
+	// on the whole row, plus its name in the meta line, are what make "Division 1
+	// vs Division 2" readable at a glance in a flattened list. A single-division
+	// tournament has nothing to tell apart. The tint replaced a coloured dot that
+	// was too easy to confuse with the status dot beside it; the row's border
+	// stays neutral, and a live row's green wash still wins over the tint.
 	//
 	// `divisions` — the tournament's full division list — is threaded through
 	// from the caller so this row's colour never collides with a sibling
@@ -50,7 +51,9 @@ export default function FixtureRow({
 	const divisionStyle = showDivision ? divisionColorStyle(fixture.division_id, divisions) : undefined;
 
 	return (
-		<li className={`tv-fixture-row tv-fixture-row--${status}`}>
+		<li
+			className={`tv-fixture-row${divisionStyle ? ' tv-fixture-row--division' : ''} tv-fixture-row--${status}`}
+			style={divisionStyle}>
 			<div className="tv-fixture-row-meta">
 				<span className="tv-fixture-row-status">
 					{/* Status is a colour, not a word: it is the least-read text on a row
@@ -73,10 +76,7 @@ export default function FixtureRow({
 					<span className="tv-fixture-row-place">
 						{court && <span className="tv-court-chip">{court}</span>}
 						{showDivision && fixture.division_name && (
-							<span className="tv-division-inline" style={divisionStyle}>
-								<span className="tv-division-inline-dot" aria-hidden="true" />
-								{fixture.division_name}
-							</span>
+							<span className="tv-division-inline">{fixture.division_name}</span>
 						)}
 						{fixture.round && <span className="tv-round-label">{fixture.round}</span>}
 					</span>

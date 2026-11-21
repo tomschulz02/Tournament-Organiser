@@ -6,7 +6,7 @@ import '../App.css';
 import TournamentShell from '../components/tournament/TournamentShell';
 import { useTournamentTab } from '../components/tournament/tournamentTabs';
 import SectionState from '../components/tournament/SectionState';
-import OverviewTab from '../components/tournament/OverviewTab';
+import OverviewTab, { TournamentActions } from '../components/tournament/OverviewTab';
 import FixturesTab from '../components/tournament/FixturesTab';
 import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
@@ -565,7 +565,22 @@ export default function ViewPage() {
 				</Suspense>
 			)}
 
-			<TournamentShell tournamentId={id} name={title} creator={data?.creator} canOpenSettings={can.manageSetup}>
+			<TournamentShell
+				tournamentId={id}
+				name={title}
+				actions={
+					data && (
+						<TournamentActions
+							tournament={data.tournament}
+							dashboard={data.dashboard}
+							canManageSetup={can.manageSetup}
+							canExportResults={Boolean(can.enterCurrentRoundResults)}
+							onChanged={reload}
+						/>
+					)
+				}
+				creator={data?.creator}
+				canOpenSettings={can.manageSetup}>
 				{loading && <SectionState variant="loading" />}
 				{!loading && !data && result.error && (
 					<SectionState

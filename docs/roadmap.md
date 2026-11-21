@@ -1039,8 +1039,15 @@ so they are Medium Risk at least. More items may be added.
 
 4. ~~**Better buttons.**~~ — **done 2026-11-15** (its handover is deleted).
    Every text-styled action from that handover's audit is an outlined button, with icons
-   where they are unambiguous. Exports read "Results", "Final results" and "Results pack"
-   with a download icon. The print schedule and all three grid/list toggles are icon-only.
+   where they are unambiguous. Exports read "Final results" and "Results pack" with a
+   download icon. The print schedule and all three grid/list toggles are icon-only.
+   *Revised 2026-11-21:* in the Fixtures & Schedule toolbar, View/Print schedule, Download
+   results and Print all scoresheets sit behind one three-dots "More actions" button
+   (`components/tournament/ToolbarMenu.jsx`), where they are labelled menu items with
+   icons. When only one of them applies (a viewer gets only the print, and before a
+   schedule exists the organiser gets only the export), it shows directly as its own icon
+   button, with no menu. The button shares one line with Create/Edit Schedule, which fills
+   the rest. The division filter there went back from chips to a dropdown.
    Team and collaborator Edit/Remove are icon-only. Scoresheet cards are chosen by
    clicking the card, with a "Clear selection" button. New `components/IconTooltip.jsx`
    names icon-only controls on hover, keyboard focus and long-press. Original request:
@@ -1068,7 +1075,10 @@ so they are Medium Risk at least. More items may be added.
    - Settled 2026-11-15: offered at creation and in Settings; changing it rebuilds that
      division's fixtures and unschedules them, like the pool draw.
 
-7. **Division colour on schedule maker fixture cards.** *(added 2026-11-15)* Cards on the
+7. ~~**Division colour on schedule maker fixture cards.**~~ — **done 2026-11-21**
+   (`docs/decisions.md`, "A Division Is A Tint, Not A Dot"). Board cards, and the editor's
+   fixture pills, take a tint of their division's colour. Pools are told apart by a letter
+   badge. *(added 2026-11-15)* Cards on the
    schedule maker's board drop the default blue background for a background in their
    division's colour, keeping the left border as an accent. Colours already come from
    `divisionColorStyle` (`tourganiser-ui/src/utils/divisionColors.js`, applied in
@@ -1079,7 +1089,9 @@ so they are Medium Risk at least. More items may be added.
      each pool; a pattern such as stripes on alternate pools; varying the accent
      border's style or width per pool. These can be combined, e.g. a badge plus shades.
 
-8. **Faint division background in the Fixtures & Schedule tab.** *(added 2026-11-15)* The
+8. ~~**Faint division background in the Fixtures & Schedule tab.**~~ — **done 2026-11-21**
+   (same decision). Rows take a faint division tint, and the division dot is gone.
+   *(added 2026-11-15)* The
    coloured division dot in fixture rows (`FixtureRow.jsx`, which only shows it in a
    multi-division tournament) is replaced by a faint background tint in the division's
    colour. Reason: a status dot next to a division dot makes the two hard to tell apart.

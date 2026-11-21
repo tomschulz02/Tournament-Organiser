@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
-import Icon from '../Icons';
+import ToolbarMenu from './ToolbarMenu';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
 import FixtureGroup from './FixtureGroup';
@@ -80,12 +79,21 @@ export default function FixturesTab({
 				<div className="tv-toolbar-actions">
 					{/* Organiser roles only. Carries the filters above, so the export
 					    is the completed fixtures of what is on screen. */}
-					{canExportResults && tournamentId && (
-						<Link to={resultsExportPath(tournamentId, filters)} className="tv-icon-button" target="_blank" rel="noopener">
-							<Icon name="download" size={18} fill="currentColor" />
-							Results
-						</Link>
-					)}
+					{/* One action today, so ToolbarMenu shows it as its own icon button. */}
+					<ToolbarMenu
+						actions={
+							canExportResults && tournamentId
+								? [
+										{
+											id: 'results',
+											label: 'Download results',
+											icon: 'download',
+											to: resultsExportPath(tournamentId, filters),
+										},
+									]
+								: []
+						}
+					/>
 
 					{canEditSchedule && onCreateSchedule && (
 						<button type="button" className="tv-primary-action" onClick={onCreateSchedule}>

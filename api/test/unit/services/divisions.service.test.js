@@ -222,6 +222,42 @@ describe("createLeagueState", () => {
             teams.forEach((id) => expect(playedAgainst.get(id).size).toBe(3));
         });
 
+        it("pairs in seed order by default and stores no matchup draw", () => {
+            const teams = ["a", "b", "c", "d", "e", "f", "g", "h"];
+            const state = createLeagueState(teams, 8, { mode: "limited", gamesPerTeam: 2, matchupDraw: { method: "SEED" } });
+
+            expect(state).not.toHaveProperty("matchupDraw");
+            // Distance 1 around the seed order: each team meets its neighbours.
+            expect(state.rounds[0].pairs).toEqual(teams.map((team, index) => [team, teams[(index + 1) % 8]]));
+            expect(state).toEqual(createLeagueState(teams, 8, { mode: "limited", gamesPerTeam: 2 }));
+        });
+
+        it("shuffles only the pairing input for a random draw, repeatably", () => {
+            const teams = ["a", "b", "c", "d", "e", "f", "g", "h"];
+            const random = (seed) => createLeagueState(teams, 8, {
+                mode: "limited",
+                gamesPerTeam: 3,
+                matchupDraw: { method: "RANDOM", seed }
+            });
+            const seeded = createLeagueState(teams, 8, { mode: "limited", gamesPerTeam: 3 });
+
+            const state = random(7);
+            expect(state.teams).toEqual(teams);
+            expect(state.rounds[0].groups).toEqual([teams]);
+            expect(state.matchupDraw).toEqual({ method: "RANDOM", seed: 7 });
+            expect(state.rounds[0].pairs).not.toEqual(seeded.rounds[0].pairs);
+            expect(random(7).rounds[0].pairs).toEqual(state.rounds[0].pairs);
+            expect(random(8).rounds[0].pairs).not.toEqual(state.rounds[0].pairs);
+
+            const { fixtures } = generateFixtures(state.rounds);
+            const games = new Map(teams.map((id) => [id, 0]));
+            fixtures.forEach((fixture) => {
+                games.set(fixture.team1, games.get(fixture.team1) + 1);
+                games.set(fixture.team2, games.get(fixture.team2) + 1);
+            });
+            teams.forEach((id) => expect(games.get(id)).toBe(3));
+        });
+
         it("propagates the realisability error for an invalid (n, g) pair", () => {
             // 7 teams can only take an even games-per-team — see docs/division-state.md.
             expect(() => createLeagueState(["a", "b", "c", "d", "e", "f", "g"], 7, { mode: "limited", gamesPerTeam: 3 }))
@@ -238,7 +274,26 @@ describe("leagueConfigFromPayload", () => {
 
     it("reads a limited-mode payload", () => {
         expect(leagueConfigFromPayload({ round_robin_mode: "limited", games_per_team: 4 }))
-            .toEqual({ mode: "limited", gamesPerTeam: 4 });
+            .toEqual({ mode: "limited", gamesPerTeam: 4, matchupDraw: { method: "SEED" } });
+    });
+
+    it("gives a random limited League a seeded matchup draw", () => {
+        const config = leagueConfigFromPayload({ round_robin_mode: "limited", games_per_team: 4, matchup_draw: "RANDOM" });
+
+        expect(config.matchupDraw.method).toBe("RANDOM");
+        expect(Number.isInteger(config.matchupDraw.seed)).toBe(true);
+        expect(leagueConfigFromPayload({ round_robin_mode: "limited", games_per_team: 4, matchup_draw: "SEED" }).matchupDraw)
+            .toEqual({ method: "SEED" });
+    });
+
+    it("refuses random matchups outside limited mode, and an unknown matchup draw", () => {
+        expect(() => leagueConfigFromPayload({ round_robin_mode: "legs", matchup_draw: "RANDOM" }))
+            .toThrow(expect.objectContaining({ code: "MATCHUP_DRAW_NOT_AVAILABLE", status: 400 }));
+        expect(() => leagueConfigFromPayload({ matchup_draw: "RANDOM" }))
+            .toThrow(expect.objectContaining({ code: "MATCHUP_DRAW_NOT_AVAILABLE" }));
+        expect(leagueConfigFromPayload({ round_robin_mode: "legs", matchup_draw: "SEED" })).toEqual({ mode: "legs", legs: 1 });
+        expect(() => leagueConfigFromPayload({ round_robin_mode: "limited", games_per_team: 2, matchup_draw: "SHUFFLE" }))
+            .toThrow(expect.objectContaining({ code: "INVALID_MATCHUP_DRAW", status: 400 }));
     });
 
     it("defaults legs to 1 when absent from a legs-mode payload", () => {
@@ -274,7 +329,16 @@ describe("leagueConfigFromState", () => {
         // 8 teams, g=3 -> 12 games; a full cycle would be 28.
         const state = { rounds: [{ ...makeLeagueRound("Round Robin"), totalGames: 12 }] };
 
-        expect(leagueConfigFromState(state, 8)).toEqual({ mode: "limited", gamesPerTeam: 3 });
+        expect(leagueConfigFromState(state, 8)).toEqual({ mode: "limited", gamesPerTeam: 3, matchupDraw: { method: "SEED" } });
+    });
+
+    it("reads a stored random matchup draw back for limited mode", () => {
+        const state = {
+            rounds: [{ ...makeLeagueRound("Round Robin"), totalGames: 12 }],
+            matchupDraw: { method: "RANDOM", seed: 9 }
+        };
+
+        expect(leagueConfigFromState(state, 8).matchupDraw).toEqual({ method: "RANDOM", seed: 9 });
     });
 
     it("reads legs mode (1 leg) from a single full-cycle round", () => {
@@ -504,6 +568,37 @@ describe("divisionService.createDivision", () => {
         // 4 teams, g=2 -> 4 games total.
         expect(division.state.rounds).toHaveLength(1);
         expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
+    });
+
+    it("stores a random matchup draw for a limited League", async () => {
+        await divisionService.createDivision(
+            { ...details(), type: "league", round_robin_mode: "limited", games_per_team: 2, matchup_draw: "RANDOM" },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        );
+
+        const [, , division] = divisionsRepository.createDivision.mock.calls[0];
+        expect(division.state.matchupDraw.method).toBe("RANDOM");
+        expect(division.state.teams).toEqual(TEAM_IDS);
+        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
+    });
+
+    it("refuses random matchups for a Classic division before writing anything", async () => {
+        await expect(divisionService.createDivision(
+            { ...details(), matchup_draw: "RANDOM" },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "MATCHUP_DRAW_NOT_AVAILABLE", status: 400 });
+        expect(divisionsRepository.createDivision).not.toHaveBeenCalled();
+
+        await expect(divisionService.createDivision(
+            { ...details(), matchup_draw: "SHUFFLE" },
+            "tour-1",
+            "user-1",
+            dbMock.client
+        )).rejects.toMatchObject({ code: "INVALID_MATCHUP_DRAW" });
     });
 
     it("refuses more teams than the cap before writing anything", async () => {
@@ -998,6 +1093,25 @@ describe("divisionService.updateDivision", () => {
             expect(result.fixtures).toBeGreaterThan(0);
         });
 
+        it("keeps a random League's matchup seed and follows the new seed order", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({
+                type: "League",
+                state: {
+                    teams: [...STORED],
+                    rounds: [{ ...makeLeagueRound("Round Robin"), totalGames: 4 }],
+                    currentRound: 0,
+                    matchupDraw: { method: "RANDOM", seed: 11 }
+                }
+            }));
+
+            await divisionService.updateDivision("div-1", "user-1", body(reordered(), { num_groups: 1 }));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.teams).toEqual(["t3", "t1", "t2", "t4"]);
+            expect(state.matchupDraw).toEqual({ method: "RANDOM", seed: 11 });
+            expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(4);
+        });
+
         // Generation knows nothing of the settings kept in state, so a reorder
         // used to drop the chosen colour. They are carried across.
         it("keeps the colour and the ranking rules the old state held", async () => {
@@ -1265,6 +1379,28 @@ describe("divisionService.updateDivision", () => {
             // 5 teams at g=2: every team plays 2 games -> 5 fixtures, not the 10
             // a full cycle would give — confirms the carried-over g (not reset
             // to a full cycle) was reapplied against the new team count.
+            expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(5);
+        });
+
+        // The matchup draw is read back from state the same way, so the new team
+        // list is paired from the stored seed rather than a new one.
+        it("keeps a random League's matchup seed across a rebuild", async () => {
+            divisionsRepository.getDivisionWithOwner.mockResolvedValue(division({
+                type: "League",
+                state: {
+                    teams: STORED,
+                    rounds: [{ ...makeLeagueRound("Round Robin"), totalGames: 4 }],
+                    currentRound: 0,
+                    matchupDraw: { method: "RANDOM", seed: 11 }
+                }
+            }));
+
+            const teams = [...unchanged(), { name: "Eagles" }];
+            await divisionService.updateDivision("div-1", "user-1", body(teams, { num_groups: 1, knockout_teams: 2 }));
+
+            const [, state] = divisionsRepository.replaceState.mock.calls[0];
+            expect(state.matchupDraw).toEqual({ method: "RANDOM", seed: 11 });
+            expect(state.teams.slice(0, 4)).toEqual(STORED);
             expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(5);
         });
 

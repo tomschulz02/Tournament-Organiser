@@ -62,6 +62,28 @@ export function getPoolDrawLabel(value) {
 	return POOL_DRAWS.find((draw) => draw.value === poolDrawOf(value)).label;
 }
 
+// Who plays whom in a League with a limited number of games per team —
+// docs/tournament-rules.md, "Matchups (limited round robin)". `value` is what
+// the API takes, as `matchup_draw` on creation and `matchupDraw` in the settings
+// body. Seed order is the default and is what a division with no stored draw has.
+export const MATCHUP_DRAWS = [
+	{ value: 'SEED', label: 'By seed', summary: 'Each team plays the teams seeded nearest to it.' },
+	{ value: 'RANDOM', label: 'Random', summary: 'Opponents are drawn at random. Seeding is unchanged.' },
+];
+
+export const DEFAULT_MATCHUP_DRAW = 'SEED';
+
+// A matchup value from anywhere — a draft, a restored draft from before the
+// field existed, a division's state.matchupDraw.method — with anything else read
+// as seed order, the way the server reads an absent draw.
+export function matchupDrawOf(value) {
+	return MATCHUP_DRAWS.some((draw) => draw.value === value) ? value : DEFAULT_MATCHUP_DRAW;
+}
+
+export function getMatchupDrawLabel(value) {
+	return MATCHUP_DRAWS.find((draw) => draw.value === matchupDrawOf(value)).label;
+}
+
 export const DIVISION_NAME_MAX = 100;
 
 export const TEAM_NAME_MAX = 100;
@@ -113,6 +135,8 @@ export function createEmptyDivision() {
 		roundRobinMode: 'legs',
 		roundRobinLegs: 1,
 		gamesPerTeam: '',
+		// League in limited mode only. One of MATCHUP_DRAWS.
+		matchup_draw: DEFAULT_MATCHUP_DRAW,
 		teams: [],
 	};
 }

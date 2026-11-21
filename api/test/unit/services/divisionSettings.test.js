@@ -610,3 +610,142 @@ describe("pool draw", () => {
         expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
     });
 });
+
+// The matchup draw — docs/tournament-rules.md, "Matchups (limited round robin)".
+// A League with a limited number of games per team only. Changing it, or
+// reshuffling a random draw, regenerates the division the way the pool draw does.
+describe("matchup draw", () => {
+    const save = (body) => divisionService.updateDivisionSettings("div-1", "user-1", body);
+    const written = () => divisionsRepository.replaceState.mock.calls.at(-1)[1];
+    // fixturesRepository.createFixture(id, divisionId, matchNo, team1, team2, ...)
+    const createdPairs = () => fixturesRepository.createFixture.mock.calls.map((call) => [call[3], call[4]]);
+    const generatedPairs = (leagueConfig) =>
+        generateFixtures(createLeagueState(TEAMS, TEAMS.length, leagueConfig).rounds)
+            .fixtures.map((fixture) => [fixture.team1, fixture.team2]);
+
+    // A League of 12 teams playing 3 games each, stored with the given draw.
+    function league(matchupDraw, overrides = {}) {
+        const stored = storedDivision({ overrides: { tournament_status: "Not Started", ...overrides } });
+        const state = createLeagueState(TEAMS, TEAMS.length, { mode: "limited", gamesPerTeam: 3, matchupDraw });
+        stored.division.type = "League";
+        stored.division.placement_depth = null;
+        stored.division.state = { ...state, rounds: generateFixtures(state.rounds).rounds, color: "accent-4" };
+
+        return stored;
+    }
+
+    beforeEach(() => {
+        fixturesRepository.getResults.mockResolvedValue([]);
+        fixturesRepository.deleteByDivisionId.mockResolvedValue(["old-1", "old-2"]);
+        use(league(undefined));
+    });
+
+    it("changes to random: new pairings, seeding kept, settings carried, schedule repaired", async () => {
+        await expect(save({ matchupDraw: "RANDOM" })).resolves.toEqual({
+            divisionId: "div-1",
+            rankingRules: MATCH_WINS,
+            placementDepth: null,
+            matchupDraw: "RANDOM"
+        });
+
+        const [divisionId, state, numTeams, client] = divisionsRepository.replaceState.mock.calls[0];
+        expect({ divisionId, numTeams }).toEqual({ divisionId: "div-1", numTeams: 12 });
+        expect(client).toBe(dbMock.client);
+        expect(state.matchupDraw.method).toBe("RANDOM");
+        expect(Number.isInteger(state.matchupDraw.seed)).toBe(true);
+        expect(state.teams).toEqual(TEAMS);
+        expect(state.color).toBe("accent-4");
+        expect(state.rounds).toHaveLength(1);
+        expect(state.rounds[0].totalGames).toBe(18);
+
+        expect(fixturesRepository.deleteByDivisionId).toHaveBeenCalledWith("div-1", dbMock.client);
+        expect(fixturesRepository.createFixture).toHaveBeenCalledTimes(18);
+        expect(tournamentRepository.getScheduleForUpdate).toHaveBeenCalled();
+    });
+
+    it("pairs differently from seed order, and back again on returning to it", async () => {
+        const seedOrder = league(undefined).division.state;
+        use(league({ method: "RANDOM", seed: 3 }));
+
+        await expect(save({ matchupDraw: "SEED" })).resolves.toMatchObject({ matchupDraw: "SEED" });
+
+        expect(written()).not.toHaveProperty("matchupDraw");
+        expect(written().rounds[0].groups).toEqual(seedOrder.rounds[0].groups);
+        expect(createdPairs()).toEqual(generatedPairs({ mode: "limited", gamesPerTeam: 3 }));
+        expect(createdPairs()).not.toEqual(
+            generatedPairs({ mode: "limited", gamesPerTeam: 3, matchupDraw: { method: "RANDOM", seed: 3 } })
+        );
+    });
+
+    it("keeps a random draw's seed when the method is sent again", async () => {
+        use(league({ method: "RANDOM", seed: 5 }));
+
+        await expect(save({ matchupDraw: "RANDOM" })).resolves.toMatchObject({ matchupDraw: "RANDOM" });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("reshuffles a random draw with a new seed", async () => {
+        use(league({ method: "RANDOM", seed: 5 }));
+
+        await expect(save({ reshuffleMatchups: true })).resolves.toMatchObject({ matchupDraw: "RANDOM" });
+
+        expect(written().matchupDraw.method).toBe("RANDOM");
+        expect(written().matchupDraw.seed).not.toBe(5);
+    });
+
+    it("does nothing for seed order sent again, or a reshuffle of seed order", async () => {
+        await expect(save({ matchupDraw: "SEED" })).resolves.toMatchObject({ matchupDraw: "SEED" });
+        await expect(save({ reshuffleMatchups: true })).resolves.toMatchObject({ matchupDraw: "SEED" });
+
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+        expect(fixturesRepository.getResults).not.toHaveBeenCalled();
+    });
+
+    it("ignores reshuffleMatchups unless it is true", async () => {
+        use(league({ method: "RANDOM", seed: 5 }));
+
+        await expect(save({ reshuffleMatchups: false })).resolves.not.toHaveProperty("matchupDraw");
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("applies ranking rules sent with it in the same regeneration", async () => {
+        await expect(save({ matchupDraw: "RANDOM", rankingRules: SET_WINS })).resolves.toMatchObject({
+            rankingRules: SET_WINS,
+            matchupDraw: "RANDOM"
+        });
+
+        expect(written().rankingRules).toEqual(SET_WINS);
+        expect(divisionsRepository.updateStateRankingRules).not.toHaveBeenCalled();
+    });
+
+    it("refuses a change or a reshuffle once the tournament has started", async () => {
+        use(league({ method: "RANDOM", seed: 5 }, { tournament_status: "In Progress" }));
+
+        await expect(save({ matchupDraw: "SEED" })).rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED", status: 409 });
+        await expect(save({ reshuffleMatchups: true })).rejects.toMatchObject({ code: "TOURNAMENT_ALREADY_STARTED" });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("refuses when the division already has a result", async () => {
+        fixturesRepository.getResults.mockResolvedValue([{ id: "f1" }]);
+
+        await expect(save({ matchupDraw: "RANDOM" })).rejects.toMatchObject({ code: "DIVISION_HAS_RESULTS", status: 409 });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("refuses an unknown draw", async () => {
+        await expect(save({ matchupDraw: "SHUFFLE" })).rejects.toMatchObject({ code: "INVALID_MATCHUP_DRAW", status: 400 });
+    });
+
+    it("refuses a matchup draw on a Classic division or a League in legs mode", async () => {
+        use(storedDivision());
+        await expect(save({ matchupDraw: "RANDOM" })).rejects.toMatchObject({ code: "MATCHUP_DRAW_NOT_AVAILABLE", status: 400 });
+
+        const legs = league(undefined);
+        const state = createLeagueState(TEAMS, TEAMS.length, { mode: "legs", legs: 2 });
+        legs.division.state = { ...state, rounds: generateFixtures(state.rounds).rounds };
+        use(legs);
+        await expect(save({ reshuffleMatchups: true })).rejects.toMatchObject({ code: "MATCHUP_DRAW_NOT_AVAILABLE" });
+        expect(divisionsRepository.replaceState).not.toHaveBeenCalled();
+    });
+});

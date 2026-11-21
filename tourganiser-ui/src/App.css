@@ -719,6 +719,10 @@ img {
 	bottom: 10px;
 	right: 10px;
 	color: var(--secondary-color);
+	/* A <button> since 2026-11-15, so it is reachable by keyboard; these undo
+	   the browser's button chrome so it looks as the old <div> did. */
+	background: none;
+	padding: 0;
 	border: none;
 	border-radius: 50%;
 	display: flex;
@@ -3712,4 +3716,43 @@ Temporary styles for teams page - taken from old version
 	background-color: rgb(from var(--background-color) r g b / 0.5);
 	border-radius: 4px;
 	border: 1px solid var(--card-border-color);
+}
+
+/* The What's new popup (components/WhatsNewModal.jsx), built on CreateModal and
+   the help's stepper. Each slide is a stepper step with its own title. */
+.ct-modal.ct-modal-whats-new {
+	max-width: 720px;
+}
+
+/* Capped so Back and Next stay on screen beside a tall capture; the image keeps
+   its proportions and centres. */
+.ct-modal-whats-new .help-media {
+	width: auto;
+	max-width: 100%;
+	max-height: min(45vh, 420px);
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.help-stepper-title {
+	margin: 0 0 var(--space-2);
+	font-size: 1.05rem;
+	line-height: 1.3;
+}
+
+.whats-new-dismiss {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	/* The whole label is the tap target, at the tournament view's 44px. */
+	min-height: 44px;
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+.whats-new-dismiss input {
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	accent-color: var(--main-color);
 }

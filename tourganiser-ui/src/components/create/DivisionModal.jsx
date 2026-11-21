@@ -7,6 +7,7 @@ import { useHelpTopic } from '../../HelpContext';
 import {
 	DIVISION_NAME_MAX,
 	FORMATS,
+	MATCHUP_DRAWS,
 	MAX_ROUND_ROBIN_LEGS,
 	POOL_DRAWS,
 	TEAM_NAME_MAX,
@@ -14,6 +15,7 @@ import {
 	gamesPerTeamError,
 	getPoolDrawLabel,
 	isConfigurableFormat,
+	matchupDrawOf,
 	parseBulkTeamNames,
 	poolDrawOf,
 	validateDivision,
@@ -461,6 +463,7 @@ function ClassicConfigurationScreen({ draft, errors, onChange }) {
 // know its team count already, and gets the live check.
 function LeagueConfigurationScreen({ draft, errors, onChange }) {
 	const teamCount = draft.teams.length;
+	const matchupDraw = matchupDrawOf(draft.matchup_draw);
 	const liveError = teamCount >= 2 && draft.gamesPerTeam !== '' ? gamesPerTeamError(draft.gamesPerTeam, teamCount) : null;
 
 	return (
@@ -542,6 +545,31 @@ function LeagueConfigurationScreen({ draft, errors, onChange }) {
 						)}
 					</div>
 				</div>
+			)}
+
+			{/* Who plays whom — docs/tournament-rules.md, "Matchups (limited round
+			    robin)". Limited mode only: in legs mode every team meets every
+			    other team, so there is nothing to choose. */}
+			{draft.roundRobinMode === 'limited' && (
+				<fieldset className="ct-fieldset">
+					<legend className="ct-field-label">
+						<span>Matchups</span>
+						<HelpButton topic="division-modal" section="matchups" />
+					</legend>
+					<div className="ct-format-options">
+						{MATCHUP_DRAWS.map((draw) => (
+							<button
+								key={draw.value}
+								type="button"
+								className={`ct-format-option ${matchupDraw === draw.value ? 'ct-format-option-selected' : ''}`.trim()}
+								aria-pressed={matchupDraw === draw.value}
+								onClick={() => onChange('matchup_draw', draw.value)}>
+								<span className="ct-format-name">{draw.label}</span>
+								<span className="ct-format-summary">{draw.summary}</span>
+							</button>
+						))}
+					</div>
+				</fieldset>
 			)}
 		</div>
 	);

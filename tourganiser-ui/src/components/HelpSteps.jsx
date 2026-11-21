@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Icon from './Icons';
 
 // The pieces a walkthrough is built from, shared by the help modal and the
-// What's new popup (docs/handover-whats-new.md).
+// What's new popup (components/WhatsNewModal.jsx).
 //
 // media: { type: 'image' | 'animation', src, alt, still?, phoneSrc?, phoneStill? }.
 // An animation is an animated WebP and must carry a still, shown instead under
@@ -39,15 +39,24 @@ export function HelpMedia({ media }) {
 // One step at a time, with Back and Next. The step count is announced politely
 // as it changes, so a screen reader hears where it is without losing focus.
 //
-// steps: [{ text: [string], media? }]
-export function HelpStepper({ steps, label }) {
+// steps: [{ title?, text: [string], media? }]. The What's new popup gives each
+// step a title and follows the index through onIndexChange (its Done button
+// shows on the last step).
+export function HelpStepper({ steps, label, onIndexChange }) {
 	const [index, setIndex] = useState(0);
 	const step = steps[index];
 	const last = steps.length - 1;
 
+	const go = (next) => {
+		const clamped = Math.min(last, Math.max(0, next));
+		setIndex(clamped);
+		onIndexChange?.(clamped);
+	};
+
 	return (
 		<div className="help-stepper" role="group" aria-label={label}>
 			<div className="help-stepper-step">
+				{step.title && <h3 className="help-stepper-title">{step.title}</h3>}
 				{step.text.map((paragraph, paragraphIndex) => (
 					<p key={paragraphIndex}>{paragraph}</p>
 				))}
@@ -59,7 +68,7 @@ export function HelpStepper({ steps, label }) {
 					type="button"
 					className="help-stepper-button"
 					disabled={index === 0}
-					onClick={() => setIndex((current) => Math.max(0, current - 1))}>
+					onClick={() => go(index - 1)}>
 					<Icon name="leftChevron" size={18} fill="currentColor" />
 					Back
 				</button>
@@ -70,7 +79,7 @@ export function HelpStepper({ steps, label }) {
 					type="button"
 					className="help-stepper-button"
 					disabled={index === last}
-					onClick={() => setIndex((current) => Math.min(last, current + 1))}>
+					onClick={() => go(index + 1)}>
 					Next
 					<Icon name="leftChevron" size={18} fill="currentColor" className="help-stepper-next-icon" />
 				</button>

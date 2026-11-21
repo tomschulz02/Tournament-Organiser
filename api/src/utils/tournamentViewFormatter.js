@@ -16,6 +16,7 @@ import { qualifierCount } from "../services/progression.service.js";
 import { roundHolding } from "../services/fixtures.service.js";
 import { ordinal } from "../services/divisions.service.js";
 import { poolDrawFromState, storedPoolDraw } from "./poolDraw.js";
+import { matchupDrawFromState, storedMatchupDraw } from "./matchupDraw.js";
 import { AppError } from "../errors.js";
 
 const FIXTURE_STATUS_LABELS = {
@@ -961,6 +962,7 @@ function normalizeDivisionState(state) {
     const colour = divisionColourOf(state);
     const rankingRules = readRankingRules(state.rankingRules);
     const poolDraw = storedPoolDraw(poolDrawFromState(state));
+    const matchupDraw = storedMatchupDraw(matchupDrawFromState(state));
 
     return {
         teams: Array.isArray(state.teams) ? state.teams : [],
@@ -978,7 +980,9 @@ function normalizeDivisionState(state) {
         ...(rankingRules ? { rankingRules } : {}),
         // And for the pool draw: absent means Snake. storedPoolDraw gives back
         // nothing for a snake draw or a value that does not read as one.
-        ...(poolDraw ? { poolDraw } : {})
+        ...(poolDraw ? { poolDraw } : {}),
+        // And for the matchup draw: absent means seed order.
+        ...(matchupDraw ? { matchupDraw } : {})
     };
 }
 

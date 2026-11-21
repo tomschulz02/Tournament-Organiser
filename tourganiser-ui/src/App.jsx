@@ -10,6 +10,8 @@ import { logoutUser } from './requests';
 import LoadingScreen from './components/LoadingScreen';
 import Icon from './components/Icons';
 import HelpModal from './components/HelpModal';
+import WhatsNewModal from './components/WhatsNewModal';
+import { shouldAutoShowWhatsNew } from './utils/whatsNewBrowser';
 
 // Shared by the desktop nav's account control and the mobile Profile sheet —
 // the one working account action (Friends and Saved Tournaments are still
@@ -55,6 +57,20 @@ function isActivePath(pathname, target) {
 export default function App() {
 	const { isLoggedIn, setIsLoggedIn } = useContext(AuthContext);
 	const { helpRequest, openHelp } = useHelp();
+	// The What's new popup opens by itself once per release (whatsNew.js) on the
+	// first page inside the shell, and from the help's topic list at any time.
+	const [whatsNewOpen, setWhatsNewOpen] = useState(shouldAutoShowWhatsNew);
+	const whatsNewEntry = [{ id: 'whats-new', label: "What's new", onSelect: () => setWhatsNewOpen(true) }];
+	// Opened from the help, the control that opened it has gone with the help, so
+	// focus would fall to the page. The floating help button is where it came from.
+	const closeWhatsNew = () => {
+		setWhatsNewOpen(false);
+		// After the modal's own focus return has run (it targets a control that
+		// is gone). A timeout, not requestAnimationFrame, which a hidden tab pauses.
+		setTimeout(() => {
+			if (document.activeElement === document.body) document.querySelector('.help-button')?.focus();
+		}, 0);
+	};
 
 	useEffect(() => {
 		// Resolved once, not on every scroll event. Effects run after the whole
@@ -88,11 +104,12 @@ export default function App() {
 			    takes up space — there is no third, hamburger-driven state left. */}
 			<BottomNav loggedIn={isLoggedIn} setLoggedIn={setIsLoggedIn} />
 			<MessagePopup />
-			<HelpModal />
+			<HelpModal extraEntries={whatsNewEntry} />
+			{whatsNewOpen && <WhatsNewModal onClose={closeWhatsNew} />}
 			{!helpRequest && (
-				<div className="help-button" onClick={() => openHelp()}>
-					<i className="fas fa-question-circle"></i>
-				</div>
+				<button type="button" className="help-button" aria-label="Help" onClick={() => openHelp()}>
+					<i className="fas fa-question-circle" aria-hidden="true"></i>
+				</button>
 			)}
 		</>
 	);

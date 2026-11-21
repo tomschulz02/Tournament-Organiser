@@ -880,7 +880,8 @@ one shipped with a known gap, noted below.
 
 ### Help menu
 
-- ~~**Help menu redesigned as a slide-in side panel.**~~ — **done 2026-08-29.** Replaces
+- ~~**Help menu redesigned as a slide-in side panel.**~~ — **done 2026-08-29; superseded
+  2026-11-15** by the centred help modal (Release 1.1, UI polish item 2). Replaced
   the centred `.help-menu-container`/`.help-menu` modal in `App.jsx`. Right-side panel
   (`width: min(420px, 100%)`, `translateX`-based `helpPanelSlideIn` animation), a visible
   `×` close plus Escape-to-close, restructured into a sticky `.help-menu-header` and
@@ -998,14 +999,15 @@ nothing here has been scoped against the code yet. Each item needs a handover do
 (see `CLAUDE.md`) before it is built, and the help and What's new items touch shared UI,
 so they are Medium Risk at least. More items may be added.
 
-1. **Less text by default.** *(built 2026-11-15 with item 2, except the help media — see
-   `docs/handover-help-and-less-text.md`, "Status".)* Detailed explanations are fine, but they should not be on
+1. ~~**Less text by default.**~~ — **done 2026-11-15** with item 2 (`docs/decisions.md`,
+   "Help Is A Modal Of Topics"). Detailed explanations are fine, but they should not be on
    screen by default. The worst case is the collaborators section of Settings, with its
    large permissions table; the problem is app-wide. Long explanations move into the help
    (item 2) and the page keeps a short label plus a help button. This depends on item 2.
 
-2. **Help redesign.** *(built 2026-11-15 except the media, which waits for a deploy to the
-   test instance — see `docs/handover-help-and-less-text.md`, "Status".)*
+2. ~~**Help redesign.**~~ — **done 2026-11-15**, media included (`docs/decisions.md`,
+   "Help Is A Modal Of Topics"). Six media items were left uncaptured on purpose; that
+   entry lists them.
    - *Contextual help buttons inside pages.* Besides the floating help button and the
      existing contextual help, pages get small in-place help buttons ("?" or a short
      question such as "What do these roles mean?") that open the help **at a specific
@@ -1019,7 +1021,9 @@ so they are Medium Risk at least. More items may be added.
    - *Media:* Claude drafts screenshots and GIFs from the test instance with test data;
      the user reviews them and replaces any they want to.
 
-3. **"What's new" popup.**
+3. ~~**"What's new" popup.**~~ — **done 2026-11-15** (`docs/decisions.md`, "What's New
+   Is Keyed To A Release"). The release identifier is `release` in
+   `tourganiser-ui/src/whatsNew.js`; it can be reopened from the help's topic list.
    - A modal shown after each update or release, one slide per major change or
      addition, each with an explanation and pictures or GIFs (same media arrangement as
      item 2).
@@ -1049,7 +1053,10 @@ so they are Medium Risk at least. More items may be added.
 5. **Wording changes.** The user is making these by hand. Listed here only so they are
    tracked with the rest; Claude does not act on this item.
 
-6. **Randomised matchups for limited round robin.** *(added 2026-11-15)* When a round
+6. ~~**Randomised matchups for limited round robin.**~~ — **done 2026-11-15.** Chosen at
+   creation and in Settings → Divisions (with Reshuffle), locked at the start, stored as
+   `state.matchupDraw`. See `docs/tournament-rules.md`, "Matchups (limited round robin)".
+   *(added 2026-11-15)* When a round
    robin limits games per team (`round_robin_mode: 'limited'`), the pairs come from
    `generatePartialRoundRobinPairs` (`api/src/services/fixtures.service.js`): a circulant
    graph over the teams *in seed order*, so each team plays its neighbours by seed. That
@@ -1058,8 +1065,8 @@ so they are Medium Risk at least. More items may be added.
      construction. That keeps the g-regular guarantee and the existing parity rules.
    - Fixture generation is Medium Risk. The toggle needs a home in the payload and in
      division state, and `docs/division-state.md` would need updating.
-   - Open: whether the toggle is offered only at creation (`DivisionModal.jsx`) or also
-     in Settings, and what flipping it does once fixtures exist.
+   - Settled 2026-11-15: offered at creation and in Settings; changing it rebuilds that
+     division's fixtures and unschedules them, like the pool draw.
 
 7. **Division colour on schedule maker fixture cards.** *(added 2026-11-15)* Cards on the
    schedule maker's board drop the default blue background for a background in their

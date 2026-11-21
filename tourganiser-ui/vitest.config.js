@@ -35,6 +35,9 @@ export default defineConfig({
                 // break. A page given too much clips rows off the paper with
                 // no error, so the selection and pagination rules are tested.
                 "src/utils/resultsExportLayout.js",
+                // Whether the What's new popup interrupts a visitor. A wrong
+                // rule shows it on every visit, so the storage rules are tested.
+                "src/utils/whatsNewSeen.js",
                 // The Discover card's date tile and start countdown.
                 "src/utils/tournamentDates.js",
                 // Ranking rules as the Settings and Standings tabs present them:

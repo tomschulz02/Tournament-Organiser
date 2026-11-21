@@ -29,7 +29,7 @@ function mulberry32(seed) {
     };
 }
 
-// Fisher-Yates, driven by the seeded generator.
+// Fisher-Yates, driven by the seeded generator. Shared with matchupDraw.js.
 function shuffled(items, random) {
     const result = [...items];
 
@@ -126,6 +126,7 @@ function poolDrawFor(method, previous, redraw = false) {
 export {
     POOL_DRAW_METHODS,
     mulberry32,
+    shuffled,
     drawPools,
     readDrawMethod,
     poolDrawFromState,

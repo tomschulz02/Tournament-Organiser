@@ -980,3 +980,72 @@ reason.
   `public/assets/fonts/` with its licence beside it and declared only in
   `results-export.css`, so the app's own pages never load it. This is the one exception to
   DESIGN.md's single-typeface rule, and it applies to paper only.
+
+## Help Is A Modal Of Topics, And Explanations Live There
+
+Decided 2026-11-15; built and its media captured the same day.
+
+The help is a centred modal (`components/HelpModal.jsx`, opened through `useHelp()` from
+`HelpProvider.jsx`). It replaces the 2026-08-29 slide-in side panel. Above 768px it shows a
+topic list in a sidebar and the current topic beside it; below 768px it is full screen with
+a topic picker at the top.
+
+- **Content shape.** `helpContent.js` holds `HELP_TOPICS`: each topic has `sections`, each
+  section an `id`, a heading, paragraphs, an optional table from `helpTables.js`, optional
+  `media` and optional `steps` (shown one at a time with Back and Next by `HelpStepper`).
+  Media is `{ type: 'image' | 'animation', src, still?, phoneSrc?, phoneStill?, alt }`,
+  rendered by `HelpMedia` as a `<picture>`.
+- **Explanations live in help, not on the page.** Pages keep labels, controls, live status
+  and a "?" (`HelpButton`) that opens the matching topic scrolled to a section. Every modal
+  built on `CreateModal` gets a "?" beside its close button, and the floating help button
+  sits above modal backdrops. Exempt from the rule: empty and error states, live counts and
+  status, confirm dialogs, Home, About and Legal. One-line descriptions inside choice cards
+  stay.
+- **"?" is always an icon**, never question text, with an accessible label and the
+  `IconTooltip`. `Tooltip.jsx` is gone; the Auto-schedule sheet has one "?" for the sheet.
+- **Help over a modal.** The help opens over whatever modal is open; Escape closes only the
+  help, and `CreateModal`'s scroll lock is released only by the modal that took it.
+- **Media.** Captured on the test instance with invented test data, light theme, at a
+  1280×800 desktop viewport and a 390×800 phone viewport, saved as WebP in
+  `public/assets/help/` named `<topic>--<section>[--<step>]` with `--still`, `--phone` and
+  `--phone-still` variants. Animations are recorded with Claude in Chrome's GIF recorder
+  and converted to animated WebP with a one-off `sharp` script (never a project
+  dependency). Every animation has a still, shown under `prefers-reduced-motion: reduce`,
+  because an `<img>` cannot pause. The `// Shot:` comment beside each media item is the
+  shot list for recapturing. Chrome will not size a window below about 657px, so phone
+  captures load the app in a 390px same-origin iframe; native drag-and-drop is driven by
+  dispatched `DragEvent`s, since a synthetic mouse drag does not start it. The owner reviews
+  the media and replaces any they want.
+- **Left without media on purpose (2026-11-15):** the Discover intro (it would show other
+  people's tournaments on the instance), the three collaborator shots (they need a second
+  account), and the Save-button animation and Saved Tournaments list (Save appears only on a
+  tournament you did not create). On the schedule board, dragging a fixture from the sidebar
+  and moving or resizing a match have desktop media only: a phone does neither.
+
+## What's New Is Keyed To A Release
+
+Decided and built 2026-11-15.
+
+A "What's new" popup (`components/WhatsNewModal.jsx`) shows one slide per major change in a
+release, on whichever page inside the App shell someone lands on first. It never appears
+on `/login` or the print and export pages, which sit outside the shell.
+
+- **The release identifier is `release` in `tourganiser-ui/src/whatsNew.js`**, beside the
+  slides. Writing the next release's slides and changing that string is the one act that
+  shows the popup again. `package.json`'s version is not used, and no slides means it never
+  shows.
+- **Shown to everyone**, first-time visitors included.
+- **Remembered per browser, against the release.** Closing it records the release in
+  `sessionStorage` (`tourganiser:whats-new-closed`), so it returns next session; with
+  "Don't show this again" ticked, in `localStorage` (`tourganiser:whats-new-dismissed`),
+  so it stays hidden until the release changes. Every way of closing counts: ×, Escape,
+  the backdrop and Done. The rules are `utils/whatsNewSeen.js` (pure, tested with fake
+  storage); `utils/whatsNewBrowser.js` applies them to the real storage, treats storage
+  that throws as empty, and keeps a once-per-load flag so a remount after `/login` cannot
+  re-show it where storage is blocked.
+- **Reopened from the help's topic list** ("What's new", an entry in the list, not a help
+  topic). A deliberate reopen ignores the stored records; closing it follows the same rules.
+- **Slides reuse the help's pieces:** `CreateModal`, `HelpStepper` (steps gained an
+  optional `title`) and `HelpMedia`. Media follows the help's arrangement and lives in
+  `public/assets/whats-new/`, named `whats-new-<release>--<slide id>`. The 1.1 slides
+  reuse three of the help captures and add one of the collaborator role table.

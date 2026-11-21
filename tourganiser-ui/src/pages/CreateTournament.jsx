@@ -10,7 +10,7 @@ import DivisionCard from '../components/create/DivisionCard';
 import DivisionModal from '../components/create/DivisionModal';
 import LoadingScreen from '../components/LoadingScreen';
 import ReviewModal from '../components/create/ReviewModal';
-import { createEmptyDivision, isDivisionValid, poolDrawOf } from '../components/create/divisionFormats';
+import { createEmptyDivision, isDivisionValid, matchupDrawOf, poolDrawOf } from '../components/create/divisionFormats';
 import { clearDraft, describeDraftAge, hasDraftContent, readDraft, writeDraft } from '../utils/createDraft';
 import '../styles/create-tournament.css';
 // The review embeds BracketView, whose styles live with the tournament view and
@@ -165,7 +165,7 @@ function buildPayload(details, divisions) {
 			...(division.type === 'league' && {
 				round_robin_mode: division.roundRobinMode,
 				...(division.roundRobinMode === 'limited'
-					? { games_per_team: Number(division.gamesPerTeam) }
+					? { games_per_team: Number(division.gamesPerTeam), matchup_draw: matchupDrawOf(division.matchup_draw) }
 					: { round_robin_legs: Number(division.roundRobinLegs) }),
 			}),
 			teams: division.teams.map((team) => ({ name: team.name })),

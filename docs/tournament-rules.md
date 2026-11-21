@@ -87,6 +87,28 @@ both are refused once the tournament has started or the division has a result.
 The draws are `drawPools` in `api/src/utils/poolDraw.js`. The knockout pairing still uses
 `populateGroups` directly and is unaffected by the choice.
 
+## Matchups (limited round robin)
+
+Who plays whom in a League that limits games per team (each team plays exactly `g`
+opponents, fewer than a full round robin). Chosen per division when it is created, and
+changeable in Settings until the tournament starts. A League in legs mode has no choice to
+make: every team meets every other team.
+
+- **By seed** (the default). The circulant construction runs over the teams in seed
+  order, so each team plays the teams seeded nearest to it.
+- **Random.** The same construction runs over a seeded shuffle of the teams. Every team
+  still plays exactly `g` games with no repeated opponent.
+
+Only the pairing input is shuffled. The seeding (`state.teams`) is unchanged, so it still
+breaks the last tie in the standings. **A random draw is kept until Reshuffle**: the shuffle
+comes from a seed number stored with the division (`state.matchupDraw.seed`), and adding,
+removing or reordering teams pairs the new list from the same seed. Changing the choice or
+reshuffling regenerates the division's fixtures and takes them off the schedule, so both are
+refused once the tournament has started or the division has a result.
+
+The shuffle is `matchupOrder` in `api/src/utils/matchupDraw.js`; the pairs are
+`generatePartialRoundRobinPairs` in `api/src/services/fixtures.service.js`.
+
 ## Match Format
 
 Match format is set **per round**, not per division. Pool play may be best-of-3 while

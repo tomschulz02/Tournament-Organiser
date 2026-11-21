@@ -21,7 +21,7 @@ export function HelpProvider({ children }) {
 	}, []);
 
 	// Any "?" button anywhere in the tree opens help here, at a topic and,
-	// optionally, a section within it. See docs/handover-help-and-less-text.md.
+	// optionally, a section within it. See docs/decisions.md, "Help Is A Modal Of Topics".
 	const openHelp = useCallback((topicId = null, sectionId = null) => {
 		setRequest({ topicId, sectionId });
 	}, []);

@@ -27,6 +27,7 @@ import {
 	getEntryDivisionStyle,
 	getEntryLabel,
 	getEntryOfficials,
+	getEntryPoolLetter,
 	getEntrySecondary,
 	getFixtureDefaultLength,
 	getPlacementProblem,
@@ -1187,7 +1188,7 @@ export default function ScheduleMakerModal({
 	// reach through to a ref — handleDiscard reads initialScheduleRef — is what
 	// react-hooks flags as accessing refs during render. The id is data; the work happens
 	// in runAction at event time.
-	const inlineActions = [...(canEdit ? [{ id: 'setup', label: 'Set up' }] : []), { id: 'print', label: 'Print' }];
+	const inlineActions = [...(canEdit ? [{ id: 'setup', label: 'Settings', icon: 'settings' }] : []), { id: 'print', label: 'Print', icon: 'print' }];
 	const destructiveActions = canEdit
 		? [
 				{ id: 'discard', label: 'Discard Changes', disabled: !dirty },
@@ -1277,33 +1278,53 @@ export default function ScheduleMakerModal({
 							</IconTooltip>
 						</div>
 
-						{/* Rendered whatever the width; the stylesheet hides this group below
-						    768px, where the same actions appear in the More menu. */}
-						<div className="schedule-maker-inline-actions">
-							{inlineActions.map((action) => (
-								<button key={action.id} type="button" onClick={() => runAction(action.id)}>
-									{action.label}
-								</button>
-							))}
-						</div>
+						{/* Everything after the view toggle is pushed to the right (see
+						    .schedule-view-toggle in schedule-maker.css), in this order:
+						    Generate, Save, Undo, Settings, Print, More.
 
-						{/* Auto-schedule and Save stay visible at every width. Both labels
-						    render; a media query picks. */}
+						    Generate, Save and Undo stay visible at every width. Generate's
+						    two labels both render; a media query picks. Save and Undo are
+						    icon-only. */}
 						{canEdit && (
 							<>
-								<button type="button" onClick={handleUndo} disabled={undoStack.length === 0 || saving}>
-									Undo
-								</button>
 								<button type="button" onClick={() => openSheet('auto')}>
-									<span className="schedule-label-long">Auto-schedule</span>
-									<span className="schedule-label-short">Auto</span>
+									<span className="schedule-label-long">Generate Schedule</span>
+									<span className="schedule-label-short">Generate</span>
 								</button>
-								<button type="button" className="primary" onClick={handleSave} disabled={!dirty || saving}>
-									<span className="schedule-label-long">Save Schedule</span>
-									<span className="schedule-label-short">Save</span>
-								</button>
+								<IconTooltip label="Save schedule">
+									<button
+										type="button"
+										className="primary"
+										aria-label="Save schedule"
+										onClick={handleSave}
+										disabled={!dirty || saving}>
+										<Icon name="save" size={20} fill="currentColor" />
+									</button>
+								</IconTooltip>
+								<IconTooltip label="Undo">
+									<button
+										type="button"
+										aria-label="Undo"
+										onClick={handleUndo}
+										disabled={undoStack.length === 0 || saving}>
+										<Icon name="undo" size={20} fill="currentColor" />
+									</button>
+								</IconTooltip>
 							</>
 						)}
+
+						{/* Settings and Print. Rendered whatever the width; the stylesheet
+						    hides this group below 768px, where the same actions appear in
+						    the More menu. */}
+						<div className="schedule-maker-inline-actions">
+							{inlineActions.map((action) => (
+								<IconTooltip key={action.id} label={action.label}>
+									<button type="button" aria-label={action.label} onClick={() => runAction(action.id)}>
+										<Icon name={action.icon} size={20} fill="currentColor" />
+									</button>
+								</IconTooltip>
+							))}
+						</div>
 
 						<div className={`schedule-maker-overflow${canEdit ? '' : ' is-narrow-only'}`} ref={overflowRef}>
 							<button
@@ -1312,7 +1333,7 @@ export default function ScheduleMakerModal({
 								aria-expanded={menuOpen}
 								aria-label="More actions"
 								onClick={() => setMenuOpen((open) => !open)}>
-								More
+								<Icon name="more" size={20} fill="currentColor" />
 							</button>
 							{menuOpen && (
 								<div className="schedule-maker-overflow-menu" role="menu">
@@ -1430,14 +1451,19 @@ export default function ScheduleMakerModal({
 									<small>{NEW_BREAK_MINUTES} minutes across all courts</small>
 								</button>
 								{filteredUnscheduledFixtures.length > 0 ? (
-									filteredUnscheduledFixtures.map((fixture) => (
+									filteredUnscheduledFixtures.map((fixture) => {
+										const divisionStyle = getFixtureDivisionStyle(fixture, divisionList);
+
+										return (
 										<button
 											key={fixture.id}
 											type="button"
 											draggable
 											aria-pressed={pendingFixtureId === fixture.id}
-											className={`schedule-fixture-pill${pendingFixtureId === fixture.id ? ' pending' : ''}`}
-											style={getFixtureDivisionStyle(fixture, divisionList)}
+											className={`schedule-fixture-pill${divisionStyle ? ' has-division' : ''}${
+												pendingFixtureId === fixture.id ? ' pending' : ''
+											}`}
+											style={divisionStyle}
 											onDragStart={(event) => {
 												// effectAllowed has to be set explicitly here, or Chrome can
 												// drop the payload set below somewhere between dragstart and
@@ -1457,7 +1483,8 @@ export default function ScheduleMakerModal({
 												{fixture.round} - Match {fixture.matchNo}
 											</small>
 										</button>
-									))
+										);
+									})
 								) : (
 									<div className="schedule-empty-panel">
 										<p>All fixtures are scheduled.</p>
@@ -2325,6 +2352,10 @@ function ScheduleGridView({
 						const preview = resizingEntryId === entry.id ? gesture : item;
 						const height = heightFor(preview.startOffset, preview.endOffset);
 						const sizeClass = height < TINY_ENTRY_HEIGHT ? ' compact tiny' : height < COMPACT_ENTRY_HEIGHT ? ' compact' : '';
+						// Undefined in a single-division tournament, which keeps the default
+						// blue card; has-division switches to the division's tint.
+						const divisionStyle = getEntryDivisionStyle(entry, fixturesById, divisions);
+						const poolLetter = getEntryPoolLetter(entry, fixturesById);
 
 						return (
 							// Draggable and clickable at once: dragging moves the entry, clicking
@@ -2334,7 +2365,9 @@ function ScheduleGridView({
 								key={entry.id}
 								type="button"
 								data-entry-id={entry.id}
-								className={`schedule-grid-entry ${entry.type}${sizeClass}${
+								className={`schedule-grid-entry ${entry.type}${sizeClass}${divisionStyle ? ' has-division' : ''}${
+									poolLetter ? ' has-pool' : ''
+								}${
 									resizingEntryId === entry.id ? ' resizing' : ''
 								}${highlightEntryIds.includes(entry.id) ? ' highlighted' : ''}${
 									linkedEntryIds.has(entry.id) ? ' linked' : ''
@@ -2378,9 +2411,18 @@ function ScheduleGridView({
 									gridRow: '1 / -1',
 									top: `${topFor(preview.startOffset)}px`,
 									height: `${height}px`,
-									...getEntryDivisionStyle(entry, fixturesById, divisions),
+									...divisionStyle,
 								}}
 								onClick={() => takeClick() && onSelectEntry(entry)}>
+								{/* Every card size shows it, unlike the subtitle that also names
+								    the pool. The letter is decoration; the hidden text is what a
+								    screen reader announces. */}
+								{poolLetter && (
+									<span className="schedule-grid-entry-pool" title={`Pool ${poolLetter}`}>
+										<span aria-hidden="true">{poolLetter}</span>
+										<span className="tv-visually-hidden">Pool {poolLetter}</span>
+									</span>
+								)}
 								{/* Read off the offsets rather than the stored times, so that the
 								    times shown mid-resize are the ones the drag is about to
 								    write. Off a gesture the two are the same value. */}
@@ -2483,7 +2525,7 @@ function ScheduleGridView({
 							<button
 								key={entry.id}
 								type="button"
-								className="schedule-fixture-pill"
+								className={`schedule-fixture-pill${getEntryDivisionStyle(entry, fixturesById, divisions) ? ' has-division' : ''}`}
 								style={getEntryDivisionStyle(entry, fixturesById, divisions)}
 								onClick={() => onSelectEntry(entry)}>
 								<strong>{getEntryLabel(entry, fixturesById)}</strong>
@@ -2800,7 +2842,7 @@ function FixturePickerPopover({ draft, schedule, fixtures, divisions, getAnchor,
 						<button
 							key={fixture.id}
 							type="button"
-							className="schedule-fixture-pill"
+							className={`schedule-fixture-pill${getFixtureDivisionStyle(fixture, divisions) ? ' has-division' : ''}`}
 							style={getFixtureDivisionStyle(fixture, divisions)}
 							onClick={() => onAssign(fixture)}>
 							<strong>{fixture.team1}</strong>

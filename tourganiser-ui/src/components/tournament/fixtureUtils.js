@@ -152,10 +152,18 @@ export function formatResult(result) {
 //
 // Null rather than [0, 0] for an unplayed fixture: nothing has been won yet, and
 // the row renders an empty score cell rather than a zero.
-export function setsWon(result) {
+//
+// `live: true` is for a match still being played. Its last set is the one in
+// progress — a set ends when the next one starts — so it counts for nobody yet.
+// A live match in its first set therefore shows [0, 0], not null: it has
+// started, it just has no finished set. Off by default, so standings and
+// exports, which only read finished matches, are unchanged.
+export function setsWon(result, { live = false } = {}) {
 	if (!Array.isArray(result) || result.length === 0) return null;
 
-	return result.reduce(
+	const finished = live ? result.slice(0, -1) : result;
+
+	return finished.reduce(
 		([one, two], [scoreOne, scoreTwo]) => [one + (scoreOne > scoreTwo ? 1 : 0), two + (scoreTwo > scoreOne ? 1 : 0)],
 		[0, 0],
 	);

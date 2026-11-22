@@ -25,6 +25,9 @@ body.light {
 	--schedule-fixture: #1b68ff;
 	--schedule-break: #0f8f89;
 	--schedule-danger: #c94949;
+	/* How much of the division colour a board card mixes into the surface. Per
+	   theme, because a dark surface needs more of the (lightened) accent to show. */
+	--schedule-division-tint: 22%;
 }
 
 body.dark {
@@ -37,6 +40,7 @@ body.dark {
 	--schedule-fixture: #4894ff;
 	--schedule-break: #16b3aa;
 	--schedule-danger: #ff7d7d;
+	--schedule-division-tint: 30%;
 }
 
 .schedule-maker-launcher {
@@ -126,6 +130,11 @@ body.dark {
 }
 
 .schedule-maker-toolbar-actions button {
+	/* Centres an icon-only button's svg, which otherwise sits on the text
+	   baseline and leaves a gap under it. */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	min-height: 44px;
 	background: transparent;
 	color: var(--schedule-text);
@@ -369,6 +378,9 @@ body.dark {
 }
 
 .schedule-maker-toolbar-actions {
+	/* The full toolbar width, so the view toggle's auto margin has room to
+	   push the rest to the right. */
+	flex: 1 1 auto;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -429,7 +441,10 @@ body.dark {
 	opacity: 0.5;
 }
 
+/* Stays on the left; the auto margin pushes every action after it to the
+   right-hand end of the toolbar. */
 .schedule-view-toggle {
+	margin-right: auto;
 	display: inline-flex;
 	padding: var(--space-1);
 	border-radius: 14px;
@@ -864,7 +879,17 @@ body.dark .schedule-popover input {
 	box-shadow: inset 3px 0 0 0 var(--tv-division-color, transparent);
 }
 
-.schedule-fixture-pill span,
+/* Multi-division tournaments only. Half the board card's tint, since these are
+   lists rather than the thing being arranged. Before .pending, so a chosen pill
+   swaps to the selection background and stands out from the rest. */
+.schedule-fixture-pill.has-division {
+	background: color-mix(
+		in srgb,
+		var(--tv-division-color) calc(var(--schedule-division-tint) / 2),
+		var(--schedule-surface)
+	);
+}
+
 /* The fixture chosen for placement, waiting for a slot. */
 .schedule-fixture-pill.pending {
 	border-color: var(--schedule-fixture);
@@ -1337,8 +1362,50 @@ button.schedule-grid-header-court:hover {
 	background: linear-gradient(160deg, var(--schedule-fixture), rgb(from var(--main-color) r g b / 0.92));
 }
 
+/* Multi-division tournaments only (has-division is set when the entry carries
+   --tv-division-color). A tint of the division's colour mixed into the surface
+   rather than a solid fill: white text on amber or green would not read, so the
+   card takes the normal text colour instead. The left border stays as the accent.
+   A single-division tournament keeps the blue card above. */
+.schedule-grid-entry.fixture.has-division {
+	background: color-mix(in srgb, var(--tv-division-color) var(--schedule-division-tint), var(--schedule-surface));
+	color: var(--schedule-text);
+}
+
 .schedule-grid-entry.break {
 	background: linear-gradient(160deg, var(--schedule-break), rgb(from var(--secondary-color) r g b / 0.92));
+}
+
+/* The pool letter, top-right, at every card size. Neutral rather than in the
+   division colour so it reads on any tint and on the default blue. Clicks pass
+   through to the card and the resize strip beneath. */
+.schedule-grid-entry-pool {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	min-width: 18px;
+	padding: 0 4px;
+	border: 1px solid var(--schedule-border);
+	border-radius: 6px;
+	background: var(--schedule-surface);
+	color: var(--schedule-text);
+	font-size: 0.7rem;
+	font-weight: 700;
+	line-height: 16px;
+	text-align: center;
+	pointer-events: none;
+}
+
+/* A tiny card is about one line tall; centred, the badge isn't clipped. */
+.schedule-grid-entry.tiny .schedule-grid-entry-pool {
+	top: 50%;
+	transform: translateY(-50%);
+}
+
+/* Keep the first visible line clear of the badge. */
+.schedule-grid-entry.has-pool .schedule-grid-entry-time,
+.schedule-grid-entry.has-pool.tiny .schedule-grid-entry-title {
+	padding-right: 28px;
 }
 
 .schedule-grid-entry-time {
@@ -1705,8 +1772,10 @@ button.schedule-grid-header-court:hover {
 		flex: 0 0 auto;
 	}
 
+	/* The anchor form is an icon-only button wrapped by IconTooltip (Save). */
 	.schedule-view-toggle button,
 	.schedule-maker-toolbar-actions > button,
+	.schedule-maker-toolbar-actions > .icon-tooltip-anchor > button,
 	.schedule-maker-overflow > button {
 		padding: var(--space-2);
 		min-height: 44px;
@@ -1715,6 +1784,7 @@ button.schedule-grid-header-court:hover {
 	@media (max-width: 359px) {
 		.schedule-view-toggle button,
 		.schedule-maker-toolbar-actions > button,
+		.schedule-maker-toolbar-actions > .icon-tooltip-anchor > button,
 		.schedule-maker-overflow > button {
 			padding-inline: 6px;
 			min-width: 44px;

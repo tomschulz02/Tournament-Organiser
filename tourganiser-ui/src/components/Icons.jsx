@@ -1,3 +1,11 @@
+// The two grids icons arrive on from Google Fonts' Material Symbols. The SVG
+// download uses the 960 grid, the default here. The preview's copy button gives
+// a 24×24 SVG; check the viewBox in what you copied and, for "0 0 24 24", add the
+// icon in the { viewBox: VIEWBOX_24, path } form (see settings below). A path
+// drawn on one grid and shown on the other renders outside the box: blank.
+const VIEWBOX_960 = '0 -960 960 960';
+const VIEWBOX_24 = '0 0 24 24';
+
 export default function Icon({ name, label = '', size = 24, className = '', onClick = () => {}, fill = 'var(--background-color)' }) {
 	const icons = {
 		doubleArrowDown: (
@@ -72,6 +80,14 @@ export default function Icon({ name, label = '', size = 24, className = '', onCl
 		print: (
 			<path d="M640-640v-120H320v120h-80v-200h480v200h-80Zm-480 80h640-640Zm560 100q17 0 28.5-11.5T760-500q0-17-11.5-28.5T720-540q-17 0-28.5 11.5T680-500q0 17 11.5 28.5T720-460Zm-80 260v-160H320v160h320Zm80 80H240v-160H80v-240q0-51 35-85.5t85-34.5h560q51 0 85.5 34.5T880-520v240H720v160Zm80-240v-160q0-17-11.5-28.5T760-560H200q-17 0-28.5 11.5T160-520v160h80v-80h480v80h80Z" />
 		),
+		// Three dots: a menu of more actions (tournament/ToolbarMenu.jsx).
+		more: (
+			<path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z" />
+		),
+		// A page with lines: a scoresheet (Print All Scoresheets).
+		scoresheet: (
+			<path d="M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z" />
+		),
 		upload: (
 			<path d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z" />
 		),
@@ -88,12 +104,32 @@ export default function Icon({ name, label = '', size = 24, className = '', onCl
 		list: (
 			<path d="M280-600v-80h560v80H280Zm0 160v-80h560v80H280Zm0 160v-80h560v80H280ZM160-600q-17 0-28.5-11.5T120-640q0-17 11.5-28.5T160-680q17 0 28.5 11.5T200-640q0 17-11.5 28.5T160-600Zm0 160q-17 0-28.5-11.5T120-480q0-17 11.5-28.5T160-520q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440Zm0 160q-17 0-28.5-11.5T120-320q0-17 11.5-28.5T160-360q17 0 28.5 11.5T200-320q0 17-11.5 28.5T160-280Z"/>
 		),
+		// Copied with the Google Fonts preview's copy button, which gives a 24×24
+		// SVG (viewBox "0 0 24 24") rather than the 960 grid the icons above use.
+		// The object form says so; paste such paths unchanged.
+		settings: {
+			viewBox: VIEWBOX_24,
+			path: <path d="M9.25,22l-0.4-3.2q-0.32-0.13-0.61-0.3T7.68,18.13L4.7,19.38L1.95,14.63l2.58-1.95Q4.5,12.5 4.5,12.34q0-0.16 0-0.34t0-0.34t0.03-0.34L1.95,9.38L4.7,4.63L7.68,5.88Q7.95,5.68 8.25,5.5t0.6-0.3L9.25,2h5.5l0.4,3.2q0.33,0.13 0.61,0.3t0.56,0.38L19.3,4.63l2.75,4.75l-2.57,1.95q0.02,0.18 0.02,0.34t0,0.34t0,0.34t-0.05,0.34l2.57,1.95l-2.75,4.75l-2.95-1.25q-0.27,0.2-0.57,0.38t-0.6,0.3L14.75,22H9.25ZM11,20h1.98l0.35-2.65q0.78-0.2 1.44-0.59t1.21-0.94l2.47,1.03l0.98-1.7l-2.15-1.63q0.13-0.35 0.17-0.74T17.5,12t-0.05-0.79q-0.05-0.39-0.17-0.74l2.15-1.63l-0.98-1.7L15.98,8.2q-0.55-0.57-1.21-0.96T13.33,6.65L13,4H11.03L10.68,6.65Q9.9,6.85 9.24,7.24T8.03,8.17L5.55,7.15L4.58,8.85l2.15,1.6Q6.6,10.83 6.55,11.2T6.5,12q0,0.4 0.05,0.77t0.17,0.75L4.58,15.15l0.98,1.7L8.03,15.8q0.55,0.58 1.21,0.96t1.44,0.59L11,20Zm1.05-4.5q1.45,0 2.47-1.03T15.55,12T14.53,9.52T12.05,8.5q-1.47,0-2.49,1.02T8.55,12t1.01,2.47t2.49,1.03ZM12,12Z"/>,
+		},
+		save: {
+			viewBox: VIEWBOX_24,
+			path: <path d="M21,7V19q0,0.82-0.59,1.41T19,21H5q-0.83,0-1.41-0.59T3,19V5Q3,4.17 3.59,3.59T5,3H17l4,4ZM19,7.85L16.15,5H5V19H19V7.85Zm-4.88,9.28Q15,16.25 15,15t-0.88-2.13T12,12T9.88,12.88T9,15t0.88,2.13T12,18t2.13-0.88ZM6,10h9V6H6v4ZM5,7.85V19V5V7.85Z"/>,
+		},
+		undo: {
+			viewBox: VIEWBOX_24,
+			path: <path d="M7,19V17h7.1q1.57,0 2.74-1T18,13.5T16.84,11T14.1,10H7.8l2.6,2.6L9,14L4,9L9,4l1.4,1.4L7.8,8h6.3q2.43,0 4.16,1.57T20,13.5t-1.74,3.93Q16.53,19 14.1,19H7Z"/>
+		}
 	};
+
+	// An icon is either a bare <path> on the default grid, or { viewBox, path }
+	// when it was drawn on another one. See the comment above VIEWBOX_960.
+	const icon = icons[name];
+	const viewBox = icon?.viewBox ?? VIEWBOX_960;
 
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
-			viewBox="0 -960 960 960"
+			viewBox={viewBox}
 			width={size}
 			height={size}
 			className={className}
@@ -103,7 +139,7 @@ export default function Icon({ name, label = '', size = 24, className = '', onCl
 			aria-hidden={!label}
 			onClick={onClick}
 			fill={fill}>
-			{icons[name]}
+			{icon?.path ?? icon}
 		</svg>
 	);
 }

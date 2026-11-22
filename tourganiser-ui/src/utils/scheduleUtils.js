@@ -1118,6 +1118,19 @@ export function getEntrySecondary(entry, fixturesById) {
 	return fixture.divisionName ? `${fixture.divisionName} - ${context}` : context;
 }
 
+// The pool letter for a board card's badge ("Pool B" -> "B"). The API sets
+// `pool` only on a non-knockout round with two or more pools, so a knockout
+// fixture or a single-pool round has none and shows no badge. The subtitle
+// already names the pool, but compact and tiny cards hide it; the badge is what
+// tells pools apart at every size.
+export function getEntryPoolLetter(entry, fixturesById) {
+	if (entry.type === 'break') return null;
+
+	const match = /^pool\s+(\S+)$/i.exec(String(fixturesById[entry.fixtureId]?.pool ?? '').trim());
+
+	return match ? match[1] : null;
+}
+
 export function getEntryOfficials(entry) {
 	if (entry.type === 'break') return '';
 

@@ -353,8 +353,11 @@ its file references and a suggested direction). Spectator side first:
   updated.
 - **Match numbers repeat across divisions.** A combined schedule shows several "#1"s at
   the same time, and spectators, scorers and scoresheets all refer to matches by number.
-- **The status dot reads backwards.** Completed is red, live is green, upcoming is blue.
-  Red usually means live in sports apps, and error elsewhere.
+- ~~**The status dot reads backwards.**~~ — **fixed 2026-11-22.** Only live matches have
+  a dot now, a pulsing red one in its own token (`--tv-live`), kept apart from
+  `--error-color`. Upcoming, completed and cancelled have no dot. See `docs/decisions.md`,
+  "A Division Is A Tint, Not A Dot". Was: completed red, live green, upcoming blue — red
+  usually means live in sports apps, and error elsewhere.
 - ~~**The Save button never shows saved state.**~~ — **fixed 2026-10-23.** It reads the
   saved list on load, so a saved tournament shows Saved and can be unsaved from its page,
   and a signed-out click goes to sign-in and back. It still fetches the whole saved list

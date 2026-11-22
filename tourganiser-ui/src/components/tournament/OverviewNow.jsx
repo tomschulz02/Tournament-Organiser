@@ -62,21 +62,44 @@ function scoreLabel(fixture) {
 	return fixture.result?.length > 0 ? 'Edit score' : 'Enter score';
 }
 
-// One team's line on a court card: name, sets won, then each set's points.
-function CourtTeamLine({ name, won, points, leading }) {
+// One team's line of a scoreline, on a court card and in Recent results
+// (OverviewTab.jsx): name, each set's points, then sets won. A set's points are
+// bold for the team that won it, as sets won is for the match winner. A tied
+// set (which counts for neither, see setsWon) is bold for neither.
+//
+// `live` marks a match still being played. Its last set is the one in
+// progress — a set ends when the next one starts — so it stays plain however
+// the points stand; only the sets before it have a winner.
+export function TeamScoreLine({ name, won, points, opponentPoints, leading, live = false }) {
+	const lastIndex = (points?.length ?? 0) - 1;
+
 	return (
-		<div className={`tv-ov-team ${leading ? 'is-leading' : ''}`.trim()}>
+		<span className={`tv-ov-team ${leading ? 'is-leading' : ''}`.trim()}>
 			<span className="tv-ov-team-name">{name || 'TBD'}</span>
+			<span className="tv-ov-team-points">
+				{points?.map((score, index) => {
+					const finished = !(live && index === lastIndex);
+					const wonSet = finished && score > (opponentPoints?.[index] ?? Infinity);
+
+					return (
+						<span key={index} className={wonSet ? 'is-set-won' : undefined}>
+							{score}
+						</span>
+					);
+				})}
+			</span>
 			<span className="tv-ov-team-sets">{won ?? ''}</span>
-			<span className="tv-ov-team-points">{points?.join(' ') ?? ''}</span>
-		</div>
+		</span>
 	);
 }
 
 function CourtCard({ entry, fixture, schedule, divisions, next, canScore, onScore }) {
 	// Not shown for a cancelled match: its stored 0-0 is a convention, not a score.
 	const showScore = fixture.status !== 'CANCELLED';
-	const won = showScore ? setsWon(fixture.result) : null;
+	const live = fixture.status === 'LIVE';
+	// A live match's last set is in progress, so it is neither counted in sets
+	// won (nor, in TeamScoreLine, shown bold) until the next set starts.
+	const won = showScore ? setsWon(fixture.result, { live }) : null;
 	const points = showScore ? setScores(fixture.result) : null;
 	const court = entry ? getCourtName(schedule, entry.courtId) : null;
 
@@ -85,13 +108,39 @@ function CourtCard({ entry, fixture, schedule, divisions, next, canScore, onScor
 			className={`tv-ov-court tv-ov-court--${String(fixture.status || 'UPCOMING').toLowerCase()}`}
 			style={divisionColorStyle(fixture.division_id, divisions)}>
 			<div className="tv-ov-court-head">
-				<span className="tv-ov-court-name">{court ?? (fixture.match_no != null ? `Match ${fixture.match_no}` : 'Match')}</span>
+				<span className="tv-ov-court-name">
+					{/* The same pulsing dot a live row has in Fixtures & Schedule. A
+					    card is only here while it is live or just finished, so only
+					    live gets a dot. Hidden from the accessibility tree; the hidden
+					    word says it once. */}
+					{live && (
+						<>
+							<span className="tv-status-dot tv-status-dot--live" aria-hidden="true" />
+							<span className="tv-visually-hidden">Live: </span>
+						</>
+					)}
+					{court ?? (fixture.match_no != null ? `Match ${fixture.match_no}` : 'Match')}
+				</span>
 				<DivisionBadge id={fixture.division_id} name={fixture.division_name} divisions={divisions} />
 			</div>
 
 			<div className="tv-ov-court-teams">
-				<CourtTeamLine name={fixture.team1} won={won?.[0]} points={points?.[0]} leading={won && won[0] > won[1]} />
-				<CourtTeamLine name={fixture.team2} won={won?.[1]} points={points?.[1]} leading={won && won[1] > won[0]} />
+				<TeamScoreLine
+					name={fixture.team1}
+					won={won?.[0]}
+					points={points?.[0]}
+					opponentPoints={points?.[1]}
+					leading={won && won[0] > won[1]}
+					live={live}
+				/>
+				<TeamScoreLine
+					name={fixture.team2}
+					won={won?.[1]}
+					points={points?.[1]}
+					opponentPoints={points?.[0]}
+					leading={won && won[1] > won[0]}
+					live={live}
+				/>
 			</div>
 
 			<div className="tv-ov-court-foot">

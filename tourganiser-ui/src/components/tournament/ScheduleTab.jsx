@@ -1,8 +1,6 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import SectionState from './SectionState';
-import Icon from '../Icons';
-import IconTooltip from '../IconTooltip';
+import ToolbarMenu from './ToolbarMenu';
 import FixtureRow from './FixtureRow';
 import FixtureFilters from './FixtureFilters';
 import FixtureGroup from './FixtureGroup';
@@ -165,55 +163,43 @@ export default function ScheduleTab({
 				/>
 
 				<div className="tv-toolbar-actions">
-					{/* Present whenever the tournament has a template selected at all,
-					    disabled with a title naming which of the two reasons applies —
-					    the same distinction the per-fixture button makes — rather than
-					    absent, so an organiser who has not picked one yet knows the
-					    control exists. */}
-					{canPrintScoresheets && scoresheetTemplateSelected && onPrintAllScoresheets && (
-						<button
-							type="button"
-							className="tv-primary-action"
-							disabled={!scoresheetTemplateReady}
-							title={
-								scoresheetTemplateReady
-									? undefined
-									: 'The scoresheet template is not available on this device'
-							}
-							onClick={onPrintAllScoresheets}>
-							Print All Scoresheets
-						</button>
-					)}
-
-					{/* Organiser roles only. Carries the filters above, day and court
-					    included, so the export is the completed fixtures of what is on
-					    screen. */}
-					{canExportResults && (
-						<Link
-							to={resultsExportPath(tournament.id, filters)}
-							className="tv-icon-button"
-							target="_blank"
-							rel="noopener">
-							<Icon name="download" size={18} fill="currentColor" />
-							Results
-						</Link>
-					)}
-
-					{/* Unconditional — everyone viewing a scheduled tournament can view
-					    or print it, not just the organiser. One button rather than two:
-					    grid and list are a choice made on the print page itself now that
-					    it is a real, linkable route rather than a generated document.
-					    Never loads ScheduleMakerModal. */}
-					<IconTooltip label="View/Print Schedule">
-						<Link
-							to={`/tournaments/view/${tournament.id}/print`}
-							className="tv-icon-button tv-icon-button--icon"
-							target="_blank"
-							rel="noopener"
-							aria-label="View/Print Schedule">
-							<Icon name="print" size={20} fill="currentColor" />
-						</Link>
-					</IconTooltip>
+					<ToolbarMenu
+						actions={[
+							// Unconditional — everyone viewing a scheduled tournament can
+							// view or print it, not just the organiser. Grid and list are a
+							// choice made on the print page itself. Never loads
+							// ScheduleMakerModal.
+							{
+								id: 'print-schedule',
+								label: 'View/Print schedule',
+								icon: 'print',
+								to: `/tournaments/view/${tournament.id}/print`,
+							},
+							// Organiser roles only. Carries the filters above, day and
+							// court included, so the export is the completed fixtures of
+							// what is on screen.
+							canExportResults && {
+								id: 'results',
+								label: 'Download results',
+								icon: 'download',
+								to: resultsExportPath(tournament.id, filters),
+							},
+							// Present whenever the tournament has a template selected at
+							// all, disabled with a title naming why — the same distinction
+							// the per-fixture button makes — rather than absent, so an
+							// organiser who has not picked one yet knows it exists.
+							canPrintScoresheets &&
+								scoresheetTemplateSelected &&
+								onPrintAllScoresheets && {
+									id: 'scoresheets',
+									label: 'Print all scoresheets',
+									icon: 'scoresheet',
+									onClick: onPrintAllScoresheets,
+									disabled: !scoresheetTemplateReady,
+									title: 'The scoresheet template is not available on this device',
+								},
+						].filter(Boolean)}
+					/>
 
 					{/* In place of Create Schedule, not alongside it. */}
 					{canEditSchedule && onEditSchedule && (

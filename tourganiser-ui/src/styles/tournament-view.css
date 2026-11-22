@@ -22,6 +22,11 @@ body.light {
 	--tv-muted: rgba(37, 37, 37, 0.66);
 	--tv-skeleton: rgba(37, 37, 37, 0.09);
 	--tv-skeleton-sheen: rgba(37, 37, 37, 0.04);
+	/* How much of the division colour a fixture row mixes into the surface.
+	   Below the schedule maker's cards, but enough to name the hue. */
+	--tv-division-tint: 16%;
+	/* The live indicator (.tv-status-dot). Not --error-color: see there. */
+	--tv-live: rgb(196, 0, 0);
 }
 
 body.dark {
@@ -31,6 +36,8 @@ body.dark {
 	--tv-muted: rgba(245, 245, 245, 0.7);
 	--tv-skeleton: rgba(245, 245, 245, 0.1);
 	--tv-skeleton-sheen: rgba(245, 245, 245, 0.05);
+	--tv-division-tint: 20%;
+	--tv-live: rgb(240, 20, 20);
 }
 
 /* For text that only a screen reader needs — a status carried visually by a
@@ -130,6 +137,25 @@ body.dark {
 .tv-subheader .tv-follow {
 	grid-column: 3;
 	justify-self: end;
+}
+
+/* The tournament's own actions (Start/End, Results pack), on every tab. Their
+   own grid row across all three columns, centred under the name, so on a phone
+   they are not squeezed between Back and Save. */
+.tv-header-actions {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+/* Side by side on a phone too, rather than the full-width primary button the
+   phone rule further down gives every other .tv-primary-action. */
+.tv-header-actions .tv-primary-action {
+	width: auto;
 }
 
 /* Equal-width buttons, so the outer columns have equal floors and the name sits
@@ -523,15 +549,6 @@ body.dark .tv-division-badge {
 
 /* The organiser's lifecycle controls, at the foot of the info card. Separated
    by a rule because they act on the tournament rather than describe it. */
-.tv-info-actions {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--space-2);
-	margin-top: var(--space-4);
-	padding-top: var(--space-4);
-	border-top: 1px solid var(--tv-border);
-}
 
 .tv-status-pill {
 	padding: var(--space-1) var(--space-3);
@@ -622,6 +639,43 @@ body.dark .tv-division-badge {
 	border-left: 3px solid var(--tv-division-color, var(--tv-border));
 	border-radius: 14px;
 	padding: var(--space-4);
+}
+
+/* The placeholder card that adds a division, first in the grid. Dashed and
+   empty-looking, so it reads as a slot for a division rather than one. It
+   stretches to the height of the real cards in its row. */
+.tv-division-card--add {
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	min-height: 160px;
+	border: 1px dashed var(--tv-border);
+	background: transparent;
+	color: var(--tv-muted);
+	font: inherit;
+	font-size: 0.95rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		color 0.15s ease,
+		background-color 0.15s ease;
+}
+
+.tv-division-card--add svg {
+	fill: currentColor;
+}
+
+.tv-division-card--add:hover:not(:disabled),
+.tv-division-card--add:focus-visible {
+	border-color: var(--main-color);
+	background: rgb(from var(--main-color) r g b / 0.06);
+	color: var(--main-color);
+}
+
+.tv-division-card--add:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
 }
 
 .tv-division-card-header {
@@ -851,58 +905,10 @@ body.dark .tv-division-badge {
 	color: var(--tv-muted);
 }
 
-.tv-fixture-previews {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-2);
-}
-
-/* High information density, low visual density: three short columns, one line
-   each where the names allow it. */
-.tv-fixture-preview {
-	display: grid;
-	grid-template-columns: auto minmax(0, 1fr) auto;
-	align-items: center;
-	gap: var(--space-3);
-	padding: var(--space-2) var(--space-3);
-	background: var(--tv-surface);
-	border: 1px solid var(--tv-border);
-	border-radius: 10px;
-}
-
-.tv-fixture-preview-meta {
-	display: flex;
-	align-items: center;
-	gap: var(--space-1);
-}
-
 .tv-match-no {
 	font-size: 0.75rem;
 	color: var(--tv-muted);
 	font-variant-numeric: tabular-nums;
-}
-
-.tv-fixture-preview-teams {
-	display: flex;
-	align-items: center;
-	gap: var(--space-1);
-	min-width: 0;
-	font-size: 0.9rem;
-	color: var(--secondary-text-color);
-}
-
-.tv-fixture-preview-teams > span:not(.tv-versus) {
-	/* Equal, capped share of the row so a long team1 can't crowd team2 below
-	   its own ellipsis width — flex: 0 1 auto shrinks each span by its own
-	   content length instead. */
-	flex: 1 1 0;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .tv-versus {
@@ -911,16 +917,6 @@ body.dark .tv-division-badge {
 	color: var(--tv-muted);
 }
 
-.tv-fixture-preview-outcome {
-	font-size: 0.82rem;
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-	color: var(--secondary-text-color);
-}
-
-.tv-fixture-preview-outcome--status {
-	color: var(--tv-muted);
-}
 
 /* --- overview: happening now -------------------------------------------- */
 
@@ -1137,7 +1133,11 @@ body.dark .tv-division-badge {
 	min-width: 0;
 }
 
+/* Room for the live dot beside the court name. */
 .tv-ov-court-name {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
 	font-size: 0.82rem;
 	font-weight: 700;
 	color: var(--tv-muted);
@@ -1149,9 +1149,11 @@ body.dark .tv-division-badge {
 	gap: var(--space-1);
 }
 
+/* TeamScoreLine: name, points per set, then sets won. Used by On court now and
+   Recent results. */
 .tv-ov-team {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 1.5em auto;
+	grid-template-columns: minmax(0, 1fr) auto 1.5em;
 	align-items: baseline;
 	gap: var(--space-2);
 	font-size: 0.95rem;
@@ -1175,10 +1177,25 @@ body.dark .tv-division-badge {
 }
 
 .tv-ov-team-points {
+	display: inline-flex;
+	gap: 0.4em;
 	font-size: 0.82rem;
 	color: var(--tv-muted);
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
+}
+
+/* A fixed width per set, so the two teams' scores line up in columns even
+   when one of them is a single digit. */
+.tv-ov-team-points > span {
+	min-width: 1.3em;
+	text-align: right;
+}
+
+/* The set's winner, bold and at full strength like sets won. */
+.tv-ov-team-points .is-set-won {
+	font-weight: 700;
+	color: var(--secondary-text-color);
 }
 
 .tv-ov-court-foot {
@@ -1242,6 +1259,24 @@ body.dark .tv-division-badge {
 
 .tv-ov-line:first-child {
 	border-top: none;
+}
+
+/* Recent results: a line like Up next's, without the action column and with a
+   narrower lead, since a match number needs less than a court name and the
+   column it sits in is narrow. The lead sits beside the first team. Doubled
+   class so the phone rule for .tv-ov-line further down does not undo it. */
+.tv-ov-line.tv-ov-recent {
+	grid-template-columns: 2.5rem minmax(0, 1fr);
+	align-items: start;
+	padding: var(--space-3) 0;
+}
+
+.tv-ov-recent .tv-ov-line-lead {
+	padding-top: 2px;
+}
+
+.tv-ov-recent .tv-ov-line-body {
+	gap: var(--space-2);
 }
 
 .tv-ov-line-lead {
@@ -1664,10 +1699,94 @@ body.dark .tv-division-badge {
 	margin-bottom: var(--space-3);
 }
 
+/* One line at every width: the "more" button (ToolbarMenu: print schedule,
+   results export, print all scoresheets) keeps its size and the main action
+   (Create/Edit Schedule) takes the rest. */
 .tv-toolbar-actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	gap: var(--space-2);
+	flex-direction: row-reverse;
+}
+
+.tv-toolbar-actions > * {
+	flex: none;
+}
+
+/* Drops below the "more" button, from its left edge — the toolbar starts at
+   the left of the page at every width, so there is always room to the right. */
+/* Its own layer at --z-menu, so the open menu sits above the fixture list on
+   phones and tablets too, where the toolbar is not sticky. */
+.tv-toolbar-menu {
+	position: relative;
+	z-index: var(--z-menu);
+	display: flex;
+}
+
+.tv-toolbar-menu-list {
+	position: absolute;
+	top: calc(100% + var(--space-1));
+	left: 0;
+	z-index: var(--z-menu);
+	display: grid;
+	min-width: 220px;
+	padding: var(--space-1);
+	border: 1px solid var(--tv-border);
+	border-radius: 12px;
+	background: var(--tv-surface);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.tv-toolbar-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 40px;
+	padding: var(--space-2) var(--space-3);
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--secondary-text-color);
+	font: inherit;
+	font-size: 0.9rem;
+	text-align: left;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tv-toolbar-menu-item svg {
+	flex: none;
+	fill: currentColor;
+}
+
+.tv-toolbar-menu-item:hover:not(:disabled),
+.tv-toolbar-menu-item:focus-visible {
+	background: rgb(from var(--main-color) r g b / 0.1);
+	color: var(--main-color);
+	outline: none;
+}
+
+.tv-toolbar-menu-item:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+	.tv-toolbar-menu-item {
+		min-height: 44px;
+	}
+}
+
+.tv-toolbar-actions > .tv-primary-action {
+	/* Basis 0, so the phone rule's width: 100% does not push it onto a line
+	   of its own; it grows into whatever the icons leave. */
+	flex: 1 1 0;
+	min-width: 10rem;
+	/* The same height as the 36px icon buttons beside it; phones raise all
+	   three to 44px further down. */
+	align-self: stretch;
 }
 
 /* Compact and inline. The filters wrap onto as many rows as they need rather
@@ -1800,7 +1919,8 @@ body.dark .tv-division-badge {
 }
 
 /* Three columns: what and where at a fixed width, the match taking whatever is
-   left, and the organiser's action. 232px is chosen to hold a court chip, a
+   left, and the organiser's actions (on desktop a fixed-width column with the
+   buttons stacked; see .tv-fixture-row-action). 232px is chosen to hold a court chip, a
    division badge and the longest realistic round name; the width being fixed is
    the point, since that is what produces the alignment. */
 .tv-fixture-row {
@@ -1810,22 +1930,26 @@ body.dark .tv-division-badge {
 	column-gap: var(--space-4);
 	padding: var(--space-4) var(--space-3);
 	background: var(--tv-surface);
-	/* Neutral on every side. The division is the dot in the meta line
-	   (.tv-division-inline), which replaced a 3px left edge in its colour. */
+	/* Neutral by default. In a multi-division tournament the border and a
+	   background tint take the division's colour (.tv-fixture-row--division). */
 	border: 1px solid var(--tv-border);
 	border-radius: 10px;
+}
+
+/* Multi-division tournaments only. The solid border is what names the hue;
+   the tint carries it across the row. A live row keeps both. */
+.tv-fixture-row--division {
+	border-color: var(--tv-division-color);
+	background: color-mix(in srgb, var(--tv-division-color) var(--tv-division-tint), var(--tv-surface));
 }
 
 .tv-fixture-row--cancelled {
 	opacity: 0.65;
 }
 
-/* A match being played reads apart from the rest of its slot: a light green
-   wash and a green border, the live status colour. */
-.tv-fixture-row--live {
-	border-color: rgb(from var(--success-color) r g b / 0.5);
-	background: rgb(from var(--success-color) r g b / 0.07);
-}
+/* A live row has no style of its own: it keeps the border and background every
+   row gets (its division's, in a multi-division tournament). What sets it apart
+   is its status dot, which pulses (.tv-status-dot--live). */
 
 .tv-division-inline {
 	display: inline-flex;
@@ -1837,7 +1961,6 @@ body.dark .tv-division-badge {
 	white-space: nowrap;
 }
 
-.tv-division-inline-dot,
 .tv-division-chip-dot {
 	flex: none;
 	width: 9px;
@@ -1846,12 +1969,8 @@ body.dark .tv-division-badge {
 	background: var(--tv-division-color, var(--tv-muted));
 }
 
-/* The division filter: one chip per division with its dot, "All" first. The
+/* Division chips, one per division with its dot (Settings → Divisions). The
    chosen chip is in the action blue; the dot keeps the division's colour. */
-.tv-filter--chips {
-	flex-basis: 100%;
-}
-
 .tv-division-chips {
 	display: flex;
 	flex-wrap: wrap;
@@ -1984,6 +2103,11 @@ body.dark .tv-division-badge {
 	.tv-fixtures--sided .tv-fixtures-toolbar {
 		position: sticky;
 		top: 96px;
+		/* Sticky makes the sidebar its own stacking context, so the More menu's
+		   z-index only counts inside it. Without one here, anything in the list
+		   that paints on its own layer (the fold chevron is transformed) drew
+		   over the menu where it opens across the list. */
+		z-index: var(--z-raised);
 		flex-direction: column;
 		align-items: stretch;
 		gap: var(--space-4);
@@ -1992,12 +2116,12 @@ body.dark .tv-division-badge {
 
 	.tv-fixtures--sided .tv-toolbar-actions {
 		order: -1;
-		flex-direction: column;
 	}
 
-	.tv-fixtures--sided .tv-toolbar-actions > * {
-		justify-content: center;
-		text-align: center;
+	/* The sidebar is 240px: the main action fits beside the two icons only
+	   without the floor the wider layouts give it. */
+	.tv-fixtures--sided .tv-toolbar-actions > .tv-primary-action {
+		min-width: 0;
 	}
 
 	.tv-fixtures--sided .tv-filters {
@@ -2089,32 +2213,70 @@ body.dark .tv-division-badge {
 	gap: var(--space-1);
 }
 
-/* One dot per row, first thing in the left column, so the statuses read straight
-   down the list. Blue upcoming, green live, red completed, muted cancelled. The row's
-   left edge stays the neutral border on every status: this is the only place a
-   status is encoded, so there is nothing for it to disagree with. */
+/* Desktop: the actions get a fixed-width column of their own on the far right,
+   stacked one above the other. The column is the same width on every row —
+   two buttons, one or none — so the scores beside it sit at the same distance
+   from the right edge on every row. The buttons keep their full 44px size and
+   20px icons; two stacked are what sets the height of a row that has them. */
+@media (min-width: 769px) {
+	.tv-fixture-row {
+		grid-template-columns: 232px minmax(0, 1fr) 44px;
+	}
+
+	.tv-fixture-row-action {
+		grid-column: 3;
+		flex-direction: column;
+		gap: 2px;
+	}
+}
+
+/* The live indicator: a red dot, first thing on a live fixture row and beside
+   the court name on a live On court now card. Only live matches have one —
+   other statuses read from the row itself. Red in --tv-live, a pure, darker red
+   kept apart from --error-color (an orange-leaning red) so "live" is never
+   mistaken for "something went wrong". */
 .tv-status-dot {
 	display: block;
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
-	background: var(--tv-muted);
+	background: var(--tv-live);
 }
 
-.tv-status-dot--upcoming {
-	background: var(--main-color);
-}
+/* A live match's dot pulses: a red copy of it grows out from behind and
+   fades, once every 1.6s. It is the only thing that marks a live row apart
+   from the rest, so it moves rather than recolouring the row. Still for anyone
+   who has asked for reduced motion; the red colour still says live.
 
+   transform and opacity rather than an animated box-shadow: a shadow colour
+   written with rgb(from …) does not interpolate between keyframes and came out
+   transparent mid-pulse. */
 .tv-status-dot--live {
-	background: var(--success-color);
+	position: relative;
 }
 
-.tv-status-dot--completed {
-	background: var(--error-color);
+@media (prefers-reduced-motion: no-preference) {
+	.tv-status-dot--live::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		background: var(--tv-live);
+		animation: tv-live-pulse 1.6s ease-out infinite;
+	}
 }
 
-.tv-status-dot--cancelled {
-	background: var(--tv-muted);
+@keyframes tv-live-pulse {
+	0% {
+		transform: scale(1);
+		opacity: 0.6;
+	}
+
+	70%,
+	100% {
+		transform: scale(2.4);
+		opacity: 0;
+	}
 }
 
 /* The middle column: one line per team, each of name, sets won and per-set
@@ -2147,12 +2309,27 @@ body.dark .tv-division-badge {
 	text-align: right;
 }
 
+/* Per-set scores, before sets won (TeamLine in FixtureRow.jsx). One fixed-width
+   cell per set so the two teams' scores line up in columns, and the set's
+   winner bold at full strength — the same as TeamScoreLine on the Overview. */
 .tv-team-scores {
+	display: inline-flex;
+	justify-content: flex-end;
+	gap: 0.4em;
 	font-size: 0.78rem;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
-	text-align: right;
 	color: var(--tv-muted);
+}
+
+.tv-team-scores > span {
+	min-width: 1.3em;
+	text-align: right;
+}
+
+.tv-team-scores .is-set-won {
+	font-weight: 700;
+	color: var(--secondary-text-color);
 }
 
 .tv-round-label {
@@ -2345,7 +2522,7 @@ body.dark .tv-division-badge {
 }
 
 .tv-stage-card-label {
-	font-size: 0.9rem;
+	font-size: 1rem;
 	font-weight: 700;
 	overflow-wrap: anywhere;
 }
@@ -3475,6 +3652,7 @@ body.dark .tv-division-badge {
 	flex-wrap: wrap;
 	gap: var(--space-2) var(--space-3);
 	margin-bottom: var(--space-3);
+	justify-content: end;
 }
 
 .tv-teams-bar .tv-fixtures-count {
@@ -4240,27 +4418,6 @@ body.dark .tv-division-badge {
 		margin-top: var(--space-5);
 	}
 
-	/* The three columns become two rows: the teams need the full width far more
-	   than the outcome needs to sit beside them. */
-	.tv-fixture-preview {
-		grid-template-columns: minmax(0, 1fr) auto;
-		gap: var(--space-1) var(--space-2);
-	}
-
-	.tv-fixture-preview-meta {
-		grid-column: 1;
-	}
-
-	.tv-fixture-preview-outcome {
-		grid-column: 2;
-		grid-row: 1;
-		justify-self: end;
-	}
-
-	.tv-fixture-preview-teams {
-		grid-column: 1 / -1;
-	}
-
 	/* The three columns become three bands: the meta, the teams, then the action.
 	   There is no width here for a fixed left column, and the teams need all of
 	   what there is. */
@@ -4288,9 +4445,14 @@ body.dark .tv-division-badge {
 		grid-column: 1 / -1;
 	}
 
-	/* Band three, where there is room for the word beside the icon. */
+	/* Band three, where there is room for the word beside the icon. Each
+	   action (wrapped by IconTooltip) takes an equal share of the band. */
 	.tv-row-action {
 		width: 100%;
+	}
+
+	.tv-fixture-row-action > .icon-tooltip-anchor {
+		flex: 1 1 0;
 	}
 
 	.tv-row-action-label {
@@ -4446,7 +4608,7 @@ body.dark .tv-division-badge {
 	}
 
 	.tv-toolbar-actions {
-		margin: 0 auto;
+		width: 100%;
 	}
 }
 

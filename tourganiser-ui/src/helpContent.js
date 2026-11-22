@@ -202,7 +202,7 @@ export const HELP_TOPICS = {
 				heading: 'Starting and ending the tournament',
 				paragraphs: [
 					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament marks an Ongoing tournament as finished. Results can still be corrected afterwards.',
-					"While the tournament hasn't started, Add Division opens the same screen the creation page uses, and a division's card can be removed — which takes its teams, fixtures and any scheduled slots with it. Both close once the tournament starts.",
+					"While the tournament hasn't started, the Add division card at the start of the list opens the same screen the creation page uses, and a division's card can be removed — which takes its teams, fixtures and any scheduled slots with it. Both close once the tournament starts.",
 				],
 			},
 			{
@@ -422,7 +422,7 @@ export const HELP_TOPICS = {
 				heading: 'Scheduling and exporting',
 				paragraphs: [
 					"Create Schedule opens the schedule builder, where courts and times are assigned — see its own help entry once it's open.",
-					'Results, with the download icon, is shown to the organiser and collaborators and opens a printable page of the completed fixtures in a new tab. It follows the filters set here, so filter first to export one division, stage or team.',
+					'The download icon, shown to the organiser and collaborators, opens a printable page of the completed fixtures in a new tab. It follows the filters set here, so filter first to export one division, stage or team.',
 				],
 			},
 		],
@@ -449,7 +449,7 @@ export const HELP_TOPICS = {
 				heading: 'Viewing and printing',
 				steps: [
 					{
-						text: ['The print icon opens a clean, printable version of the whole schedule in a new tab. Anyone can use it, not only the organiser.'],
+						text: ['View/Print schedule opens a clean, printable version of the whole schedule in a new tab. Anyone can use it, not only the organiser: it is the print icon, or an entry in the three-dots menu when there are other actions beside it.'],
 						media: {
 							type: 'image',
 							src: '/assets/help/tournament-fixtures-scheduled--viewing-and-printing--1.webp',
@@ -474,8 +474,8 @@ export const HELP_TOPICS = {
 				id: 'organiser',
 				heading: 'If you run the tournament',
 				paragraphs: [
-					"Edit Schedule reopens the schedule builder — see its own help entry once it's open. Print All Scoresheets prints every fixture's scoresheet in one file, when a scoresheet template is in use.",
-					'Results, with the download icon, opens a printable page of the completed fixtures in a new tab. It follows the filters set here, day and court included.',
+					"Edit Schedule reopens the schedule builder — see its own help entry once it's open. The three-dots menu beside it holds Print all scoresheets, which prints every fixture's scoresheet in one file when a scoresheet template is in use.",
+					'Download results, in the same menu, opens a printable page of the completed fixtures in a new tab. It follows the filters set here, day and court included.',
 				],
 			},
 		],

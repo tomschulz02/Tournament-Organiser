@@ -30,7 +30,9 @@ export default function FixtureRow({
 	// A cancelled match was never played. Cancelling stores a single 0-0 set, a
 	// convention rather than a score, so it shows no score at all.
 	const result = fixture.status === 'CANCELLED' ? null : fixture.result;
-	const sets = setsWon(result);
+	// A live match's last set is still being played and has no winner yet.
+	const live = fixture.status === 'LIVE';
+	const sets = setsWon(result, { live });
 	const scores = setScores(result);
 
 	// The unscheduled state has no court and no officials, so the left column
@@ -38,11 +40,13 @@ export default function FixtureRow({
 	// placeholder.
 	const hasPlace = Boolean(court || showDivision || fixture.round);
 
-	// Only in a multi-division tournament: the division's dot and name in the
-	// meta line are what make "Division 1 vs Division 2" readable at a glance in
-	// a flattened list. A single-division tournament has nothing to tell apart.
-	// The dot replaced a 3px left edge in the same colour; the row's border stays
-	// neutral, so the only colour on its edge is the live tint.
+	// Only in a multi-division tournament: a faint tint of the division's colour
+	// on the whole row, plus its name in the meta line, are what make "Division 1
+	// vs Division 2" readable at a glance in a flattened list. A single-division
+	// tournament has nothing to tell apart. The tint replaced a coloured dot that
+	// was too easy to confuse with the status dot beside it; the row's border
+	// takes the division colour too, and a live row keeps both: its pulsing
+	// red status dot is what marks it live.
 	//
 	// `divisions` — the tournament's full division list — is threaded through
 	// from the caller so this row's colour never collides with a sibling
@@ -50,21 +54,19 @@ export default function FixtureRow({
 	const divisionStyle = showDivision ? divisionColorStyle(fixture.division_id, divisions) : undefined;
 
 	return (
-		<li className={`tv-fixture-row tv-fixture-row--${status}`}>
+		<li
+			className={`tv-fixture-row${divisionStyle ? ' tv-fixture-row--division' : ''} tv-fixture-row--${status}`}
+			style={divisionStyle}>
 			<div className="tv-fixture-row-meta">
 				<span className="tv-fixture-row-status">
-					{/* Status is a colour, not a word: it is the least-read text on a row
-					    and the most repeated one. The label stays reachable as a tooltip
-					    and as hidden text, so nothing depends on being able to tell the
-					    colours apart. The dot is hidden from the accessibility tree and
-					    the text sits beside it, so the status is announced exactly once —
-					    a title on the row or on the dot is announced on top of it, not
-					    instead. */}
-					<span
-						className={`tv-status-dot tv-status-dot--${status}`}
-						title={fixture.statusLabel}
-						aria-hidden="true"
-					/>
+					{/* Only a live match gets a dot: a pulsing red one. Upcoming, completed
+					    and cancelled read from the row itself (a score, or none), so a dot
+					    for them added nothing. The status stays reachable as hidden text
+					    on every row, and the dot is hidden from the accessibility tree,
+					    so the status is announced exactly once. */}
+					{status === 'live' && (
+						<span className="tv-status-dot tv-status-dot--live" title={fixture.statusLabel} aria-hidden="true" />
+					)}
 					<span className="tv-visually-hidden">{fixture.statusLabel}</span>
 					<span className="tv-match-no">#{fixture.match_no ?? '—'}</span>
 				</span>
@@ -73,10 +75,7 @@ export default function FixtureRow({
 					<span className="tv-fixture-row-place">
 						{court && <span className="tv-court-chip">{court}</span>}
 						{showDivision && fixture.division_name && (
-							<span className="tv-division-inline" style={divisionStyle}>
-								<span className="tv-division-inline-dot" aria-hidden="true" />
-								{fixture.division_name}
-							</span>
+							<span className="tv-division-inline">{fixture.division_name}</span>
 						)}
 						{fixture.round && <span className="tv-round-label">{fixture.round}</span>}
 					</span>
@@ -87,8 +86,8 @@ export default function FixtureRow({
 			</div>
 
 			<div className="tv-fixture-row-teams">
-				<TeamLine name={fixture.team1} sets={sets?.[0]} scores={scores?.[0]} />
-				<TeamLine name={fixture.team2} sets={sets?.[1]} scores={scores?.[1]} />
+				<TeamLine name={fixture.team1} sets={sets?.[0]} scores={scores?.[0]} opponentScores={scores?.[1]} live={live} />
+				<TeamLine name={fixture.team2} sets={sets?.[1]} scores={scores?.[1]} opponentScores={scores?.[0]} live={live} />
 			</div>
 
 			{action && <div className="tv-fixture-row-action">{action}</div>}
@@ -100,15 +99,31 @@ export default function FixtureRow({
 // teams grid and the sets and per-set scores of the two lines align with each
 // other however long the names are.
 //
-// Sets won is the prominent figure and the per-set scores are the detail beside
-// it: `Team One 2 25 25` reads as two sets won, having scored 25 and 25. An
-// unplayed fixture has neither, and renders empty cells rather than zeroes.
-function TeamLine({ name, sets, scores }) {
+// The per-set scores, then sets won: `Team One 25 25 2` reads as having scored
+// 25 and 25 and so won two sets — the same order as the Overview's On court now
+// and Recent results (TeamScoreLine in OverviewNow.jsx). A set's score is bold
+// for the team that won it; a live match's last set is still being played and
+// stays plain. An unplayed fixture has neither, and renders empty cells rather
+// than zeroes.
+function TeamLine({ name, sets, scores, opponentScores, live = false }) {
+	const lastIndex = (scores?.length ?? 0) - 1;
+
 	return (
 		<>
 			<span className="tv-team-name">{name}</span>
+			<span className="tv-team-scores">
+				{scores?.map((score, index) => {
+					const finished = !(live && index === lastIndex);
+					const wonSet = finished && score > (opponentScores?.[index] ?? Infinity);
+
+					return (
+						<span key={index} className={wonSet ? 'is-set-won' : undefined}>
+							{score}
+						</span>
+					);
+				})}
+			</span>
 			<span className="tv-team-sets">{sets ?? ''}</span>
-			<span className="tv-team-scores">{scores ? scores.join(' ') : ''}</span>
 		</>
 	);
 }

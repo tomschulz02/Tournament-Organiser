@@ -6,7 +6,7 @@ import '../App.css';
 import TournamentShell from '../components/tournament/TournamentShell';
 import { useTournamentTab } from '../components/tournament/tournamentTabs';
 import SectionState from '../components/tournament/SectionState';
-import OverviewTab from '../components/tournament/OverviewTab';
+import OverviewTab, { TournamentActions } from '../components/tournament/OverviewTab';
 import FixturesTab from '../components/tournament/FixturesTab';
 import ScheduleTab from '../components/tournament/ScheduleTab';
 import StandingsTab from '../components/tournament/StandingsTab';
@@ -14,6 +14,7 @@ import TeamsTab from '../components/tournament/TeamsTab';
 import RoundCompleteBanner from '../components/tournament/RoundCompleteBanner';
 import LoadingScreen from '../components/LoadingScreen';
 import Icon from '../components/Icons';
+import IconTooltip from '../components/IconTooltip';
 import ScoreUpdateModal from '../components/ScoreUpdateModal';
 import NextRoundModal from '../components/NextRoundModal';
 import { editableFixtureIds, flattenFixtures } from '../components/tournament/fixtureUtils';
@@ -263,21 +264,22 @@ export default function ViewPage() {
 		if (!canScoreFixture(fixture)) return null;
 
 		// An icon on the row, where the word would be the widest thing in its
-		// column. aria-label rather than title alone, so the control is named for a
-		// screen reader as well as for a pointer; the label below is the same text
-		// shown when the row has the width for it.
+		// column. aria-label names the control for a screen reader; IconTooltip
+		// shows the same words on hover and keyboard focus. The label below is the
+		// same text shown when the row has the width for it (phones).
 		const label = fixture.result?.length > 0 ? 'Edit Score' : 'Enter Score';
 
 		return (
-			<button
-				type="button"
-				className="tv-row-action"
-				title={label}
-				aria-label={label}
-				onClick={() => setScoringFixtureId(fixture.id)}>
-				<Icon name="edit" size={20} />
-				<span className="tv-row-action-label">{label}</span>
-			</button>
+			<IconTooltip label={label}>
+				<button
+					type="button"
+					className="tv-row-action"
+					aria-label={label}
+					onClick={() => setScoringFixtureId(fixture.id)}>
+					<Icon name="edit" size={20} />
+					<span className="tv-row-action-label">{label}</span>
+				</button>
+			</IconTooltip>
 		);
 	};
 
@@ -366,17 +368,24 @@ export default function ViewPage() {
 		if (!can.printScoresheets) return null;
 		if (!scoresheetTemplateKey) return null;
 
+		// The tooltip names the reason when it is disabled. The native title stays
+		// for that case only: a disabled button gets no pointer events of its own,
+		// so the title is the fallback that still shows on hover.
+		const unavailable = 'Scoresheet template not available on this device';
+
 		return (
-			<button
-				type="button"
-				className="tv-row-action"
-				title={resolvedScoresheetTemplate ? 'Download scoresheet' : 'Scoresheet template not available on this device'}
-				aria-label="Download scoresheet"
-				disabled={!resolvedScoresheetTemplate}
-				onClick={() => handleDownloadScoresheet(fixture)}>
-				<Icon name="download" size={20} />
-				<span className="tv-row-action-label">Scoresheet</span>
-			</button>
+			<IconTooltip label={resolvedScoresheetTemplate ? 'Download scoresheet' : unavailable}>
+				<button
+					type="button"
+					className="tv-row-action"
+					title={resolvedScoresheetTemplate ? undefined : unavailable}
+					aria-label="Download scoresheet"
+					disabled={!resolvedScoresheetTemplate}
+					onClick={() => handleDownloadScoresheet(fixture)}>
+					<Icon name="download" size={20} />
+					<span className="tv-row-action-label">Scoresheet</span>
+				</button>
+			</IconTooltip>
 		);
 	};
 
@@ -565,7 +574,22 @@ export default function ViewPage() {
 				</Suspense>
 			)}
 
-			<TournamentShell tournamentId={id} name={title} creator={data?.creator} canOpenSettings={can.manageSetup}>
+			<TournamentShell
+				tournamentId={id}
+				name={title}
+				actions={
+					data && (
+						<TournamentActions
+							tournament={data.tournament}
+							dashboard={data.dashboard}
+							canManageSetup={can.manageSetup}
+							canExportResults={Boolean(can.enterCurrentRoundResults)}
+							onChanged={reload}
+						/>
+					)
+				}
+				creator={data?.creator}
+				canOpenSettings={can.manageSetup}>
 				{loading && <SectionState variant="loading" />}
 				{!loading && !data && result.error && (
 					<SectionState

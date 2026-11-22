@@ -1049,3 +1049,41 @@ on `/login` or the print and export pages, which sit outside the shell.
   optional `title`) and `HelpMedia`. Media follows the help's arrangement and lives in
   `public/assets/whats-new/`, named `whats-new-<release>--<slide id>`. The 1.1 slides
   reuse three of the help captures and add one of the collaborator role table.
+
+## A Division Is A Tint, Not A Dot
+
+Decided and built 2026-11-21.
+
+The schedule maker and the Fixtures & Schedule tab show a fixture's division as a
+background tint in that division's colour (from `divisionColorStyle`).
+
+- **Tint, not a solid fill.** The division colour is mixed into the surface with
+  `color-mix()`, and the text keeps the theme's normal colour. White text on a solid
+  accent fails for amber and green. How strong the tint is lives in one property per
+  stylesheet and per theme:
+  - board cards and fixture pills use `--schedule-division-tint` in `schedule-maker.css`
+    (22% light, 30% dark; the pills use half that)
+  - fixture rows use `--tv-division-tint` in `tournament-view.css` (16% light, 20% dark,
+    raised from 8%/12% on 2026-11-21 because the hue was hard to name), plus a solid
+    1px border in the division colour
+- **Board cards keep the 3px division left border** as an accent.
+- **Pools are told apart with a letter badge, not with colour.** The badge sits top-right
+  on every board card size and comes from `fixture.pool` through `getEntryPoolLetter`. It
+  appears only when the API sets `pool`, which means a non-knockout round with 2+ pools.
+  Shades of one hue were rejected because they blur together past three or four pools.
+- **Only in a multi-division tournament.** A single-division tournament keeps the blue
+  board cards and neutral rows. The existing `divisionName` / `showDivision` gates decide
+  this.
+- **The row's division dot was removed** because it was too easy to confuse with the
+  status dot beside it. The division name stays.
+- **A live row keeps its division colour** (revised 2026-11-22; it was "status beats
+  identity", with the green wash replacing the tint). A live row has no green on it at
+  all, in any tournament: it keeps the border and background every row gets. Its status
+  dot pulses instead (a ring growing out of the dot, every 1.6s; still under
+  prefers-reduced-motion). A green ring around the whole row was tried the same day and
+  removed.
+- **Only a live match has a status dot, and it is red** (2026-11-22). Upcoming, completed
+  and cancelled rows have none, since the row's score (or lack of one) already says it.
+  The red is its own token, `--tv-live` (rgb(196, 0, 0) light, rgb(240, 20, 20) dark),
+  not `--error-color`, so live is not read as an error. The same dot marks a live card in
+  On court now; that card also keeps its light green border.

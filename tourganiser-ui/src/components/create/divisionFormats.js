@@ -15,15 +15,15 @@ export const FORMATS = [
 	{
 		type: 'league',
 		label: 'Round Robin',
-		summary: 'Every team plays every other team once. One table decides it, with no knockout at the end.',
+		summary: 'Every team plays every other team once.',
 		best: 'Best for smaller divisions where everyone should get the same number of matches.',
 		configurable: true,
 	},
 	{
 		type: 'classic',
 		label: 'Pool Play + Knockout',
-		summary: 'Teams are split into pools that play among themselves, then the best go through to a knockout bracket.',
-		best: 'Best for larger divisions, and where the finish should be a final rather than a table.',
+		summary: 'Teams are split into pools, with the best teams qualfying for the next round.',
+		best: 'Best for larger divisions.',
 		configurable: true,
 	},
 ];

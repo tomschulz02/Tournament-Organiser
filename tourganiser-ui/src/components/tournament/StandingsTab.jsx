@@ -156,9 +156,7 @@ export default function StandingsTab({
 							className={`tv-stage-card${stage.id === activeStage ? ' tv-stage-card--active' : ''}`}
 							onClick={() => setRequestedStage(stage.id)}>
 							<span className="tv-stage-card-label">{stage.label}</span>
-							<span className={`tv-stage-card-status tv-stage-card-status--${stage.status}`}>
-								{STATUS_LABELS[stage.status]}
-							</span>
+							
 						</button>
 					))}
 				</div>

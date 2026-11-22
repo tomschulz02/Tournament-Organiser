@@ -1076,5 +1076,14 @@ background tint in that division's colour (from `divisionColorStyle`).
   this.
 - **The row's division dot was removed** because it was too easy to confuse with the
   status dot beside it. The division name stays.
-- **Status beats identity while live.** A live row's green wash overrides the division
-  tint.
+- **A live row keeps its division colour** (revised 2026-11-22; it was "status beats
+  identity", with the green wash replacing the tint). A live row has no green on it at
+  all, in any tournament: it keeps the border and background every row gets. Its status
+  dot pulses instead (a ring growing out of the dot, every 1.6s; still under
+  prefers-reduced-motion). A green ring around the whole row was tried the same day and
+  removed.
+- **Only a live match has a status dot, and it is red** (2026-11-22). Upcoming, completed
+  and cancelled rows have none, since the row's score (or lack of one) already says it.
+  The red is its own token, `--tv-live` (rgb(196, 0, 0) light, rgb(240, 20, 20) dark),
+  not `--error-color`, so live is not read as an error. The same dot marks a live card in
+  On court now; that card also keeps its light green border.

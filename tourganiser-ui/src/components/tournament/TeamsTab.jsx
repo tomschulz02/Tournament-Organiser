@@ -591,17 +591,17 @@ export default function TeamsTab({
 
 			{isClassic && (
 				<div className="tv-teams-bar">
-					<p className="tv-fixtures-count">
-						{teams.length} team{teams.length === 1 ? '' : 's'} · {getDivisionStructure(division).numGroups} pool
-						{getDivisionStructure(division).numGroups === 1 ? '' : 's'} · {getPoolDrawLabel(poolDraw)} draw
-					</p>
 
 					<div className="tv-teams-view-toggle" role="group" aria-label="Teams view">
 						<button type="button" aria-pressed={view === 'pools'} onClick={() => setTeamsView('pools')}>
-							Pools
+							<IconTooltip label='Pools'>
+								<Icon name='grid' size={20} fill='currentColor'></Icon>
+							</IconTooltip>
 						</button>
 						<button type="button" aria-pressed={view === 'list'} onClick={() => setTeamsView('list')}>
-							Full list
+							<IconTooltip label='Seeding'>
+								<Icon name='list' size={20} fill='currentColor'></Icon>
+							</IconTooltip>
 						</button>
 					</div>
 				</div>

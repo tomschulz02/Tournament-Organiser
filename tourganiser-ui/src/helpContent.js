@@ -202,7 +202,7 @@ export const HELP_TOPICS = {
 				heading: 'Starting and ending the tournament',
 				paragraphs: [
 					'Start Tournament closes team and division editing for good, but the schedule can still be edited and results entered once it has started — a confirmation spells this out before you commit. End Tournament marks an Ongoing tournament as finished. Results can still be corrected afterwards.',
-					"While the tournament hasn't started, Add Division opens the same screen the creation page uses, and a division's card can be removed — which takes its teams, fixtures and any scheduled slots with it. Both close once the tournament starts.",
+					"While the tournament hasn't started, the Add division card at the start of the list opens the same screen the creation page uses, and a division's card can be removed — which takes its teams, fixtures and any scheduled slots with it. Both close once the tournament starts.",
 				],
 			},
 			{

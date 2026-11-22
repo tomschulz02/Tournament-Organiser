@@ -296,6 +296,21 @@ describe('setsWon', () => {
 	])('returns null for %s, rather than zeroes', (_label, value) => {
 		expect(setsWon(value)).toBeNull();
 	});
+
+	// A set ends when the next one starts, so a live match's last set is unfinished.
+	describe('live', () => {
+		it('leaves the set in progress out of the count', () => {
+			expect(setsWon([[25, 21], [10, 4]], { live: true })).toEqual([1, 0]);
+		});
+
+		it('shows no sets won while the first set is still being played', () => {
+			expect(setsWon([[5, 2]], { live: true })).toEqual([0, 0]);
+		});
+
+		it('still returns null for a live match with no score yet', () => {
+			expect(setsWon([], { live: true })).toBeNull();
+		});
+	});
 });
 
 describe('setScores', () => {

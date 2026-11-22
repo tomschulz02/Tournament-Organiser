@@ -130,6 +130,11 @@ body.dark {
 }
 
 .schedule-maker-toolbar-actions button {
+	/* Centres an icon-only button's svg, which otherwise sits on the text
+	   baseline and leaves a gap under it. */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	min-height: 44px;
 	background: transparent;
 	color: var(--schedule-text);
@@ -373,6 +378,9 @@ body.dark {
 }
 
 .schedule-maker-toolbar-actions {
+	/* The full toolbar width, so the view toggle's auto margin has room to
+	   push the rest to the right. */
+	flex: 1 1 auto;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -433,7 +441,10 @@ body.dark {
 	opacity: 0.5;
 }
 
+/* Stays on the left; the auto margin pushes every action after it to the
+   right-hand end of the toolbar. */
 .schedule-view-toggle {
+	margin-right: auto;
 	display: inline-flex;
 	padding: var(--space-1);
 	border-radius: 14px;
@@ -1761,8 +1772,10 @@ button.schedule-grid-header-court:hover {
 		flex: 0 0 auto;
 	}
 
+	/* The anchor form is an icon-only button wrapped by IconTooltip (Save). */
 	.schedule-view-toggle button,
 	.schedule-maker-toolbar-actions > button,
+	.schedule-maker-toolbar-actions > .icon-tooltip-anchor > button,
 	.schedule-maker-overflow > button {
 		padding: var(--space-2);
 		min-height: 44px;
@@ -1771,6 +1784,7 @@ button.schedule-grid-header-court:hover {
 	@media (max-width: 359px) {
 		.schedule-view-toggle button,
 		.schedule-maker-toolbar-actions > button,
+		.schedule-maker-toolbar-actions > .icon-tooltip-anchor > button,
 		.schedule-maker-overflow > button {
 			padding-inline: 6px;
 			min-width: 44px;

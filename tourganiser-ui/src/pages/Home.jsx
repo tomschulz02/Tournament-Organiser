@@ -26,7 +26,6 @@ const STOPS = [
 	{
 		title: 'Enter your teams',
 		text: 'Add a division, type in the teams and set the seeding order. Reorder until the tournament starts.',
-		who: 'Organiser',
 		drawing: (
 			<ul className="hm-sheet">
 				{SEEDS.map(([team, pool], index) => (
@@ -42,7 +41,6 @@ const STOPS = [
 	{
 		title: 'The format builds itself',
 		text: 'Pools and knockout rounds are worked out from the team count, with every fixture generated. Choose the pool draw, ranking rules and placement matches.',
-		who: 'Organiser',
 		drawing: (
 			<>
 				<div className="hm-court">
@@ -65,8 +63,7 @@ const STOPS = [
 	},
 	{
 		title: 'Courts and times',
-		text: 'Auto-schedule across your courts and drag what needs to move. Print the schedule and the FIVB scoresheets.',
-		who: 'Organiser',
+		text: 'Generate match schedules and link custom scoresheets to your tournament. Print and share them with everyone.',
 		drawing: (
 			<>
 				<span className="hm-cap">09:00</span>
@@ -86,8 +83,7 @@ const STOPS = [
 	},
 	{
 		title: 'Match day',
-		text: 'Scorers enter each set courtside. Players, parents and coaches follow on their phones with no account: on court now, up next, standings and the bracket.',
-		who: 'Organiser, helpers and everyone at the venue',
+		text: 'Scorers enter results live. Players and spectators can follow along on their phones - no sign-up required.',
 		drawing: (
 			<>
 				<div className="hm-board">
@@ -110,8 +106,7 @@ const STOPS = [
 	},
 	{
 		title: 'Final rankings',
-		text: 'End the tournament and every team has a place. Export the results pack to share afterwards.',
-		who: 'Everyone',
+		text: 'End the tournament and determine final rankings. Export the results to share afterwards.',
 		drawing: (
 			<div className="hm-podium">
 				<div>
@@ -136,8 +131,8 @@ export default function Home() {
 			<div className="banner-image"></div>
 
 			<section className="hm-wrap hm-intro">
-				<h1>Your whole tournament, on one line.</h1>
-				<p>Tourganiser builds your tournament from the team list and runs it on the day.</p>
+				<h1>Welcome to Tourganiser</h1>
+				<p>Tourganiser builds your tournament for you and makes organisation easy.</p>
 				<div className="hm-doors">
 					<Link to={isLoggedIn ? '/tournaments/create' : '/login'} className="hm-btn">
 						Run a tournament

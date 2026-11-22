@@ -4,7 +4,7 @@ import DivisionBadge from './DivisionBadge';
 import SectionState from './SectionState';
 import { isNotStarted } from './tournamentStatus';
 import { viewerRole } from './collaboratorRoles';
-import { canProgress, flattenFixtures } from './fixtureUtils';
+import { canProgress, flattenFixtures, setScores, setsWon } from './fixtureUtils';
 import { dayTimeline, nextSlot, nextSlotLater, onCourtNow, slotsMissingResults } from './scheduleNow';
 import { useScheduleClock } from './useScheduleClock';
 import {
@@ -13,6 +13,7 @@ import {
 	FinalResultsBand,
 	QueueBand,
 	StatusLine,
+	TeamScoreLine,
 	TimelineBand,
 	ToScoreBand,
 	UpNextBand,
@@ -347,7 +348,7 @@ export function TournamentActions({ tournament = {}, dashboard = {}, canManageSe
 					target="_blank"
 					rel="noopener">
 					<Icon name="download" size={18} fill="currentColor" />
-					Results pack
+					Results
 				</Link>
 			)}
 		</div>
@@ -527,19 +528,9 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 		<section className="tv-band">
 			<div className="tv-band-header">
 				<h2 className="tv-band-heading">Divisions</h2>
-
-				{canCompose && (
-					<button
-						type="button"
-						className="tv-primary-action"
-						disabled={busy}
-						onClick={() => setAdding(true)}>
-						Add Division
-					</button>
-				)}
 			</div>
 
-			{divisions.length === 0 ? (
+			{divisions.length === 0 && !canCompose ? (
 				<SectionState
 					variant="empty"
 					title="This tournament has no divisions"
@@ -547,6 +538,20 @@ function DivisionsBand({ divisions: stored, onOpenDivision, tournamentId, status
 				/>
 			) : (
 				<div className="tv-division-cards">
+					{/* Adding a division is a card of its own, first in the grid,
+					    rather than a button in the band header. Same gate as before:
+					    organiser roles, before the tournament starts. */}
+					{canCompose && (
+						<button
+							type="button"
+							className="tv-division-card tv-division-card--add"
+							disabled={busy}
+							onClick={() => setAdding(true)}>
+							<Icon name="add" size={28} fill="currentColor" />
+							<span>Add division</span>
+						</button>
+					)}
+
 					{divisions.map((division) => (
 						<DivisionCard
 							key={division.id}
@@ -784,66 +789,67 @@ function DivisionColourPicker({ division, divisions, onChoose }) {
 // the point: re-sorting or re-slicing here would put a second, competing
 // definition of "recent" in the client. "Up next" moved to UpNextBand
 // (OverviewNow.jsx), which reads the schedule.
+//
+// Laid out like Up next (one bordered list, the match number on the left, the
+// division and round beneath), but each team gets a line of its own with its
+// sets won and set points, the same line On court now uses. The column is
+// narrow, and one "Team v Team" line truncated both names.
 function RecentBand({ dashboard, divisions = [] }) {
+	const fixtures = dashboard.recentResults ?? [];
+
 	return (
-		<section className="tv-band">
-			<FixturePreviewList
-				title="Recent results"
-				fixtures={dashboard.recentResults ?? []}
-				emptyMessage="No matches have finished yet."
-				divisions={divisions}
-			/>
+		<section className="tv-band tv-ov-band" aria-labelledby="tv-ov-recent">
+			<div className="tv-band-header">
+				<h2 id="tv-ov-recent" className="tv-band-heading">
+					Recent results
+				</h2>
+			</div>
+
+			{fixtures.length === 0 ? (
+				<p className="tv-activity-empty">No matches have finished yet.</p>
+			) : (
+				<ul className="tv-ov-list">
+					{fixtures.map((fixture) => (
+						<RecentResult key={fixture.id} fixture={fixture} divisions={divisions} />
+					))}
+				</ul>
+			)}
 		</section>
 	);
 }
 
-function FixturePreviewList({ title, fixtures, emptyMessage, divisions = [] }) {
-	return (
-		<div className="tv-activity-column">
-			<h2 className="tv-band-heading">{title}</h2>
-
-			{fixtures.length === 0 ? (
-				<p className="tv-activity-empty">{emptyMessage}</p>
-			) : (
-				<ul className="tv-fixture-previews">
-					{fixtures.map((fixture) => (
-						<FixturePreview key={fixture.id} fixture={fixture} divisions={divisions} />
-					))}
-				</ul>
-			)}
-		</div>
-	);
-}
-
-function FixturePreview({ fixture, divisions = [] }) {
+function RecentResult({ fixture, divisions = [] }) {
 	// A cancelled match's stored 0-0 is a convention, not a score: show the status.
-	const score = fixture.status === 'CANCELLED' ? null : formatResult(fixture.result);
+	const cancelled = fixture.status === 'CANCELLED';
+	const won = cancelled ? null : setsWon(fixture.result);
+	const points = cancelled ? null : setScores(fixture.result);
 
 	return (
-		<li className="tv-fixture-preview">
-			<div className="tv-fixture-preview-meta">
-				{fixture.match_no != null && <span className="tv-match-no">#{fixture.match_no}</span>}
-				<DivisionBadge id={fixture.division_id} name={fixture.division_name} divisions={divisions} />
-			</div>
-
-			<div className="tv-fixture-preview-teams">
-				<span>{fixture.team1}</span>
-				<span className="tv-versus">v</span>
-				<span>{fixture.team2}</span>
-			</div>
-
-			{/* A result where there is one, the status where there is not. Both are
-			    server-supplied; statusLabel is the display form of the enum. */}
-			<span className={`tv-fixture-preview-outcome ${score ? '' : 'tv-fixture-preview-outcome--status'}`}>
-				{score || fixture.statusLabel}
+		<li className="tv-ov-line tv-ov-recent">
+			<span className="tv-ov-line-lead">{fixture.match_no != null ? `#${fixture.match_no}` : ''}</span>
+			<span className="tv-ov-line-body">
+				<span className="tv-ov-court-teams">
+					<TeamScoreLine
+						name={fixture.team1}
+						won={won?.[0]}
+						points={points?.[0]}
+						opponentPoints={points?.[1]}
+						leading={won && won[0] > won[1]}
+					/>
+					<TeamScoreLine
+						name={fixture.team2}
+						won={won?.[1]}
+						points={points?.[1]}
+						opponentPoints={points?.[0]}
+						leading={won && won[1] > won[0]}
+					/>
+				</span>
+				<span className="tv-ov-line-meta">
+					<DivisionBadge id={fixture.division_id} name={fixture.division_name} divisions={divisions} />
+					{fixture.round && <span>{fixture.round}</span>}
+					{cancelled && <span>{fixture.statusLabel}</span>}
+				</span>
 			</span>
 		</li>
 	);
-}
-
-// result is [[teamOneScore, teamTwoScore], ...], one pair per set.
-function formatResult(result) {
-	if (!Array.isArray(result) || result.length === 0) return null;
-
-	return result.map(([one, two]) => `${one}-${two}`).join(', ');
 }

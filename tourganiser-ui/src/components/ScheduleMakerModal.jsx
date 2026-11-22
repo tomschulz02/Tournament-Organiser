@@ -1188,7 +1188,7 @@ export default function ScheduleMakerModal({
 	// reach through to a ref — handleDiscard reads initialScheduleRef — is what
 	// react-hooks flags as accessing refs during render. The id is data; the work happens
 	// in runAction at event time.
-	const inlineActions = [...(canEdit ? [{ id: 'setup', label: 'Set up' }] : []), { id: 'print', label: 'Print' }];
+	const inlineActions = [...(canEdit ? [{ id: 'setup', label: 'Settings', icon: 'settings' }] : []), { id: 'print', label: 'Print', icon: 'print' }];
 	const destructiveActions = canEdit
 		? [
 				{ id: 'discard', label: 'Discard Changes', disabled: !dirty },
@@ -1278,33 +1278,53 @@ export default function ScheduleMakerModal({
 							</IconTooltip>
 						</div>
 
-						{/* Rendered whatever the width; the stylesheet hides this group below
-						    768px, where the same actions appear in the More menu. */}
-						<div className="schedule-maker-inline-actions">
-							{inlineActions.map((action) => (
-								<button key={action.id} type="button" onClick={() => runAction(action.id)}>
-									{action.label}
-								</button>
-							))}
-						</div>
+						{/* Everything after the view toggle is pushed to the right (see
+						    .schedule-view-toggle in schedule-maker.css), in this order:
+						    Generate, Save, Undo, Settings, Print, More.
 
-						{/* Auto-schedule and Save stay visible at every width. Both labels
-						    render; a media query picks. */}
+						    Generate, Save and Undo stay visible at every width. Generate's
+						    two labels both render; a media query picks. Save and Undo are
+						    icon-only. */}
 						{canEdit && (
 							<>
-								<button type="button" onClick={handleUndo} disabled={undoStack.length === 0 || saving}>
-									Undo
-								</button>
 								<button type="button" onClick={() => openSheet('auto')}>
-									<span className="schedule-label-long">Auto-schedule</span>
-									<span className="schedule-label-short">Auto</span>
+									<span className="schedule-label-long">Generate Schedule</span>
+									<span className="schedule-label-short">Generate</span>
 								</button>
-								<button type="button" className="primary" onClick={handleSave} disabled={!dirty || saving}>
-									<span className="schedule-label-long">Save Schedule</span>
-									<span className="schedule-label-short">Save</span>
-								</button>
+								<IconTooltip label="Save schedule">
+									<button
+										type="button"
+										className="primary"
+										aria-label="Save schedule"
+										onClick={handleSave}
+										disabled={!dirty || saving}>
+										<Icon name="save" size={20} fill="currentColor" />
+									</button>
+								</IconTooltip>
+								<IconTooltip label="Undo">
+									<button
+										type="button"
+										aria-label="Undo"
+										onClick={handleUndo}
+										disabled={undoStack.length === 0 || saving}>
+										<Icon name="undo" size={20} fill="currentColor" />
+									</button>
+								</IconTooltip>
 							</>
 						)}
+
+						{/* Settings and Print. Rendered whatever the width; the stylesheet
+						    hides this group below 768px, where the same actions appear in
+						    the More menu. */}
+						<div className="schedule-maker-inline-actions">
+							{inlineActions.map((action) => (
+								<IconTooltip key={action.id} label={action.label}>
+									<button type="button" aria-label={action.label} onClick={() => runAction(action.id)}>
+										<Icon name={action.icon} size={20} fill="currentColor" />
+									</button>
+								</IconTooltip>
+							))}
+						</div>
 
 						<div className={`schedule-maker-overflow${canEdit ? '' : ' is-narrow-only'}`} ref={overflowRef}>
 							<button
@@ -1313,7 +1333,7 @@ export default function ScheduleMakerModal({
 								aria-expanded={menuOpen}
 								aria-label="More actions"
 								onClick={() => setMenuOpen((open) => !open)}>
-								More
+								<Icon name="more" size={20} fill="currentColor" />
 							</button>
 							{menuOpen && (
 								<div className="schedule-maker-overflow-menu" role="menu">
